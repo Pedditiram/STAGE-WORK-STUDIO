@@ -241,16 +241,12 @@ export default function AdminSettingsModal({
 
   const [activityLog, setActivityLog] = useState(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sps_collaboration_activity_log');
-      if (saved) {
+      if (saved !== null) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) return parsed;
         } catch (e) {}
       }
     }
@@ -260,27 +256,9 @@ export default function AdminSettingsModal({
         date: todayStr,
         dateFormatted: 'Today, 24 Jul 2026',
         time: '07:08 PM',
-        user: 'Collaborator (9701239649)',
-        action: 'Opened link, entered 6-Digit OTP (821150), and unlocked Stage Production Studio',
+        user: 'Admin Owner (pedditiram@gmail.com)',
+        action: 'Authorized studio collaborator pedditivarshini@gmail.com',
         status: 'verified'
-      },
-      {
-        id: 'act_2',
-        date: todayStr,
-        dateFormatted: 'Today, 24 Jul 2026',
-        time: '07:00 PM',
-        user: 'Collaborator (9701239649)',
-        action: 'Opened link, entered 6-Digit OTP (821150), and unlocked Stage Production Studio',
-        status: 'verified'
-      },
-      {
-        id: 'act_3',
-        date: todayStr,
-        dateFormatted: 'Today, 24 Jul 2026',
-        time: '06:52 PM',
-        user: 'Admin Owner',
-        action: 'Removed access for Lead Director (+91 98765 43210)',
-        status: 'system'
       }
     ];
   });
@@ -288,40 +266,21 @@ export default function AdminSettingsModal({
   const [authorizedUsers, setAuthorizedUsers] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sps_authorized_phone_users');
-      if (saved) {
+      if (saved !== null) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) return parsed;
         } catch (e) {}
       }
     }
     return [
       { 
-        name: 'Rahul Sharma', 
+        name: 'Pedditi Varshini', 
         designation: 'Lead Director', 
-        email: 'rahul@studioproductions.com', 
-        phone: '+91 98765 43210', 
+        email: 'pedditivarshini@gmail.com', 
         role: 'Director & Owner', 
         status: 'Active', 
         verifiedAt: 'Today, 10:15 AM' 
-      },
-      { 
-        name: 'Vikramaditya', 
-        designation: 'DOP / Cinematographer', 
-        email: 'vikram@studioproductions.com', 
-        phone: '+91 91234 56789', 
-        role: 'Editor', 
-        status: 'Active', 
-        verifiedAt: 'Today, 11:30 AM' 
-      },
-      { 
-        name: 'Ananya Rao', 
-        designation: 'Executive Producer', 
-        email: 'ananya@studioproductions.com', 
-        phone: '+91 97012 39649', 
-        role: 'Viewer', 
-        status: 'Active', 
-        verifiedAt: 'Today, 12:45 PM' 
       }
     ];
   });
@@ -403,9 +362,8 @@ export default function AdminSettingsModal({
     }
   };
 
-  const handleRemoveCollaborator = (phoneToRemove) => {
-    const user = authorizedUsers.find(u => u.phone === phoneToRemove);
-    setAuthorizedUsers(prev => prev.filter(u => u.phone !== phoneToRemove));
+  const handleRemoveCollaborator = (userToRemove) => {
+    setAuthorizedUsers(prev => prev.filter(u => u !== userToRemove && u.email !== userToRemove.email && u.phone !== userToRemove.phone));
 
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -418,44 +376,69 @@ export default function AdminSettingsModal({
       dateFormatted: todayFormatted,
       time: nowStr,
       user: 'Admin Owner',
-      action: `Revoked access for ${user?.name || 'Collaborator'} (${phoneToRemove})`,
+      action: `Revoked access for ${userToRemove?.name || 'Collaborator'} (${userToRemove?.email || userToRemove?.phone || ''})`,
       status: 'system'
     };
     setActivityLog(prev => [newActivity, ...prev]);
   };
 
-  const handleRoleChange = (phoneToUpdate, newRole) => {
-    setAuthorizedUsers(prev => prev.map(u => u.phone === phoneToUpdate ? { ...u, role: newRole } : u));
-    
-    const user = authorizedUsers.find(u => u.phone === phoneToUpdate);
-    const now = new Date();
-    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const todayIso = now.toISOString().split('T')[0];
-    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-
-    const newActivity = {
-      id: `act_${Date.now()}`,
-      date: todayIso,
-      dateFormatted: todayFormatted,
-      time: nowStr,
-      user: 'Admin Owner',
-      action: `Changed role for ${user?.name || 'User'} to ${newRole}`,
-      status: 'system'
-    };
-    setActivityLog(prev => [newActivity, ...prev]);
-  };
-
-  const handleToggleAccessStatus = (phoneToToggle) => {
+  const handleRoleChange = (targetUser, newRole) => {
     setAuthorizedUsers(prev => prev.map(u => {
-      if (u.phone === phoneToToggle) {
-        const newStatus = u.status === 'Active' ? 'Suspended' : 'Active';
+      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+      return match ? { ...u, role: newRole } : u;
+    }));
+    
+    const now = new Date();
+    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const todayIso = now.toISOString().split('T')[0];
+    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+    const newActivity = {
+      id: `act_${Date.now()}`,
+      date: todayIso,
+      dateFormatted: todayFormatted,
+      time: nowStr,
+      user: 'Admin Owner',
+      action: `Changed access role for ${targetUser?.name || 'User'} to ${newRole}`,
+      status: 'system'
+    };
+    setActivityLog(prev => [newActivity, ...prev]);
+  };
+
+  const handleDesignationChange = (targetUser, newDesignation) => {
+    setAuthorizedUsers(prev => prev.map(u => {
+      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+      return match ? { ...u, designation: newDesignation } : u;
+    }));
+
+    const now = new Date();
+    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const todayIso = now.toISOString().split('T')[0];
+    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+    const newActivity = {
+      id: `act_${Date.now()}`,
+      date: todayIso,
+      dateFormatted: todayFormatted,
+      time: nowStr,
+      user: 'Admin Owner',
+      action: `Updated designation for ${targetUser?.name || 'User'} to ${newDesignation}`,
+      status: 'system'
+    };
+    setActivityLog(prev => [newActivity, ...prev]);
+  };
+
+  const handleToggleAccessStatus = (targetUser) => {
+    let newStatus = 'Active';
+    setAuthorizedUsers(prev => prev.map(u => {
+      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+      if (match) {
+        newStatus = u.status === 'Active' ? 'Suspended' : 'Active';
         return { ...u, status: newStatus };
       }
       return u;
     }));
 
-    const user = authorizedUsers.find(u => u.phone === phoneToToggle);
-    const newStatus = user?.status === 'Active' ? 'Suspended' : 'Active';
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayIso = now.toISOString().split('T')[0];
@@ -467,7 +450,7 @@ export default function AdminSettingsModal({
       dateFormatted: todayFormatted,
       time: nowStr,
       user: 'Admin Owner',
-      action: `${newStatus === 'Suspended' ? '🔴 Suspended' : '🟢 Re-activated'} Studio App Access for ${user?.name || 'User'} (${phoneToToggle})`,
+      action: `${newStatus === 'Suspended' ? '🔴 Suspended' : '🟢 Re-activated'} Studio App Access for ${targetUser?.name || 'User'}`,
       status: newStatus === 'Suspended' ? 'security' : 'verified'
     };
     setActivityLog(prev => [newActivity, ...prev]);
@@ -1734,20 +1717,34 @@ export default function AdminSettingsModal({
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-bold text-white text-xs">{user.name}</span>
-                                {user.designation && (
-                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 border border-blue-800 font-bold">
-                                    💼 {user.designation}
-                                  </span>
-                                )}
-
+                                
+                                {/* Editable Designation Dropdown */}
                                 <select
-                                  value={user.role}
-                                  onChange={(e) => handleRoleChange(user.phone, e.target.value)}
-                                  className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold cursor-pointer bg-zinc-900 ${
+                                  value={user.designation || 'Lead Director'}
+                                  onChange={(e) => handleDesignationChange(user, e.target.value)}
+                                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-blue-300 border border-blue-800 font-bold cursor-pointer hover:border-blue-500 focus:outline-none"
+                                  title="Click to edit designation"
+                                >
+                                  <option value="Lead Director">💼 Lead Director</option>
+                                  <option value="Executive Producer">💼 Executive Producer</option>
+                                  <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
+                                  <option value="Lighting Specialist">💼 Lighting Specialist</option>
+                                  <option value="Sound Engineer">💼 Sound Engineer</option>
+                                  <option value="Lead Editor">💼 Lead Editor</option>
+                                  <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
+                                  <option value="Production Assistant">💼 Production Assistant</option>
+                                </select>
+
+                                {/* Editable Access Role Dropdown */}
+                                <select
+                                  value={user.role || 'Editor'}
+                                  onChange={(e) => handleRoleChange(user, e.target.value)}
+                                  className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold cursor-pointer bg-zinc-900 focus:outline-none ${
                                     user.role === 'Viewer' 
                                       ? 'text-cyan-300 border-cyan-800' 
-                                      : (user.role.includes('Director') ? 'text-amber-300 border-amber-800' : 'text-emerald-300 border-emerald-800')
+                                      : (user.role && user.role.includes('Director') ? 'text-amber-300 border-amber-800' : 'text-emerald-300 border-emerald-800')
                                   }`}
+                                  title="Click to edit access role"
                                 >
                                   <option value="Editor">✏️ Editor (Full Access)</option>
                                   <option value="Viewer">👁️ Viewer (Read-Only)</option>
@@ -1756,15 +1753,14 @@ export default function AdminSettingsModal({
                               </div>
 
                               <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400 font-mono pt-0.5">
-                                <span className="text-amber-300 font-bold">📱 {user.phone}</span>
-                                {user.email && <span>📧 {user.email}</span>}
+                                {user.email ? <span className="text-amber-300 font-bold">📧 {user.email}</span> : (user.phone && <span className="text-amber-300 font-bold">📱 {user.phone}</span>)}
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                               <button
                                 type="button"
-                                onClick={() => handleToggleAccessStatus(user.phone)}
+                                onClick={() => handleToggleAccessStatus(user)}
                                 className={`text-[10.5px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1 font-bold shadow-xs transition-all ${
                                   isSuspended
                                     ? 'bg-red-950 text-red-300 border-red-800 hover:bg-red-900'
@@ -1778,14 +1774,13 @@ export default function AdminSettingsModal({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete collaborator ${user.name} (${user.phone}) and permanently revoke app access?`)) {
-                                    handleRemoveCollaborator(user.phone);
+                                  if (window.confirm(`Are you sure you want to delete collaborator ${user.name} (${user.email || user.phone}) and permanently revoke app access?`)) {
+                                    handleRemoveCollaborator(user);
                                   }
                                 }}
                                 className="px-2 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 text-[11px] font-bold font-mono flex items-center gap-1 shadow-sm transition-all"
                               >
                                 <X className="w-3.5 h-3.5" />
-                                <span>Delete</span>
                               </button>
                             </div>
                           </div>
