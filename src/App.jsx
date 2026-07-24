@@ -424,15 +424,38 @@ export default function App() {
     syncToCloud({ shots: newShots });
   };
 
-  const handleDeleteShot = (index) => {
-    if (shots.length <= 1) return;
-    const newShots = shots.filter((_, i) => i !== index);
-    setShots(newShots);
-    if (activeShotIndex >= newShots.length) {
-      setActiveShotIndex(newShots.length - 1);
+  // -------------------------------------------------------------
+  // SHOT ARCHIVE ENGINE (RULE: NOBODY CAN DELETE SHOTS/SCENES)
+  // -------------------------------------------------------------
+  const handleArchiveShot = (index) => {
+    const activeShots = shots.filter(s => !s.isArchived);
+    if (activeShots.length <= 1) {
+      alert("🔒 RULE ENFORCEMENT:\nScenes and shots cannot be deleted. At least 1 active shot must remain in production sequence. You can modify this shot instead.");
+      return;
     }
+
+    const newShots = [...shots];
+    newShots[index] = {
+      ...newShots[index],
+      isArchived: true,
+      archivedAt: new Date().toLocaleTimeString() + ' - ' + new Date().toLocaleDateString()
+    };
+
+    setShots(newShots);
     syncToCloud({ shots: newShots });
   };
+
+  const handleRestoreShot = (index) => {
+    const newShots = [...shots];
+    if (newShots[index]) {
+      const { isArchived, archivedAt, ...rest } = newShots[index];
+      newShots[index] = rest;
+      setShots(newShots);
+      syncToCloud({ shots: newShots });
+    }
+  };
+
+  const handleDeleteShot = handleArchiveShot;
 
   const handleCloneShot = (index) => {
     const cloned = { ...shots[index] };

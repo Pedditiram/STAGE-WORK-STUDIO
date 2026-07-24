@@ -239,11 +239,10 @@ export default function SpreadsheetView({
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onDeleteShot(shotIdx); }}
-                        disabled={shots.length <= 1}
-                        className="p-1 rounded bg-zinc-800 hover:bg-red-600 text-zinc-300 hover:text-white disabled:opacity-30 transition-colors"
-                        title="Delete Shot"
+                        className="p-1 rounded bg-zinc-800 hover:bg-amber-600 text-zinc-300 hover:text-white transition-colors"
+                        title="Archive Shot (Rule Enforcement: No Permanent Deletion Prohibited)"
                       >
-                        <Trash2 className="w-3 h-3 text-red-400" />
+                        <Trash2 className="w-3 h-3 text-amber-400" />
                       </button>
                     </div>
                   </td>
