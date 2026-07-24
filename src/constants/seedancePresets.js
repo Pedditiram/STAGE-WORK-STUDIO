@@ -591,6 +591,23 @@ export const SEEDANCE_SLOTS = [
     ]
   },
   {
+    key: "atmosphereVolumetricsTag",
+    label: "Atmosphere & Volumetric Haze",
+    icon: "CloudRain",
+    description: "Volumetric light shafts, dust motes, embers, rain, or fog physics.",
+    tipTitle: "Volumetrics & Particle Physics",
+    tip: "Define environmental particle physics (Divine Dust Motes, Incense Smoke, Neon Rain Mist, Floating Embers) to dictate 3D spatial depth and realistic volume falloff.",
+    presets: [
+      "[Atmosphere: Golden Incense Smoke & Floating Sacred Dust Motes]",
+      "[Atmosphere: Volumetric Divine Solar Ray Shafts & Sparkle Flare]",
+      "[Atmosphere: Heavy Monsoon Rain & Wet Pavement Reflection Mist]",
+      "[Atmosphere: Cyberpunk Neon Vapor & Ground Steam Vents]",
+      "[Atmosphere: Fiery Battlefield Smoke & Floating Burning Embers]",
+      "[Atmosphere: Dense Paranormal Fog & Creeping Shadow Mist]",
+      "[Atmosphere: Zero-Gravity Cosmic Stardust & Plasma Glow]"
+    ]
+  },
+  {
     key: "characterIdAssetRef",
     label: "Main Performing Artist ID",
     icon: "User",

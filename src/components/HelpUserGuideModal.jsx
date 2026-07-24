@@ -24,8 +24,8 @@ const GUIDE_SECTIONS = [
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-1">
-            <span className="font-bold text-amber-400 block">📐 15-Slot Cinema Matrix</span>
-            <p className="text-zinc-400 leading-snug">Structured 15-slot prompt architecture governing composition, camera motion, lighting, co-artist reactions, kinetics, and facial expressions.</p>
+            <span className="font-bold text-amber-400 block">📐 16-Slot Cinema Matrix</span>
+            <p className="text-zinc-400 leading-snug">Structured 16-slot prompt architecture governing composition, camera motion, lighting, atmosphere volumetrics, co-artist reactions, kinetics, and facial expressions.</p>
           </div>
           <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-1">
             <span className="font-bold text-cyan-400 block">🪄 AI Screenplay Parser</span>
