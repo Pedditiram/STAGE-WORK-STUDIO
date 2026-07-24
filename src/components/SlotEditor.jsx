@@ -136,28 +136,28 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
     if (!isPopupOpen) return null;
     return (
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-mono"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 font-mono"
         onClick={() => setIsPopupOpen(false)}
       >
         <div 
-          className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white rounded-2xl p-5 w-full max-w-lg shadow-2xl space-y-3 max-h-[88vh] flex flex-col"
+          className="bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-5 w-full max-w-xl shadow-2xl space-y-3.5 max-h-[88vh] flex flex-col font-mono"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header Bar */}
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2.5 shrink-0">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800 shrink-0">
-                <Sparkles className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <div className="p-1.5 rounded-lg bg-cyan-950/80 text-cyan-400 border border-cyan-800 shrink-0">
+                <Sparkles className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white font-sans">{slotConfig.label}</h3>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">{slotConfig.description}</p>
+                <h3 className="text-sm font-bold text-white font-sans">{slotConfig.label}</h3>
+                <p className="text-[11px] text-zinc-400 font-mono">{slotConfig.description}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsPopupOpen(false)}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -166,14 +166,14 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
           <div className="overflow-y-auto space-y-3 flex-1 pr-1">
             {/* SLOT TIP CARD INSIDE POPUP MODAL */}
             {slotConfig.tip && (
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-950/60 space-y-2 font-mono shadow-sm">
+              <div className="p-3.5 rounded-xl border border-zinc-800/90 bg-zinc-900/90 space-y-2 font-mono shadow-sm">
                 <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                  <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <h4 className="text-xs font-bold text-white font-sans">
                     {slotConfig.tipTitle || slotConfig.label}
                   </h4>
                 </div>
-                <p className="text-[11px] text-slate-700 dark:text-zinc-300 leading-relaxed p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800/80 font-mono shadow-inner">
+                <p className="text-[11px] text-zinc-300 leading-relaxed p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80 font-mono shadow-inner">
                   {slotConfig.tip}
                 </p>
               </div>
@@ -182,8 +182,8 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
             {/* Complete Textarea Box */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] text-slate-900 dark:text-zinc-200 font-bold font-mono">Complete Text Value:</label>
-                <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono font-bold">{value ? value.length : 0} chars</span>
+                <label className="text-[11px] text-zinc-200 font-bold font-mono">Complete Text Value:</label>
+                <span className="text-[10px] text-cyan-400 font-mono font-bold">{value ? value.length : 0} chars</span>
               </div>
 
               <textarea
@@ -192,14 +192,14 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                 onChange={handleCustomInput}
                 autoFocus
                 placeholder={`Enter complete ${slotConfig.label.toLowerCase()} text...`}
-                className="w-full bg-white dark:bg-zinc-950 text-slate-900 dark:text-white border border-slate-300 dark:border-zinc-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
+                className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-xl p-3 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
               />
             </div>
 
             {/* Add New Custom Preset Input Box */}
-            <div className="p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-950/60 space-y-1.5">
-              <label className="text-[11px] text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1 font-mono">
-                <Plus className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-1.5">
+              <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">
+                <Plus className="w-3.5 h-3.5 text-amber-400" />
                 Add Custom Preset:
               </label>
               <div className="flex items-center gap-1.5">
@@ -209,7 +209,7 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                   onChange={(e) => setNewPresetInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddNewPreset()}
                   placeholder="Type custom preset name & press Enter..."
-                  className="flex-1 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none focus:border-amber-500 font-mono placeholder:text-slate-400"
+                  className="flex-1 bg-zinc-950 text-white border border-zinc-700 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none focus:border-amber-500 font-mono placeholder:text-zinc-500"
                 />
                 <button
                   type="button"
@@ -223,9 +223,9 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
 
             {/* FAVORITES PRESETS SECTION */}
             {favoriteItems.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[11px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1 font-mono">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+              <div className="space-y-1.5">
+                <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                   ⭐ Favorite Presets ({favoriteItems.length}):
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -236,16 +236,16 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                       className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-sm ${
                         value === preset
                           ? 'bg-amber-400 text-zinc-950 font-black border-amber-300 shadow-md scale-105'
-                          : 'bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/60 hover:border-amber-400'
+                          : 'bg-amber-950/70 text-amber-200 border-amber-500/60 hover:border-amber-400'
                       }`}
                     >
                       <button
                         type="button"
                         onClick={(e) => handleToggleFavorite(preset, e)}
-                        className="text-amber-600 dark:text-amber-400 hover:scale-125 transition-transform shrink-0"
+                        className="text-amber-400 hover:scale-125 transition-transform shrink-0"
                         title="Remove from favorites"
                       >
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                       </button>
 
                       <span className="truncate max-w-[240px]">{preset}</span>
@@ -253,7 +253,7 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                       <button
                         type="button"
                         onClick={(e) => handleDeletePreset(preset, e)}
-                        className="p-0.5 rounded hover:bg-red-500/20 text-slate-500 dark:text-zinc-400 hover:text-red-500 transition-colors shrink-0"
+                        className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0"
                         title="Delete preset"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -265,15 +265,15 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
             )}
 
             {/* ALL PRESETS LIST SECTION */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] text-slate-800 dark:text-zinc-300 font-bold font-mono">All Presets:</label>
-                <span className="text-[9.5px] text-slate-500 dark:text-zinc-400 font-mono">
+                <label className="text-[11px] text-zinc-300 font-bold font-mono">All Presets:</label>
+                <span className="text-[9.5px] text-zinc-400 font-mono">
                   Click ⭐ to favorite | Click 🗑️ to delete
                 </span>
               </div>
 
-              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
                 {nonFavoriteItems.map((preset, idx) => {
                   const isCustom = userPresets.includes(preset);
                   const isSelected = value === preset;
@@ -284,13 +284,13 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                       className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono ${
                         isSelected 
                           ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md scale-105'
-                          : 'bg-slate-100 dark:bg-zinc-950 text-slate-800 dark:text-zinc-200 border-slate-200 dark:border-zinc-800 hover:border-cyan-500/60 font-medium'
+                          : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:border-cyan-500/60 font-medium'
                       }`}
                     >
                       <button
                         type="button"
                         onClick={(e) => handleToggleFavorite(preset, e)}
-                        className="text-slate-400 dark:text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0"
+                        className="text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0"
                         title="Add to favorites"
                       >
                         <Star className="w-3.5 h-3.5" />
@@ -303,7 +303,7 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                       <button
                         type="button"
                         onClick={(e) => handleDeletePreset(preset, e)}
-                        className="p-0.5 rounded hover:bg-red-500/20 text-slate-400 dark:text-zinc-400 hover:text-red-500 transition-colors shrink-0"
+                        className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0"
                         title="Delete preset"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -316,7 +316,7 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-end pt-2.5 border-t border-slate-200 dark:border-zinc-800 shrink-0">
+          <div className="flex items-center justify-end pt-3 border-t border-zinc-800 shrink-0">
             <button
               type="button"
               onClick={() => setIsPopupOpen(false)}
