@@ -159,13 +159,13 @@ export default function Header({
           </div>
 
           {/* User Name, Designation & User Rights Badge */}
-          <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800/90 px-3 py-1 rounded-xl shrink-0 shadow-sm">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow shrink-0">
+          <div className="flex items-center gap-2.5 bg-zinc-900/90 border border-zinc-800/90 px-3.5 py-1.5 rounded-xl shrink-0 shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow shrink-0">
               {userName.charAt(0).toUpperCase()}
             </div>
-            <div className="flex flex-col text-left leading-none">
-              <span className="font-bold text-white text-xs tracking-tight">{userName}</span>
-              <span className="text-[10px] text-zinc-400 font-mono font-medium mt-0.5">
+            <div className="flex flex-col text-left leading-tight shrink-0">
+              <span className="font-bold text-white text-xs tracking-tight whitespace-nowrap block">{userName}</span>
+              <span className="text-[10.5px] text-zinc-400 font-mono font-medium whitespace-nowrap block mt-0.5">
                 💼 {userDesignation} • <strong className="text-amber-400 font-bold">{userRole}</strong>
               </span>
             </div>
