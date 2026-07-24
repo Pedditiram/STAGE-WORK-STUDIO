@@ -57,7 +57,8 @@ export default function ProjectConsoleModal({
   setPresetProfile,
   onExportProject,
   onImportProject,
-  initialTab = 'library'
+  initialTab = 'library',
+  isAdminLoggedIn = false
 }) {
   // Project Library state stored in localStorage 'sps_project_library'
   const [projectLibrary, setProjectLibrary] = useState(() => {
@@ -258,13 +259,20 @@ export default function ProjectConsoleModal({
     setProjectLibrary(prev => [...prev, dupObj]);
   };
 
-  // 5. DELETE PROJECT
+  // 5. DELETE PROJECT (ADMIN-ONLY SECURITY RULE)
   const handleDeleteProject = (projId) => {
+    if (!isAdminLoggedIn) {
+      alert("🔒 ACCESS RESTRICTED:\nNo user has permission to delete projects. Only the Primary App Admin (pedditiram@gmail.com) logged into Admin Settings is authorized to delete projects.");
+      return;
+    }
+
     if (projectLibrary.length <= 1) {
       alert("Cannot delete the last remaining project. Create a new project first!");
       return;
     }
-    if (confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+
+    const targetProj = projectLibrary.find(p => p.id === projId);
+    if (confirm(`⚠️ PRIMARY ADMIN CONFIRMATION REQUIRED:\nAre you sure you want to permanently delete project "${targetProj?.title || projId}"?\nThis action cannot be undone.`)) {
       const updated = projectLibrary.filter(p => p.id !== projId);
       setProjectLibrary(updated);
       if (activeProjectId === projId) {

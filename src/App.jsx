@@ -219,6 +219,73 @@ export default function App() {
     return () => unsubscribe();
   }, [roomId, projectTitle]);
 
+  // -------------------------------------------------------------
+  // AUTOMATIC 30-MINUTE PROJECT BACKUP & VERSION SNAPSHOT ENGINE
+  // -------------------------------------------------------------
+  useEffect(() => {
+    const create30MinAutoBackup = () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = now.toLocaleDateString();
+        const backupName = `Auto-Backup 30m - ${timeStr} - ${dateStr}`;
+
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        if (!Array.isArray(library) || library.length === 0) return;
+
+        const currentTitle = localStorage.getItem('sps_current_project_title') || projectTitle;
+        const targetIdx = library.findIndex(p => p.title === currentTitle || p.id === 'proj_default');
+
+        if (targetIdx !== -1) {
+          const activeProj = library[targetIdx];
+          const newSnapshot = {
+            versionId: `autobackup_${Date.now()}`,
+            versionName: backupName,
+            createdAt: `${timeStr} - ${dateStr}`,
+            shots: [...shots],
+            isAutoBackup: true
+          };
+
+          const existingVersions = activeProj.versions || [];
+          const updatedVersions = [newSnapshot, ...existingVersions].slice(0, 50);
+
+          library[targetIdx] = {
+            ...activeProj,
+            shots: [...shots],
+            lastModified: dateStr,
+            versions: updatedVersions
+          };
+
+          localStorage.setItem('sps_project_library', JSON.stringify(library));
+
+          const globalBackupsStr = localStorage.getItem('sps_global_project_backups');
+          let globalBackups = globalBackupsStr ? JSON.parse(globalBackupsStr) : [];
+          if (!Array.isArray(globalBackups)) globalBackups = [];
+
+          globalBackups.unshift({
+            id: `bak_${Date.now()}`,
+            projectTitle: currentTitle,
+            backupName: backupName,
+            timestamp: now.toISOString(),
+            shots: [...shots]
+          });
+
+          localStorage.setItem('sps_global_project_backups', JSON.stringify(globalBackups.slice(0, 100)));
+        }
+      } catch (err) {
+        console.warn("Auto-backup error:", err);
+      }
+    };
+
+    create30MinAutoBackup();
+    const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+    const backupInterval = setInterval(create30MinAutoBackup, THIRTY_MINUTES_MS);
+
+    return () => clearInterval(backupInterval);
+  }, [projectTitle, shots]);
+
   const [projectGeneratedImages, setProjectGeneratedImages] = useState(() => {
     try {
       const saved = localStorage.getItem('sps_generated_images_map');
@@ -790,6 +857,7 @@ export default function App() {
         setRoomId={setRoomId}
         presetProfile={presetProfile}
         setPresetProfile={(val) => { setPresetProfile(val); syncToCloud({ presetProfile: val }); }}
+        isAdminLoggedIn={isAdminLoggedIn}
       />
 
       {/* 2-Factor Phone & OTP Security Guard for Shared Invite Links */}
