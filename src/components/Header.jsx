@@ -40,6 +40,33 @@ export default function Header({
     setIsEditingTitle(false);
   };
 
+  const getLoggedInUser = () => {
+    if (typeof window !== 'undefined') {
+      const authEmail = localStorage.getItem('sps_authorized_user_email');
+      const savedUsers = localStorage.getItem('sps_authorized_phone_users');
+      if (savedUsers) {
+        try {
+          const users = JSON.parse(savedUsers);
+          if (authEmail) {
+            const found = users.find(u => u.email === authEmail || u.phone === authEmail);
+            if (found) return found;
+          }
+          if (users.length > 0) return users[0];
+        } catch (e) {}
+      }
+    }
+    return {
+      name: isAdminLoggedIn ? 'Pedditi Ram' : 'Pedditi Varshini',
+      designation: 'Lead Director',
+      role: isAdminLoggedIn ? 'Director & Owner' : 'Editor'
+    };
+  };
+
+  const currentUser = getLoggedInUser();
+  const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
+  const userDesignation = currentUser.designation || 'Lead Director';
+  const userRole = currentUser.role || (isAdminLoggedIn ? 'Director & Owner' : 'Editor');
+
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
       <div className="w-full flex items-center justify-between gap-3 overflow-x-auto scrollbar-none">
@@ -86,48 +113,63 @@ export default function Header({
           </div>
         </div>
 
-        {/* CENTER: Studio View Navigation Tabs (Compact Icon Buttons) */}
-        <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
-          {showCanvasTab && (
+        {/* CENTER: Studio View Navigation Tabs & User Identity Display */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+            {showCanvasTab && (
+              <button
+                type="button"
+                onClick={() => setActiveView("canvas")}
+                className={`p-1.5 rounded-lg transition-all shrink-0 ${
+                  activeView === "canvas"
+                    ? "bg-cyan-500 text-zinc-950 shadow"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+                title="Canvas View"
+              >
+                <Video className="w-4 h-4" />
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => setActiveView("canvas")}
+              onClick={() => setActiveView("spreadsheet")}
               className={`p-1.5 rounded-lg transition-all shrink-0 ${
-                activeView === "canvas"
+                activeView === "spreadsheet"
                   ? "bg-cyan-500 text-zinc-950 shadow"
                   : "text-zinc-400 hover:text-white"
               }`}
-              title="Canvas View"
+              title="17-Slot Matrix View"
             >
-              <Video className="w-4 h-4" />
+              <LayoutGrid className="w-4 h-4" />
             </button>
-          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveView("spreadsheet")}
-            className={`p-1.5 rounded-lg transition-all shrink-0 ${
-              activeView === "spreadsheet"
-                ? "bg-cyan-500 text-zinc-950 shadow"
-                : "text-zinc-400 hover:text-white"
-            }`}
-            title="15-Slot Matrix View"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveView("form")}
+              className={`p-1.5 rounded-lg transition-all shrink-0 ${
+                activeView === "form"
+                  ? "bg-cyan-500 text-zinc-950 shadow"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+              title="Form View"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveView("form")}
-            className={`p-1.5 rounded-lg transition-all shrink-0 ${
-              activeView === "form"
-                ? "bg-cyan-500 text-zinc-950 shadow"
-                : "text-zinc-400 hover:text-white"
-            }`}
-            title="Form View"
-          >
-            <FileText className="w-4 h-4" />
-          </button>
+          {/* User Name, Designation & User Rights Badge */}
+          <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800/90 px-3 py-1 rounded-xl shrink-0 shadow-sm">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow shrink-0">
+              {userName.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex flex-col text-left leading-none">
+              <span className="font-bold text-white text-xs tracking-tight">{userName}</span>
+              <span className="text-[10px] text-zinc-400 font-mono font-medium mt-0.5">
+                💼 {userDesignation} • <strong className="text-amber-400 font-bold">{userRole}</strong>
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT: Quick Action Tools */}
