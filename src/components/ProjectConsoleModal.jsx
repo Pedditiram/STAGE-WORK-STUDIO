@@ -627,8 +627,8 @@ export default function ProjectConsoleModal({
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-xs flex items-center gap-1.5">
-                            {profile.name}
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-slate-900 dark:text-amber-300">
+                            {profile.label || profile.name}
                           </span>
                           {isSelected && (
                             <span className="text-[10px] bg-amber-500 text-zinc-950 font-black px-2 py-0.5 rounded-full">

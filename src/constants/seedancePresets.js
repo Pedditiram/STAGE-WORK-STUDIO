@@ -4,8 +4,9 @@
 
 export const GENRE_PRESET_PROFILES = {
   mythological: {
-    label: "🕉️ Mythological & Period Epic",
-    description: "Tailored for Ramayana, Ayodhya, Royal Palaces, Ancient Legends & Historical Epics",
+    label: "🕉️ Indian Mythology & Period Epic",
+    name: "🕉️ Indian Mythology & Period Epic",
+    description: "Tailored for Ramayana, Mahabharata, Ayodhya, Royal Palaces, Ancient Legends & Historical Epics",
     presets: {
       characterIdAssetRef: [
         "[CharID: @LeadHero_Rama - Prince of Ayodhya, saffron robes, divine bow]",
