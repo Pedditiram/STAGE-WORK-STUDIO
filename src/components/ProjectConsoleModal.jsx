@@ -206,9 +206,6 @@ export default function ProjectConsoleModal({
 
     setIsLoadingFile(true);
     setUploadedFileName(file.name);
-    
-    const autoTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_]/g, " ").trim().toUpperCase();
-    setCustomProjectTitle(autoTitle);
 
     try {
       let extractedText = '';
@@ -244,7 +241,6 @@ export default function ProjectConsoleModal({
   const handleApplyAIShotsToCurrent = () => {
     if (parsedPreview.length > 0) {
       if (setShots) setShots(parsedPreview);
-      if (setProjectTitle && customProjectTitle) setProjectTitle(customProjectTitle);
       onClose();
     }
   };
@@ -367,19 +363,6 @@ export default function ProjectConsoleModal({
           >
             <Folder className="w-4 h-4" />
             <span>📂 Projects Library</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('ai_breakdown')}
-            className={`px-3 py-2 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'ai_breakdown'
-                ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
-                : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Wand2 className="w-4 h-4 text-amber-500" />
-            <span>🪄 AI Script Breakdown</span>
           </button>
 
           <button
@@ -550,7 +533,6 @@ export default function ProjectConsoleModal({
                         type="button"
                         onClick={() => {
                           setRawScriptText(sample.script);
-                          setCustomProjectTitle(sample.title.toUpperCase());
                         }}
                         className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-cyan-600 dark:text-cyan-300 text-[11px] font-bold shrink-0 hover:border-cyan-400 shadow-xs"
                       >
