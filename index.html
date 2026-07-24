@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stage Production Studio</title>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error("Global Error Caught:", msg, error);
+        var root = document.getElementById('root');
+        if (root) {
+          root.innerHTML = '<div style="background:#09090b;color:#f87171;padding:32px;font-family:monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-center;text-align:center;">' +
+            '<div style="max-width:500px;background:#18181b;border:1px solid #ef444450;padding:24px;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">' +
+            '<h2 style="color:#ef4444;margin-top:0;font-size:18px;">🎬 Stage Production Studio Diagnostic</h2>' +
+            '<p style="color:#a1a1aa;font-size:12px;line-height:1.6;">A runtime error occurred in your browser session. Click below to clear cached state and reload cleanly.</p>' +
+            '<pre style="background:#09090b;padding:12px;border-radius:8px;color:#fca5a5;font-size:11px;text-align:left;overflow-x:auto;max-height:150px;">' + (msg || error || 'Unknown script error') + (lineNo ? '\nLine: ' + lineNo : '') + '</pre>' +
+            '<button onclick="localStorage.clear();sessionStorage.clear();location.reload(true);" style="background:linear-gradient(to right, #0284c7, #2563eb);color:#fff;border:none;padding:12px 20px;border-radius:10px;font-weight:bold;font-size:12px;cursor:pointer;margin-top:16px;width:100%;">' +
+            '⚡ Clear Local Cache & Hard Reload' +
+            '</button></div></div>';
+        }
+      };
+      window.onunhandledrejection = function(event) {
+        console.error("Unhandled Rejection:", event.reason);
+        var root = document.getElementById('root');
+        if (root) {
+          root.innerHTML = '<div style="background:#09090b;color:#f87171;padding:32px;font-family:monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-center;text-align:center;">' +
+            '<div style="max-width:500px;background:#18181b;border:1px solid #f59e0b50;padding:24px;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">' +
+            '<h2 style="color:#f59e0b;margin-top:0;font-size:18px;">🎬 Stage Production Studio</h2>' +
+            '<p style="color:#a1a1aa;font-size:12px;line-height:1.6;">Connection or resource initialization notice. Click below to refresh.</p>' +
+            '<pre style="background:#09090b;padding:12px;border-radius:8px;color:#fcd34d;font-size:11px;text-align:left;overflow-x:auto;max-height:150px;">' + (event.reason ? (event.reason.stack || event.reason) : 'Promise rejection') + '</pre>' +
+            '<button onclick="localStorage.clear();sessionStorage.clear();location.reload(true);" style="background:linear-gradient(to right, #d97706, #0284c7);color:#fff;border:none;padding:12px 20px;border-radius:10px;font-weight:bold;font-size:12px;cursor:pointer;margin-top:16px;width:100%;">' +
+            '⚡ Clear Local Cache & Reload' +
+            '</button></div></div>';
+        }
+      };
+    </script>
+  </head>
+  <body style="background-color:#09090b;margin:0;padding:0;">
+    <div id="root">
+      <div style="min-height:100vh;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#09090b;color:#38bdf8;font-family:monospace;gap:16px;">
+        <div style="width:40px;height:40px;border:3px solid #1e293b;border-top-color:#38bdf8;border-radius:50%;animation:spin 1s linear infinite;"></div>
+        <div style="font-size:14px;font-weight:bold;letter-spacing:1px;">STAGE PRODUCTION STUDIO</div>
+        <div style="font-size:11px;color:#71717a;">Initializing 15-Slot Cinema Matrix...</div>
+        <style>
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

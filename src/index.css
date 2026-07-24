@@ -1,0 +1,228 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #07080c;
+  color: #f3f4f6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(18, 19, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ==========================================
+   THEME OVERRIDES: ULTRA-MODERN LIGHT THEME
+   (ZERO ANTIQUE PARCHMENT, ZERO DARK PATCHES)
+   ========================================== */
+
+.theme-paper {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+  color-scheme: light;
+}
+
+.theme-paper body {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+}
+
+.theme-paper ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+.theme-paper ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+
+/* Convert all dark panels, buttons, cards & headers to crisp modern light cards with ZERO black boxes */
+.theme-paper .bg-zinc-950,
+.theme-paper .bg-zinc-950\/95,
+.theme-paper .bg-zinc-950\/90,
+.theme-paper .bg-zinc-950\/80,
+.theme-paper .bg-zinc-900,
+.theme-paper .bg-zinc-900\/95,
+.theme-paper .bg-zinc-900\/90,
+.theme-paper .bg-zinc-900\/80,
+.theme-paper .bg-zinc-850,
+.theme-paper .bg-zinc-800,
+.theme-paper .bg-black,
+.theme-paper .bg-black\/90,
+.theme-paper .bg-black\/80,
+.theme-paper .bg-black\/70,
+.theme-paper .bg-cyan-950,
+.theme-paper .bg-cyan-950\/40,
+.theme-paper .bg-amber-950,
+.theme-paper .bg-amber-950\/40,
+.theme-paper .bg-pink-950,
+.theme-paper .bg-pink-950\/40 {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+/* Headers & Bar strips */
+.theme-paper header {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Text Overrides for crisp dark navy slate ink */
+.theme-paper p.text-white,
+.theme-paper h1.text-white,
+.theme-paper h2.text-white,
+.theme-paper h3.text-white,
+.theme-paper h4.text-white,
+.theme-paper span.text-zinc-100,
+.theme-paper .text-zinc-200,
+.theme-paper .text-zinc-300 {
+  color: #0F172A !important;
+}
+
+/* Crisp Light Buttons for Dark-Class Buttons in Light Theme */
+.theme-paper button.bg-zinc-900,
+.theme-paper button.bg-zinc-950,
+.theme-paper button.bg-zinc-800,
+.theme-paper button.bg-black {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+/* ALWAYS KEEP WHITE TEXT ON COLORED BUTTONS & GRADIENTS */
+.theme-paper button.text-white,
+.theme-paper button .text-white,
+.theme-paper .bg-purple-600,
+.theme-paper .bg-cyan-600,
+.theme-paper .bg-emerald-600,
+.theme-paper .bg-gradient-to-r,
+.theme-paper .bg-gradient-to-r * {
+  color: #FFFFFF !important;
+}
+
+.theme-paper button.bg-amber-400,
+.theme-paper button.bg-cyan-500,
+.theme-paper button.bg-cyan-400,
+.theme-paper button.bg-emerald-400 {
+  color: #09090B !important;
+  font-weight: 800 !important;
+}
+
+.theme-paper .text-zinc-400,
+.theme-paper .text-zinc-500 {
+  color: #475569 !important;
+}
+
+/* Inputs, Textareas, Selects & Prompt Output Boxes */
+.theme-paper textarea, 
+.theme-paper input, 
+.theme-paper select,
+.theme-paper p,
+.theme-paper code {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+.theme-paper input::placeholder, 
+.theme-paper textarea::placeholder {
+  color: #64748B !important;
+}
+
+/* Badges & Accents */
+.theme-paper .text-amber-200,
+.theme-paper .text-amber-300,
+.theme-paper .text-amber-400 {
+  color: #B45309 !important;
+  font-weight: 700 !important;
+}
+
+.theme-paper .text-cyan-200,
+.theme-paper .text-cyan-300,
+.theme-paper .text-cyan-400 {
+  color: #0284C7 !important;
+  font-weight: 700 !important;
+}
+
+.theme-paper .border-zinc-800,
+.theme-paper .border-zinc-800\/90,
+.theme-paper .border-zinc-800\/60,
+.theme-paper .border-zinc-700 {
+  border-color: #E2E8F0 !important;
+}
+
+/* Fix Modal Backdrop & Content in Light Mode */
+.theme-paper .fixed.inset-0.bg-black\/80,
+.theme-paper .fixed.inset-0.bg-black\/75,
+.theme-paper .fixed.inset-0.bg-black\/70 {
+  background-color: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* High Contrast Light Theme Chip Overrides */
+.theme-paper .bg-amber-100,
+.theme-slate .bg-amber-100 {
+  background-color: #FEF3C7 !important;
+  color: #78350F !important;
+  border-color: #FCD34D !important;
+}
+
+.theme-paper .bg-amber-400,
+.theme-slate .bg-amber-400 {
+  background-color: #F59E0B !important;
+  color: #0F172A !important;
+  border-color: #FBBF24 !important;
+}
+
+.theme-paper .bg-cyan-500,
+.theme-slate .bg-cyan-500 {
+  background-color: #0284C7 !important;
+  color: #FFFFFF !important;
+  border-color: #38BDF8 !important;
+}
+
+.theme-paper .bg-zinc-100,
+.theme-slate .bg-zinc-100 {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
