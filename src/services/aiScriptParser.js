@@ -201,6 +201,31 @@ function parseRawScriptFallback(scriptText) {
     let actionContext = block.replace(/\s+/g, ' ').trim();
     if (actionContext.length > 200) actionContext = actionContext.substring(0, 200) + '...';
 
+    // Automatic Character & Element Extraction for 9 Image Inputs
+    const extractedChars = [];
+    if (artistId) extractedChars.push(artistId.replace(/\[CharID:\s*/, '').replace(/\]/, '').split('-')[0].trim());
+    if (coArtist && !coArtist.includes("Backing performers")) {
+      extractedChars.push(coArtist.replace(/\[Co-Artist:\s*/, '').replace(/\]/, '').split('reacting')[0].trim());
+    }
+
+    const words = block.match(/@[A-Z][a-zA-Z0-9_]+/g) || [];
+    words.forEach(w => {
+      if (!extractedChars.includes(w)) extractedChars.push(w);
+    });
+
+    // Build Image_1 to Image_9 reference bindings string
+    const imgBindings = [];
+    for (let imgIdx = 0; imgIdx < 9; imgIdx++) {
+      if (extractedChars[imgIdx]) {
+        imgBindings.push(`Image_${imgIdx + 1}: ${extractedChars[imgIdx]}`);
+      }
+    }
+    if (imgBindings.length === 0) {
+      imgBindings.push("Image_1: @MainCharacter", "Image_2: @CoArtist", "Image_3: @EnvironmentBackdrop");
+    }
+
+    const durationAndImagesStr = `Duration: 5s | ${imgBindings.join(' | ')}`;
+
     parsedShots.push({
       sceneShotId: shotId,
       shotComposition: framing,
@@ -209,6 +234,7 @@ function parseRawScriptFallback(scriptText) {
       subjectColorTag: subjColor,
       backgroundLightingTag: bgLighting,
       backgroundColorTag: bgColor,
+      atmosphereVolumetricsTag: "[Atmosphere: Golden Incense Smoke & Floating Sacred Dust Motes]",
       characterIdAssetRef: artistId,
       coArtistInteraction: coArtist,
       actionEnvContext: actionContext,
@@ -216,7 +242,8 @@ function parseRawScriptFallback(scriptText) {
       characterPlacement: "Foreground center frame, opposing army arrayed in background",
       characterDialogue: dialogue,
       characterMovement: "Standing firm in full hero stance",
-      characterEyeLooks: "[Eye Look: Direct Laser Focus on Target / Camera]"
+      characterEyeLooks: "[Eye Look: Direct Laser Focus on Target / Camera]",
+      shotDurationAndImages: durationAndImagesStr
     });
   });
 

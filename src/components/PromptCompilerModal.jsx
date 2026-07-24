@@ -25,6 +25,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     if (shot.characterMovement) parts.push(`The artist performs by ${shot.characterMovement.toLowerCase()}.`);
     if (shot.characterExpression) parts.push(`Facial expression shows ${shot.characterExpression}.`);
     if (shot.characterDialogue) parts.push(`Vocal sync: ${shot.characterDialogue}.`);
+    if (shot.shotDurationAndImages) parts.push(`[Input Assets & Duration: ${shot.shotDurationAndImages}].`);
     return parts.join(' ');
   };
 

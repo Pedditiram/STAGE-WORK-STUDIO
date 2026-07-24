@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  { id: 'all', label: 'All 16 Slots', keys: [] },
-  { id: 'framing', label: '🎬 Framing & Scene', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag', 'actionEnvContext'] },
+  { id: 'all', label: 'All 17 Slots', keys: [] },
+  { id: 'framing', label: '🎬 Framing, Duration & 9-Image Inputs', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag', 'actionEnvContext', 'shotDurationAndImages'] },
   { id: 'lighting', label: '💡 Lighting, Grade & Atmosphere', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'atmosphereVolumetricsTag'] },
   { id: 'artists', label: '🎭 Artists & Reactions', keys: ['characterIdAssetRef', 'coArtistInteraction', 'characterExpression', 'characterPlacement'] },
   { id: 'kinetics', label: '🎵 Movement & Dialogue', keys: ['characterDialogue', 'characterMovement', 'characterEyeLooks'] }
