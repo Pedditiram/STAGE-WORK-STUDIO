@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle
+  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown
 } from 'lucide-react';
 
 export default function Header({ 
@@ -32,6 +32,7 @@ export default function Header({
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const handleTitleSubmit = () => {
     if (tempTitleInput.trim()) {
@@ -66,6 +67,7 @@ export default function Header({
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Director & Owner' : 'Editor');
+  const firstThreeLetters = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'PED';
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
@@ -113,66 +115,51 @@ export default function Header({
           </div>
         </div>
 
-        {/* CENTER: Studio View Navigation Tabs & User Identity Display */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
-            {showCanvasTab && (
-              <button
-                type="button"
-                onClick={() => setActiveView("canvas")}
-                className={`p-1.5 rounded-lg transition-all shrink-0 ${
-                  activeView === "canvas"
-                    ? "bg-cyan-500 text-zinc-950 shadow"
-                    : "text-zinc-400 hover:text-white"
-                }`}
-                title="Canvas View"
-              >
-                <Video className="w-4 h-4" />
-              </button>
-            )}
-
+        {/* CENTER: Studio View Navigation Tabs */}
+        <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+          {showCanvasTab && (
             <button
               type="button"
-              onClick={() => setActiveView("spreadsheet")}
+              onClick={() => setActiveView("canvas")}
               className={`p-1.5 rounded-lg transition-all shrink-0 ${
-                activeView === "spreadsheet"
+                activeView === "canvas"
                   ? "bg-cyan-500 text-zinc-950 shadow"
                   : "text-zinc-400 hover:text-white"
               }`}
-              title="17-Slot Matrix View"
+              title="Canvas View"
             >
-              <LayoutGrid className="w-4 h-4" />
+              <Video className="w-4 h-4" />
             </button>
+          )}
 
-            <button
-              type="button"
-              onClick={() => setActiveView("form")}
-              className={`p-1.5 rounded-lg transition-all shrink-0 ${
-                activeView === "form"
-                  ? "bg-cyan-500 text-zinc-950 shadow"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-              title="Form View"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveView("spreadsheet")}
+            className={`p-1.5 rounded-lg transition-all shrink-0 ${
+              activeView === "spreadsheet"
+                ? "bg-cyan-500 text-zinc-950 shadow"
+                : "text-zinc-400 hover:text-white"
+            }`}
+            title="17-Slot Matrix View"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
 
-          {/* User Name, Designation & User Rights Badge */}
-          <div className="flex items-center gap-2.5 bg-zinc-900/90 border border-zinc-800/90 px-3.5 py-1.5 rounded-xl shrink-0 shadow-sm">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow shrink-0">
-              {userName.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex flex-col text-left leading-tight shrink-0">
-              <span className="font-bold text-white text-xs tracking-tight whitespace-nowrap block">{userName}</span>
-              <span className="text-[10.5px] text-zinc-400 font-mono font-medium whitespace-nowrap block mt-0.5">
-                💼 {userDesignation} • <strong className="text-amber-400 font-bold">{userRole}</strong>
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveView("form")}
+            className={`p-1.5 rounded-lg transition-all shrink-0 ${
+              activeView === "form"
+                ? "bg-cyan-500 text-zinc-950 shadow"
+                : "text-zinc-400 hover:text-white"
+            }`}
+            title="Form View"
+          >
+            <FileText className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* RIGHT: Quick Action Tools */}
+        {/* RIGHT: Quick Action Tools + EXTREME TOP RIGHT User Profile Dropdown */}
         <div className="flex items-center gap-1.5 shrink-0">
           
           {/* Quick Save Project Button */}
@@ -273,6 +260,82 @@ export default function Header({
           >
             <Sparkles className="w-4 h-4 fill-zinc-950" />
           </button>
+
+          {/* EXTREME TOP RIGHT: Logged-In User Profile & Designation Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              className="flex items-center gap-1.5 p-1 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500 transition-all cursor-pointer shadow shrink-0"
+              title="Click to view logged-in profile & designation"
+            >
+              {/* 3-Letter Icon Badge */}
+              <div className="px-1.5 py-0.5 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white font-black text-[11px] font-mono tracking-widest shadow shrink-0">
+                {firstThreeLetters}
+              </div>
+
+              <div className="hidden sm:flex flex-col text-left leading-tight shrink-0">
+                <span className="font-bold text-white text-xs tracking-tight whitespace-nowrap block">{userName}</span>
+                <span className="text-[9.5px] text-zinc-400 font-mono block whitespace-nowrap">
+                  💼 {userDesignation}
+                </span>
+              </div>
+
+              <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
+            </button>
+
+            {/* Profile & Designation Dropdown Menu */}
+            {isProfileOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 p-3.5 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
+                <div className="flex items-start gap-2.5 pb-2.5 border-b border-zinc-800">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider">
+                    {firstThreeLetters}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold text-white text-sm truncate font-sans">{userName}</span>
+                    <span className="text-[11px] text-cyan-300 font-bold">💼 {userDesignation}</span>
+                    <span className="text-[10px] text-amber-400 font-bold mt-0.5">👑 {userRole}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setIsProfileOpen(false); if (onOpenAdminModal) onOpenAdminModal(); }}
+                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800/80"
+                  >
+                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-400" /> Admin & Project Settings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setIsProfileOpen(false); if (onOpenHelpModal) onOpenHelpModal(); }}
+                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800/80"
+                  >
+                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-400" /> Help & User Guide</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem('sps_authorized_user_email');
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/40 text-red-300 font-bold flex items-center justify-between transition-all border border-red-900/40 text-[11px]"
+                  >
+                    <span>🔒 Lock Session / Switch Account</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400 text-center">
+                  Stage Production Studio • Cloud Room <strong className="text-amber-400">{roomId || 'SPS-CLOUD-8821'}</strong>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
