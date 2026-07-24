@@ -232,6 +232,7 @@ export default function AdminSettingsModal({
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState('Editor');
+  const [selectedProjectToAllot, setSelectedProjectToAllot] = useState('STAGE PRODUCTION STUDIO');
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [inputOtp, setInputOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -355,6 +356,8 @@ export default function AdminSettingsModal({
         designation: designation || 'Lead Director',
         email: cleanMail,
         role: selectedRole || 'Editor',
+        allottedProjects: [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
+        currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
       };
@@ -399,6 +402,8 @@ export default function AdminSettingsModal({
         email: userMail,
         phone: userPhone,
         role: selectedRole,
+        allottedProjects: [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
+        currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
       };
@@ -1660,7 +1665,7 @@ export default function AdminSettingsModal({
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                             <div>
                               <label className="text-[11px] text-zinc-300 font-bold block mb-1">Collaborator Email ID (Required):</label>
                               <input
@@ -1671,6 +1676,20 @@ export default function AdminSettingsModal({
                                 className="w-full bg-zinc-950 border border-zinc-700 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
                                 required
                               />
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] text-amber-300 font-bold block mb-1">Project to Allot:</label>
+                              <select
+                                value={selectedProjectToAllot}
+                                onChange={(e) => setSelectedProjectToAllot(e.target.value)}
+                                className="w-full bg-zinc-950 border border-amber-500/60 text-amber-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-bold"
+                              >
+                                <option value="STAGE PRODUCTION STUDIO">🎬 STAGE PRODUCTION STUDIO</option>
+                                <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
+                                <option value="Commercial Campaign Project">🎬 Commercial Campaign Project</option>
+                                <option value="Short Film Scene Project">🎬 Short Film Scene Project</option>
+                              </select>
                             </div>
 
                             <div>
@@ -1858,6 +1877,55 @@ export default function AdminSettingsModal({
 
                                 <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
                                   {user.email ? <span className="text-amber-300 font-bold">📧 {user.email}</span> : (user.phone && <span className="text-amber-300 font-bold">📱 {user.phone}</span>)}
+                                </div>
+
+                                {/* Visible Project Allotment Control & Live Allotted Badges */}
+                                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-900/80 mt-1">
+                                  <span className="text-[10.5px] font-bold text-amber-400 font-sans flex items-center gap-1">
+                                    📁 Allot Project:
+                                  </span>
+
+                                  {/* Project Allotment Dropdown */}
+                                  <select
+                                    value={user.allottedProjects?.[0] || 'STAGE PRODUCTION STUDIO'}
+                                    onChange={(e) => {
+                                      const selectedProj = e.target.value;
+                                      setAuthorizedUsers(prev => {
+                                        const updated = prev.map(u => {
+                                          const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                          if (match) {
+                                            const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
+                                            const newList = currentList.includes(selectedProj) ? currentList : [selectedProj, ...currentList];
+                                            return { ...u, allottedProjects: newList, currentProject: selectedProj };
+                                          }
+                                          return u;
+                                        });
+                                        if (typeof window !== 'undefined') {
+                                          localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
+                                          window.dispatchEvent(new Event('sps_collaborators_updated'));
+                                        }
+                                        return updated;
+                                      });
+                                    }}
+                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-xs"
+                                    title="Select project to allot to this collaborator"
+                                  >
+                                    <option value="STAGE PRODUCTION STUDIO">🎬 STAGE PRODUCTION STUDIO</option>
+                                    <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
+                                    <option value="Commercial Campaign Project">🎬 Commercial Campaign Project</option>
+                                    <option value="Short Film Scene Project">🎬 Short Film Scene Project</option>
+                                  </select>
+
+                                  {/* Live Allotted Project Badges */}
+                                  {(Array.isArray(user.allottedProjects) && user.allottedProjects.length > 0 ? user.allottedProjects : ['STAGE PRODUCTION STUDIO']).map((pTitle, pIdx) => (
+                                    <span 
+                                      key={pIdx}
+                                      className="text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1 shadow-xs"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      {pTitle}
+                                    </span>
+                                  ))}
                                 </div>
                               </div>
                             </div>
