@@ -269,11 +269,19 @@ export default function AdminSettingsModal({
       if (saved !== null) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         } catch (e) {}
       }
     }
     return [
+      { 
+        name: 'Pedditi Ram', 
+        designation: 'Lead Director', 
+        email: 'pedditiram@gmail.com', 
+        role: 'Director & Owner', 
+        status: 'Active', 
+        verifiedAt: 'Today, 09:00 AM' 
+      },
       { 
         name: 'Pedditi Varshini', 
         designation: 'Lead Director', 
@@ -292,6 +300,30 @@ export default function AdminSettingsModal({
     }
   }, [activityLog, authorizedUsers]);
 
+  // Real-time automatic listener for collaborator updates & cross-tab sync
+  useEffect(() => {
+    const syncUsers = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sps_authorized_phone_users');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAuthorizedUsers(parsed);
+            }
+          } catch (e) {}
+        }
+      }
+    };
+
+    window.addEventListener('storage', syncUsers);
+    window.addEventListener('sps_collaborators_updated', syncUsers);
+    return () => {
+      window.removeEventListener('storage', syncUsers);
+      window.removeEventListener('sps_collaborators_updated', syncUsers);
+    };
+  }, []);
+
   const handleGenerateOtp = (e) => {
     e.preventDefault();
     if (!email.trim() || !email.includes('@')) {
@@ -308,6 +340,42 @@ export default function AdminSettingsModal({
     setOtpSent(true);
     setCollabOtpError('');
     setOtpSuccessMsg(`✓ Unique 1-Time Security OTP ${newCode} generated for ${collaboratorName.trim()} (${email.trim()})!`);
+
+    const cleanMail = email.trim().toLowerCase();
+    const now = new Date();
+    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const todayIso = now.toISOString().split('T')[0];
+    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+    // Automatically add/update authorized collaborators list immediately
+    setAuthorizedUsers(prev => {
+      const filtered = prev.filter(u => !u.email || u.email.toLowerCase() !== cleanMail);
+      const updatedUser = {
+        name: collaboratorName.trim(),
+        designation: designation || 'Lead Director',
+        email: cleanMail,
+        role: selectedRole || 'Editor',
+        status: 'Active',
+        verifiedAt: `${todayFormatted}, ${nowStr}`
+      };
+      const updated = [updatedUser, ...filtered];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+      }
+      return updated;
+    });
+
+    const newActivity = {
+      id: `act_${Date.now()}`,
+      date: todayIso,
+      dateFormatted: todayFormatted,
+      time: nowStr,
+      user: `Admin Owner (pedditiram@gmail.com)`,
+      action: `Generated 1-Time Security OTP ${newCode} & authorized ${collaboratorName.trim()} (${cleanMail}) as ${designation}`,
+      status: 'verified'
+    };
+    setActivityLog(prev => [newActivity, ...prev]);
   };
 
   const handleVerifyOtp = (e) => {
