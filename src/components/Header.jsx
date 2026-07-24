@@ -73,7 +73,15 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
-      <div className="w-full flex items-center justify-between gap-3 overflow-x-auto scrollbar-none">
+      {/* Click outside backdrop when profile dropdown is open */}
+      {isProfileOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" 
+          onClick={() => setIsProfileOpen(false)} 
+        />
+      )}
+
+      <div className="w-full flex items-center justify-between gap-3 relative">
         
         {/* LEFT: App Brand + Active Project Editable Title */}
         <div className="flex items-center gap-2.5 shrink-0">
@@ -263,8 +271,8 @@ export default function Header({
             <Sparkles className="w-4 h-4 fill-zinc-950" />
           </button>
 
-          {/* EXTREME TOP RIGHT: Logged-In User Profile (4-Letter Name Only, Designation Removed From Pill) */}
-          <div className="relative shrink-0">
+          {/* EXTREME TOP RIGHT: Logged-In User Profile (4-Letter Name Only, Fixed Visible Dropdown) */}
+          <div className="shrink-0 relative">
             <button
               type="button"
               onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -276,15 +284,15 @@ export default function Header({
                 {fourLetterName}
               </div>
 
-              {/* 4-Letter Name Display (Designation Removed From Pill) */}
+              {/* 4-Letter Name Display */}
               <span className="font-bold text-white text-xs tracking-wide whitespace-nowrap block">{fourLetterName}</span>
 
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
             </button>
 
-            {/* Profile & Designation Dropdown Menu */}
+            {/* Profile & Designation Fixed High Z-Index Dropdown Menu */}
             {isProfileOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 p-4 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
+              <div className="fixed top-12 right-2 sm:right-4 w-80 bg-zinc-950 border-2 border-zinc-700/90 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] z-50 p-4 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
                 
                 {/* User Info & Designation Header */}
                 <div className="flex items-start gap-3 pb-3 border-b border-zinc-800">
