@@ -67,9 +67,33 @@ export default function Header({
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Director & Owner' : 'Editor');
+  const firstLetter = userName.trim().charAt(0).toUpperCase() || 'P';
   const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PEDD';
   const authEmail = currentUser.email || (isAdminLoggedIn ? 'pedditiram@gmail.com' : 'user@gmail.com');
   const allottedProjects = currentUser.allottedProjects || [projectTitle || 'Active Stage Production Project'];
+
+  // Generate unique color gradient for each user based on name hash
+  const USER_GRADIENTS = [
+    'from-cyan-500 via-blue-600 to-indigo-600',       // Cyan Blue
+    'from-emerald-400 via-teal-600 to-cyan-600',      // Emerald Teal
+    'from-purple-500 via-violet-600 to-indigo-600',   // Purple Violet
+    'from-amber-400 via-orange-500 to-rose-600',      // Warm Sunset
+    'from-fuchsia-500 via-pink-600 to-rose-600',      // Pink Rose
+    'from-sky-400 via-indigo-600 to-blue-700',        // Sky Blue
+    'from-lime-400 via-emerald-600 to-teal-700',      // Fresh Lime
+    'from-rose-500 via-red-600 to-amber-600',         // Crimson Flame
+  ];
+
+  const getUserGradient = (name = '') => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const idx = Math.abs(hash) % USER_GRADIENTS.length;
+    return USER_GRADIENTS[idx];
+  };
+
+  const userColorGradient = getUserGradient(userName);
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
@@ -271,7 +295,7 @@ export default function Header({
             <Sparkles className="w-4 h-4 fill-zinc-950" />
           </button>
 
-          {/* EXTREME TOP RIGHT: Logged-In User Profile (4-Letter Name Only, Fixed Visible Dropdown) */}
+          {/* EXTREME TOP RIGHT: Logged-In User Profile (Round Circle Icon with Unique User Color + 4-Letter Name) */}
           <div className="shrink-0 relative">
             <button
               type="button"
@@ -279,9 +303,9 @@ export default function Header({
               className="flex items-center gap-2 p-1.5 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500 transition-all cursor-pointer shadow shrink-0"
               title="Click to view logged-in profile, designation & allotted projects"
             >
-              {/* 4-Letter Icon Badge */}
-              <div className="px-2 py-0.5 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white font-black text-xs font-mono tracking-widest shadow shrink-0">
-                {fourLetterName}
+              {/* Round Circle Avatar Icon with User-Unique Gradient Color */}
+              <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${userColorGradient} text-white font-black text-xs font-mono flex items-center justify-center shadow shrink-0 ring-1 ring-white/20`}>
+                {firstLetter}
               </div>
 
               {/* 4-Letter Name Display */}
@@ -296,8 +320,8 @@ export default function Header({
                 
                 {/* User Info & Designation Header */}
                 <div className="flex items-start gap-3 pb-3 border-b border-zinc-800">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider">
-                    {fourLetterName}
+                  <div className={`w-11 h-11 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider ring-2 ring-white/30`}>
+                    {firstLetter}
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold text-white text-sm truncate font-sans">{userName}</span>
