@@ -471,7 +471,21 @@ export default function ProjectConsoleModal({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isActive) handleSwitchProject(proj);
+                            setCustomProjectTitle(proj.title);
+                            setActiveTab('ai_breakdown');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 text-xs font-bold font-mono shadow flex items-center gap-1"
+                          title={`Run AI Script Breakdown for ${proj.title}`}
+                        >
+                          <Wand2 className="w-3.5 h-3.5 text-amber-500" />
+                          <span>AI Script Breakdown</span>
+                        </button>
+
                         {!isActive && (
                           <button
                             type="button"
@@ -510,10 +524,15 @@ export default function ProjectConsoleModal({
             <div className="space-y-4 font-mono">
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-cyan-300 dark:border-cyan-500/40 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Wand2 className="w-4 h-4 text-amber-500" />
-                    AI Screenplay Breakdown & Cinema Parser:
-                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Wand2 className="w-4 h-4 text-amber-500" />
+                      AI Screenplay Breakdown & Cinema Parser:
+                    </h4>
+                    <span className="text-[11px] bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-800/80 font-mono font-bold">
+                      Target Project: {customProjectTitle || currentProjectTitle}
+                    </span>
+                  </div>
                   <label className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 shadow">
                     <Upload className="w-3.5 h-3.5" />
                     <span>Upload PDF / TXT Script</span>
