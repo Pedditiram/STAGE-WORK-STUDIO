@@ -67,7 +67,9 @@ export default function Header({
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Director & Owner' : 'Editor');
-  const firstThreeLetters = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'PED';
+  const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PEDD';
+  const authEmail = currentUser.email || (isAdminLoggedIn ? 'pedditiram@gmail.com' : 'user@gmail.com');
+  const allottedProjects = currentUser.allottedProjects || [projectTitle || 'Active Stage Production Project'];
 
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
@@ -261,60 +263,79 @@ export default function Header({
             <Sparkles className="w-4 h-4 fill-zinc-950" />
           </button>
 
-          {/* EXTREME TOP RIGHT: Logged-In User Profile & Designation Dropdown */}
+          {/* EXTREME TOP RIGHT: Logged-In User Profile (4-Letter Name Only, Designation Removed From Pill) */}
           <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="flex items-center gap-1.5 p-1 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500 transition-all cursor-pointer shadow shrink-0"
-              title="Click to view logged-in profile & designation"
+              className="flex items-center gap-2 p-1.5 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500 transition-all cursor-pointer shadow shrink-0"
+              title="Click to view logged-in profile, designation & allotted projects"
             >
-              {/* 3-Letter Icon Badge */}
-              <div className="px-1.5 py-0.5 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white font-black text-[11px] font-mono tracking-widest shadow shrink-0">
-                {firstThreeLetters}
+              {/* 4-Letter Icon Badge */}
+              <div className="px-2 py-0.5 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white font-black text-xs font-mono tracking-widest shadow shrink-0">
+                {fourLetterName}
               </div>
 
-              <div className="hidden sm:flex flex-col text-left leading-tight shrink-0">
-                <span className="font-bold text-white text-xs tracking-tight whitespace-nowrap block">{userName}</span>
-                <span className="text-[9.5px] text-zinc-400 font-mono block whitespace-nowrap">
-                  💼 {userDesignation}
-                </span>
-              </div>
+              {/* 4-Letter Name Display (Designation Removed From Pill) */}
+              <span className="font-bold text-white text-xs tracking-wide whitespace-nowrap block">{fourLetterName}</span>
 
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
             </button>
 
             {/* Profile & Designation Dropdown Menu */}
             {isProfileOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 p-3.5 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
-                <div className="flex items-start gap-2.5 pb-2.5 border-b border-zinc-800">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider">
-                    {firstThreeLetters}
+              <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-50 p-4 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
+                
+                {/* User Info & Designation Header */}
+                <div className="flex items-start gap-3 pb-3 border-b border-zinc-800">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider">
+                    {fourLetterName}
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold text-white text-sm truncate font-sans">{userName}</span>
                     <span className="text-[11px] text-cyan-300 font-bold">💼 {userDesignation}</span>
-                    <span className="text-[10px] text-amber-400 font-bold mt-0.5">👑 {userRole}</span>
+                    <span className="text-[10.5px] text-amber-400 font-bold mt-0.5">👑 {userRole}</span>
+                    <span className="text-[10px] text-zinc-400 truncate mt-0.5">📧 {authEmail}</span>
                   </div>
                 </div>
 
+                {/* Projects Shared / Allotted Section */}
                 <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-zinc-300 block flex items-center gap-1.5 font-sans">
+                    <FolderKanban className="w-3.5 h-3.5 text-amber-400" />
+                    Projects Shared & Allotted ({allottedProjects.length}):
+                  </span>
+                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                    {allottedProjects.map((proj, pIdx) => (
+                      <div key={pIdx} className="p-2 rounded-lg bg-zinc-900 border border-zinc-800/80 flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-200 font-bold truncate max-w-[170px]">{proj}</span>
+                        <span className="text-[9.5px] bg-emerald-950 text-emerald-300 border border-emerald-800/80 px-1.5 py-0.5 rounded font-bold">
+                          🟢 Access Allotted
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Action & Login / Logout Controls */}
+                <div className="space-y-1.5 pt-2 border-t border-zinc-800">
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenAdminModal) onOpenAdminModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800/80"
+                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800"
                   >
-                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-400" /> Admin & Project Settings</span>
+                    <span className="flex items-center gap-2"><Settings className="w-3.5 h-3.5 text-amber-400" /> Admin & Project Settings</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenHelpModal) onOpenHelpModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800/80"
+                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800"
                   >
-                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-400" /> Help & User Guide</span>
+                    <span className="flex items-center gap-2"><HelpCircle className="w-3.5 h-3.5 text-cyan-400" /> Help & User Guide</span>
                   </button>
 
+                  {/* Gmail Login / Logout Trigger */}
                   <button
                     type="button"
                     onClick={() => {
@@ -324,14 +345,14 @@ export default function Header({
                         window.location.reload();
                       }
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/40 text-red-300 font-bold flex items-center justify-between transition-all border border-red-900/40 text-[11px]"
+                    className="w-full text-left px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/50 text-red-300 font-bold flex items-center justify-between transition-all border border-red-900/40 text-[11px]"
                   >
-                    <span>🔒 Lock Session / Switch Account</span>
+                    <span className="flex items-center gap-2">🔑 Logout / Switch Gmail Account</span>
                   </button>
                 </div>
 
                 <div className="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400 text-center">
-                  Stage Production Studio • Cloud Room <strong className="text-amber-400">{roomId || 'SPS-CLOUD-8821'}</strong>
+                  Gmail Authorization • Cloud Room <strong className="text-amber-400">{roomId || 'SPS-CLOUD-8821'}</strong>
                 </div>
               </div>
             )}
