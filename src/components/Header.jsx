@@ -314,34 +314,34 @@ export default function Header({
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
             </button>
 
-            {/* Profile & Designation Fixed High Z-Index Dropdown Menu */}
+            {/* Profile & Designation Fixed High Z-Index Dropdown Menu (Guaranteed High Contrast in Light & Dark Mode) */}
             {isProfileOpen && (
-              <div className="fixed top-12 right-2 sm:right-4 w-80 bg-zinc-950 border-2 border-zinc-700/90 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] z-50 p-4 space-y-3 font-mono text-xs text-left animate-in fade-in zoom-in-95">
+              <div className="fixed top-12 right-2 sm:right-4 w-80 bg-slate-950 text-white border-2 border-cyan-500/50 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95)] z-50 p-4 space-y-3.5 font-mono text-xs text-left animate-in fade-in zoom-in-95">
                 
                 {/* User Info & Designation Header */}
-                <div className="flex items-start gap-3 pb-3 border-b border-zinc-800">
-                  <div className={`w-11 h-11 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-black text-sm shadow shrink-0 tracking-wider ring-2 ring-white/30`}>
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                  <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-black text-base shadow-lg shrink-0 tracking-wider ring-2 ring-white/40`}>
                     {firstLetter}
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="font-bold text-white text-sm truncate font-sans">{userName}</span>
-                    <span className="text-[11px] text-cyan-300 font-bold">💼 {userDesignation}</span>
-                    <span className="text-[10.5px] text-amber-400 font-bold mt-0.5">👑 {userRole}</span>
-                    <span className="text-[10px] text-zinc-400 truncate mt-0.5">📧 {authEmail}</span>
+                  <div className="flex flex-col min-w-0 leading-snug">
+                    <span className="font-black text-white text-base truncate font-sans block tracking-tight">{userName}</span>
+                    <span className="text-xs text-cyan-300 font-bold block mt-0.5">💼 {userDesignation}</span>
+                    <span className="text-[11px] text-amber-300 font-bold block mt-0.5">👑 {userRole}</span>
+                    <span className="text-[10.5px] text-slate-300 truncate block mt-0.5">📧 {authEmail}</span>
                   </div>
                 </div>
 
                 {/* Projects Shared / Allotted Section */}
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-zinc-300 block flex items-center gap-1.5 font-sans">
+                  <span className="text-xs font-bold text-slate-200 block flex items-center gap-1.5 font-sans">
                     <FolderKanban className="w-3.5 h-3.5 text-amber-400" />
                     Projects Shared & Allotted ({allottedProjects.length}):
                   </span>
                   <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
                     {allottedProjects.map((proj, pIdx) => (
-                      <div key={pIdx} className="p-2 rounded-lg bg-zinc-900 border border-zinc-800/80 flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-200 font-bold truncate max-w-[170px]">{proj}</span>
-                        <span className="text-[9.5px] bg-emerald-950 text-emerald-300 border border-emerald-800/80 px-1.5 py-0.5 rounded font-bold">
+                      <div key={pIdx} className="p-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-[11px] shadow-sm">
+                        <span className="text-white font-bold truncate max-w-[160px] font-sans">{proj}</span>
+                        <span className="text-[9.5px] bg-emerald-950 text-emerald-300 border border-emerald-700/80 px-2 py-0.5 rounded-md font-bold shrink-0">
                           🟢 Access Allotted
                         </span>
                       </div>
@@ -350,21 +350,21 @@ export default function Header({
                 </div>
 
                 {/* Quick Action & Login / Logout Controls */}
-                <div className="space-y-1.5 pt-2 border-t border-zinc-800">
+                <div className="space-y-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenAdminModal) onOpenAdminModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800"
+                    className="w-full text-left px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-100 hover:text-white font-bold flex items-center justify-between transition-all border border-slate-800 text-xs shadow-sm"
                   >
-                    <span className="flex items-center gap-2"><Settings className="w-3.5 h-3.5 text-amber-400" /> Admin & Project Settings</span>
+                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-400" /> Admin & Project Settings</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenHelpModal) onOpenHelpModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-bold flex items-center justify-between transition-all border border-zinc-800"
+                    className="w-full text-left px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-100 hover:text-white font-bold flex items-center justify-between transition-all border border-slate-800 text-xs shadow-sm"
                   >
-                    <span className="flex items-center gap-2"><HelpCircle className="w-3.5 h-3.5 text-cyan-400" /> Help & User Guide</span>
+                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-400" /> Help & User Guide</span>
                   </button>
 
                   {/* Gmail Login / Logout Trigger */}
@@ -377,14 +377,14 @@ export default function Header({
                         window.location.reload();
                       }
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/50 text-red-300 font-bold flex items-center justify-between transition-all border border-red-900/40 text-[11px]"
+                    className="w-full text-left px-3.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-between transition-all border border-red-400 text-xs shadow-md cursor-pointer"
                   >
                     <span className="flex items-center gap-2">🔑 Logout / Switch Gmail Account</span>
                   </button>
                 </div>
 
-                <div className="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400 text-center">
-                  Gmail Authorization • Cloud Room <strong className="text-amber-400">{roomId || 'SPS-CLOUD-8821'}</strong>
+                <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 text-center font-bold">
+                  Gmail Authorization • Cloud Room <strong className="text-amber-400 font-mono">{roomId || 'SPS-CLOUD-8821'}</strong>
                 </div>
               </div>
             )}
