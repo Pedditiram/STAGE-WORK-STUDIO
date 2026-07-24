@@ -1542,6 +1542,33 @@ export default function AdminSettingsModal({
                       </div>
                     </div>
 
+                    {/* Public Shareable URL Link */}
+                    <div className="pt-1">
+                      <label className="text-[11px] font-mono text-zinc-400 font-bold block mb-1">Public Shareable Cloud URL Link:</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'SPS-CLOUD-8821'}`}
+                          className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-cyan-300 font-mono select-all shadow-inner"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'SPS-CLOUD-8821'}`;
+                            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                              navigator.clipboard.writeText(url);
+                            }
+                            alert("✓ Copied Cloud Shareable Link to Clipboard!");
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow flex items-center gap-1.5 shrink-0"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Share Link</span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Grant Collaborator Credentials Form */}
                     <div className="space-y-3 pt-1">
                       <h4 className="text-xs font-bold text-white flex items-center gap-2 font-sans">

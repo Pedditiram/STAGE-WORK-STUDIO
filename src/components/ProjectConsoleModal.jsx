@@ -390,19 +390,6 @@ export default function ProjectConsoleModal({
             <Plus className="w-4 h-4" />
             <span>➕ Create Project</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('share')}
-            className={`px-3 py-2 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
-              activeTab === 'share'
-                ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
-                : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Share2 className="w-4 h-4" />
-            <span>🔗 Cloud Share</span>
-          </button>
         </div>
 
         {/* Modal Tab Content */}
