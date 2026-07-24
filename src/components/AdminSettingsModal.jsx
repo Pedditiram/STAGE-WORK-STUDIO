@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail } from 'lucide-react';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2 } from 'lucide-react';
 
 export default function AdminSettingsModal({ 
   isOpen, 
@@ -1884,10 +1884,10 @@ export default function AdminSettingsModal({
                                     handleRemoveCollaborator(user);
                                   }
                                 }}
-                                className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all"
-                                title="Remove Collaborator"
+                                className="p-2 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                                title="Delete / Remove Collaborator"
                               >
-                                <X className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
                             </div>
                           </div>
