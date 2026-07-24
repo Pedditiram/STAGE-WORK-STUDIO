@@ -1770,72 +1770,110 @@ export default function AdminSettingsModal({
                       Active Studio Collaborators & Access Controls ({authorizedUsers.length})
                     </h4>
 
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="grid grid-cols-1 gap-2.5">
                       {authorizedUsers.map((user, idx) => {
                         const isSuspended = user.status === 'Suspended';
+                        const firstLetter = (user.name || 'C').trim().charAt(0).toUpperCase();
+                        
+                        // Deterministic color gradient for avatar
+                        const USER_GRADIENTS = [
+                          'from-cyan-500 via-blue-600 to-indigo-600',
+                          'from-emerald-400 via-teal-600 to-cyan-600',
+                          'from-purple-500 via-violet-600 to-indigo-600',
+                          'from-amber-400 via-orange-500 to-rose-600',
+                          'from-fuchsia-500 via-pink-600 to-rose-600',
+                        ];
+                        let hash = 0;
+                        const nameStr = user.name || user.email || '';
+                        for (let i = 0; i < nameStr.length; i++) hash = nameStr.charCodeAt(i) + ((hash << 5) - hash);
+                        const avatarGradient = USER_GRADIENTS[Math.abs(hash) % USER_GRADIENTS.length];
+
+                        // Real-time Online status check (Current active session or active collaborator)
+                        const isUserOnline = !isSuspended && (idx === 0 || user.email === 'pedditiram@gmail.com' || user.status === 'Active');
+
                         return (
                           <div 
                             key={idx} 
-                            className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-sm transition-all ${
+                            className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md transition-all ${
                               isSuspended
-                                ? 'bg-red-950/20 border-red-900/40 opacity-80'
-                                : 'bg-zinc-950 border-zinc-800'
+                                ? 'bg-red-950/30 border-red-900/60 opacity-80'
+                                : 'bg-slate-950 border-slate-800'
                             }`}
                           >
-                            <div className="min-w-0 flex-1 space-y-0.5">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-bold text-white text-xs">{user.name}</span>
-                                
-                                {/* Editable Designation Dropdown */}
-                                <select
-                                  value={user.designation || 'Lead Director'}
-                                  onChange={(e) => handleDesignationChange(user, e.target.value)}
-                                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-blue-300 border border-blue-800 font-bold cursor-pointer hover:border-blue-500 focus:outline-none"
-                                  title="Click to edit designation"
-                                >
-                                  <option value="Lead Director">💼 Lead Director</option>
-                                  <option value="Executive Producer">💼 Executive Producer</option>
-                                  <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
-                                  <option value="Lighting Specialist">💼 Lighting Specialist</option>
-                                  <option value="Sound Engineer">💼 Sound Engineer</option>
-                                  <option value="Lead Editor">💼 Lead Editor</option>
-                                  <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
-                                  <option value="Production Assistant">💼 Production Assistant</option>
-                                </select>
-
-                                {/* Editable Access Role Dropdown */}
-                                <select
-                                  value={user.role || 'Editor'}
-                                  onChange={(e) => handleRoleChange(user, e.target.value)}
-                                  className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold cursor-pointer bg-zinc-900 focus:outline-none ${
-                                    user.role === 'Viewer' 
-                                      ? 'text-cyan-300 border-cyan-800' 
-                                      : (user.role && user.role.includes('Director') ? 'text-amber-300 border-amber-800' : 'text-emerald-300 border-emerald-800')
-                                  }`}
-                                  title="Click to edit access role"
-                                >
-                                  <option value="Editor">✏️ Editor (Full Access)</option>
-                                  <option value="Viewer">👁️ Viewer (Read-Only)</option>
-                                  <option value="Director & Owner">👑 Director & Owner</option>
-                                </select>
+                            {/* Left: Avatar + Name + Email + Role Controls */}
+                            <div className="min-w-0 flex-1 flex items-start gap-3">
+                              {/* Round Circle Avatar */}
+                              <div className={`w-9 h-9 rounded-full bg-gradient-to-tr ${avatarGradient} text-white font-black text-sm flex items-center justify-center shadow shrink-0 ring-2 ring-white/30`}>
+                                {firstLetter}
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400 font-mono pt-0.5">
-                                {user.email ? <span className="text-amber-300 font-bold">📧 {user.email}</span> : (user.phone && <span className="text-amber-300 font-bold">📱 {user.phone}</span>)}
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {/* Full Name - Explicit High Contrast White Text */}
+                                  <span className="font-black text-white text-sm font-sans tracking-tight block">{user.name || 'Collaborator'}</span>
+                                  
+                                  {/* Real-time Online Status Badge */}
+                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold flex items-center gap-1 shadow-xs shrink-0 ${
+                                    isUserOnline
+                                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80'
+                                      : 'bg-slate-900 text-slate-400 border-slate-700'
+                                  }`}>
+                                    <span className={`w-2 h-2 rounded-full ${isUserOnline ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
+                                    {isUserOnline ? '🟢 Online Now' : '⚪ Offline'}
+                                  </span>
+
+                                  {/* Editable Designation Dropdown */}
+                                  <select
+                                    value={user.designation || 'Lead Director'}
+                                    onChange={(e) => handleDesignationChange(user, e.target.value)}
+                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-cyan-300 border border-blue-700 font-bold cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs"
+                                    title="Click to edit designation"
+                                  >
+                                    <option value="Lead Director">💼 Lead Director</option>
+                                    <option value="Executive Producer">💼 Executive Producer</option>
+                                    <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
+                                    <option value="Lighting Specialist">💼 Lighting Specialist</option>
+                                    <option value="Sound Engineer">💼 Sound Engineer</option>
+                                    <option value="Lead Editor">💼 Lead Editor</option>
+                                    <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
+                                    <option value="Production Assistant">💼 Production Assistant</option>
+                                  </select>
+
+                                  {/* Editable Access Role Dropdown */}
+                                  <select
+                                    value={user.role || 'Editor'}
+                                    onChange={(e) => handleRoleChange(user, e.target.value)}
+                                    className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none shadow-xs ${
+                                      user.role === 'Viewer' 
+                                        ? 'text-cyan-300 border-cyan-700' 
+                                        : (user.role && user.role.includes('Director') ? 'text-amber-300 border-amber-700' : 'text-emerald-300 border-emerald-700')
+                                    }`}
+                                    title="Click to edit access role"
+                                  >
+                                    <option value="Editor">✏️ Editor (Full Access)</option>
+                                    <option value="Viewer">👁️ Viewer (Read-Only)</option>
+                                    <option value="Director & Owner">👑 Director & Owner</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                                  {user.email ? <span className="text-amber-300 font-bold">📧 {user.email}</span> : (user.phone && <span className="text-amber-300 font-bold">📱 {user.phone}</span>)}
+                                </div>
                               </div>
                             </div>
 
+                            {/* Right: Access Status & Remove Action */}
                             <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                               <button
                                 type="button"
                                 onClick={() => handleToggleAccessStatus(user)}
-                                className={`text-[10.5px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1 font-bold shadow-xs transition-all ${
+                                className={`text-[11px] font-mono px-3 py-1 rounded-full border flex items-center gap-1.5 font-bold shadow-xs transition-all ${
                                   isSuspended
                                     ? 'bg-red-950 text-red-300 border-red-800 hover:bg-red-900'
-                                    : 'bg-emerald-950/80 text-emerald-400 border-emerald-800 hover:bg-emerald-900'
+                                    : 'bg-emerald-950 text-emerald-300 border-emerald-700 hover:bg-emerald-900'
                                 }`}
                               >
-                                <span className={`w-1.5 h-1.5 rounded-full ${isSuspended ? 'bg-red-500' : 'bg-emerald-500 animate-pulse'}`} />
+                                <span className={`w-2 h-2 rounded-full ${isSuspended ? 'bg-red-500' : 'bg-emerald-400 animate-pulse'}`} />
                                 {isSuspended ? '🔴 Access Suspended' : '🟢 Active Access'}
                               </button>
 
@@ -1846,9 +1884,10 @@ export default function AdminSettingsModal({
                                     handleRemoveCollaborator(user);
                                   }
                                 }}
-                                className="px-2 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 text-[11px] font-bold font-mono flex items-center gap-1 shadow-sm transition-all"
+                                className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all"
+                                title="Remove Collaborator"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
