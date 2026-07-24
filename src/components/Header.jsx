@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll
+  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle
 } from 'lucide-react';
 
 export default function Header({ 
@@ -17,6 +17,7 @@ export default function Header({
   onOpenAdminModal,
   onOpenAIModal,
   onOpenProjectConsole,
+  onOpenHelpModal,
   roomId,
   collaboratorCount,
   isAdminLoggedIn,
@@ -185,6 +186,16 @@ export default function Header({
             title="Admin Settings"
           >
             {isAdminLoggedIn ? <Settings className="w-4 h-4 text-amber-400 animate-spin-slow" /> : <Lock className="w-4 h-4 text-zinc-400" />}
+          </button>
+
+          {/* Help & User Guide Trigger */}
+          <button
+            type="button"
+            onClick={onOpenHelpModal}
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-700 shrink-0"
+            title="Open Help & User Guide"
+          >
+            <HelpCircle className="w-4 h-4 text-cyan-400" />
           </button>
 
           {/* Color Theme Selector Pill (Small Icons Only) */}

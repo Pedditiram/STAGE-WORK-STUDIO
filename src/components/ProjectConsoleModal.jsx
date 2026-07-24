@@ -146,9 +146,13 @@ export default function ProjectConsoleModal({
     onClose();
   };
 
-  // 2. CREATE NEW PROJECT
+  // 2. CREATE NEW PROJECT (ADMIN-ONLY SECURITY RULE)
   const handleCreateProject = (e) => {
     e.preventDefault();
+    if (!isAdminLoggedIn) {
+      alert("🔒 ACCESS RESTRICTED:\nNo user has permission to create a project. Only the Primary App Admin (pedditiram@gmail.com) logged into Admin Settings is authorized to create new projects.");
+      return;
+    }
     if (!newTitle.trim()) return;
 
     const projId = `proj_${Date.now()}`;

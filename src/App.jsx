@@ -9,6 +9,7 @@ import AdminSettingsModal from './components/AdminSettingsModal';
 import AIScriptModal from './components/AIScriptModal';
 import ProjectConsoleModal from './components/ProjectConsoleModal';
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
+import HelpUserGuideModal from './components/HelpUserGuideModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
 import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward } from 'lucide-react';
@@ -167,6 +168,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [currentRole, setCurrentRole] = useState('director');
   const [collaborators, setCollaborators] = useState([
@@ -629,6 +631,7 @@ export default function App() {
         onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
         onOpenAIModal={() => setIsAIModalOpen(true)}
         onOpenProjectConsole={() => setIsProjectConsoleOpen(true)}
+        onOpenHelpModal={() => setIsHelpModalOpen(true)}
         roomId={roomId}
         collaboratorCount={collaborators.length}
         isAdminLoggedIn={isAdminLoggedIn}
@@ -885,6 +888,12 @@ export default function App() {
 
       {/* 2-Factor Phone & OTP Security Guard for Shared Invite Links */}
       <PhoneOtpGuardModal currentRoomId={roomId} />
+
+      {/* Official Help & User Guide Modal */}
+      <HelpUserGuideModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
     </div>
   );
 }
