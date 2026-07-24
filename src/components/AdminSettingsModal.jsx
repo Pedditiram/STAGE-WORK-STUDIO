@@ -1916,14 +1916,46 @@ export default function AdminSettingsModal({
                                     <option value="Short Film Scene Project">🎬 Short Film Scene Project</option>
                                   </select>
 
-                                  {/* Live Allotted Project Badges */}
+                                  {/* Live Allotted Project Badges with 1-Click Revoke / Remove Button */}
                                   {(Array.isArray(user.allottedProjects) && user.allottedProjects.length > 0 ? user.allottedProjects : ['STAGE PRODUCTION STUDIO']).map((pTitle, pIdx) => (
                                     <span 
                                       key={pIdx}
-                                      className="text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1 shadow-xs"
+                                      className="text-[9.5px] font-mono pl-2 pr-1.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1.5 shadow-xs"
                                     >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                      {pTitle}
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                                      <span className="truncate max-w-[180px]">{pTitle}</span>
+                                      
+                                      {/* Remove / Revoke Project Access Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (window.confirm(`Revoke access to project "${pTitle}" for ${user.name || 'collaborator'}?`)) {
+                                            setAuthorizedUsers(prev => {
+                                              const updated = prev.map(u => {
+                                                const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                                if (match) {
+                                                  const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
+                                                  const filteredList = currentList.filter(p => p !== pTitle);
+                                                  return { 
+                                                    ...u, 
+                                                    allottedProjects: filteredList.length > 0 ? filteredList : ['STAGE PRODUCTION STUDIO'] 
+                                                  };
+                                                }
+                                                return u;
+                                              });
+                                              if (typeof window !== 'undefined') {
+                                                localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
+                                                window.dispatchEvent(new Event('sps_collaborators_updated'));
+                                              }
+                                              return updated;
+                                            });
+                                          }
+                                        }}
+                                        className="hover:bg-red-900/80 hover:text-red-200 text-emerald-400/80 rounded-full p-0.5 transition-all cursor-pointer ml-0.5"
+                                        title={`Remove access to project "${pTitle}"`}
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
                                     </span>
                                   ))}
                                 </div>
