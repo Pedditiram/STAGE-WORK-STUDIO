@@ -1343,13 +1343,12 @@ export default function AdminSettingsModal({
                         }}
                         className="w-full bg-zinc-950 text-cyan-300 border border-cyan-500/50 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-inner font-mono"
                       >
-                        <option value="Seedance 2.0" className="bg-zinc-950 text-white">Seedance 2.0 Engine</option>
-                        <option value="OpenAI Sora" className="bg-zinc-950 text-white">OpenAI Sora Engine</option>
-                        <option value="Runway Gen-3" className="bg-zinc-950 text-white">Runway Gen-3 Alpha</option>
-                        <option value="Luma Dream Machine" className="bg-zinc-950 text-white">Luma Dream Machine</option>
-                        <option value="Kling AI 1.5" className="bg-zinc-950 text-white">Kling AI 1.5</option>
-                        <option value="MiniMax Video-01" className="bg-zinc-950 text-white">MiniMax Video-01 Engine</option>
-                        <option value="BytePlus Seaweed" className="bg-zinc-950 text-white">BytePlus Seaweed Video Engine</option>
+                        <option value="Seedance 2.0" className="bg-zinc-950 text-white">Seedance 2.0 (Direct Cinema Prompting)</option>
+                        <option value="Sora 2" className="bg-zinc-950 text-white">Sora 2 (High Fidelity Dynamic Physics)</option>
+                        <option value="Runway Gen-3" className="bg-zinc-950 text-white">Runway Gen-3 Alpha (Camera Motion Control)</option>
+                        <option value="Kling 1.5" className="bg-zinc-950 text-white">Kling 1.5 Pro (Realistic Asian/Global Faces)</option>
+                        <option value="Luma Dream Machine" className="bg-zinc-950 text-white">Luma Dream Machine (Smooth Camera Rotations)</option>
+                        <option value="BytePlus Seedream 5.0" className="bg-zinc-950 text-white">BytePlus Seedream 5.0 (2K Keyframe Generation)</option>
                       </select>
                     </div>
 
