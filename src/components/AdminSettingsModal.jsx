@@ -335,8 +335,8 @@ export default function AdminSettingsModal({
 
   const handleGenerateOtp = (e) => {
     e.preventDefault();
-    if (!phoneNumber.trim() || phoneNumber.trim().length < 7) {
-      setCollabOtpError('Please enter a valid mobile phone number with country code (e.g. +91 9876543210).');
+    if (!email.trim() || !email.includes('@')) {
+      setCollabOtpError('Please enter a valid collaborator Email Address (e.g. user@studioproductions.com).');
       return;
     }
     if (!collaboratorName.trim()) {
@@ -348,7 +348,7 @@ export default function AdminSettingsModal({
     setGeneratedOtp(newCode);
     setOtpSent(true);
     setCollabOtpError('');
-    setOtpSuccessMsg(`✓ Unique Security OTP ${newCode} generated for ${collaboratorName.trim()} (${phoneNumber.trim()})!`);
+    setOtpSuccessMsg(`✓ Unique 1-Time Security OTP ${newCode} generated for ${collaboratorName.trim()} (${email.trim()})!`);
   };
 
   const handleVerifyOtp = (e) => {
@@ -1609,27 +1609,16 @@ export default function AdminSettingsModal({
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <div>
-                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Security Phone Number:</label>
-                              <input
-                                type="tel"
-                                value={phoneNumber}
-                                onChange={(e) => setPhoneNumber(e.target.value)}
-                                placeholder="Mobile (+91 9876543210)..."
-                                className="w-full bg-zinc-950 border border-zinc-700 text-amber-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-bold"
-                                required
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Email Address:</label>
+                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Collaborator Email ID (Required):</label>
                               <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="rahul@studio.com"
-                                className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                                placeholder="e.g. user@studioproductions.com"
+                                className="w-full bg-zinc-950 border border-zinc-700 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                                required
                               />
                             </div>
 
@@ -1652,13 +1641,13 @@ export default function AdminSettingsModal({
                             className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center justify-center gap-1.5 transition-all shadow text-xs"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>➕ Add Collaborator & Generate Security OTP</span>
+                            <span>➕ Authorize Email & Generate Security OTP</span>
                           </button>
                         </form>
                       ) : (
                         <div className="p-3.5 rounded-xl bg-zinc-950 border border-cyan-500/40 space-y-3">
                           <div className="flex items-center justify-between text-emerald-400 font-bold border-b border-zinc-800 pb-2">
-                            <span>{otpSuccessMsg}</span>
+                            <span>✓ Unique Security OTP {generatedOtp} generated for {email}!</span>
                             <span className="text-amber-300 bg-zinc-900 px-2.5 py-1 rounded-lg border border-amber-500/40 text-sm tracking-wider font-bold">
                               Security OTP: <strong>{generatedOtp}</strong>
                             </span>
@@ -1668,15 +1657,30 @@ export default function AdminSettingsModal({
                             <button
                               type="button"
                               onClick={() => {
-                                const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
-                                const inviteUrl = `${window.location.origin}?room=${roomId || 'SPS-CLOUD-8821'}&phone=${encodeURIComponent(phoneNumber)}&otp=${generatedOtp}`;
-                                const msg = `🎬 *STAGE PRODUCTION STUDIO - OFFICIAL COLLABORATION INVITE*\n\nHello *${collaboratorName || 'Collaborator'}*,\nYou have been granted official collaboration access to Stage Production Studio.\n\n📌 *Collaborator Credentials:*\n👤 *Name:* ${collaboratorName || 'N/A'}\n💼 *Designation:* ${designation || 'Production Staff'}\n📧 *Email:* ${email || 'N/A'}\n📱 *Phone:* ${phoneNumber || 'N/A'} (Security Key)\n🔐 *Access Role:* ${selectedRole}\n🔑 *Cloud Room ID:* ${roomId || 'SPS-CLOUD-8821'}\n\n⚡ *Your Unique Security OTP Code:* *${generatedOtp}*\n\n👉 Click link below to open studio & verify access:\n${inviteUrl}`;
-                                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
+                                const subject = `🎬 STAGE PRODUCTION STUDIO - Authorized Access & 1-Time Authorization OTP`;
+                                const body = `Hello ${collaboratorName || 'Collaborator'},\n\nYou have been granted official collaboration access to Stage Production Studio.\n\n📌 Collaborator Credentials:\n👤 Name: ${collaboratorName || 'N/A'}\n💼 Designation: ${designation || 'Production Staff'}\n📧 Authorized Email: ${email}\n🔐 Access Role: ${selectedRole}\n🔑 Cloud Room ID: ${roomId || 'SPS-CLOUD-8821'}\n\n⚡ Your 1-Time Security Authorization OTP: ${generatedOtp}\n\n👉 Click link below to log in & unlock studio access:\n${inviteUrl}`;
+                                window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
                               }}
                               className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
                             >
-                              <Share2 className="w-3.5 h-3.5" />
-                              <span>💬 Share Credentials & OTP via WhatsApp</span>
+                              <Mail className="w-3.5 h-3.5" />
+                              <span>📧 Share Credentials & OTP via Email</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
+                                if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                  navigator.clipboard.writeText(inviteUrl);
+                                }
+                                alert("✓ Copied Email Access & OTP Authorization Link to Clipboard!");
+                              }}
+                              className="px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-cyan-300 font-bold text-xs flex items-center gap-1.5 border border-zinc-700 shadow"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>📋 Copy Invite Link</span>
                             </button>
                           </div>
 
