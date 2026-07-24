@@ -314,34 +314,40 @@ export default function Header({
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
             </button>
 
-            {/* Profile & Designation Fixed High Z-Index Dropdown Menu (Guaranteed High Contrast in Light & Dark Mode) */}
+            {/* Profile & Designation Fixed High Z-Index Dropdown Menu (Theme Adaptive: Paper Light & Dark Cyber Modes) */}
             {isProfileOpen && (
-              <div className="fixed top-12 right-2 sm:right-4 w-80 bg-slate-950 text-white border-2 border-cyan-500/50 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.95)] z-50 p-4 space-y-3.5 font-mono text-xs text-left animate-in fade-in zoom-in-95">
+              <div className={`fixed top-12 right-2 sm:right-4 w-80 rounded-2xl shadow-2xl z-50 p-4 space-y-3.5 font-mono text-xs text-left animate-in fade-in zoom-in-95 border-2 ${
+                colorTheme === 'paper' 
+                  ? 'bg-white text-slate-900 border-slate-300 shadow-[0_20px_50px_rgba(0,0,0,0.15)]' 
+                  : 'bg-slate-950 text-white border-cyan-500/50 shadow-[0_25px_70px_rgba(0,0,0,0.95)]'
+              }`}>
                 
                 {/* User Info & Designation Header */}
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                <div className={`flex items-center gap-3 pb-3 border-b ${colorTheme === 'paper' ? 'border-slate-200' : 'border-slate-800'}`}>
                   <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-black text-base shadow-lg shrink-0 tracking-wider ring-2 ring-white/40`}>
                     {firstLetter}
                   </div>
                   <div className="flex flex-col min-w-0 leading-snug">
-                    <span className="font-black text-white text-base truncate font-sans block tracking-tight">{userName}</span>
-                    <span className="text-xs text-cyan-300 font-bold block mt-0.5">💼 {userDesignation}</span>
-                    <span className="text-[11px] text-amber-300 font-bold block mt-0.5">👑 {userRole}</span>
-                    <span className="text-[10.5px] text-slate-300 truncate block mt-0.5">📧 {authEmail}</span>
+                    <span className={`font-black text-base truncate font-sans block tracking-tight ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`}>{userName}</span>
+                    <span className={`text-xs font-bold block mt-0.5 ${colorTheme === 'paper' ? 'text-cyan-700' : 'text-cyan-300'}`}>💼 {userDesignation}</span>
+                    <span className={`text-[11px] font-bold block mt-0.5 ${colorTheme === 'paper' ? 'text-amber-700' : 'text-amber-300'}`}>👑 {userRole}</span>
+                    <span className={`text-[10.5px] truncate block mt-0.5 ${colorTheme === 'paper' ? 'text-slate-600' : 'text-slate-300'}`}>📧 {authEmail}</span>
                   </div>
                 </div>
 
                 {/* Projects Shared / Allotted Section */}
                 <div className="space-y-1.5">
-                  <span className="text-xs font-bold text-slate-200 block flex items-center gap-1.5 font-sans">
-                    <FolderKanban className="w-3.5 h-3.5 text-amber-400" />
+                  <span className={`text-xs font-bold block flex items-center gap-1.5 font-sans ${colorTheme === 'paper' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    <FolderKanban className="w-3.5 h-3.5 text-amber-500" />
                     Projects Shared & Allotted ({allottedProjects.length}):
                   </span>
                   <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
                     {allottedProjects.map((proj, pIdx) => (
-                      <div key={pIdx} className="p-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-[11px] shadow-sm">
-                        <span className="text-white font-bold truncate max-w-[160px] font-sans">{proj}</span>
-                        <span className="text-[9.5px] bg-emerald-950 text-emerald-300 border border-emerald-700/80 px-2 py-0.5 rounded-md font-bold shrink-0">
+                      <div key={pIdx} className={`p-2 rounded-xl border flex items-center justify-between text-[11px] shadow-sm ${
+                        colorTheme === 'paper' ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+                      }`}>
+                        <span className="font-bold truncate max-w-[160px] font-sans">{proj}</span>
+                        <span className="text-[9.5px] bg-emerald-600 text-white px-2 py-0.5 rounded-md font-bold shrink-0 shadow-xs">
                           🟢 Access Allotted
                         </span>
                       </div>
@@ -350,21 +356,29 @@ export default function Header({
                 </div>
 
                 {/* Quick Action & Login / Logout Controls */}
-                <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className={`space-y-2 pt-2 border-t ${colorTheme === 'paper' ? 'border-slate-200' : 'border-slate-800'}`}>
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenAdminModal) onOpenAdminModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-100 hover:text-white font-bold flex items-center justify-between transition-all border border-slate-800 text-xs shadow-sm"
+                    className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition-all border text-xs shadow-sm ${
+                      colorTheme === 'paper' 
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300' 
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-100 border-slate-800'
+                    }`}
                   >
-                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-400" /> Admin & Project Settings</span>
+                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-500" /> Admin & Project Settings</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => { setIsProfileOpen(false); if (onOpenHelpModal) onOpenHelpModal(); }}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-100 hover:text-white font-bold flex items-center justify-between transition-all border border-slate-800 text-xs shadow-sm"
+                    className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition-all border text-xs shadow-sm ${
+                      colorTheme === 'paper' 
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300' 
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-100 border-slate-800'
+                    }`}
                   >
-                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-400" /> Help & User Guide</span>
+                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-600" /> Help & User Guide</span>
                   </button>
 
                   {/* Gmail Login / Logout Trigger */}
@@ -383,8 +397,8 @@ export default function Header({
                   </button>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 text-center font-bold">
-                  Gmail Authorization • Cloud Room <strong className="text-amber-400 font-mono">{roomId || 'SPS-CLOUD-8821'}</strong>
+                <div className={`pt-2 border-t text-[10px] text-center font-bold ${colorTheme === 'paper' ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'}`}>
+                  Gmail Authorization • Cloud Room <strong className="text-amber-600 font-mono">{roomId || 'SPS-CLOUD-8821'}</strong>
                 </div>
               </div>
             )}
