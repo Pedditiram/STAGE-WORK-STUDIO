@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import { createZipArchive } from '../utils/zipUtils';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle, PackageCheck
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle, PackageCheck, Archive
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -11,6 +12,8 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
   const [copied, setCopied] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
+
+  const isDirectoryPickerSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   // Active Native Folder Handle & Custom Path State
   const [folderHandle, setFolderHandle] = useState(null);
@@ -31,7 +34,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
 
   // Synchronous User Gesture Native Folder Picker
   const handleSelectTargetFolder = async () => {
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+    if (isDirectoryPickerSupported) {
       try {
         const handle = await window.showDirectoryPicker({
           mode: 'readwrite',
@@ -47,6 +50,9 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
         if (err.name === 'AbortError') return null;
         console.warn("Directory picker error:", err);
       }
+    } else {
+      setExportSuccessMsg("ℹ️ Safari/Firefox Security Notice: Directory picker is Chrome-only. Use '📦 Download ZIP Folder' below for 1-click folder extraction in Safari!");
+      setTimeout(() => setExportSuccessMsg(null), 6000);
     }
     return null;
   };
@@ -285,15 +291,38 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Direct Write to Active Locked Target Directory
+  // Universal Cross-Browser ZIP Package Downloader (Safari, Chrome, Firefox)
+  const handleDownloadZipPackage = () => {
+    const folderLabel = (folderName || customFolderPath || 'jai_sri_ram_prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const zipFiles = shots.map((shot, idx) => ({
+      name: `${folderLabel}/${getShotFilename(shot, idx)}`,
+      content: getShotPromptText(shot, idx)
+    }));
+
+    const zipBlob = createZipArchive(zipFiles);
+    const zipFilename = `${folderLabel}.zip`;
+
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = zipFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Unzips directly into "${folderLabel}" folder on your Desktop!`);
+    setTimeout(() => setExportSuccessMsg(null), 6000);
+  };
+
+  // Direct Write to Active Locked Target Directory (Chrome API)
   const generateAndSaveSingleShotFile = async (shot, idx) => {
     const filename = getShotFilename(shot, idx);
     const content = getShotPromptText(shot, idx);
 
     let activeHandle = folderHandle;
 
-    // Trigger directory picker IMMEDIATELY inside user click gesture if handle is null
-    if (!activeHandle && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+    if (!activeHandle && isDirectoryPickerSupported) {
       activeHandle = await handleSelectTargetFolder();
     }
 
@@ -303,14 +332,11 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         const writable = await fileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${activeHandle.name}" on disk!`);
+        setExportSuccessMsg(`🟢 Saved "${filename}" directly into folder "${activeHandle.name}" on disk!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
         console.error("Direct folder save error:", err);
-        setExportSuccessMsg(`❌ Folder save error: ${err.message}`);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
-        return;
       }
     }
 
@@ -322,8 +348,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
   const handleExportAllIndividualFiles = async () => {
     let targetDir = folderHandle;
 
-    // Trigger directory picker IMMEDIATELY inside user click gesture if handle is null
-    if (!targetDir && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+    if (!targetDir && isDirectoryPickerSupported) {
       targetDir = await handleSelectTargetFolder();
     }
 
@@ -346,24 +371,11 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         return;
       } catch (err) {
         console.error("Folder export error:", err);
-        setExportSuccessMsg(`❌ Folder export error: ${err.message}`);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
-        return;
       }
     }
 
-    // Browser Fallback Download
-    const prefix = (folderName || customFolderPath || 'Seedance_Prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
-    shots.forEach((shot, i) => {
-      setTimeout(() => {
-        const filename = `${prefix}_${getShotFilename(shot, i)}`;
-        const content = getShotPromptText(shot, i);
-        downloadSingleTxtFile(filename, content);
-      }, i * 350);
-    });
-
-    setExportSuccessMsg(`🟢 Downloading ${shots.length} files to browser downloads!`);
-    setTimeout(() => setExportSuccessMsg(null), 4000);
+    // Fallback: Download ZIP Package for Safari/Firefox/non-Chrome
+    handleDownloadZipPackage();
   };
 
   const handleDownloadFullDoc = () => {
@@ -408,34 +420,30 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           </div>
         )}
 
-        {/* STEP-BY-STEP STEPPER INSTRUCTION BANNER */}
-        <div className="bg-amber-950/90 border-b border-amber-500/50 p-3 px-5 text-amber-100 text-xs font-mono flex flex-wrap items-center justify-between gap-3 shadow-inner">
+        {/* SAFARI & UNIVERSAL BROWSER HIGH-VISIBILITY DOWNLOAD BANNER */}
+        <div className="bg-cyan-950/90 border-b border-cyan-500/40 p-3 px-5 text-cyan-100 text-xs font-mono flex flex-wrap items-center justify-between gap-3 shadow-inner">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300">
-              <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
+            <div className="p-1.5 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-300">
+              <Archive className="w-4 h-4 text-cyan-300 shrink-0" />
             </div>
             <div>
               <div className="font-bold text-white flex items-center gap-2 text-xs">
-                <span>📁 DIRECT FOLDER SAVE INSTRUCTIONS:</span>
-                <span className="text-amber-300 font-extrabold underline">STEP 1 OF 2</span>
+                <span>📦 SAFARI & ALL BROWSERS (1-CLICK FOLDER EXPORT):</span>
+                <span className="text-emerald-300 font-extrabold">RECOMMENDED FOR SAFARI</span>
               </div>
-              <p className="text-[11px] text-amber-200/90">
-                Click <strong className="text-white underline">"STEP 1: Pick 'jai sri ram prompts' Folder"</strong> below to select your Desktop folder once!
+              <p className="text-[11px] text-cyan-200/90">
+                Click <strong className="text-white underline">"📦 Download ZIP Folder"</strong> to instantly get a folder containing all individual TXT files!
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={handleSelectTargetFolder}
-            className={`px-4 py-1.5 rounded-xl font-mono text-xs font-black flex items-center gap-2 shadow-xl border cursor-pointer transition-all ${
-              folderHandle
-                ? 'bg-emerald-500 text-zinc-950 border-emerald-300 hover:bg-emerald-400 ring-2 ring-emerald-400/50'
-                : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 border-amber-300 animate-pulse'
-            }`}
+            onClick={handleDownloadZipPackage}
+            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-mono text-xs font-black flex items-center gap-2 shadow-xl border border-cyan-300/40 cursor-pointer transition-all hover:scale-105"
           >
-            <FolderPlus className="w-4 h-4 text-zinc-950" />
-            <span>{folderName ? `🟢 Folder Locked: ${folderName}` : '👉 STEP 1: Pick "jai sri ram prompts" Folder'}</span>
+            <Archive className="w-4 h-4 text-cyan-100" />
+            <span>📦 Download "jai_sri_ram_prompts.zip" Folder</span>
           </button>
         </div>
 
@@ -561,20 +569,22 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 </button>
               </div>
 
-              {/* STEP 1: INTERACTIVE TARGET FOLDER PICKER BUTTON */}
-              <button
-                type="button"
-                onClick={handleSelectTargetFolder}
-                className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
-                  folderHandle
-                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
-                    : 'bg-amber-500 text-zinc-950 border-amber-400 hover:bg-amber-400 font-extrabold shadow-lg animate-pulse'
-                }`}
-                title="Click to visually pick your desktop target folder"
-              >
-                <FolderPlus className="w-4 h-4 text-zinc-950" />
-                <span>{folderName ? `🟢 Locked: ${folderName}` : '👉 STEP 1: Pick Folder'}</span>
-              </button>
+              {/* CHROME DIRECT FOLDER PICKER BUTTON */}
+              {isDirectoryPickerSupported && (
+                <button
+                  type="button"
+                  onClick={handleSelectTargetFolder}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
+                    folderHandle
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
+                      : 'bg-amber-500 text-zinc-950 border-amber-400 hover:bg-amber-400 font-extrabold shadow-lg'
+                  }`}
+                  title="Click to visually pick your desktop target folder (Chrome/Edge)"
+                >
+                  <FolderPlus className="w-4 h-4 text-zinc-950" />
+                  <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Chrome Folder Picker'}</span>
+                </button>
+              )}
 
               {/* FOLDER PATH DISPLAY / INPUT FIELD */}
               <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
@@ -591,15 +601,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               </div>
             </div>
 
-            {/* STEP 2: BATCH EXPORT BUTTON */}
+            {/* BATCH EXPORT ZIP BUTTON */}
             <button
               type="button"
-              onClick={handleExportAllIndividualFiles}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
-              title={`Save all ${shots.length} prompts as individual TXT files into target location`}
+              onClick={handleDownloadZipPackage}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-cyan-400/40 transition-all cursor-pointer shrink-0"
+              title={`Download all ${shots.length} prompts in a single ZIP folder containing individual TXT files`}
             >
-              <FolderDown className="w-4 h-4 text-emerald-200" />
-              <span>⚡ STEP 2: Save All TXT Files to Folder</span>
+              <Archive className="w-4 h-4 text-cyan-200" />
+              <span>📦 Download ZIP Folder ({shots.length} TXT Files)</span>
             </button>
           </div>
         </div>
