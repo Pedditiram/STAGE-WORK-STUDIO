@@ -10,8 +10,8 @@ const firebaseConfig = {
   appId: "1:98127391273:web:stageproductionstudio"
 };
 
-// High-Performance Zero-Rate-Limit Cloud Room REST Sync Endpoint
-const REALTIME_ROOM_SYNC_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f9760413e23bf";
+// High-Performance Production REST Cloud Sync Endpoints
+const REALTIME_ROOM_SYNC_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 
 let app = null;
 let db = null;
@@ -41,18 +41,21 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
 
   let lastProcessedTimestamp = 0;
 
-  // Load cached room data from localStorage immediately on subscribe
+  // 1. Hydrate from localStorage immediately
   if (typeof window !== 'undefined') {
     const cachedStr = localStorage.getItem(`sps_cloud_${roomId}`);
     if (cachedStr) {
       try {
         const cachedData = JSON.parse(cachedStr);
+        if (cachedData.lastUpdated) {
+          lastProcessedTimestamp = new Date(cachedData.lastUpdated).getTime();
+        }
         onDataReceived(cachedData);
       } catch (e) {}
     }
   }
 
-  // 1. Listen for Native Browser Storage Events (0ms Instant Tab-to-Tab Sync)
+  // 2. Native Storage Event Listener (0ms Instant Tab-to-Tab Sync)
   const handleStorageChange = (e) => {
     if (e.key === `sps_cloud_${roomId}` && e.newValue) {
       try {
@@ -71,7 +74,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     window.addEventListener('storage', handleStorageChange);
   }
 
-  // 2. Listen for BroadcastChannel Messages (Instant Cross-Tab Signal)
+  // 3. BroadcastChannel Listener (Instant Cross-Window Signal)
   const handleBroadcast = (event) => {
     if (event.data && event.data.roomId === roomId && typeof onDataReceived === 'function') {
       if (event.data.payload && event.data.payload.lastUpdated) {
@@ -85,13 +88,13 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     broadcastChannel.addEventListener('message', handleBroadcast);
   }
 
-  // 3. Ultra-Fast Real-Time 2-Second Cloud REST Polling (Cross-Device Worldwide Sync)
+  // 4. Background REST Cloud Polling (Every 10 Seconds to prevent rate limiting)
   const pollInterval = setInterval(async () => {
     try {
       const res = await fetch(REALTIME_ROOM_SYNC_URL, { cache: 'no-store' });
       if (res.ok) {
         const resObj = await res.json();
-        const payload = resObj?.data;
+        const payload = resObj?.data || resObj;
         if (payload && payload.lastUpdated) {
           const remoteTime = new Date(payload.lastUpdated).getTime();
           if (remoteTime > lastProcessedTimestamp) {
@@ -106,7 +109,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
         }
       }
     } catch (e) {}
-  }, 2000);
+  }, 10000);
 
   let unsubscribeFirestore = () => {};
   if (db) {
@@ -140,25 +143,22 @@ export async function publishToCloudRoom(roomId, projectData) {
     lastUpdated: nowIso
   };
 
-  // 1. Local Storage Cache (Triggers 0ms Native Storage Event in Other Open Tabs)
+  // 1. Save to Local Storage (Triggers 0ms Native Storage Event in Other Open Windows)
   if (typeof window !== 'undefined') {
     localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
   }
 
-  // 2. Tab Broadcast Channel
+  // 2. BroadcastChannel (Instant Cross-Tab Signal)
   if (broadcastChannel) {
     broadcastChannel.postMessage({ roomId, payload });
   }
 
-  // 3. Ultra-Fast High-Speed REST Cloud DB (Instant Multi-Device Sync)
+  // 3. REST Cloud Database
   try {
     await fetch(REALTIME_ROOM_SYNC_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: roomId,
-        data: payload
-      })
+      body: JSON.stringify(payload)
     });
   } catch (e) {}
 
