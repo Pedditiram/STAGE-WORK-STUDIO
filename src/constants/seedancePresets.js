@@ -3,6 +3,91 @@
 // ==========================================
 
 export const GENRE_PRESET_PROFILES = {
+  konaseema_anthology: {
+    label: "🌾 Rural Telugu Anthology (Konaseema & Malkipuram)",
+    name: "🌾 Rural Telugu Anthology (Konaseema & Malkipuram)",
+    description: "Tailored for Andhra Pradesh, East Godavari, Konaseema & Malkipuram Village multi-story narratives, rural realism, coconut groves & Godavari backwaters",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @VillageElder_Ramaraju - Respected Konaseema elder, white dhoti & kanduva]",
+        "[CharID: @YoungProtagonist_Suri - Malkipuram youth in cotton shirt, vintage bicycle]",
+        "[CharID: @Weaver_Lakshmi - Traditional Konaseema weaver in handloom cotton saree]",
+        "[CharID: @Boatman_Appanna - Godavari river ferryman with rowing pole & sun-tanned skin]",
+        "[CharID: @Teacher_Savitri - Village school teacher carrying brass tiffin & books]",
+        "[CharID: @Farmer_Subbarao - Konaseema paddy farmer with straw hat & sickle]"
+      ],
+      coArtistInteraction: [
+        "[Co-Artist: Village elders gathered under banyan tree for Panchayat discussion]",
+        "[Co-Artist: Local youth laughing together at rural tea stall by Godavari canal]",
+        "[Co-Artist: Village women gathering water at stone well in Malkipuram lane]",
+        "[Co-Artist: Festive crowd celebrating Sankranti bullock cart procession in village square]",
+        "[Co-Artist: Fishermen casting nets along the lush Konaseema backwaters]"
+      ],
+      actionEnvContext: [
+        "Lush green Konaseema coconut orchard with sunbeams filtering through palm fronds and red soil pathway.",
+        "Tranquil Godavari canal in Malkipuram village, wooden ferry boat drifting past banana plantations.",
+        "Traditional East Godavari courtyard house (Panchayati Veedhi) with clay-tile roof, carved wooden pillars, and flower rangoli.",
+        "Bustling Malkipuram village junction at dusk, tea stall smoke mixing with warm yellow bulb lights.",
+        "Vast green paddy fields stretching to the horizon under dramatic monsoon clouds in Godavari district."
+      ],
+      characterExpression: [
+        "Warm, authentic rural Telugu smile with deep eyes full of nostalgia and wisdom",
+        "Contemplative village gaze looking out over Godavari river backwaters",
+        "Determined earthy look with sweat glinting on brow under tropical sun",
+        "Gently laughing with innocent rural joy amidst village festival celebrations",
+        "Intense emotional conflict reflecting family tradition vs modern aspirations"
+      ],
+      characterPlacement: [
+        "Foreground left, leaning against vintage bicycle under coconut palm frame",
+        "Center frame sitting on carved wooden porch bench (Thinnaye) of village house",
+        "Standing at edge of Godavari canal boat with lush green vegetation backdrop",
+        "Positioned right of frame amidst bustling Malkipuram village street market"
+      ],
+      characterDialogue: [
+        '"Mana Konaseema pachani polalu chooste manasuki prasanthatha vasthundi."',
+        '"Malkipuram urukoliya vinayaka chavithi thirunallu eppudaina choosava?"',
+        '"Godavari thalliki mokki polaniki velthunnam thambi."',
+        '"Ee oorilo manushula anubandham entha goppado meeku teliyadu."'
+      ],
+      characterMovement: [
+        "Riding vintage bicycle along narrow dirt path through lush Konaseema coconut groves",
+        "Rowing wooden boat smoothly across Godavari canal with steady rhythmic strokes",
+        "Serving warm tea in small glass to village elders seated on wooden bench",
+        "Walking briskly along paddy field embankment (Gattu) with brass container",
+        "Folding hands in warm traditional Namaskaram greeting to visiting guests"
+      ],
+      characterEyeLooks: [
+        "[Eye Look: Looking out thoughtfully across the calm Godavari river waters]",
+        "[Eye Look: Warm direct eye contact with village neighbor coming down the lane]",
+        "[Eye Look: Looking up through swaying coconut tree canopy towards sunlit sky]",
+        "[Eye Look: Focused gaze on traditional handloom weaving shuttle movement]"
+      ],
+      subjectLightingTag: [
+        "[Lighting: Golden Hour Konaseema Sunbeams through Coconut Palm Canopy]",
+        "[Lighting: Warm Monsoon Haze over Godavari River Backwaters]",
+        "[Lighting: Incandescent Yellow Tea Stall Bulb Glow at Malkipuram Dusk]",
+        "[Lighting: Diffuse Natural Sunlight on Red Soil & Lush Vegetation]"
+      ],
+      subjectColorTag: [
+        "[Subject Color: Lush Konaseema Emerald Green & Terracotta Red]",
+        "[Subject Color: Godavari Azure Blue & Tropical Palm Green]",
+        "[Subject Color: Sun-Bleached Cotton White & Warm Ochre Earth]",
+        "[Subject Color: Rich Handloom Saffron & Traditional Silk Crimson]"
+      ],
+      backgroundLightingTag: [
+        "[BG Lighting: Glistening Water Reflections on Godavari Canal Surface]",
+        "[BG Lighting: Soft Warm Bokeh of Village Street Lamps at Dusk]",
+        "[BG Lighting: Deep Emerald Shadow under Dense Mango & Coconut Groves]",
+        "[BG Lighting: Dramatic Golden Sunset Horizon over Coastal Paddy Fields]"
+      ],
+      backgroundColorTag: [
+        "[BG Color: Vibrant Konaseema Palm Green & Water Blue]",
+        "[BG Color: Rustic Clay Brick Red & Straw Gold]",
+        "[BG Color: Tropical Sunset Orange & Twilight Purple]",
+        "[BG Color: Monsoon Cloud Gray & Rich Earthy Brown]"
+      ]
+    }
+  },
   mythological: {
     label: "🕉️ Indian Mythology & Period Epic",
     name: "🕉️ Indian Mythology & Period Epic",
@@ -376,6 +461,21 @@ export const GENRE_PRESET_PROFILES = {
 // ==========================================
 export function detectScriptGenre(projectTitle = '', shots = []) {
   const combinedText = (projectTitle + ' ' + JSON.stringify(shots)).toLowerCase();
+
+  if (
+    combinedText.includes('anthology') ||
+    combinedText.includes('konaseema') ||
+    combinedText.includes('malkipuram') ||
+    combinedText.includes('godavari') ||
+    combinedText.includes('andhra') ||
+    combinedText.includes('east godavari') ||
+    combinedText.includes('multi story') ||
+    combinedText.includes('multistory') ||
+    combinedText.includes('village') ||
+    combinedText.includes('rural')
+  ) {
+    return 'konaseema_anthology';
+  }
 
   if (
     combinedText.includes('sreeram') ||
@@ -766,6 +866,48 @@ export function getSlotsForGenre(genreKey = 'mythological') {
 // PRODUCTION TEMPLATES
 // ==========================================
 export const PRODUCTION_TEMPLATES = [
+  {
+    id: "konaseema_anthology_epic",
+    title: "🌾 Konaseema Tales - Malkipuram Village Anthology Treatment",
+    category: "Rural Telugu Anthology",
+    description: "Multi-story narrative set in Andhra Pradesh, East Godavari district, Konaseema coconut orchards & Malkipuram village backwaters.",
+    shots: [
+      {
+        sceneShotId: "SC01_SH01",
+        shotComposition: "Extreme Wide Shot (EWS)",
+        cameraMotionTag: "[Camera: Slow Aerial Drone Pan over Godavari River]",
+        subjectLightingTag: "[Lighting: Golden Hour Sunbeams through Coconut Palm Canopy]",
+        subjectColorTag: "[Subject Color: Lush Konaseema Emerald Green & Terracotta Red]",
+        backgroundLightingTag: "[BG Lighting: Glistening Water Reflections on Godavari Canal Surface]",
+        backgroundColorTag: "[BG Color: Vibrant Konaseema Palm Green & Water Blue]",
+        characterIdAssetRef: "[CharID: @YoungProtagonist_Suri - Malkipuram youth in cotton shirt, vintage bicycle]",
+        coArtistInteraction: "[Co-Artist: Village elders gathered under banyan tree for Panchayat discussion]",
+        actionEnvContext: "Lush green Konaseema coconut orchard with sunbeams filtering through palm fronds and red soil pathway along Malkipuram village canal.",
+        characterExpression: "Warm, authentic rural Telugu smile with deep eyes full of nostalgia and wisdom",
+        characterPlacement: "Foreground left, leaning against vintage bicycle under coconut palm frame",
+        characterDialogue: '"Mana Konaseema pachani polalu chooste manasuki prasanthatha vasthundi."',
+        characterMovement: "Riding vintage bicycle along narrow dirt path through lush Konaseema coconut groves",
+        characterEyeLooks: "[Eye Look: Looking out thoughtfully across the calm Godavari river waters]"
+      },
+      {
+        sceneShotId: "SC01_SH02",
+        shotComposition: "Medium Shot (MS)",
+        cameraMotionTag: "[Camera: Slow Tracking Side Dolly]",
+        subjectLightingTag: "[Lighting: Incandescent Yellow Tea Stall Bulb Glow at Malkipuram Dusk]",
+        subjectColorTag: "[Subject Color: Sun-Bleached Cotton White & Warm Ochre Earth]",
+        backgroundLightingTag: "[BG Lighting: Soft Warm Bokeh of Village Street Lamps at Dusk]",
+        backgroundColorTag: "[BG Color: Rustic Clay Brick Red & Straw Gold]",
+        characterIdAssetRef: "[CharID: @VillageElder_Ramaraju - Respected Konaseema elder, white dhoti & kanduva]",
+        coArtistInteraction: "[Co-Artist: Local youth laughing together at rural tea stall by Godavari canal]",
+        actionEnvContext: "Traditional East Godavari courtyard house (Panchayati Veedhi) with clay-tile roof, carved wooden pillars, and flower rangoli.",
+        characterExpression: "Contemplative village gaze looking out over Godavari river backwaters",
+        characterPlacement: "Center frame sitting on carved wooden porch bench (Thinnaye) of village house",
+        characterDialogue: '"Malkipuram urukoliya vinayaka chavithi thirunallu eppudaina choosava?"',
+        characterMovement: "Serving warm tea in small glass to village elders seated on wooden bench",
+        characterEyeLooks: "[Eye Look: Warm direct eye contact with village neighbor coming down the lane]"
+      }
+    ]
+  },
   {
     id: "mythological_epic",
     title: "🕉️ Jai Sreeram Ramayana Epic Treatment",
