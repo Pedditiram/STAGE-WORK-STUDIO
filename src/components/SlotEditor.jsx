@@ -1,10 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders } from 'lucide-react';
 
-export default function SlotEditor({ slotConfig, value, onChange, compact = false, onSelectSlot }) {
+export default function SlotEditor({ 
+  slotConfig, 
+  value, 
+  onChange, 
+  compact = false, 
+  onSelectSlot,
+  isForcePopupOpen,
+  onCloseForcePopup,
+  onOpenPopup,
+  onNavigateNextSlot,
+  onNavigatePrevSlot
+}) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
+
+  const isModalActive = isForcePopupOpen !== undefined ? isForcePopupOpen : isPopupOpen;
+  
+  const handleCloseModal = () => {
+    setIsPopupOpen(false);
+    if (onCloseForcePopup) onCloseForcePopup();
+  };
+
+  const handleOpenModal = () => {
+    setIsPopupOpen(true);
+    if (onOpenPopup) onOpenPopup();
+  };
+
+  // Keyboard navigation for Cmd + Right Arrow and Cmd + Left Arrow
+  useEffect(() => {
+    if (!isModalActive) return;
+
+    const handleKeyDown = (e) => {
+      // Cmd + Right Arrow (⌘→) or Ctrl + Right Arrow -> Next Slot
+      if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof onNavigateNextSlot === 'function') {
+          onNavigateNextSlot(slotConfig.key);
+        }
+      }
+      // Cmd + Left Arrow (⌘←) or Ctrl + Left Arrow -> Prev Slot
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof onNavigatePrevSlot === 'function') {
+          onNavigatePrevSlot(slotConfig.key);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isModalActive, slotConfig.key, onNavigateNextSlot, onNavigatePrevSlot]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
@@ -133,11 +183,11 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
 
   // Render Shared Compact Popup Modal Window
   const renderPopupModal = () => {
-    if (!isPopupOpen) return null;
+    if (!isModalActive) return null;
     return (
       <div 
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 font-mono"
-        onClick={() => setIsPopupOpen(false)}
+        onClick={handleCloseModal}
       >
         <div 
           className="bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-5 w-full max-w-xl shadow-2xl space-y-3.5 max-h-[88vh] flex flex-col font-mono"
@@ -154,13 +204,42 @@ export default function SlotEditor({ slotConfig, value, onChange, compact = fals
                 <p className="text-[11px] text-zinc-400 font-mono">{slotConfig.description}</p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsPopupOpen(false)}
-              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-1.5">
+              {onNavigatePrevSlot && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigatePrevSlot(slotConfig.key);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 font-mono"
+                  title="Previous Slot (Cmd + Left Arrow)"
+                >
+                  ◀ Prev <span className="text-[9px] text-zinc-400 font-mono font-normal">(⌘←)</span>
+                </button>
+              )}
+              {onNavigateNextSlot && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateNextSlot(slotConfig.key);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 font-mono"
+                  title="Next Slot (Cmd + Right Arrow)"
+                >
+                  Next ▶ <span className="text-[9px] text-zinc-400 font-mono font-normal">(⌘→)</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors ml-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="overflow-y-auto space-y-3 flex-1 pr-1">

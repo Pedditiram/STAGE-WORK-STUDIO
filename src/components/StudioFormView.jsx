@@ -28,7 +28,30 @@ export default function StudioFormView({
   };
 
   const [selectedSlotKey, setSelectedSlotKey] = React.useState('coArtistInteraction');
+  const [activeModalSlotKey, setActiveModalSlotKey] = React.useState(null);
   const activeSlotConfig = slots.find(s => s.key === selectedSlotKey) || slots[0];
+
+  const handleNavigateNextSlot = (currentSlotKey) => {
+    const slotKeys = (slots || []).map(s => s.key);
+    const currIdx = slotKeys.indexOf(currentSlotKey);
+    if (currIdx !== -1 && currIdx < slotKeys.length - 1) {
+      setActiveModalSlotKey(slotKeys[currIdx + 1]);
+    } else if (activeShotIndex < (shots || []).length - 1) {
+      if (setActiveShotIndex) setActiveShotIndex(activeShotIndex + 1);
+      setActiveModalSlotKey(slotKeys[0]);
+    }
+  };
+
+  const handleNavigatePrevSlot = (currentSlotKey) => {
+    const slotKeys = (slots || []).map(s => s.key);
+    const currIdx = slotKeys.indexOf(currentSlotKey);
+    if (currIdx > 0) {
+      setActiveModalSlotKey(slotKeys[currIdx - 1]);
+    } else if (activeShotIndex > 0) {
+      if (setActiveShotIndex) setActiveShotIndex(activeShotIndex - 1);
+      setActiveModalSlotKey(slotKeys[slotKeys.length - 1]);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full w-full overflow-hidden">
@@ -83,6 +106,11 @@ export default function StudioFormView({
               onChange={(val) => handleSlotChange(slot.key, val)}
               onSelectSlot={setSelectedSlotKey}
               compact={false}
+              isForcePopupOpen={activeModalSlotKey === slot.key}
+              onOpenPopup={() => setActiveModalSlotKey(slot.key)}
+              onCloseForcePopup={() => setActiveModalSlotKey(null)}
+              onNavigateNextSlot={handleNavigateNextSlot}
+              onNavigatePrevSlot={handleNavigatePrevSlot}
             />
           ))}
         </div>

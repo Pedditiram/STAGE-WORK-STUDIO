@@ -31,6 +31,7 @@ export default function SpreadsheetView({
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [activeModalCell, setActiveModalCell] = useState(null); // { shotIdx, slotKey }
 
   const [draggedShotIdx, setDraggedShotIdx] = useState(null);
   const [dragOverShotIdx, setDragOverShotIdx] = useState(null);
@@ -42,6 +43,28 @@ export default function SpreadsheetView({
     if (activeCategory === 'all') return true;
     return currentCategoryObj?.keys.includes(slot.key);
   });
+
+  const handleNavigateNextSlot = (currentShotIdx, currentSlotKey) => {
+    const slotKeys = filteredSlots.map(s => s.key);
+    const currIdx = slotKeys.indexOf(currentSlotKey);
+    if (currIdx !== -1 && currIdx < slotKeys.length - 1) {
+      setActiveModalCell({ shotIdx: currentShotIdx, slotKey: slotKeys[currIdx + 1] });
+    } else if (currentShotIdx < (shots || []).length - 1) {
+      if (setActiveShotIndex) setActiveShotIndex(currentShotIdx + 1);
+      setActiveModalCell({ shotIdx: currentShotIdx + 1, slotKey: slotKeys[0] });
+    }
+  };
+
+  const handleNavigatePrevSlot = (currentShotIdx, currentSlotKey) => {
+    const slotKeys = filteredSlots.map(s => s.key);
+    const currIdx = slotKeys.indexOf(currentSlotKey);
+    if (currIdx > 0) {
+      setActiveModalCell({ shotIdx: currentShotIdx, slotKey: slotKeys[currIdx - 1] });
+    } else if (currentShotIdx > 0) {
+      if (setActiveShotIndex) setActiveShotIndex(currentShotIdx - 1);
+      setActiveModalCell({ shotIdx: currentShotIdx - 1, slotKey: slotKeys[slotKeys.length - 1] });
+    }
+  };
 
   const filteredShots = (shots || []).filter((shot, idx) => {
     if (!searchTerm) return true;
@@ -310,6 +333,11 @@ export default function SpreadsheetView({
                         value={shot[slot.key] || ''}
                         onChange={(val) => handleCellChange(shotIdx, slot.key, val)}
                         compact={true}
+                        isForcePopupOpen={activeModalCell?.shotIdx === shotIdx && activeModalCell?.slotKey === slot.key}
+                        onOpenPopup={() => setActiveModalCell({ shotIdx, slotKey: slot.key })}
+                        onCloseForcePopup={() => setActiveModalCell(null)}
+                        onNavigateNextSlot={(slotKey) => handleNavigateNextSlot(shotIdx, slotKey)}
+                        onNavigatePrevSlot={(slotKey) => handleNavigatePrevSlot(shotIdx, slotKey)}
                       />
                     </td>
                   ))}
