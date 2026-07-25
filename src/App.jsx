@@ -244,16 +244,29 @@ export default function App() {
       syncProjectLibraryToCloud(updatedProjs);
 
       const activeProj = updatedProjs.find(p => p.title === projectTitle || p.id === 'proj_default');
+      const savedShotsStr = localStorage.getItem('sps_current_shots');
+      let localSavedShots = [];
+      if (savedShotsStr) {
+        try { localSavedShots = JSON.parse(savedShotsStr); } catch (e) {}
+      }
+
       if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+        // If local browser has more shots (e.g. newly added script breakdown), keep local shots!
+        const targetShots = (Array.isArray(localSavedShots) && localSavedShots.length > activeProj.shots.length)
+          ? localSavedShots
+          : activeProj.shots;
+
         const cloudHash = JSON.stringify({ 
-          shots: activeProj.shots, 
+          shots: targetShots, 
           projectTitle: activeProj.title || projectTitle, 
           targetModel: activeProj.targetModel || targetModel, 
           aspectRatio: activeProj.aspectRatio || aspectRatio 
         });
         lastSyncedHash.current = cloudHash;
-        setShots(activeProj.shots);
-        localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
+        setShots(targetShots);
+        localStorage.setItem('sps_current_shots', JSON.stringify(targetShots));
+      } else if (Array.isArray(localSavedShots) && localSavedShots.length > 0) {
+        setShots(localSavedShots);
       }
     }).catch(() => {});
 
