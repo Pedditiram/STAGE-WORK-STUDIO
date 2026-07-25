@@ -47,6 +47,38 @@ export default function AdminSettingsModal({
   const [passChangeSuccess, setPassChangeSuccess] = useState('');
   const [passChangeError, setPassChangeError] = useState('');
 
+  // Dynamic Studio Projects List for Collaborator Allotment
+  const [projectLibraryList, setProjectLibraryList] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sps_project_library');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
+    return [{ title: 'STAGE PRODUCTION STUDIO' }];
+  });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sps_project_library');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) setProjectLibraryList(parsed);
+          } catch (e) {}
+        }
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('sps_projects_updated', handleUpdate);
+      return () => window.removeEventListener('sps_projects_updated', handleUpdate);
+    }
+  }, []);
+
   // Authorized Admin Email for Stage Production Studio
   const [authorizedEmail, setAuthorizedEmail] = useState(() => {
     return localStorage.getItem('sps_authorized_admin_email') || 'pedditiram@gmail.com';
@@ -1930,10 +1962,10 @@ export default function AdminSettingsModal({
                                     className="text-[10.5px] font-mono px-2 py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-xs"
                                     title="Select project to allot to this collaborator"
                                   >
-                                    <option value="STAGE PRODUCTION STUDIO">🎬 STAGE PRODUCTION STUDIO</option>
                                     <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
-                                    <option value="Commercial Campaign Project">🎬 Commercial Campaign Project</option>
-                                    <option value="Short Film Scene Project">🎬 Short Film Scene Project</option>
+                                    {projectLibraryList.map((p, pIdx) => (
+                                      <option key={pIdx} value={p.title}>🎬 {p.title}</option>
+                                    ))}
                                   </select>
 
                                   {/* Live Allotted Project Badges with 1-Click Revoke / Remove Button */}

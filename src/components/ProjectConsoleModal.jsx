@@ -160,8 +160,37 @@ export default function ProjectConsoleModal({
   // Active project ID
   const activeProjectId = projectLibrary.find(p => p.title === currentProjectTitle)?.id || projectLibrary[0]?.id;
 
-  // 1. SWITCH PROJECT
+  // EVALUATE CURRENT USER PERMISSIONS & ALLOTTED PROJECTS
+  const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('sps_authorized_user_email') : '') || 'pedditiram@gmail.com';
+  const authorizedUsers = typeof window !== 'undefined' 
+    ? JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]') 
+    : [];
+
+  const currentUserProfile = authorizedUsers.find(u => 
+    (u.email && u.email.toLowerCase() === currentUserEmail.toLowerCase()) || 
+    (u.phone && currentUserEmail.includes(u.phone))
+  );
+
+  const isPrimaryOwner = currentUserEmail.toLowerCase() === 'pedditiram@gmail.com' || 
+    isAdminLoggedIn === true || 
+    (currentUserProfile?.role && (currentUserProfile.role.includes('Owner') || currentUserProfile.role.includes('Director')));
+
+  const allottedProjectsList = Array.isArray(currentUserProfile?.allottedProjects) 
+    ? currentUserProfile.allottedProjects 
+    : ['STAGE PRODUCTION STUDIO', 'All Studio Projects'];
+
+  const checkIsProjectAllotted = (projTitle) => {
+    if (isPrimaryOwner) return true;
+    if (allottedProjectsList.includes('All Studio Projects') || allottedProjectsList.includes('All Studio Projects (Full Access)')) return true;
+    return allottedProjectsList.includes(projTitle);
+  };
+
+  // 1. SWITCH PROJECT (WITH ENFORCED ALLOTTED PERMISSION GUARD)
   const handleSwitchProject = (proj) => {
+    if (!checkIsProjectAllotted(proj.title)) {
+      alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask Primary Admin (pedditiram@gmail.com) to allot this project to your profile in Admin Settings.`);
+      return;
+    }
     if (setProjectTitle) setProjectTitle(proj.title);
     if (setTargetModel) setTargetModel(proj.targetModel);
     if (setAspectRatio) setAspectRatio(proj.aspectRatio);
@@ -448,13 +477,16 @@ export default function ProjectConsoleModal({
               <div className="grid grid-cols-1 gap-3">
                 {projectLibrary.map((proj) => {
                   const isActive = currentProjectTitle === proj.title;
+                  const isAllotted = checkIsProjectAllotted(proj.title);
                   return (
                     <div
                       key={proj.id}
                       className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
                         isActive
                           ? 'bg-cyan-50/80 dark:bg-cyan-950/30 border-cyan-400 dark:border-cyan-500/60 shadow-md'
-                          : 'bg-white dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 shadow-sm'
+                          : isAllotted
+                            ? 'bg-white dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 shadow-sm'
+                            : 'bg-slate-100/60 dark:bg-zinc-950/40 border-slate-200 dark:border-zinc-800/60 opacity-80'
                       }`}
                     >
                       <div className="space-y-1">
@@ -492,7 +524,7 @@ export default function ProjectConsoleModal({
                               </button>
                             </form>
                           ) : (
-                            <h4 className="text-sm font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2 flex-wrap">
                               <span>{proj.title}</span>
                               <button
                                 type="button"
@@ -508,6 +540,16 @@ export default function ProjectConsoleModal({
                               {isActive && (
                                 <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-900 dark:text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-300 dark:border-cyan-800 font-mono font-bold flex items-center gap-1">
                                   <CheckCircle2 className="w-3 h-3 text-cyan-600 dark:text-cyan-400" /> ACTIVE
+                                </span>
+                              )}
+                              {!isActive && isAllotted && (
+                                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 font-mono font-bold flex items-center gap-1">
+                                  🟢 Allotted
+                                </span>
+                              )}
+                              {!isAllotted && (
+                                <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 font-mono font-bold flex items-center gap-1" title="Not allotted to your collaborator account">
+                                  🔒 Locked (Not Allotted)
                                 </span>
                               )}
                             </h4>
@@ -549,13 +591,24 @@ export default function ProjectConsoleModal({
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
-                        {!isActive && (
+                        {!isActive && isAllotted && (
                           <button
                             type="button"
                             onClick={() => handleSwitchProject(proj)}
                             className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow flex items-center gap-1"
                           >
                             <ArrowRight className="w-3.5 h-3.5" /> Open
+                          </button>
+                        )}
+
+                        {!isActive && !isAllotted && (
+                          <button
+                            type="button"
+                            onClick={() => alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your profile (${currentUserEmail}).\n\nPlease ask Primary Admin (pedditiram@gmail.com) to allot this project to your account in Admin Settings.`)}
+                            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold text-xs font-mono shadow flex items-center gap-1 border border-zinc-700/50"
+                            title={`🔒 Ask pedditiram@gmail.com to allot ${proj.title} in Admin Settings`}
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Locked
                           </button>
                         )}
                         <button
