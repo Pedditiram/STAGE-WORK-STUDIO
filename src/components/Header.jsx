@@ -413,6 +413,21 @@ export default function Header({
                   </div>
                 </div>
 
+                {/* Investor Presentation Slideshow Showcase Button */}
+                <button
+                  type="button"
+                  onClick={() => { setIsProfileOpen(false); if (onOpenInvestorDeck) onOpenInvestorDeck(); }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black text-xs font-sans shadow-md flex items-center justify-between transition-all border border-amber-300/60 cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+                    Investor Deck & Studio Showcase
+                  </span>
+                  <span className="text-[10px] bg-slate-950 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                    Slideshow
+                  </span>
+                </button>
+
                 {/* Projects Shared / Allotted Section */}
                 <div className="space-y-1.5">
                   <span className={`text-xs font-bold block flex items-center gap-1.5 font-sans ${colorTheme === 'paper' ? 'text-slate-800' : 'text-slate-200'}`}>

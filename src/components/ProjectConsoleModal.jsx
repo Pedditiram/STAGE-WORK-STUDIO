@@ -59,7 +59,9 @@ export default function ProjectConsoleModal({
   onExportProject,
   onImportProject,
   initialTab = 'library',
-  isAdminLoggedIn = false
+  isAdminLoggedIn = false,
+  onOpenInvestorDeck,
+  onOpenLogin
 }) {
   // Project Library state stored in localStorage 'sps_project_library'
   const [projectLibrary, setProjectLibrary] = useState(() => {
@@ -249,8 +251,17 @@ export default function ProjectConsoleModal({
     return allottedProjectsList.includes(projTitle);
   };
 
-  // 1. SWITCH PROJECT (WITH ENFORCED ALLOTTED PERMISSION GUARD)
+  // 1. SWITCH PROJECT (WITH ENFORCED GUEST & ALLOTTED PERMISSION GUARD)
   const handleSwitchProject = (proj) => {
+    const savedEmail = typeof window !== 'undefined' ? localStorage.getItem('sps_authorized_user_email') : '';
+    const isGuestUser = !savedEmail || savedEmail === 'Guest' || savedEmail === 'Guest / Unauthenticated';
+    
+    if (isGuestUser) {
+      alert(`🔒 GUEST ACCESS RESTRICTED:\nGuest users are strictly prohibited from accessing working studio projects ('${proj.title}'). Please log in with your authorized studio Gmail account or watch our Investor Showcase Slideshow!`);
+      if (onOpenInvestorDeck) onOpenInvestorDeck();
+      return;
+    }
+
     if (!checkIsProjectAllotted(proj.title)) {
       alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask Primary Admin (pedditiram@gmail.com) to allot this project to your profile in Admin Settings.`);
       return;

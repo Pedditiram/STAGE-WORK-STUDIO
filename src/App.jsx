@@ -11,6 +11,7 @@ import ProjectConsoleModal from './components/ProjectConsoleModal';
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
+import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { 
@@ -181,6 +182,7 @@ export default function App() {
   const [adminModalTab, setAdminModalTab] = useState('all');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const email = localStorage.getItem('sps_authorized_user_email');
@@ -842,6 +844,7 @@ export default function App() {
         onOpenProjectConsole={() => setIsProjectConsoleOpen(true)}
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
         roomId={roomId}
         collaboratorCount={collaborators.length}
         isAdminLoggedIn={isAdminLoggedIn}
@@ -1096,6 +1099,15 @@ export default function App() {
         presetProfile={presetProfile}
         setPresetProfile={(val) => { setPresetProfile(val); syncToCloud({ presetProfile: val }); }}
         isAdminLoggedIn={isAdminLoggedIn}
+        onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+      />
+
+      {/* Investor Pitch Showcase & Slide Presentation Modal */}
+      <InvestorDeckModal
+        isOpen={isInvestorDeckOpen}
+        onClose={() => setIsInvestorDeckOpen(false)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
       />
 
       {/* 2-Factor Phone & OTP Security Guard for Shared Invite Links */}
