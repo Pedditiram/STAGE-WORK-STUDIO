@@ -72,9 +72,12 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
     totalCollaborators: authorizedUsers.length
   };
 
-  // Always persist locally
-  localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
-  window.dispatchEvent(new Event('sps_collaborators_updated'));
+  const newStr = JSON.stringify(authorizedUsers);
+  const oldStr = localStorage.getItem('sps_authorized_phone_users');
+  if (newStr !== oldStr) {
+    localStorage.setItem('sps_authorized_phone_users', newStr);
+    window.dispatchEvent(new Event('sps_collaborators_updated'));
+  }
 
   // Push to Production REST Cloud Database
   try {
@@ -85,7 +88,6 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
     });
   } catch (e) {}
 
-  // Push to Firestore if custom config present
   if (db) {
     try {
       const collabRef = doc(db, 'studio_config', 'authorized_collaborators');
@@ -101,8 +103,12 @@ export async function fetchCollaboratorsFromCloud() {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users) && data.users.length > 0) {
-        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
-        window.dispatchEvent(new Event('sps_collaborators_updated'));
+        const newStr = JSON.stringify(data.users);
+        const oldStr = localStorage.getItem('sps_authorized_phone_users');
+        if (newStr !== oldStr) {
+          localStorage.setItem('sps_authorized_phone_users', newStr);
+          window.dispatchEvent(new Event('sps_collaborators_updated'));
+        }
         return data.users;
       }
     }
@@ -115,8 +121,12 @@ export async function fetchCollaboratorsFromCloud() {
       if (snap.exists()) {
         const data = snap.data();
         if (Array.isArray(data.users)) {
-          localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
-          window.dispatchEvent(new Event('sps_collaborators_updated'));
+          const newStr = JSON.stringify(data.users);
+          const oldStr = localStorage.getItem('sps_authorized_phone_users');
+          if (newStr !== oldStr) {
+            localStorage.setItem('sps_authorized_phone_users', newStr);
+            window.dispatchEvent(new Event('sps_collaborators_updated'));
+          }
           return data.users;
         }
       }
@@ -131,15 +141,15 @@ export async function fetchCollaboratorsFromCloud() {
 export function subscribeToCollaboratorUpdates(onUsersReceived) {
   let unsubscribe = () => {};
   
-  // Real-time polling via REST Cloud DB
   const interval = setInterval(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const users = await fetchCollaboratorsFromCloud();
       if (Array.isArray(users) && typeof onUsersReceived === 'function') {
         onUsersReceived(users);
       }
     } catch (e) {}
-  }, 10000);
+  }, 25000);
 
   if (db) {
     try {
@@ -148,8 +158,12 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
         if (snap.exists()) {
           const data = snap.data();
           if (Array.isArray(data.users)) {
-            localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
-            window.dispatchEvent(new Event('sps_collaborators_updated'));
+            const newStr = JSON.stringify(data.users);
+            const oldStr = localStorage.getItem('sps_authorized_phone_users');
+            if (newStr !== oldStr) {
+              localStorage.setItem('sps_authorized_phone_users', newStr);
+              window.dispatchEvent(new Event('sps_collaborators_updated'));
+            }
             if (typeof onUsersReceived === 'function') {
               onUsersReceived(data.users);
             }
@@ -174,10 +188,13 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
     totalProjects: projectLibrary.length
   };
 
-  localStorage.setItem('sps_project_library', JSON.stringify(projectLibrary));
-  window.dispatchEvent(new Event('sps_projects_updated'));
+  const newStr = JSON.stringify(projectLibrary);
+  const oldStr = localStorage.getItem('sps_project_library');
+  if (newStr !== oldStr) {
+    localStorage.setItem('sps_project_library', newStr);
+    window.dispatchEvent(new Event('sps_projects_updated'));
+  }
 
-  // Push to Production REST Cloud Database Engine
   try {
     await fetch(SPS_PROJECTS_BLOB_URL, {
       method: 'PUT',
@@ -198,15 +215,15 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
 export function subscribeToProjectLibraryUpdates(callback) {
   initDatabase();
 
-  // Background polling for multi-device sync
   const interval = setInterval(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const projects = await fetchProjectLibraryFromCloud();
       if (Array.isArray(projects) && typeof callback === 'function') {
         callback(projects);
       }
     } catch (e) {}
-  }, 12000);
+  }, 25000);
 
   let unsubscribe = () => {};
   if (db && typeof window !== 'undefined') {
@@ -216,9 +233,13 @@ export function subscribeToProjectLibraryUpdates(callback) {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data && Array.isArray(data.projects)) {
-            localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
-            if (typeof callback === 'function') callback(data.projects);
-            window.dispatchEvent(new Event('sps_projects_updated'));
+            const newStr = JSON.stringify(data.projects);
+            const oldStr = localStorage.getItem('sps_project_library');
+            if (newStr !== oldStr) {
+              localStorage.setItem('sps_project_library', newStr);
+              window.dispatchEvent(new Event('sps_projects_updated'));
+              if (typeof callback === 'function') callback(data.projects);
+            }
           }
         }
       }, (err) => {});
@@ -238,8 +259,12 @@ export async function fetchProjectLibraryFromCloud() {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.projects) && data.projects.length > 0) {
-        localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
-        window.dispatchEvent(new Event('sps_projects_updated'));
+        const newStr = JSON.stringify(data.projects);
+        const oldStr = localStorage.getItem('sps_project_library');
+        if (newStr !== oldStr) {
+          localStorage.setItem('sps_project_library', newStr);
+          window.dispatchEvent(new Event('sps_projects_updated'));
+        }
         return data.projects;
       }
     }
@@ -252,8 +277,12 @@ export async function fetchProjectLibraryFromCloud() {
       if (snap.exists()) {
         const data = snap.data();
         if (Array.isArray(data.projects)) {
-          localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
-          window.dispatchEvent(new Event('sps_projects_updated'));
+          const newStr = JSON.stringify(data.projects);
+          const oldStr = localStorage.getItem('sps_project_library');
+          if (newStr !== oldStr) {
+            localStorage.setItem('sps_project_library', newStr);
+            window.dispatchEvent(new Event('sps_projects_updated'));
+          }
           return data.projects;
         }
       }
@@ -304,6 +333,7 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
 // 8. Subscribe to Active Editing Slots in Real Time to detect conflicts
 export function subscribeToActiveEditingSlots(currentEmail, callback) {
   const interval = setInterval(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const res = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
       if (res.ok) {
@@ -322,7 +352,7 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
         if (typeof callback === 'function') callback(activeUsersMap);
       }
     } catch (e) {}
-  }, 8000);
+  }, 20000);
 
   return () => clearInterval(interval);
 }
