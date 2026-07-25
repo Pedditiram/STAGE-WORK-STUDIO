@@ -180,6 +180,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const email = localStorage.getItem('sps_authorized_user_email');
