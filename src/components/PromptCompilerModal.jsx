@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -17,9 +17,9 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
   const [folderName, setFolderName] = useState('');
   const [customFolderPath, setCustomFolderPath] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_custom_export_folder') || "Seedance_Prompts";
+      return localStorage.getItem('sps_custom_export_folder') || "/Users/pedditiram/Desktop/jai sri ram prompts";
     }
-    return "Seedance_Prompts";
+    return "/Users/pedditiram/Desktop/jai sri ram prompts";
   });
 
   const handleCustomFolderPathChange = (val) => {
@@ -29,25 +29,25 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     }
   };
 
-  // Option 1: Native Folder Picker Dialog
+  // Option 1: Native Folder Picker Dialog to grant browser write access to exact Desktop folder
   const handleSelectTargetFolder = async () => {
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {
         const handle = await window.showDirectoryPicker({
           mode: 'readwrite',
-          startIn: 'downloads'
+          startIn: 'desktop'
         });
         setFolderHandle(handle);
         setFolderName(handle.name);
         handleCustomFolderPathChange(handle.name);
-        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". All generated files will be written directly here!`);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
+        setExportSuccessMsg(`🟢 Target Folder Granted & Locked: "${handle.name}". Files will now save directly here!`);
+        setTimeout(() => setExportSuccessMsg(null), 5000);
+        return handle;
       } catch (err) {
-        if (err.name === 'AbortError') return;
+        if (err.name === 'AbortError') return null;
       }
-    } else {
-      alert("Folder Picker API is supported in Chrome, Edge, and modern Mac browsers. You can also type your custom folder name in the input box!");
     }
+    return null;
   };
 
   if (!isOpen) return null;
@@ -272,26 +272,31 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // Direct Write to Active Target Folder or Browser Download
+  // Direct Write to Active Locked Folder or Prompt Folder Picker
   const generateAndSaveSingleShotFile = async (shot, idx) => {
     const filename = getShotFilename(shot, idx);
     const content = getShotPromptText(shot, idx);
 
-    if (folderHandle) {
+    let activeHandle = folderHandle;
+    if (!activeHandle && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      activeHandle = await handleSelectTargetFolder();
+    }
+
+    if (activeHandle) {
       try {
-        const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+        const fileHandle = await activeHandle.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${folderName}/"!`);
+        setExportSuccessMsg(`🟢 Directly Saved "${filename}" into folder "${folderName || activeHandle.name}"!`);
         setTimeout(() => setExportSuccessMsg(null), 3000);
         return;
       } catch (err) {
-        console.warn("Direct folder save failed, falling back to download:", err);
+        console.warn("Direct folder save error:", err);
       }
     }
 
-    // Fallback standard download
+    // Standard download fallback
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -308,17 +313,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     let targetDir = folderHandle;
 
     if (!targetDir && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      try {
-        targetDir = await window.showDirectoryPicker({
-          mode: 'readwrite',
-          startIn: 'downloads'
-        });
-        setFolderHandle(targetDir);
-        setFolderName(targetDir.name);
-        handleCustomFolderPathChange(targetDir.name);
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-      }
+      targetDir = await handleSelectTargetFolder();
     }
 
     const cleanSubfolder = (customFolderPath || folderName || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -326,7 +321,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     if (targetDir) {
       try {
         let destinationDir = targetDir;
-        if (cleanSubfolder && cleanSubfolder !== targetDir.name) {
+        if (cleanSubfolder && cleanSubfolder !== targetDir.name && !customFolderPath.includes('/')) {
           destinationDir = await targetDir.getDirectoryHandle(cleanSubfolder, { create: true });
         }
 
@@ -342,7 +337,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           count++;
         }
 
-        setExportSuccessMsg(`🟢 Successfully saved ${count} prompt files directly inside folder "${cleanSubfolder}/"!`);
+        setExportSuccessMsg(`🟢 Successfully saved ${count} prompt files directly inside folder "${targetDir.name}"!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
@@ -355,7 +350,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       setTimeout(() => {
         const filename = `${cleanSubfolder}_${getShotFilename(shot, i)}`;
         const content = getShotPromptText(shot, i);
-        generateAndSaveSingleShotFile({ ...shot, sceneShotId: filename.replace(/\.txt$/, '') }, i);
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }, i * 350);
     });
 
@@ -410,6 +413,25 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           <div className="bg-emerald-950/90 border-b border-emerald-500/40 p-2.5 px-5 text-emerald-200 text-xs font-mono flex items-center gap-2 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{exportSuccessMsg}</span>
+          </div>
+        )}
+
+        {/* Browser Security Guidance Info Bar */}
+        {!folderHandle && (
+          <div className="bg-amber-950/40 border-b border-amber-500/30 p-2 px-5 text-amber-200 text-[11px] font-mono flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                To save files directly into your folder (e.g. <span className="text-white font-bold">/Desktop/jai sri ram prompts</span>), click <strong>"📁 Grant Folder Permission"</strong> to select your folder once.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleSelectTargetFolder}
+              className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] shrink-0 cursor-pointer shadow transition-all"
+            >
+              📁 Grant Folder Access Now
+            </button>
           </div>
         )}
 
@@ -541,26 +563,26 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 onClick={handleSelectTargetFolder}
                 className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
                   folderHandle
-                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900'
-                    : 'bg-zinc-900 text-amber-300 border-zinc-700 hover:bg-zinc-800 hover:text-amber-200'
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
+                    : 'bg-amber-950/80 text-amber-300 border-amber-500/50 hover:bg-amber-900 hover:text-white animate-pulse'
                 }`}
-                title="Click to visually pick any target folder location on your computer"
+                title="Click to visually pick your desktop target folder"
               >
                 <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-                <span>{folderName ? `📁 ${folderName}` : '📁 Choose Save Location'}</span>
+                <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Grant Save Folder Access'}</span>
               </button>
 
               {/* OPTION 2: CUSTOM FOLDER PATH / SUBFOLDER INPUT FIELD */}
               <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
                 <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Folder Path:</span>
+                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Path:</span>
                 <input
                   type="text"
                   value={customFolderPath}
                   onChange={(e) => handleCustomFolderPathChange(e.target.value)}
-                  placeholder="e.g. /Users/pedditiram/Desktop/jai sri ram prompts/"
+                  placeholder="/Users/pedditiram/Desktop/jai sri ram prompts"
                   className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-48 lg:w-64 truncate"
-                  title="Specify target folder path or subfolder name on your computer"
+                  title="Specify target folder path on your computer"
                 />
               </div>
             </div>
@@ -588,7 +610,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
                 <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-lg hidden md:inline">
-                  Target Destination: <span className="text-white font-bold">{customFolderPath || folderName || 'Default Downloads'}/</span>
+                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: ${folderName}]` : (customFolderPath || 'Downloads')}</span>
                 </span>
               </div>
 
@@ -597,7 +619,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   const filename = getShotFilename(shot, idx);
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
-                  const targetDisplayPath = customFolderPath ? `${customFolderPath.endsWith('/') ? customFolderPath : customFolderPath + '/'}${filename}` : `${filename}`;
+                  const displayFolderPrefix = folderName ? `${folderName}/` : (customFolderPath ? `${customFolderPath.endsWith('/') ? customFolderPath : customFolderPath + '/'}` : '');
 
                   return (
                     <div 
@@ -608,8 +630,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                       <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/80 p-2.5 px-3 rounded-lg border border-zinc-800">
                         <div className="flex items-center gap-2 truncate max-w-xl">
                           <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1 shrink-0">
-                            <FileCode className="w-3.5 h-3.5" />
-                            {targetDisplayPath}
+                            <FileCode className="w-3.5 h-3.5 text-emerald-300" />
+                            {displayFolderPrefix}{filename}
                           </span>
                           <span className="text-zinc-300 font-bold font-mono text-xs shrink-0">
                             Shot #{idx + 1}
