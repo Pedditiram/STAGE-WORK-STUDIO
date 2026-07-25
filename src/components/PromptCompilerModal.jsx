@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -39,12 +39,13 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
         });
         setFolderHandle(handle);
         setFolderName(handle.name);
-        handleCustomFolderPathChange(handle.name);
-        setExportSuccessMsg(`🟢 Target Folder Granted & Locked: "${handle.name}". Files will now save directly here!`);
+        handleCustomFolderPathChange(`Desktop/${handle.name}`);
+        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". All files will now be written directly here!`);
         setTimeout(() => setExportSuccessMsg(null), 5000);
         return handle;
       } catch (err) {
         if (err.name === 'AbortError') return null;
+        console.warn("Directory picker error:", err);
       }
     }
     return null;
@@ -272,31 +273,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // Direct Write to Active Locked Folder or Prompt Folder Picker
-  const generateAndSaveSingleShotFile = async (shot, idx) => {
-    const filename = getShotFilename(shot, idx);
-    const content = getShotPromptText(shot, idx);
-
-    let activeHandle = folderHandle;
-    if (!activeHandle && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
-      activeHandle = await handleSelectTargetFolder();
-    }
-
-    if (activeHandle) {
-      try {
-        const fileHandle = await activeHandle.getFileHandle(filename, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(content);
-        await writable.close();
-        setExportSuccessMsg(`🟢 Directly Saved "${filename}" into folder "${folderName || activeHandle.name}"!`);
-        setTimeout(() => setExportSuccessMsg(null), 3000);
-        return;
-      } catch (err) {
-        console.warn("Direct folder save error:", err);
-      }
-    }
-
-    // Standard download fallback
+  const downloadSingleTxtFile = (filename, content) => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -308,7 +285,40 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Batch Export to Locked Directory or Directory Picker
+  // Direct Write to Active Locked Target Directory
+  const generateAndSaveSingleShotFile = async (shot, idx) => {
+    const filename = getShotFilename(shot, idx);
+    const content = getShotPromptText(shot, idx);
+
+    let activeHandle = folderHandle;
+
+    // If folder handle is not granted yet, automatically open directory picker
+    if (!activeHandle && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      activeHandle = await handleSelectTargetFolder();
+    }
+
+    if (activeHandle) {
+      try {
+        const fileHandle = await activeHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${activeHandle.name}" on your disk!`);
+        setTimeout(() => setExportSuccessMsg(null), 4000);
+        return;
+      } catch (err) {
+        console.error("Direct folder save error:", err);
+        setExportSuccessMsg(`❌ Could not save file into folder: ${err.message}`);
+        setTimeout(() => setExportSuccessMsg(null), 4000);
+        return;
+      }
+    }
+
+    // Standard download fallback
+    downloadSingleTxtFile(filename, content);
+  };
+
+  // Batch Export to Locked Directory or Prompt Directory Picker
   const handleExportAllIndividualFiles = async () => {
     let targetDir = folderHandle;
 
@@ -316,21 +326,14 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       targetDir = await handleSelectTargetFolder();
     }
 
-    const cleanSubfolder = (customFolderPath || folderName || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-
     if (targetDir) {
       try {
-        let destinationDir = targetDir;
-        if (cleanSubfolder && cleanSubfolder !== targetDir.name && !customFolderPath.includes('/')) {
-          destinationDir = await targetDir.getDirectoryHandle(cleanSubfolder, { create: true });
-        }
-
         let count = 0;
         for (let i = 0; i < shots.length; i++) {
           const shot = shots[i];
           const filename = getShotFilename(shot, i);
           const content = getShotPromptText(shot, i);
-          const fileHandle = await destinationDir.getFileHandle(filename, { create: true });
+          const fileHandle = await targetDir.getFileHandle(filename, { create: true });
           const writable = await fileHandle.createWritable();
           await writable.write(content);
           await writable.close();
@@ -338,46 +341,34 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         }
 
         setExportSuccessMsg(`🟢 Successfully saved ${count} prompt files directly inside folder "${targetDir.name}"!`);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
+        setTimeout(() => setExportSuccessMsg(null), 5000);
         return;
       } catch (err) {
-        console.warn("Folder export error:", err);
+        console.error("Folder export error:", err);
+        setExportSuccessMsg(`❌ Folder export error: ${err.message}`);
+        setTimeout(() => setExportSuccessMsg(null), 4000);
+        return;
       }
     }
 
     // Browser Fallback Download
+    const prefix = (folderName || customFolderPath || 'Seedance_Prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
     shots.forEach((shot, i) => {
       setTimeout(() => {
-        const filename = `${cleanSubfolder}_${getShotFilename(shot, i)}`;
+        const filename = `${prefix}_${getShotFilename(shot, i)}`;
         const content = getShotPromptText(shot, i);
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        downloadSingleTxtFile(filename, content);
       }, i * 350);
     });
 
-    setExportSuccessMsg(`🟢 Downloading ${shots.length} files with prefix "${cleanSubfolder}_"!`);
+    setExportSuccessMsg(`🟢 Downloading ${shots.length} files to browser downloads!`);
     setTimeout(() => setExportSuccessMsg(null), 4000);
   };
 
   const handleDownloadFullDoc = () => {
     const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
-    const cleanSubfolder = (customFolderPath || folderName || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-    const blob = new Blob([compiledOutput], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${cleanSubfolder}_full_script.${ext}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const prefix = (folderName || customFolderPath || 'Seedance_Prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
+    downloadSingleTxtFile(`${prefix}_full_script.${ext}`, compiledOutput);
   };
 
   return (
@@ -418,19 +409,19 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
         {/* Browser Security Guidance Info Bar */}
         {!folderHandle && (
-          <div className="bg-amber-950/40 border-b border-amber-500/30 p-2 px-5 text-amber-200 text-[11px] font-mono flex items-center justify-between gap-2">
+          <div className="bg-amber-950/80 border-b border-amber-500/50 p-2.5 px-5 text-amber-200 text-xs font-mono flex flex-wrap items-center justify-between gap-2 shadow-inner">
             <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
               <span>
-                To save files directly into your folder (e.g. <span className="text-white font-bold">/Desktop/jai sri ram prompts</span>), click <strong>"📁 Grant Folder Permission"</strong> to select your folder once.
+                To save files directly into your folder <strong className="text-white">"jai sri ram prompts"</strong> on Desktop, click <strong>"📁 Select Desktop Folder Now"</strong> to grant browser permission once!
               </span>
             </div>
             <button
               type="button"
               onClick={handleSelectTargetFolder}
-              className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] shrink-0 cursor-pointer shadow transition-all"
+              className="px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-zinc-950 font-extrabold text-xs shrink-0 cursor-pointer shadow-lg transition-all"
             >
-              📁 Grant Folder Access Now
+              📁 Select Desktop Folder Now
             </button>
           </div>
         )}
@@ -564,12 +555,12 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
                   folderHandle
                     ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
-                    : 'bg-amber-950/80 text-amber-300 border-amber-500/50 hover:bg-amber-900 hover:text-white animate-pulse'
+                    : 'bg-amber-500 text-zinc-950 border-amber-400 hover:bg-amber-400 font-extrabold shadow-lg animate-pulse'
                 }`}
                 title="Click to visually pick your desktop target folder"
               >
-                <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
-                <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Grant Save Folder Access'}</span>
+                <FolderPlus className="w-4 h-4 text-zinc-950" />
+                <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Select Save Folder'}</span>
               </button>
 
               {/* OPTION 2: CUSTOM FOLDER PATH / SUBFOLDER INPUT FIELD */}
@@ -619,7 +610,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   const filename = getShotFilename(shot, idx);
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
-                  const displayFolderPrefix = folderName ? `${folderName}/` : (customFolderPath ? `${customFolderPath.endsWith('/') ? customFolderPath : customFolderPath + '/'}` : '');
+                  const displayPath = folderName ? `${folderName}/${filename}` : `${customFolderPath}/${filename}`;
 
                   return (
                     <div 
@@ -631,7 +622,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                         <div className="flex items-center gap-2 truncate max-w-xl">
                           <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1 shrink-0">
                             <FileCode className="w-3.5 h-3.5 text-emerald-300" />
-                            {displayFolderPrefix}{filename}
+                            {displayPath}
                           </span>
                           <span className="text-zinc-300 font-bold font-mono text-xs shrink-0">
                             Shot #{idx + 1}
