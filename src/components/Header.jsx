@@ -265,7 +265,7 @@ export default function Header({
             ) : (
               <>
                 <RefreshCw className="w-3.5 h-3.5 text-white hover:rotate-180 transition-all duration-500 shrink-0" />
-                <span className="font-bold tracking-tight text-[11.5px] hidden sm:inline">Sync</span>
+                <span className="font-bold tracking-tight text-[11.5px]">Sync</span>
               </>
             )}
           </button>
