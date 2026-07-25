@@ -163,15 +163,47 @@ Return ONLY valid JSON array without markdown formatting.`;
   return parseRawScriptFallback(scriptText);
 }
 
-function parseRawScriptFallback(scriptText) {
+function smartSegmentTextIntoShots(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
-  const rawBlocks = scriptText
+  // 1. Check if structured by scene/shot markers (S01, EXT., INT., SHOT)
+  const structuredBlocks = scriptText
     .split(/\n(?=(?:S\d+|SC\.\d+|SC\d+_SH\d+|SHOT\s+\d+|ACT\s+[I|V|X]+|EXT\.|INT\.))/i)
     .map(b => b.trim())
     .filter(Boolean);
 
-  const blocksToProcess = rawBlocks.length > 0 ? rawBlocks : [scriptText];
+  if (structuredBlocks.length > 1) return structuredBlocks;
+
+  // 2. Check double linebreaks
+  const paraBlocks = scriptText.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  if (paraBlocks.length > 1) return paraBlocks;
+
+  // 3. Single paragraph or unformatted narrative prose!
+  // Split by sentence boundaries and cinematic visual markers (e.g. "multiple shots", "grand entry", "closeup", "revealing shot", "next", "then")
+  const transitionRegex = /(?:\.\s+|\n+|(?:,\s*)(?=(?:multiple shots|grand entry|revealing shot|closeup shots|close up|close-up|next|then|meanwhile|establishing shot|entry of|holding|shots of|versus|vs|fight|fighting|start a fight)\b))/gi;
+
+  const rawSegments = scriptText
+    .split(transitionRegex)
+    .map(s => s.replace(/^[\.,;\s]+/, '').trim())
+    .filter(s => s.length > 8);
+
+  if (rawSegments.length > 1) return rawSegments;
+
+  // 4. Fallback: split by period or semicolon
+  const sentenceSegments = scriptText
+    .split(/[.;]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 6);
+
+  if (sentenceSegments.length > 1) return sentenceSegments;
+
+  return [scriptText];
+}
+
+function parseRawScriptFallback(scriptText) {
+  if (!scriptText || typeof scriptText !== 'string') return [];
+
+  const blocksToProcess = smartSegmentTextIntoShots(scriptText);
   const parsedShots = [];
 
   blocksToProcess.forEach((block, idx) => {
@@ -181,35 +213,50 @@ function parseRawScriptFallback(scriptText) {
     const shotId = idMatch ? idMatch[1].toUpperCase().replace(/\s+/g, '_') : `SC01_SH${(idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1)}`;
 
     let framing = "Medium Shot (MS)";
-    if (textLower.includes("aerial") || textLower.includes("god's-eye") || textLower.includes("ews")) framing = "Aerial Extreme Wide Shot (EWS)";
-    else if (textLower.includes("low-angle") || textLower.includes("low cu")) framing = "Low-Angle Close-Up (CU)";
-    else if (textLower.includes("extreme close") || textLower.includes("ecu")) framing = "Extreme Close-Up (ECU)";
-    else if (textLower.includes("close-up") || textLower.includes("cu")) framing = "Close-Up (CU)";
-    else if (textLower.includes("wide shot") || textLower.includes("ws")) framing = "Wide Shot (WS)";
-    else if (textLower.includes("ots")) framing = "Over-The-Shoulder (OTS)";
-    else if (textLower.includes("mcu")) framing = "Medium Close-Up (MCU)";
+    if (textLower.includes("aerial") || textLower.includes("god's-eye") || textLower.includes("ews") || textLower.includes("surrounding villages")) {
+      framing = "Aerial Extreme Wide Shot (EWS)";
+    } else if (textLower.includes("low-angle") || textLower.includes("low cu")) {
+      framing = "Low-Angle Close-Up (CU)";
+    } else if (textLower.includes("extreme close") || textLower.includes("ecu")) {
+      framing = "Extreme Close-Up (ECU)";
+    } else if (textLower.includes("closeup") || textLower.includes("close-up") || textLower.includes("cu") || textLower.includes("tying")) {
+      framing = "Close-Up (CU)";
+    } else if (textLower.includes("wide shot") || textLower.includes("ws") || textLower.includes("establishment") || textLower.includes("entry")) {
+      framing = "Wide Shot (WS)";
+    } else if (textLower.includes("ots")) {
+      framing = "Over-The-Shoulder (OTS)";
+    } else if (textLower.includes("mcu")) {
+      framing = "Medium Close-Up (MCU)";
+    }
 
     let cameraMotion = "[Camera: Tracking Shot / Steadicam Follow]";
-    if (textLower.includes("push-in") || textLower.includes("dolly")) cameraMotion = "[Camera: Slow Push-In / Dolly Zoom]";
-    else if (textLower.includes("crane") || textLower.includes("tilt")) cameraMotion = "[Camera: Slow Crane Rise / Vertical Tilt]";
-    else if (textLower.includes("orbit")) cameraMotion = "[Camera: Hero Orbit 180/360 Deg]";
-    else if (textLower.includes("whip-pan")) cameraMotion = "[Camera: Fast Whip-Pan Follow]";
+    if (textLower.includes("push-in") || textLower.includes("dolly")) {
+      cameraMotion = "[Camera: Slow Push-In / Dolly Zoom]";
+    } else if (textLower.includes("crane") || textLower.includes("tilt")) {
+      cameraMotion = "[Camera: Slow Crane Rise / Vertical Tilt]";
+    } else if (textLower.includes("orbit")) {
+      cameraMotion = "[Camera: Hero Orbit 180/360 Deg]";
+    } else if (textLower.includes("revealing") || textLower.includes("cloth is removed")) {
+      cameraMotion = "[Camera: Slow Epic Reveal / Tilt Up]";
+    } else if (textLower.includes("fight") || textLower.includes("fighting")) {
+      cameraMotion = "[Camera: Dynamic Handheld Action Orbit]";
+    }
 
-    let lighting = "[Lighting: High-Contrast Chiaroscuro Noir]";
-    let subjColor = "[Subject Color: Teal & Orange Cinema Palette]";
-    let bgLighting = "[BG Lighting: Mood Soft Ambient Falloff]";
-    let bgColor = "[BG Color: Deep Midnight Blue & Indigo]";
+    let lighting = "[Lighting: Natural Sunlight & High-Contrast Directional Fill]";
+    let subjColor = "[Subject Color: Vibrant Cinema Color Palette]";
+    let bgLighting = "[BG Lighting: Soft Natural Ambient Falloff]";
+    let bgColor = "[BG Color: Rich Deep Tones]";
 
-    if (textLower.includes("saffron") || textLower.includes("rama") || textLower.includes("gold")) {
+    if (textLower.includes("sankranti") || textLower.includes("rooster") || textLower.includes("village") || textLower.includes("bujji") || textLower.includes("raju")) {
+      lighting = "[Lighting: Golden Hour Konaseema Festival Sunbeams]";
+      subjColor = "[Subject Color: Vibrant Festival Crimson & Golden Earth]";
+      bgLighting = "[BG Lighting: Glistening Dusty Festival Crowd Haze]";
+      bgColor = "[BG Color: Lush Konaseema Emerald Green & Clay Red]";
+    } else if (textLower.includes("saffron") || textLower.includes("rama") || textLower.includes("gold")) {
       lighting = "[Lighting: Warm Saffron & Celestial Gold-Blue Aura]";
       subjColor = "[Subject Color: Saffron & Celestial Blue]";
       bgLighting = "[BG Lighting: Volumetric God Rays blooming warm gold]";
       bgColor = "[BG Color: Soft Amber & Sunset Ochre Gradient]";
-    } else if (textLower.includes("kara") || textLower.includes("demon") || textLower.includes("venom")) {
-      lighting = "[Lighting: Venom-Green Bioluminescent Strobe]";
-      subjColor = "[Subject Color: Charcoal & Venom-Green]";
-      bgLighting = "[BG Lighting: Dark Ash-Smoke & Lightning Flash]";
-      bgColor = "[BG Color: Deep Obsidian & Poison Green Void]";
     } else if (textLower.includes("neon") || textLower.includes("cyberpunk")) {
       lighting = "[Lighting: Cyberpunk Neon Blue & Pink Dual Glow]";
       subjColor = "[Subject Color: High-Saturation Neo-Noir]";
@@ -217,24 +264,28 @@ function parseRawScriptFallback(scriptText) {
       bgColor = "[BG Color: Sci-Fi Hologram Violet & Cyan]";
     }
 
-    let artistId = "[CharID: @LeadArtist_Main - Vocalist / Lead]";
-    if (textLower.includes("rama")) artistId = "[CharID: @Lord_Rama - Celestial Blue Skin, Saffron Dhoti]";
-    else if (textLower.includes("dhushan")) artistId = "[CharID: @Dhushan_General - Serpent Armour]";
-    else if (textLower.includes("kara")) artistId = "[CharID: @Kara_King - Obsidian Armour, Venomous Crown]";
-    else if (textLower.includes("aria")) artistId = "[CharID: @LeadSinger_Aria - Vocalist, leather jacket]";
+    // Extract Character ID Asset Ref dynamically from text
+    let artistId = "[CharID: @MainArtist_Lead]";
+    if (textLower.includes("bujji") && textLower.includes("raju")) {
+      artistId = "[CharID: @Bujji_vs_Raju - Champion Rooster Showdown]";
+    } else if (textLower.includes("raju")) {
+      artistId = "[CharID: @Raju_Rooster - Unbeatable Champion Rooster]";
+    } else if (textLower.includes("bujji")) {
+      artistId = "[CharID: @Bujji_Rooster - Famous Undefeated Champion]";
+    } else if (textLower.includes("rama")) {
+      artistId = "[CharID: @Lord_Rama - Celestial Blue Skin, Saffron Dhoti]";
+    }
 
-    let coArtist = "[Co-Artist: Backing performers reacting to lead's presence]";
-    if (textLower.includes("demon army") || textLower.includes("demons")) {
-      coArtist = "[Co-Artist: 14,000 demon legion ranks flinching back in awe & terror]";
-    } else if (textLower.includes("crowd") || textLower.includes("band")) {
-      coArtist = "[Co-Artist: Backing musicians swaying to rhythm, gazing at lead artist]";
+    let coArtist = "[Co-Artist: Surrounding crowd & spectators reacting to scene]";
+    if (textLower.includes("rooster") || textLower.includes("fight")) {
+      coArtist = "[Co-Artist: Excited village crowd cheering around Sankranti fight arena]";
     }
 
     const quoteMatch = block.match(/"([^"]+)"|'([^']+)'/);
-    let dialogue = quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Silent / Atmospheric Soundtrack / Battle FX Sync]';
+    let dialogue = quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Atmospheric Rural Festival Sound & Cheering Crowd]';
 
     let actionContext = block.replace(/\s+/g, ' ').trim();
-    if (actionContext.length > 200) actionContext = actionContext.substring(0, 200) + '...';
+    if (actionContext.length > 220) actionContext = actionContext.substring(0, 220) + '...';
 
     // Automatic Character & Element Extraction for 9 Image Inputs
     const extractedChars = [];
@@ -248,7 +299,6 @@ function parseRawScriptFallback(scriptText) {
       if (!extractedChars.includes(w)) extractedChars.push(w);
     });
 
-    // Build Image_1 to Image_9 reference bindings string
     const imgBindings = [];
     for (let imgIdx = 0; imgIdx < 9; imgIdx++) {
       if (extractedChars[imgIdx]) {
@@ -269,15 +319,15 @@ function parseRawScriptFallback(scriptText) {
       subjectColorTag: subjColor,
       backgroundLightingTag: bgLighting,
       backgroundColorTag: bgColor,
-      atmosphereVolumetricsTag: "[Atmosphere: Golden Incense Smoke & Floating Sacred Dust Motes]",
+      atmosphereVolumetricsTag: "[Atmosphere: Warm Festival Haze & Dust Motes]",
       characterIdAssetRef: artistId,
       coArtistInteraction: coArtist,
       actionEnvContext: actionContext,
-      characterExpression: "Serene and absolute calm, laser-focused gaze",
-      characterPlacement: "Foreground center frame, opposing army arrayed in background",
+      characterExpression: "Intense competitive energy and focused determination",
+      characterPlacement: "Center frame focus, surrounding crowd in background",
       characterDialogue: dialogue,
-      characterMovement: "Standing firm in full hero stance",
-      characterEyeLooks: "[Eye Look: Direct Laser Focus on Target / Camera]",
+      characterMovement: "Dynamic movement focused on action sequence",
+      characterEyeLooks: "[Eye Look: Direct Laser Focus on Opponent / Arena Target]",
       shotDurationAndImages: durationAndImagesStr
     });
   });
