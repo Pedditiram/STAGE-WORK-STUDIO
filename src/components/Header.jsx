@@ -18,6 +18,7 @@ export default function Header({
   onOpenAIModal,
   onOpenProjectConsole,
   onOpenHelpModal,
+  onOpenLoginModal,
   roomId,
   collaboratorCount,
   isAdminLoggedIn,
@@ -426,7 +427,14 @@ export default function Header({
                       setIsProfileOpen(false);
                       if (typeof window !== 'undefined') {
                         localStorage.removeItem('sps_authorized_user_email');
-                        window.location.reload();
+                        localStorage.removeItem('sps_is_admin_logged_in');
+                        window.history.replaceState({}, '', window.location.pathname);
+                        window.dispatchEvent(new Event('sps_collaborators_updated'));
+                        if (onOpenLoginModal) {
+                          onOpenLoginModal();
+                        } else {
+                          window.location.reload();
+                        }
                       }
                     }}
                     className="w-full text-left px-3.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-between transition-all border border-red-400 text-xs shadow-md cursor-pointer"
