@@ -203,7 +203,7 @@ export default function App() {
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
   const isInitialMount = React.useRef(true);
-  const isReceivingCloudUpdate = React.useRef(false);
+  const lastSyncedHash = React.useRef('');
 
   // Auto-sync engine: Whenever shots, projectTitle, targetModel, or aspectRatio change, automatically sync to Cloud Database
   useEffect(() => {
@@ -216,17 +216,22 @@ export default function App() {
 
     if (isInitialMount.current) {
       isInitialMount.current = false;
+      const initialHash = JSON.stringify({ shots, projectTitle, targetModel, aspectRatio });
+      lastSyncedHash.current = initialHash;
       return;
     }
 
-    if (isReceivingCloudUpdate.current) {
-      isReceivingCloudUpdate.current = false;
+    const currentHash = JSON.stringify({ shots, projectTitle, targetModel, aspectRatio });
+
+    // Prevent re-publishing if state matches cloud hash or hasn't changed
+    if (currentHash === lastSyncedHash.current) {
       return;
     }
 
     const timer = setTimeout(async () => {
       try {
         setIsCloudSyncing(true);
+        lastSyncedHash.current = currentHash;
 
         const savedLibStr = localStorage.getItem('sps_project_library');
         let library = savedLibStr ? JSON.parse(savedLibStr) : [];
@@ -277,7 +282,13 @@ export default function App() {
 
         const activeProj = projs.find(p => p.title === projectTitle || p.id === 'proj_default');
         if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
-          isReceivingCloudUpdate.current = true;
+          const cloudHash = JSON.stringify({ 
+            shots: activeProj.shots, 
+            projectTitle: activeProj.title || projectTitle, 
+            targetModel: activeProj.targetModel || targetModel, 
+            aspectRatio: activeProj.aspectRatio || aspectRatio 
+          });
+          lastSyncedHash.current = cloudHash;
           setShots(activeProj.shots);
           localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
         }
@@ -294,12 +305,24 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = subscribeToCloudRoom(roomId, (cloudData) => {
-      if (cloudData) {
-        isReceivingCloudUpdate.current = true;
-        if (cloudData.shots && Array.isArray(cloudData.shots)) setShots(cloudData.shots);
-        if (cloudData.projectTitle) setProjectTitle(cloudData.projectTitle);
-        if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
-        if (cloudData.aspectRatio) setAspectRatio(cloudData.aspectRatio);
+      if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
+        const cloudHash = JSON.stringify({ 
+          shots: cloudData.shots, 
+          projectTitle: cloudData.projectTitle || projectTitle, 
+          targetModel: cloudData.targetModel || targetModel, 
+          aspectRatio: cloudData.aspectRatio || aspectRatio 
+        });
+
+        // Only update local state if cloud data differs from current hash
+        if (cloudHash !== lastSyncedHash.current) {
+          lastSyncedHash.current = cloudHash;
+          setShots(cloudData.shots);
+          if (cloudData.projectTitle) setProjectTitle(cloudData.projectTitle);
+          if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
+          if (cloudData.aspectRatio) setAspectRatio(cloudData.aspectRatio);
+
+          localStorage.setItem('sps_current_shots', JSON.stringify(cloudData.shots));
+        }
 
         // Auto-save team contributions to persistent project library
         try {
