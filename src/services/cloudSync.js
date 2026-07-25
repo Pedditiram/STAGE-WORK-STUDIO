@@ -36,10 +36,10 @@ export const ROLES = [
   { id: 'sound', label: '🎵 Audio / Sync Lead', color: 'text-purple-400 border-purple-500/40 bg-purple-950/80' }
 ];
 
-let lastSyncedTimestampMap = {};
-
 export function subscribeToCloudRoom(roomId, onDataReceived) {
   if (typeof onDataReceived !== 'function') return () => {};
+
+  let subscriberLastTimestamp = 0;
 
   // Load cached room data from localStorage immediately on subscribe
   if (typeof window !== 'undefined') {
@@ -47,6 +47,9 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     if (cachedStr) {
       try {
         const cachedData = JSON.parse(cachedStr);
+        if (cachedData.lastUpdated) {
+          subscriberLastTimestamp = new Date(cachedData.lastUpdated).getTime();
+        }
         onDataReceived(cachedData);
       } catch (e) {}
     }
@@ -54,6 +57,9 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
 
   const handleBroadcast = (event) => {
     if (event.data && event.data.roomId === roomId && typeof onDataReceived === 'function') {
+      if (event.data.payload && event.data.payload.lastUpdated) {
+        subscriberLastTimestamp = new Date(event.data.payload.lastUpdated).getTime();
+      }
       onDataReceived(event.data.payload);
     }
   };
@@ -70,10 +76,9 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
         const resObj = await res.json();
         const payload = resObj?.data;
         if (payload && payload.lastUpdated) {
-          const lastProcessed = lastSyncedTimestampMap[roomId] || 0;
           const remoteTime = new Date(payload.lastUpdated).getTime();
-          if (remoteTime > lastProcessed) {
-            lastSyncedTimestampMap[roomId] = remoteTime;
+          if (remoteTime > subscriberLastTimestamp) {
+            subscriberLastTimestamp = remoteTime;
             if (typeof window !== 'undefined') {
               localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
             }
@@ -114,8 +119,6 @@ export async function publishToCloudRoom(roomId, projectData) {
     roomId,
     lastUpdated: nowIso
   };
-
-  lastSyncedTimestampMap[roomId] = new Date(nowIso).getTime();
 
   // 1. Local Storage Cache
   if (typeof window !== 'undefined') {
