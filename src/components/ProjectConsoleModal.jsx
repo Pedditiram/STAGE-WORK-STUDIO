@@ -394,7 +394,27 @@ export default function ProjectConsoleModal({
 
   const handleApplyAIShotsToCurrent = () => {
     if (parsedPreview.length > 0) {
-      if (setShots) setShots(parsedPreview);
+      let finalShots = parsedPreview;
+
+      if (shots && shots.length > 0) {
+        const isOverwrite = window.confirm(
+          `🎬 SCRIPT BREAKDOWN APPLIED:\nProject '${currentProjectTitle}' currently contains ${shots.length} existing shot(s).\n\n` +
+          `• Click [ OK ] to OVERWRITE and Replace current shots.\n` +
+          `• Click [ CANCEL ] to MERGE & APPEND new script breakdown shots to your current timeline.`
+        );
+
+        if (!isOverwrite) {
+          // MERGE & APPEND
+          const startNum = shots.length + 1;
+          const renumbered = parsedPreview.map((s, idx) => ({
+            ...s,
+            sceneShotId: `SC01_SH${String(startNum + idx).padStart(2, '0')}`
+          }));
+          finalShots = [...shots, ...renumbered];
+        }
+      }
+
+      if (setShots) setShots(finalShots);
       onClose();
     }
   };

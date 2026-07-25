@@ -707,11 +707,31 @@ export default function App() {
 
   const handleApplyAIShots = (aiShots, newTitle) => {
     const titleToApply = newTitle || projectTitle;
-    setShots(aiShots);
+    let finalShots = aiShots;
+
+    if (shots && shots.length > 0) {
+      const isOverwrite = window.confirm(
+        `🎬 SCRIPT BREAKDOWN APPLIED:\nProject '${titleToApply}' currently contains ${shots.length} existing shot(s).\n\n` +
+        `• Click [ OK ] to OVERWRITE and Replace current shots.\n` +
+        `• Click [ CANCEL ] to MERGE & APPEND new script breakdown shots to your current timeline.`
+      );
+
+      if (!isOverwrite) {
+        // MERGE & APPEND
+        const startNum = shots.length + 1;
+        const renumbered = aiShots.map((s, idx) => ({
+          ...s,
+          sceneShotId: `SC01_SH${String(startNum + idx).padStart(2, '0')}`
+        }));
+        finalShots = [...shots, ...renumbered];
+      }
+    }
+
+    setShots(finalShots);
     setProjectTitle(titleToApply);
     setActiveShotIndex(0);
     setActiveView("canvas");
-    syncToCloud({ shots: aiShots, projectTitle: titleToApply });
+    syncToCloud({ shots: finalShots, projectTitle: titleToApply });
   };
 
   const handleLoadTemplate = (template) => {
