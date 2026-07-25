@@ -237,11 +237,11 @@ export default function Header({
           <button
             type="button"
             onClick={onSaveProject}
-            className={`p-1.5 rounded-lg text-xs font-mono font-bold flex items-center justify-center transition-all border shadow shrink-0 cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow shrink-0 cursor-pointer ${
               isCloudSyncing
                 ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-500 animate-pulse text-slate-950 border-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.9)] scale-105'
                 : isProjectSavedToast
-                  ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.95)] scale-110'
+                  ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.95)] scale-105'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/50 hover:shadow-emerald-500/20'
             }`}
             title={
@@ -253,11 +253,20 @@ export default function Header({
             }
           >
             {isCloudSyncing ? (
-              <RefreshCw className="w-4 h-4 text-slate-950 animate-spin" />
+              <>
+                <RefreshCw className="w-3.5 h-3.5 text-slate-950 animate-spin shrink-0" />
+                <span className="font-black tracking-tight text-[11.5px]">Syncing...</span>
+              </>
             ) : isProjectSavedToast ? (
-              <Check className="w-4.5 h-4.5 text-slate-950 stroke-[3.5] animate-in zoom-in spin-in-12 duration-300" />
+              <>
+                <Check className="w-4 h-4 text-slate-950 stroke-[3.5] animate-in zoom-in spin-in-12 duration-300 shrink-0" />
+                <span className="font-black tracking-tight text-[11.5px]">Sync Complete</span>
+              </>
             ) : (
-              <RefreshCw className="w-4 h-4 text-white hover:rotate-180 transition-all duration-500" />
+              <>
+                <RefreshCw className="w-3.5 h-3.5 text-white hover:rotate-180 transition-all duration-500 shrink-0" />
+                <span className="font-bold tracking-tight text-[11.5px] hidden sm:inline">Sync</span>
+              </>
             )}
           </button>
 
