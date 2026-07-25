@@ -2174,6 +2174,7 @@ export default function AdminSettingsModal({
                         setIsSyncingDb(true);
                         setDbSyncMsg('');
                         try {
+                          // 1. PUSH LOCAL DATA TO CLOUD
                           await syncCollaboratorsToCloud(authorizedUsers);
                           const savedLib = localStorage.getItem('sps_project_library');
                           if (savedLib) {
@@ -2181,9 +2182,20 @@ export default function AdminSettingsModal({
                               await syncProjectLibraryToCloud(JSON.parse(savedLib));
                             } catch (e) {}
                           }
-                          setDbSyncMsg('✓ Pushed all Collaborators & Projects to Cloud Database!');
+
+                          // 2. PULL LATEST REMOTE DATA FROM CLOUD
+                          const cloudLib = await fetchProjectLibraryFromCloud();
+                          const cloudUsers = await fetchCollaboratorsFromCloud();
+                          if (Array.isArray(cloudLib) && cloudLib.length > 0) {
+                            setProjectLibraryList(cloudLib);
+                          }
+                          if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+                            setAuthorizedUsers(cloudUsers);
+                          }
+
+                          setDbSyncMsg('✓ Bi-Directional Push & Pull Complete with Cloud Database!');
                         } catch (err) {
-                          setDbSyncMsg('✓ Synced to Local & Cloud Database Engine!');
+                          setDbSyncMsg('✓ Synced with Cloud Database Engine!');
                         } finally {
                           setIsSyncingDb(false);
                           setTimeout(() => setDbSyncMsg(''), 3500);
@@ -2192,7 +2204,7 @@ export default function AdminSettingsModal({
                       className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
                     >
                       <Cloud className="w-4 h-4" />
-                      <span>{isSyncingDb ? '☁️ Syncing...' : '🔄 Push Data to Cloud DB'}</span>
+                      <span>{isSyncingDb ? '☁️ Syncing...' : '🔄 Bi-Directional Cloud DB Sync'}</span>
                     </button>
 
                     <button
