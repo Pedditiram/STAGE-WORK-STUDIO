@@ -2,7 +2,33 @@
 // Supports 100% Real-Time Cross-Browser Sync (Safari, Firefox, Chrome, Edge, Mobile)
 
 let memoryRooms = {};
-let memoryProjects = [];
+let memoryProjects = [
+  {
+    id: "proj_ram",
+    title: "PROJECT RAM",
+    description: "Cinema Production Studio Project with 2 shots",
+    targetModel: "SPS Direct Cinema 2.0",
+    aspectRatio: "2.39:1 Anamorphic",
+    roomId: "SPS-PROJ-8476",
+    lastModified: new Date().toLocaleDateString(),
+    shots: [
+      {
+        sceneShotId: "SC01_SH01",
+        shotComposition: "Extreme Close-Up (ECU)",
+        cameraMotionTag: "[Camera: Push In Rapid Zoom]",
+        subjectLightingTag: "[Lighting: Rembrandt 3-Point Classic]",
+        actionEnvContext: "Cinematic interior concert venue."
+      },
+      {
+        sceneShotId: "SC01_SH02",
+        shotComposition: "Medium Shot (MS)",
+        cameraMotionTag: "[Camera: Tracking Pan Right]",
+        subjectLightingTag: "[Lighting: Soft Falloff Ambient]",
+        actionEnvContext: "Cinematic stage interior."
+      }
+    ]
+  }
+];
 let memoryCollaborators = [];
 let memoryPresence = {};
 
@@ -10,7 +36,6 @@ const RESTFUL_ROOM_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae01
 const RESTFUL_PROJECTS_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
 const JSONBLOB_ROOM_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
-const JSONBLOB_PRESENCE_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,32 +50,6 @@ export default async function handler(req, res) {
   // GET Request: Return latest data
   if (req.method === 'GET') {
     if (type === 'projects') {
-      if (memoryProjects.length > 0) {
-        return res.status(200).json({ success: true, projects: memoryProjects });
-      }
-      try {
-        const fetchRes = await fetch(`${RESTFUL_PROJECTS_URL}?t=${Date.now()}`, { cache: 'no-store' });
-        if (fetchRes.ok) {
-          const resObj = await fetchRes.json();
-          const projs = resObj?.data?.projects || resObj?.projects;
-          if (Array.isArray(projs) && projs.length > 0) {
-            memoryProjects = projs;
-            return res.status(200).json({ success: true, projects: projs });
-          }
-        }
-      } catch (e) {}
-
-      try {
-        const fetchRes = await fetch(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`, { cache: 'no-store' });
-        if (fetchRes.ok) {
-          const resObj = await fetchRes.json();
-          if (Array.isArray(resObj.projects)) {
-            memoryProjects = resObj.projects;
-            return res.status(200).json({ success: true, projects: resObj.projects });
-          }
-        }
-      } catch (e) {}
-
       return res.status(200).json({ success: true, projects: memoryProjects });
     }
 
@@ -86,17 +85,6 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
 
-    try {
-      const fetchRes = await fetch(`${JSONBLOB_ROOM_URL}?t=${Date.now()}`, { cache: 'no-store' });
-      if (fetchRes.ok) {
-        const resObj = await fetchRes.json();
-        if (resObj) {
-          memoryRooms[roomId] = resObj;
-          return res.status(200).json({ success: true, data: resObj });
-        }
-      }
-    } catch (e) {}
-
     return res.status(200).json({ success: true, data: memoryRooms[roomId] || null });
   }
 
@@ -105,22 +93,40 @@ export default async function handler(req, res) {
     const body = req.body || {};
 
     if (type === 'projects') {
-      const projs = body.projects || body;
-      if (Array.isArray(projs)) {
-        memoryProjects = projs;
+      const incomingProjs = body.projects || body;
+      if (Array.isArray(incomingProjs)) {
+        const projMap = new Map();
+        // Keep existing memory projects
+        memoryProjects.forEach(p => {
+          if (p && p.title) projMap.set(p.title, p);
+        });
+        // Merge incoming projects
+        incomingProjs.forEach(p => {
+          if (p && p.title) {
+            const existing = projMap.get(p.title);
+            if (existing) {
+              projMap.set(p.title, { ...existing, ...p });
+            } else {
+              projMap.set(p.title, p);
+            }
+          }
+        });
+        memoryProjects = Array.from(projMap.values());
+
+        // Asynchronously update persistence endpoints
         fetch(RESTFUL_PROJECTS_URL, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: "Stage Production Studio Projects", data: { projects: projs, updatedAt: new Date().toISOString() } })
+          body: JSON.stringify({ name: "Stage Production Studio Projects", data: { projects: memoryProjects, updatedAt: new Date().toISOString() } })
         }).catch(() => {});
 
         fetch(JSONBLOB_PROJECTS_URL, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projects: projs, updatedAt: new Date().toISOString() })
+          body: JSON.stringify({ projects: memoryProjects, updatedAt: new Date().toISOString() })
         }).catch(() => {});
       }
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, projects: memoryProjects });
     }
 
     if (type === 'collaborators') {

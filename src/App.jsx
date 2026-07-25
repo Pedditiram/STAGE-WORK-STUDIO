@@ -217,22 +217,39 @@ export default function App() {
   // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount
   useEffect(() => {
     fetchProjectLibraryFromCloud().then(projs => {
-      if (Array.isArray(projs) && projs.length > 0) {
-        localStorage.setItem('sps_project_library', JSON.stringify(projs));
-        window.dispatchEvent(new Event('sps_projects_updated'));
+      let updatedProjs = Array.isArray(projs) ? [...projs] : [];
+      
+      // Self-healing guard: ensure active loaded project is NEVER missing from Projects Library
+      const activeTitle = projectTitle || 'STAGE PRODUCTION STUDIO';
+      const exists = updatedProjs.some(p => p.title === activeTitle);
+      if (!exists && shots && shots.length > 0) {
+        updatedProjs.unshift({
+          id: `proj_${Date.now()}`,
+          title: activeTitle,
+          description: `Cinema Production Studio Project with ${shots.length} shots`,
+          targetModel: targetModel || 'SPS Direct Cinema 2.0',
+          aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+          roomId: effectiveRoomId || 'SPS-PROJ-8476',
+          lastModified: new Date().toLocaleDateString(),
+          shots: shots
+        });
+      }
 
-        const activeProj = projs.find(p => p.title === projectTitle || p.id === 'proj_default');
-        if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
-          const cloudHash = JSON.stringify({ 
-            shots: activeProj.shots, 
-            projectTitle: activeProj.title || projectTitle, 
-            targetModel: activeProj.targetModel || targetModel, 
-            aspectRatio: activeProj.aspectRatio || aspectRatio 
-          });
-          lastSyncedHash.current = cloudHash;
-          setShots(activeProj.shots);
-          localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
-        }
+      localStorage.setItem('sps_project_library', JSON.stringify(updatedProjs));
+      window.dispatchEvent(new Event('sps_projects_updated'));
+      syncProjectLibraryToCloud(updatedProjs);
+
+      const activeProj = updatedProjs.find(p => p.title === projectTitle || p.id === 'proj_default');
+      if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+        const cloudHash = JSON.stringify({ 
+          shots: activeProj.shots, 
+          projectTitle: activeProj.title || projectTitle, 
+          targetModel: activeProj.targetModel || targetModel, 
+          aspectRatio: activeProj.aspectRatio || aspectRatio 
+        });
+        lastSyncedHash.current = cloudHash;
+        setShots(activeProj.shots);
+        localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
       }
     }).catch(() => {});
 
