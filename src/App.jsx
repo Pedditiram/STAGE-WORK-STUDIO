@@ -274,6 +274,13 @@ export default function App() {
       if (Array.isArray(projs) && projs.length > 0) {
         localStorage.setItem('sps_project_library', JSON.stringify(projs));
         window.dispatchEvent(new Event('sps_projects_updated'));
+
+        const activeProj = projs.find(p => p.title === projectTitle || p.id === 'proj_default');
+        if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+          isReceivingCloudUpdate.current = true;
+          setShots(activeProj.shots);
+          localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
+        }
       }
     }).catch(() => {});
 
@@ -496,14 +503,16 @@ export default function App() {
         } catch (err) {}
       }
 
-      // 2. PULL LATEST DATA FROM CLOUD
+      // 2. PULL LATEST DATA FROM CLOUD DATABASE
       try {
         const latestCloudLib = await fetchProjectLibraryFromCloud();
-        const latestCloudUsers = await fetchCollaboratorsFromCloud();
+        await fetchCollaboratorsFromCloud();
         if (Array.isArray(latestCloudLib) && latestCloudLib.length > 0) {
-          const activeProj = latestCloudLib.find(p => p.title === projectTitle);
+          const activeProj = latestCloudLib.find(p => p.title === projectTitle || p.id === 'proj_default');
           if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+            isReceivingCloudUpdate.current = true;
             setShots(activeProj.shots);
+            localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
           }
         }
       } catch (err) {}

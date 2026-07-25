@@ -19,8 +19,9 @@ const DEFAULT_FIREBASE_CONFIG = {
   appId: "1:98127391273:web:stageproductionstudio"
 };
 
-// Permanent Production REST Cloud Database Blob Endpoints (Zero-Config, 100% Active Globally)
-const SPS_PROJECTS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
+// Permanent Production REST Cloud Database Endpoints (Zero-Config, 100% Active Globally across Firefox, Safari, Chrome)
+const SPS_PROJECTS_BLOB_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
+const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
 const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a9a0-7028-9dd5-9567daaf7158";
 const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 
@@ -195,8 +196,18 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
     window.dispatchEvent(new Event('sps_projects_updated'));
   }
 
+  // Push to Primary RESTful Cloud DB
   try {
     await fetch(SPS_PROJECTS_BLOB_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: "Stage Production Studio Projects", data: payload })
+    });
+  } catch (e) {}
+
+  // Push to Backup JSONBlob DB
+  try {
+    await fetch(JSONBLOB_PROJECTS_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -215,15 +226,17 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
 export function subscribeToProjectLibraryUpdates(callback) {
   initDatabase();
 
-  const interval = setInterval(async () => {
-    if (typeof document !== 'undefined' && document.hidden) return;
+  const checkUpdates = async () => {
     try {
       const projects = await fetchProjectLibraryFromCloud();
       if (Array.isArray(projects) && typeof callback === 'function') {
         callback(projects);
       }
     } catch (e) {}
-  }, 25000);
+  };
+
+  checkUpdates();
+  const interval = setInterval(checkUpdates, 3000);
 
   let unsubscribe = () => {};
   if (db && typeof window !== 'undefined') {
@@ -255,7 +268,25 @@ export function subscribeToProjectLibraryUpdates(callback) {
 // 6. Fetch Latest Project Library from Cloud Database
 export async function fetchProjectLibraryFromCloud() {
   try {
-    const res = await fetch(SPS_PROJECTS_BLOB_URL, { cache: 'no-store' });
+    const res = await fetch(`${SPS_PROJECTS_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const resData = await res.json();
+      const projects = resData?.data?.projects || resData?.projects;
+      if (Array.isArray(projects) && projects.length > 0) {
+        const newStr = JSON.stringify(projects);
+        const oldStr = localStorage.getItem('sps_project_library');
+        if (newStr !== oldStr) {
+          localStorage.setItem('sps_project_library', newStr);
+          window.dispatchEvent(new Event('sps_projects_updated'));
+        }
+        return projects;
+      }
+    }
+  } catch (e) {}
+
+  // Fallback to JSONBlob
+  try {
+    const res = await fetch(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.projects) && data.projects.length > 0) {
@@ -288,6 +319,7 @@ export async function fetchProjectLibraryFromCloud() {
       }
     } catch (e) {}
   }
+
   const saved = localStorage.getItem('sps_project_library');
   return saved ? JSON.parse(saved) : [];
 }
