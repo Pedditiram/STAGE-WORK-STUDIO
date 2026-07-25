@@ -178,11 +178,25 @@ export default function SpreadsheetView({
                   <tr 
                     key={shotIdx}
                     onClick={() => setActiveShotIndex(shotIdx)}
-                    className="bg-red-950/40 hover:bg-red-900/60 border-y border-red-500/50 transition-all text-xs h-8"
+                    onDragOver={(e) => handleDragOver(e, shotIdx)}
+                    onDrop={(e) => handleDrop(e, shotIdx)}
+                    className={`bg-red-950/40 hover:bg-red-900/60 border-y border-red-500/50 transition-all text-xs h-8 ${
+                      isBeingDragged ? 'opacity-30' : ''
+                    } ${
+                      isTargetDrop ? 'border-t-2 border-t-amber-400 bg-red-900/80' : ''
+                    }`}
                   >
-                    <td className="p-1 text-center font-mono border-r border-red-500/40 bg-red-950/90 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
-                      <div className="flex items-center justify-center gap-1">
-                        <span className="text-[10px] text-red-400/80 font-mono">⋮⋮</span>
+                    <td 
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, shotIdx)}
+                      onDragOver={(e) => handleDragOver(e, shotIdx)}
+                      onDrop={(e) => handleDrop(e, shotIdx)}
+                      onDragEnd={handleDragEnd}
+                      className="p-1 text-center font-mono border-r border-red-500/40 bg-red-950/90 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.5)] cursor-grab active:cursor-grabbing hover:bg-red-900 select-none transition-all"
+                      title="Click, hold & drag shot number to move up/down"
+                    >
+                      <div className="flex items-center justify-center gap-1 font-bold">
+                        <span className="text-[10px] text-red-400 font-mono">⋮⋮</span>
                         <span className="text-red-300 font-bold text-xs">{shotIdx + 1}</span>
                       </div>
                     </td>
