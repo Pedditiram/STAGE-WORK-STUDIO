@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { parseRawScriptToShots, generateScriptFromConcept, extractTextFromPDF } from '../services/aiScriptParser';
 import { GENRE_PRESET_PROFILES } from '../constants/seedancePresets';
+import { syncProjectLibraryToCloud, fetchProjectLibraryFromCloud } from '../services/dbService';
 
 const SAMPLE_SCRIPTS = [
   {
@@ -141,17 +142,26 @@ export default function ProjectConsoleModal({
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
 
-  // Sync tab if initialTab updates on open
+  // Sync tab if initialTab updates on open & fetch latest cloud projects
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveTab(initialTab);
     }
+    if (isOpen) {
+      fetchProjectLibraryFromCloud().then(cloudProjs => {
+        if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
+          setProjectLibrary(cloudProjs);
+        }
+      }).catch(() => {});
+    }
   }, [isOpen, initialTab]);
 
-  // Persist library changes
+  // Persist library changes locally & push to Cloud Database
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_project_library', JSON.stringify(projectLibrary));
+      window.dispatchEvent(new Event('sps_projects_updated'));
+      syncProjectLibraryToCloud(projectLibrary);
     }
   }, [projectLibrary]);
 

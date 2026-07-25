@@ -252,6 +252,23 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [shots, projectTitle, targetModel, aspectRatio, roomId]);
 
+  // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount
+  useEffect(() => {
+    fetchProjectLibraryFromCloud().then(projs => {
+      if (Array.isArray(projs) && projs.length > 0) {
+        localStorage.setItem('sps_project_library', JSON.stringify(projs));
+        window.dispatchEvent(new Event('sps_projects_updated'));
+      }
+    }).catch(() => {});
+
+    fetchCollaboratorsFromCloud().then(users => {
+      if (Array.isArray(users) && users.length > 0) {
+        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(users));
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+      }
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     const unsubscribe = subscribeToCloudRoom(roomId, (cloudData) => {
       if (cloudData) {

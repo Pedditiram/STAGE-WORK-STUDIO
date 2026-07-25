@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download } from 'lucide-react';
-import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
+import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 
 export default function AdminSettingsModal({ 
   isOpen, 
@@ -73,11 +73,21 @@ export default function AdminSettingsModal({
         }
       }
     };
+
+    if (isOpen) {
+      handleUpdate();
+      fetchProjectLibraryFromCloud().then(cloudProjs => {
+        if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
+          setProjectLibraryList(cloudProjs);
+        }
+      }).catch(() => {});
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('sps_projects_updated', handleUpdate);
       return () => window.removeEventListener('sps_projects_updated', handleUpdate);
     }
-  }, []);
+  }, [isOpen]);
 
   // Authorized Admin Email for Stage Production Studio
   const [authorizedEmail, setAuthorizedEmail] = useState(() => {
