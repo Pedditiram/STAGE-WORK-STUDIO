@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown
+  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown, RefreshCw
 } from 'lucide-react';
 
 export default function Header({ 
@@ -232,7 +232,7 @@ export default function Header({
         {/* RIGHT: Quick Action Tools + EXTREME TOP RIGHT User Profile Dropdown */}
         <div className="flex items-center gap-1.5 shrink-0">
           
-          {/* Quick Save Project Button */}
+          {/* Sync All Projects & Data to Cloud Database Button */}
           <button
             type="button"
             onClick={onSaveProject}
@@ -241,9 +241,9 @@ export default function Header({
                 ? 'bg-emerald-500 text-zinc-950 border-emerald-400 scale-105'
                 : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/40'
             }`}
-            title={isProjectSavedToast ? "✓ Saved!" : "Save Project"}
+            title={isProjectSavedToast ? "✓ All Data Synced to Cloud DB!" : "⚡ Sync All Projects, Shots & Collaborator Data to Cloud Database"}
           >
-            {isProjectSavedToast ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            <RefreshCw className={`w-4 h-4 ${isProjectSavedToast ? 'animate-spin' : ''}`} />
           </button>
 
           {/* Unified Projects, AI Script Breakdown & Genre Console */}

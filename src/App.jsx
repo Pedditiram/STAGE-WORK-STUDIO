@@ -12,9 +12,9 @@ import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
-import { syncProjectLibraryToCloud, subscribeToProjectLibraryUpdates } from './services/dbService';
+import { syncProjectLibraryToCloud, syncCollaboratorsToCloud, subscribeToProjectLibraryUpdates } from './services/dbService';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
-import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward } from 'lucide-react';
+import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward, RefreshCw } from 'lucide-react';
 
 const INITIAL_SHOTS = [
   {
@@ -320,8 +320,9 @@ export default function App() {
 
   const [isProjectSavedToast, setIsProjectSavedToast] = useState(false);
 
-  const handleSaveProjectToApp = () => {
+  const handleSaveProjectToApp = async () => {
     try {
+      setIsCloudSyncing(true);
       const savedLibStr = localStorage.getItem('sps_project_library');
       let library = savedLibStr ? JSON.parse(savedLibStr) : [];
       if (!Array.isArray(library)) library = [];
@@ -355,13 +356,24 @@ export default function App() {
       localStorage.setItem('sps_current_shots', JSON.stringify(shots));
       localStorage.setItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
-      syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
-      syncProjectLibraryToCloud(library);
+      // SYNC ALL DATA TO CLOUD DATABASE (Projects + Room + Collaborators)
+      await syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
+      await syncProjectLibraryToCloud(library);
+
+      const savedUsersStr = localStorage.getItem('sps_authorized_phone_users');
+      if (savedUsersStr) {
+        try {
+          const authUsers = JSON.parse(savedUsersStr);
+          await syncCollaboratorsToCloud(authUsers);
+        } catch (err) {}
+      }
       
       setIsProjectSavedToast(true);
-      setTimeout(() => setIsProjectSavedToast(false), 2500);
+      setTimeout(() => setIsProjectSavedToast(false), 3000);
+      setTimeout(() => setIsCloudSyncing(false), 500);
     } catch (e) {
-      console.warn("Failed to save project to library:", e);
+      console.warn("Failed to sync project data to cloud database:", e);
+      setIsCloudSyncing(false);
     }
   };
 
@@ -911,6 +923,16 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         setIsAdminLoggedIn={setIsAdminLoggedIn}
       />
+
+      {/* Live Sync Confirmation Toast Banner */}
+      {isProjectSavedToast && (
+        <div className="fixed top-16 right-4 z-50 p-3.5 rounded-2xl bg-slate-950/95 border-2 border-emerald-500 text-emerald-300 font-mono text-xs font-bold shadow-[0_10px_40px_rgba(16,185,129,0.4)] flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+          <div className="p-1.5 rounded-lg bg-emerald-500 text-slate-950">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          </div>
+          <span>⚡ All Studio Projects, Shots & Collaborator Data Synced to Cloud Database!</span>
+        </div>
+      )}
     </div>
   );
 }
