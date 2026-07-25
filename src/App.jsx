@@ -13,6 +13,7 @@ import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
 import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
+import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { 
   syncProjectLibraryToCloud, 
@@ -718,26 +719,25 @@ export default function App() {
     syncToCloud({ shots: newShots });
   };
 
-  const handleApplyAIShots = (aiShots, newTitle) => {
-    const titleToApply = newTitle || projectTitle;
+  const [mergePromptState, setMergePromptState] = useState({
+    isOpen: false,
+    projectTitle: '',
+    existingCount: 0,
+    incomingCount: 0,
+    pendingAiShots: [],
+    pendingTitle: '',
+    existingShots: []
+  });
+
+  const executeApplyAIShots = (aiShots, titleToApply, mode, baseShots = []) => {
     let finalShots = aiShots;
-
-    if (shots && shots.length > 0) {
-      const isOverwrite = window.confirm(
-        `🎬 SCRIPT BREAKDOWN APPLIED:\nProject '${titleToApply}' currently contains ${shots.length} existing shot(s).\n\n` +
-        `• Click [ OK ] to OVERWRITE and Replace current shots.\n` +
-        `• Click [ CANCEL ] to MERGE & APPEND new script breakdown shots to your current timeline.`
-      );
-
-      if (!isOverwrite) {
-        // MERGE & APPEND
-        const startNum = shots.length + 1;
-        const renumbered = aiShots.map((s, idx) => ({
-          ...s,
-          sceneShotId: `SC01_SH${String(startNum + idx).padStart(2, '0')}`
-        }));
-        finalShots = [...shots, ...renumbered];
-      }
+    if (mode === 'merge' && baseShots.length > 0) {
+      const startNum = baseShots.length + 1;
+      const renumbered = aiShots.map((s, idx) => ({
+        ...s,
+        sceneShotId: `SC01_SH${String(startNum + idx).padStart(2, '0')}`
+      }));
+      finalShots = [...baseShots, ...renumbered];
     }
 
     setShots(finalShots);
@@ -776,6 +776,37 @@ export default function App() {
     }
 
     syncToCloud({ shots: finalShots, projectTitle: titleToApply });
+  };
+
+  const handleApplyAIShots = (aiShots, newTitle) => {
+    const titleToApply = newTitle || projectTitle;
+    let targetExistingShots = (shots && shots.length > 0) ? shots : [];
+
+    if (typeof window !== 'undefined') {
+      try {
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        const library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        const found = library.find(p => p.title === titleToApply);
+        if (found && Array.isArray(found.shots) && found.shots.length > 0) {
+          targetExistingShots = found.shots;
+        }
+      } catch (e) {}
+    }
+
+    if (targetExistingShots.length > 0) {
+      setMergePromptState({
+        isOpen: true,
+        projectTitle: titleToApply,
+        existingCount: targetExistingShots.length,
+        incomingCount: aiShots.length,
+        pendingAiShots: aiShots,
+        pendingTitle: titleToApply,
+        existingShots: targetExistingShots
+      });
+      return;
+    }
+
+    executeApplyAIShots(aiShots, titleToApply, 'overwrite', []);
   };
 
   const handleLoadTemplate = (template) => {
@@ -1167,6 +1198,7 @@ export default function App() {
         isAdminLoggedIn={isAdminLoggedIn}
         onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
         onOpenLogin={() => setIsLoginModalOpen(true)}
+        onApplyShots={handleApplyAIShots}
       />
 
       {/* Investor Pitch Showcase & Slide Presentation Modal */}
@@ -1211,6 +1243,27 @@ export default function App() {
         }}
         onKeepLocal={() => {
           setIsConflictModalOpen(false);
+        }}
+      />
+
+      {/* Interactive Script Breakdown Overwrite vs Merge Choice Modal */}
+      <ScriptMergePromptModal
+        isOpen={mergePromptState.isOpen}
+        projectTitle={mergePromptState.projectTitle}
+        existingCount={mergePromptState.existingCount}
+        incomingCount={mergePromptState.incomingCount}
+        onOverwrite={() => {
+          const { pendingAiShots, pendingTitle } = mergePromptState;
+          setMergePromptState(prev => ({ ...prev, isOpen: false }));
+          executeApplyAIShots(pendingAiShots, pendingTitle, 'overwrite', []);
+        }}
+        onMerge={() => {
+          const { pendingAiShots, pendingTitle, existingShots } = mergePromptState;
+          setMergePromptState(prev => ({ ...prev, isOpen: false }));
+          executeApplyAIShots(pendingAiShots, pendingTitle, 'merge', existingShots);
+        }}
+        onCancel={() => {
+          setMergePromptState(prev => ({ ...prev, isOpen: false }));
         }}
       />
 
