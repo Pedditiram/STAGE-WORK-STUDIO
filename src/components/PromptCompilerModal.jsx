@@ -230,7 +230,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     return compileTaggedFormat(shot);
   };
 
-  // STRICT CLEAN FILENAME (e.g. SC01_SH01.txt, SC01_SH02.txt) - NO PATH PREFIXES!
+  // STRICT SHORT FILENAME ONLY (e.g. SC01_SH01.txt, SC01_SH02.txt) - NEVER PATH PREVIEW!
   const getShotFilename = (shot, idx) => {
     const rawId = shot.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
     const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -282,17 +282,17 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename;
+    link.download = filename; // ALWAYS SHORT: SC01_SH01.txt
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  // Universal Clean ZIP Package Downloader - Strictly clean filenames SC01_SH01.txt inside zip!
+  // Universal Clean ZIP Package Downloader - Strictly short filenames SC01_SH01.txt inside zip!
   const handleDownloadZipPackage = () => {
     const zipFiles = shots.map((shot, idx) => ({
-      name: getShotFilename(shot, idx), // STRICT CLEAN NAME: SC01_SH01.txt
+      name: getShotFilename(shot, idx), // STRICT SHORT NAME: SC01_SH01.txt
       content: getShotPromptText(shot, idx)
     }));
 
@@ -308,13 +308,13 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Extracts clean files (SC01_SH01.txt, SC01_SH02.txt...) directly!`);
+    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Unzips clean short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
     setTimeout(() => setExportSuccessMsg(null), 6000);
   };
 
   // Direct Write to Active Locked Target Directory (Chrome API)
   const generateAndSaveSingleShotFile = async (shot, idx) => {
-    const filename = getShotFilename(shot, idx); // CLEAN FILENAME: SC01_SH01.txt
+    const filename = getShotFilename(shot, idx); // STRICT SHORT NAME: SC01_SH01.txt
     const content = getShotPromptText(shot, idx);
 
     let activeHandle = folderHandle;
@@ -354,7 +354,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         let count = 0;
         for (let i = 0; i < shots.length; i++) {
           const shot = shots[i];
-          const filename = getShotFilename(shot, i); // CLEAN FILENAME: SC01_SH01.txt
+          const filename = getShotFilename(shot, i); // STRICT SHORT NAME: SC01_SH01.txt
           const content = getShotPromptText(shot, i);
           const fileHandle = await targetDir.getFileHandle(filename, { create: true });
           const writable = await fileHandle.createWritable();
@@ -371,8 +371,17 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       }
     }
 
-    // Universal Fallback: Download Clean ZIP Package for Safari/Firefox/non-Chrome
-    handleDownloadZipPackage();
+    // Fallback: Individual Short File Downloads (SC01_SH01.txt, SC01_SH02.txt...)
+    shots.forEach((shot, i) => {
+      setTimeout(() => {
+        const filename = getShotFilename(shot, i); // STRICT SHORT NAME: SC01_SH01.txt
+        const content = getShotPromptText(shot, i);
+        downloadSingleTxtFile(filename, content);
+      }, i * 350);
+    });
+
+    setExportSuccessMsg(`🟢 Downloading ${shots.length} short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
+    setTimeout(() => setExportSuccessMsg(null), 4000);
   };
 
   const handleDownloadFullDoc = () => {
@@ -424,10 +433,10 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </div>
             <div>
               <div className="font-bold text-white flex items-center gap-2 text-xs">
-                <span>📦 SAFARI & ALL BROWSERS (1-CLICK CLEAN FILE EXPORT):</span>
+                <span>📦 SHORT SHORT FILENAMES EXPORT (SC01_SH01.txt, SC01_SH02.txt):</span>
               </div>
               <p className="text-[11px] text-cyan-200/90">
-                Click <strong className="text-white underline">"📦 Download ZIP Folder"</strong> to get clean files <code className="text-emerald-300 font-bold">SC01_SH01.txt</code>, <code className="text-emerald-300 font-bold">SC01_SH02.txt</code>... inside your folder!
+                Click <strong className="text-white underline">"⚡ Save All TXT Files to Folder"</strong> to get clean short names <code className="text-emerald-300 font-bold">SC01_SH01.txt</code>, <code className="text-emerald-300 font-bold">SC01_SH02.txt</code>...!
               </p>
             </div>
           </div>
@@ -596,15 +605,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               </div>
             </div>
 
-            {/* BATCH EXPORT ZIP BUTTON */}
+            {/* BATCH EXPORT CLEAN SHORT TXT FILES BUTTON */}
             <button
               type="button"
-              onClick={handleDownloadZipPackage}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-cyan-400/40 transition-all cursor-pointer shrink-0"
-              title={`Download all ${shots.length} prompts in a single ZIP folder containing individual TXT files`}
+              onClick={handleExportAllIndividualFiles}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
+              title={`Save all ${shots.length} prompts as short individual TXT files (SC01_SH01.txt, SC01_SH02.txt...)`}
             >
-              <Archive className="w-4 h-4 text-cyan-200" />
-              <span>📦 Download ZIP Folder ({shots.length} TXT Files)</span>
+              <FolderDown className="w-4 h-4 text-emerald-200" />
+              <span>⚡ Save All TXT Files to Folder</span>
             </button>
           </div>
         </div>
@@ -625,7 +634,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
               <div className="grid grid-cols-1 gap-4">
                 {shots.map((shot, idx) => {
-                  const filename = getShotFilename(shot, idx); // STRICT CLEAN FILENAME (e.g. SC01_SH01.txt)
+                  const filename = getShotFilename(shot, idx); // STRICT SHORT FILENAME (e.g. SC01_SH01.txt)
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
 
@@ -637,8 +646,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                       {/* Box Header */}
                       <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/80 p-2.5 px-3 rounded-lg border border-zinc-800">
                         <div className="flex items-center gap-2 truncate max-w-xl">
-                          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1 shrink-0">
-                            <FileCode className="w-3.5 h-3.5 text-emerald-300" />
+                          <span className="px-2.5 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1.5 shrink-0">
+                            <FileCode className="w-4 h-4 text-emerald-400" />
                             {filename}
                           </span>
                           <span className="text-zinc-300 font-bold font-mono text-xs shrink-0">
