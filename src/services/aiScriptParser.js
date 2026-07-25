@@ -7,10 +7,13 @@ export async function extractTextFromPDF(file) {
     const pdfWorkerModule = await import('pdfjs-dist/build/pdf.worker.mjs?url');
     pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerModule.default || pdfWorkerModule;
 
+    // Enable cMaps for full Indic/Telugu/Unicode font decoding support
     const loadingTask = pdfjsLib.getDocument({
       data: pdfBytes,
       verbosity: 0,
-      isEvalSupported: false
+      isEvalSupported: false,
+      cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+      cMapPacked: true
     });
     
     const pdf = await loadingTask.promise;
@@ -21,8 +24,11 @@ export async function extractTextFromPDF(file) {
       const textContent = await page.getTextContent();
       const pageItems = textContent.items.map(item => item.str);
       const pageText = pageItems.join(' ');
-      if (pageText.trim()) {
-        extractedPagesText.push(pageText);
+      
+      // Clean PDF metadata residual headers
+      const cleanPageText = sanitizePdfExtractedText(pageText);
+      if (cleanPageText.trim()) {
+        extractedPagesText.push(cleanPageText);
       }
     }
 
@@ -36,39 +42,68 @@ export async function extractTextFromPDF(file) {
   return parsePdfBinaryAdvanced(originalArrayBuffer);
 }
 
+function sanitizePdfExtractedText(text) {
+  if (!text) return "";
+  return text
+    // Strip PDF object tags & metadata header leaks
+    .replace(/PDF-1\.\d+/gi, '')
+    .replace(/\b\d+\s+\d+\s+obj\b/gi, '')
+    .replace(/\bendobj\b/gi, '')
+    .replace(/\bstream\b/gi, '')
+    .replace(/\bendstream\b/gi, '')
+    .replace(/\/Title\s+.*?(?=\/|>>|$)/gi, '')
+    .replace(/\/Producer\s+.*?(?=\/|>>|$)/gi, '')
+    .replace(/Google Docs Renderer/gi, '')
+    .replace(/Skia PDF/gi, '')
+    .replace(/\/Filter\s*\/[A-Za-z0-9]+/gi, '')
+    .replace(/ca\s+\d+|CA\s+\d+|LC\s+\d+|LJ\s+\d+|LW\s+[\d\.]+|ML\s+\d+/g, '')
+    .replace(/[\uFFFD]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function parsePdfBinaryAdvanced(arrayBuffer) {
   if (!arrayBuffer || arrayBuffer.byteLength === 0) return "";
   const bytes = new Uint8Array(arrayBuffer);
-  let binaryStr = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binaryStr += String.fromCharCode(bytes[i]);
+  
+  // Use UTF-8 decoder to preserve Telugu (\u0C00-\u0C7F) and Unicode text correctly
+  let decodedStr = '';
+  try {
+    decodedStr = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch (e) {
+    for (let i = 0; i < bytes.length; i++) {
+      decodedStr += String.fromCharCode(bytes[i]);
+    }
   }
 
   const textBlocks = [];
-  const tjPattern = /\(([^()]{2,})\)\s*Tj/g;
+  // Match text inside parenthesized PDF strings: (Text Here) Tj or TJ
+  const tjPattern = /\(([^()]{2,})\)\s*Tj/gi;
   let match;
 
-  while ((match = tjPattern.exec(binaryStr)) !== null) {
-    const cleanStr = match[1].replace(/\\([0-7]{3}|[()\\n\r\t])/g, '$1').trim();
-    if (cleanStr.length > 1 && !cleanStr.startsWith('/')) {
+  while ((match = tjPattern.exec(decodedStr)) !== null) {
+    const rawMatch = match[1];
+    const cleanStr = rawMatch
+      .replace(/\\([0-7]{3}|[()\\n\r\t])/g, '$1')
+      .replace(/[\u0000-\u001F\u7F-\u009F]/g, ' ')
+      .trim();
+
+    if (cleanStr.length > 1 && !cleanStr.startsWith('/') && !cleanStr.includes('obj') && !cleanStr.includes('PDF-1.')) {
       textBlocks.push(cleanStr);
     }
   }
 
   if (textBlocks.length > 0) {
-    return textBlocks.join('\n');
+    return sanitizePdfExtractedText(textBlocks.join('\n'));
   }
 
-  const cleanText = binaryStr
-    .replace(/\/Contents\s+\d+\s+\d+\s+R/g, '')
-    .replace(/\/MediaBox\s*\[[^\]]+\]/g, '')
-    .replace(/\/Parent\s+\d+\s+\d+\s+R/g, '')
-    .replace(/\/Resources\s*<<[^>]+>>/g, '')
-    .replace(/\/Font\s*<<[^>]+>>/g, '')
-    .replace(/\/ProcSet\s*\[[^\]]+\]/g, '');
+  // Fallback: Extract all printable Unicode text blocks (including Telugu \u0C00-\u0C7F)
+  const unicodeBlocks = decodedStr.match(/[\u0C00-\u0C7FA-Za-z0-9\s.,;:'"\-!?()]{4,}/g) || [];
+  const cleanBlocks = unicodeBlocks
+    .map(b => sanitizePdfExtractedText(b))
+    .filter(b => b.length > 3 && !b.includes('endobj') && !b.includes('Normal endobj'));
 
-  const asciiBlocks = cleanText.match(/[A-Z0-9\s.,;:'"\-!]{4,}/gi) || [];
-  return asciiBlocks.filter(b => b.trim().length > 3).join('\n');
+  return cleanBlocks.join('\n');
 }
 
 /**
