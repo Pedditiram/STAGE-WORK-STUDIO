@@ -135,7 +135,7 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
   const interval = setInterval(async () => {
     try {
       const users = await fetchCollaboratorsFromCloud();
-      if (Array.isArray(users) && onUsersReceived) {
+      if (Array.isArray(users) && typeof onUsersReceived === 'function') {
         onUsersReceived(users);
       }
     } catch (e) {}
@@ -150,7 +150,9 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
           if (Array.isArray(data.users)) {
             localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
             window.dispatchEvent(new Event('sps_collaborators_updated'));
-            onUsersReceived(data.users);
+            if (typeof onUsersReceived === 'function') {
+              onUsersReceived(data.users);
+            }
           }
         }
       }, (err) => {});
@@ -200,7 +202,7 @@ export function subscribeToProjectLibraryUpdates(callback) {
   const interval = setInterval(async () => {
     try {
       const projects = await fetchProjectLibraryFromCloud();
-      if (Array.isArray(projects) && callback) {
+      if (Array.isArray(projects) && typeof callback === 'function') {
         callback(projects);
       }
     } catch (e) {}
@@ -215,7 +217,7 @@ export function subscribeToProjectLibraryUpdates(callback) {
           const data = docSnap.data();
           if (data && Array.isArray(data.projects)) {
             localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
-            if (callback) callback(data.projects);
+            if (typeof callback === 'function') callback(data.projects);
             window.dispatchEvent(new Event('sps_projects_updated'));
           }
         }
@@ -317,7 +319,7 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
             }
           });
         }
-        if (callback) callback(activeUsersMap);
+        if (typeof callback === 'function') callback(activeUsersMap);
       }
     } catch (e) {}
   }, 8000);
