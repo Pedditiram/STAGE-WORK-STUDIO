@@ -178,11 +178,37 @@ export default function ProjectConsoleModal({
     if (isOpen) {
       fetchProjectLibraryFromCloud().then(cloudProjs => {
         if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
-          setProjectLibrary(sanitizeLibraryTitles(cloudProjs));
+          setProjectLibrary(prev => {
+            const map = new Map();
+            (prev || []).forEach(p => { if (p && p.title) map.set(p.title, p); });
+            cloudProjs.forEach(p => {
+              if (p && p.title) {
+                const existing = map.get(p.title);
+                map.set(p.title, existing ? { ...existing, ...p } : p);
+              }
+            });
+
+            // Ensure current active project is NEVER missing from the library window
+            if (currentProjectTitle && !map.has(currentProjectTitle)) {
+              map.set(currentProjectTitle, {
+                id: `proj_${Date.now()}`,
+                title: currentProjectTitle,
+                description: `Cinema Production Studio Project`,
+                targetModel: 'SPS Direct Cinema 2.0',
+                aspectRatio: '2.39:1 Anamorphic',
+                roomId: 'SPS-CLOUD-8821',
+                lastModified: new Date().toLocaleDateString(),
+                shots: []
+              });
+            }
+
+            const merged = Array.from(map.values());
+            return sanitizeLibraryTitles(merged);
+          });
         }
       }).catch(() => {});
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, currentProjectTitle]);
 
   // Persist library changes locally & push to Cloud Database
   useEffect(() => {

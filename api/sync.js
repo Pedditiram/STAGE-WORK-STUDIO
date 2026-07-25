@@ -4,6 +4,22 @@
 let memoryRooms = {};
 let memoryProjects = [
   {
+    id: "proj_002",
+    title: "002",
+    description: "Cinema Production Studio Project with 4 shots",
+    targetModel: "SPS Direct Cinema 2.0",
+    aspectRatio: "2.39:1 Anamorphic",
+    roomId: "SPS-CLOUD-8821_002",
+    lastModified: new Date().toLocaleDateString(),
+    allottedTo: "pedditiram@gmail.com, pedditivarshini@gmail.com",
+    shots: [
+      { sceneShotId: "SC01_SH01", shotComposition: "Extreme Close-Up (ECU)", cameraMotionTag: "[Camera: Push In Rapid Zoom]" },
+      { sceneShotId: "SC01_SH02", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Tracking Pan Right]" },
+      { sceneShotId: "SC01_SH03", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Static Anchor]" },
+      { sceneShotId: "SC01_SH04", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Slow Dolly Out]" }
+    ]
+  },
+  {
     id: "proj_ram",
     title: "PROJECT RAM",
     description: "Cinema Production Studio Project with 2 shots",
@@ -11,21 +27,23 @@ let memoryProjects = [
     aspectRatio: "2.39:1 Anamorphic",
     roomId: "SPS-PROJ-8476",
     lastModified: new Date().toLocaleDateString(),
+    allottedTo: "pedditiram@gmail.com, pedditivarshini@gmail.com",
     shots: [
-      {
-        sceneShotId: "SC01_SH01",
-        shotComposition: "Extreme Close-Up (ECU)",
-        cameraMotionTag: "[Camera: Push In Rapid Zoom]",
-        subjectLightingTag: "[Lighting: Rembrandt 3-Point Classic]",
-        actionEnvContext: "Cinematic interior concert venue."
-      },
-      {
-        sceneShotId: "SC01_SH02",
-        shotComposition: "Medium Shot (MS)",
-        cameraMotionTag: "[Camera: Tracking Pan Right]",
-        subjectLightingTag: "[Lighting: Soft Falloff Ambient]",
-        actionEnvContext: "Cinematic stage interior."
-      }
+      { sceneShotId: "SC01_SH01", shotComposition: "Extreme Close-Up (ECU)", cameraMotionTag: "[Camera: Push In Rapid Zoom]" },
+      { sceneShotId: "SC01_SH02", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Tracking Pan Right]" }
+    ]
+  },
+  {
+    id: "proj_2",
+    title: "2",
+    description: "test",
+    targetModel: "SPS Direct Cinema 2.0",
+    aspectRatio: "2.39:1 Anamorphic",
+    roomId: "SPS-2-4287",
+    lastModified: new Date().toLocaleDateString(),
+    allottedTo: "pedditiram@gmail.com",
+    shots: [
+      { sceneShotId: "SC01_SH01", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Static Anchor]" }
     ]
   }
 ];
@@ -151,7 +169,6 @@ export default async function handler(req, res) {
     if (payload) {
       const existingRoom = memoryRooms[roomId] || {};
       
-      // Perform shot-level merge if incoming payload has shots and existing room has shots
       let finalShots = payload.shots;
       if (Array.isArray(payload.shots) && Array.isArray(existingRoom.shots) && existingRoom.shots.length > 0) {
         const shotMap = new Map();
@@ -159,7 +176,6 @@ export default async function handler(req, res) {
           if (s && s.sceneShotId) shotMap.set(s.sceneShotId, s);
         });
 
-        // Merge incoming shots into existing map
         payload.shots.forEach(s => {
           if (s && s.sceneShotId) {
             const existingShot = shotMap.get(s.sceneShotId);
@@ -183,7 +199,6 @@ export default async function handler(req, res) {
 
       memoryRooms[roomId] = mergedPayload;
 
-      // Asynchronously update persistence endpoints
       fetch(RESTFUL_ROOM_URL, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
