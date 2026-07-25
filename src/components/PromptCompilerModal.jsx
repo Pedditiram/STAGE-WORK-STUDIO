@@ -3,7 +3,7 @@ import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { createZipArchive } from '../utils/zipUtils';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle, PackageCheck, Archive
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, Archive
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -425,32 +425,6 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           </div>
         )}
 
-        {/* SAFARI & UNIVERSAL BROWSER HIGH-VISIBILITY DOWNLOAD BANNER */}
-        <div className="bg-cyan-950/90 border-b border-cyan-500/40 p-3 px-5 text-cyan-100 text-xs font-mono flex flex-wrap items-center justify-between gap-3 shadow-inner">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-300">
-              <Archive className="w-4 h-4 text-cyan-300 shrink-0" />
-            </div>
-            <div>
-              <div className="font-bold text-white flex items-center gap-2 text-xs">
-                <span>📦 SHORT SHORT FILENAMES EXPORT (SC01_SH01.txt, SC01_SH02.txt):</span>
-              </div>
-              <p className="text-[11px] text-cyan-200/90">
-                Click <strong className="text-white underline">"⚡ Save All TXT Files to Folder"</strong> to get clean short names <code className="text-emerald-300 font-bold">SC01_SH01.txt</code>, <code className="text-emerald-300 font-bold">SC01_SH02.txt</code>...!
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDownloadZipPackage}
-            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-mono text-xs font-black flex items-center gap-2 shadow-xl border border-cyan-300/40 cursor-pointer transition-all hover:scale-105"
-          >
-            <Archive className="w-4 h-4 text-cyan-100" />
-            <span>📦 Download "jai_sri_ram_prompts.zip"</span>
-          </button>
-        </div>
-
         {/* Format Selector Tabs */}
         <div className="p-3 px-4 bg-zinc-900/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
@@ -544,7 +518,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </button>
           </div>
 
-          {/* Action Bar: View Mode, Folder Picker, Folder Path Input & Save Buttons */}
+          {/* Action Bar: View Mode, Clean Action Buttons */}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
@@ -581,40 +555,38 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
                     folderHandle
                       ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
-                      : 'bg-amber-500 text-zinc-950 border-amber-400 hover:bg-amber-400 font-extrabold shadow-lg'
+                      : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
                   }`}
                   title="Click to visually pick your desktop target folder (Chrome/Edge)"
                 >
-                  <FolderPlus className="w-4 h-4 text-zinc-950" />
-                  <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Chrome Folder Picker'}</span>
+                  <FolderPlus className="w-4 h-4 text-cyan-400" />
+                  <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Pick Target Folder'}</span>
                 </button>
               )}
-
-              {/* FOLDER PATH DISPLAY / INPUT FIELD */}
-              <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
-                <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Target Folder:</span>
-                <input
-                  type="text"
-                  value={customFolderPath}
-                  onChange={(e) => handleCustomFolderPathChange(e.target.value)}
-                  placeholder="jai sri ram prompts"
-                  className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-48 lg:w-64 truncate"
-                  title="Target folder name"
-                />
-              </div>
             </div>
 
             {/* BATCH EXPORT CLEAN SHORT TXT FILES BUTTON */}
-            <button
-              type="button"
-              onClick={handleExportAllIndividualFiles}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
-              title={`Save all ${shots.length} prompts as short individual TXT files (SC01_SH01.txt, SC01_SH02.txt...)`}
-            >
-              <FolderDown className="w-4 h-4 text-emerald-200" />
-              <span>⚡ Save All TXT Files to Folder</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadZipPackage}
+                className="px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 text-xs font-bold font-mono flex items-center gap-1.5 border border-zinc-700 transition-all cursor-pointer"
+                title={`Download all ${shots.length} prompts in a ZIP folder containing individual TXT files`}
+              >
+                <Archive className="w-4 h-4 text-cyan-400" />
+                <span>📦 Download ZIP Folder</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportAllIndividualFiles}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
+                title={`Save all ${shots.length} prompts as short individual TXT files (SC01_SH01.txt, SC01_SH02.txt...)`}
+              >
+                <FolderDown className="w-4 h-4 text-emerald-200" />
+                <span>⚡ Save All TXT Files to Folder</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -627,8 +599,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
-                <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-lg hidden md:inline">
-                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: ${folderName}]` : 'jai sri ram prompts'}</span>
+                <span className="text-zinc-400 font-mono text-[11px] truncate max-w-lg hidden md:inline">
+                  Export Filenames: <span className="text-emerald-400 font-bold">SC01_SH01.txt, SC01_SH02.txt...</span>
                 </span>
               </div>
 
