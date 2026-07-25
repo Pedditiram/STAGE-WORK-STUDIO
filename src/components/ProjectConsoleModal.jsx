@@ -103,6 +103,30 @@ export default function ProjectConsoleModal({
   const [newRatio, setNewRatio] = useState('2.39:1 Anamorphic');
   const [newTemplate, setNewTemplate] = useState('epic_war');
 
+  // Rename Project State
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [renameInput, setRenameInput] = useState('');
+
+  const handleRenameProject = (projId, newName) => {
+    const cleanName = newName.trim().toUpperCase();
+    if (!cleanName) return;
+
+    setProjectLibrary(prev => {
+      const updated = prev.map(p => {
+        if (p.id === projId) {
+          if (p.title === currentProjectTitle && setProjectTitle) {
+            setProjectTitle(cleanName);
+          }
+          return { ...p, title: cleanName };
+        }
+        return p;
+      });
+      localStorage.setItem('sps_project_library', JSON.stringify(updated));
+      return updated;
+    });
+    setEditingProjectId(null);
+  };
+
   // Versioning state for active project
   const [newVersionName, setNewVersionName] = useState('');
   const [versionSuccessMsg, setVersionSuccessMsg] = useState('');
@@ -435,14 +459,59 @@ export default function ProjectConsoleModal({
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
-                            {proj.title}
-                            {isActive && (
-                              <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-900 dark:text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-300 dark:border-cyan-800 font-mono font-bold flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-cyan-600 dark:text-cyan-400" /> ACTIVE
-                              </span>
-                            )}
-                          </h4>
+                          {editingProjectId === proj.id ? (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleRenameProject(proj.id, renameInput);
+                              }}
+                              className="flex items-center gap-1.5"
+                            >
+                              <input
+                                type="text"
+                                value={renameInput}
+                                onChange={(e) => setRenameInput(e.target.value)}
+                                autoFocus
+                                placeholder="ENTER PROJECT TITLE"
+                                className="bg-slate-950 text-amber-300 font-bold border border-amber-400 rounded-lg px-2.5 py-1 text-xs font-mono focus:outline-none shadow"
+                              />
+                              <button
+                                type="submit"
+                                className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                                title="Save New Title"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingProjectId(null)}
+                                className="p-1 rounded-lg bg-slate-800 text-slate-300 text-xs"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </form>
+                          ) : (
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+                              <span>{proj.title}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingProjectId(proj.id);
+                                  setRenameInput(proj.title);
+                                }}
+                                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-amber-500 transition-all"
+                                title="Rename Project Title"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              {isActive && (
+                                <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-900 dark:text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-300 dark:border-cyan-800 font-mono font-bold flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-cyan-600 dark:text-cyan-400" /> ACTIVE
+                                </span>
+                              )}
+                            </h4>
+                          )}
                         </div>
                         <p className="text-xs text-slate-600 dark:text-zinc-400 font-mono">{proj.description}</p>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-700 dark:text-zinc-300 pt-1">
@@ -466,6 +535,18 @@ export default function ProjectConsoleModal({
                         >
                           <Wand2 className="w-3.5 h-3.5 text-amber-500" />
                           <span>AI Script Breakdown</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProjectId(proj.id);
+                            setRenameInput(proj.title);
+                          }}
+                          className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 text-xs flex items-center gap-1 font-bold font-mono"
+                          title="Rename Project Title"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
 
                         {!isActive && (
