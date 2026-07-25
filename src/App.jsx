@@ -244,8 +244,10 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+  const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
   useEffect(() => {
-    const unsubscribe = subscribeToCloudRoom(roomId, (cloudData) => {
+    const unsubscribe = subscribeToCloudRoom(effectiveRoomId, (cloudData) => {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
         const cloudHash = JSON.stringify({ 
           shots: cloudData.shots, 
@@ -258,7 +260,6 @@ export default function App() {
         if (cloudHash !== lastSyncedHash.current) {
           lastSyncedHash.current = cloudHash;
           setShots(cloudData.shots);
-          if (cloudData.projectTitle) setProjectTitle(cloudData.projectTitle);
           if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
           if (cloudData.aspectRatio) setAspectRatio(cloudData.aspectRatio);
 
@@ -295,7 +296,7 @@ export default function App() {
       if (typeof unsubLib === 'function') unsubLib();
       if (typeof unsubCollab === 'function') unsubCollab();
     };
-  }, [roomId, projectTitle]);
+  }, [effectiveRoomId, projectTitle]);
 
   // -------------------------------------------------------------
   // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
@@ -414,7 +415,9 @@ export default function App() {
     const newHash = JSON.stringify({ shots: newShots, projectTitle: newTitle, targetModel: newModel, aspectRatio: newRatio });
     lastSyncedHash.current = newHash;
 
-    publishToCloudRoom(roomId, {
+    const targetRoom = `${roomId}_${(newTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+    publishToCloudRoom(targetRoom, {
       projectTitle: newTitle,
       targetModel: newModel,
       aspectRatio: newRatio,
