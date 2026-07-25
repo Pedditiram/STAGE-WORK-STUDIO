@@ -333,11 +333,13 @@ export default function SpreadsheetView({
                         value={shot[slot.key] || ''}
                         onChange={(val) => handleCellChange(shotIdx, slot.key, val)}
                         compact={true}
+                        allSlots={filteredSlots}
                         isForcePopupOpen={activeModalCell?.shotIdx === shotIdx && activeModalCell?.slotKey === slot.key}
                         onOpenPopup={() => setActiveModalCell({ shotIdx, slotKey: slot.key })}
                         onCloseForcePopup={() => setActiveModalCell(null)}
                         onNavigateNextSlot={(slotKey) => handleNavigateNextSlot(shotIdx, slotKey)}
                         onNavigatePrevSlot={(slotKey) => handleNavigatePrevSlot(shotIdx, slotKey)}
+                        onJumpToSlot={(targetSlotKey) => setActiveModalCell({ shotIdx, slotKey: targetSlotKey })}
                       />
                     </td>
                   ))}

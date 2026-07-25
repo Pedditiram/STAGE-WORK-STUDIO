@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders } from 'lucide-react';
+import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 export default function SlotEditor({ 
   slotConfig, 
@@ -11,11 +12,15 @@ export default function SlotEditor({
   onCloseForcePopup,
   onOpenPopup,
   onNavigateNextSlot,
-  onNavigatePrevSlot
+  onNavigatePrevSlot,
+  allSlots = [],
+  onJumpToSlot
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
+
+  const availableSlotsList = (allSlots && allSlots.length > 0) ? allSlots : SEEDANCE_SLOTS;
 
   const isModalActive = isForcePopupOpen !== undefined ? isForcePopupOpen : isPopupOpen;
   
@@ -394,14 +399,76 @@ export default function SlotEditor({
             </div>
           </div>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-end pt-3 border-t border-zinc-800 shrink-0">
+          {/* Modal Footer Bar with Navigation & Direct Slot Jump Selector */}
+          <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0 font-mono flex-wrap gap-2">
+            {/* Left / Center Navigation Toolbar */}
+            <div className="flex items-center gap-1.5">
+              {/* Previous Slot Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onNavigatePrevSlot) onNavigatePrevSlot(slotConfig.key);
+                }}
+                disabled={!onNavigatePrevSlot}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs disabled:opacity-40 cursor-pointer active:scale-95"
+                title="Previous Slot (Cmd + Left Arrow)"
+              >
+                <ChevronLeft className="w-4 h-4 text-cyan-400" />
+                <span>Prev</span>
+                <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘←)</span>
+              </button>
+
+              {/* Direct Slot Jump Dropdown Pill */}
+              <div className="relative flex items-center">
+                <select
+                  value={slotConfig.key}
+                  onChange={(e) => {
+                    const selectedKey = e.target.value;
+                    if (selectedKey !== slotConfig.key) {
+                      if (typeof onJumpToSlot === 'function') {
+                        onJumpToSlot(selectedKey);
+                      } else if (typeof onNavigateNextSlot === 'function') {
+                        onNavigateNextSlot(selectedKey);
+                      }
+                    }
+                  }}
+                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-3 py-1.5 pr-7 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-center"
+                  title="Directly jump to any slot number in matrix"
+                >
+                  {availableSlotsList.map((s, idx) => (
+                    <option key={s.key} value={s.key} className="bg-zinc-950 text-white font-mono">
+                      Slot #{idx + 1} of {availableSlotsList.length}: {s.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2.5 pointer-events-none" />
+              </div>
+
+              {/* Next Slot Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onNavigateNextSlot) onNavigateNextSlot(slotConfig.key);
+                }}
+                disabled={!onNavigateNextSlot}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs disabled:opacity-40 cursor-pointer active:scale-95"
+                title="Next Slot (Cmd + Right Arrow)"
+              >
+                <span>Next</span>
+                <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘→)</span>
+                <ChevronRight className="w-4 h-4 text-cyan-400" />
+              </button>
+            </div>
+
+            {/* Right: Done & Close Button */}
             <button
               type="button"
-              onClick={() => setIsPopupOpen(false)}
-              className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+              onClick={handleCloseModal}
+              className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow-md transition-all active:scale-95 ml-auto flex items-center gap-1.5"
             >
-              <Check className="w-3.5 h-3.5 text-white" />
+              <Check className="w-4 h-4 text-white" />
               Done & Close
             </button>
           </div>

@@ -106,11 +106,13 @@ export default function StudioFormView({
               onChange={(val) => handleSlotChange(slot.key, val)}
               onSelectSlot={setSelectedSlotKey}
               compact={false}
+              allSlots={slots}
               isForcePopupOpen={activeModalSlotKey === slot.key}
               onOpenPopup={() => setActiveModalSlotKey(slot.key)}
               onCloseForcePopup={() => setActiveModalSlotKey(null)}
               onNavigateNextSlot={handleNavigateNextSlot}
               onNavigatePrevSlot={handleNavigatePrevSlot}
+              onJumpToSlot={(targetSlotKey) => setActiveModalSlotKey(targetSlotKey)}
             />
           ))}
         </div>
