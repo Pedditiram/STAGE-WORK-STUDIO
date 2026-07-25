@@ -302,11 +302,11 @@ export default function ProjectConsoleModal({
     onClose();
   };
 
-  // 2. CREATE NEW PROJECT (ADMIN-ONLY SECURITY RULE)
+  // 2. CREATE NEW PROJECT (PRIMARY ADMIN & OWNER AUTHORIZED RULE)
   const handleCreateProject = (e) => {
     e.preventDefault();
-    if (!isAdminLoggedIn) {
-      alert("🔒 ACCESS RESTRICTED:\nNo user has permission to create a project. Only the Primary App Admin (pedditiram@gmail.com) logged into Admin Settings is authorized to create new projects.");
+    if (!isPrimaryOwner) {
+      alert("🔒 ACCESS RESTRICTED:\nOnly authorized admins or primary project owner (pedditiram@gmail.com) can create new projects.");
       return;
     }
     if (!newTitle.trim()) return;
@@ -435,10 +435,10 @@ export default function ProjectConsoleModal({
     setProjectLibrary(prev => [...prev, dupObj]);
   };
 
-  // 5. DELETE PROJECT (ADMIN-ONLY SECURITY RULE)
+  // 5. DELETE PROJECT (PRIMARY ADMIN & OWNER AUTHORIZED RULE)
   const handleDeleteProject = (projId) => {
-    if (!isAdminLoggedIn) {
-      alert("🔒 ACCESS RESTRICTED:\nNo user has permission to delete projects. Only the Primary App Admin (pedditiram@gmail.com) logged into Admin Settings is authorized to delete projects.");
+    if (!isPrimaryOwner) {
+      alert("🔒 ACCESS RESTRICTED:\nOnly authorized admins or primary project owner (pedditiram@gmail.com) can delete projects.");
       return;
     }
 
