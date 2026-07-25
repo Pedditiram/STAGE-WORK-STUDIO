@@ -57,18 +57,20 @@ export default function ConflictAlertModal({
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Target Shot / Slot:</span>
-              <strong className="text-cyan-300 font-mono font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800">
-                {conflictData.activeShotId}
-              </strong>
-            </div>
+            <div className="pt-2.5 border-t border-slate-800/80 space-y-2 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300 font-bold">Project Name:</span>
+                <span className="text-amber-300 font-mono font-black text-xs bg-amber-950/90 px-2.5 py-1 rounded-lg border border-amber-500/60 shadow flex items-center gap-1.5">
+                  📁 {conflictData.projectTitle || 'STAGE PRODUCTION STUDIO'}
+                </span>
+              </div>
 
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Project Workspace:</span>
-              <strong className="text-slate-200 font-mono font-bold truncate max-w-[200px]">
-                {conflictData.projectTitle}
-              </strong>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-300 font-bold">Target Shot / Slot:</span>
+                <span className="text-cyan-300 font-mono font-black text-xs bg-cyan-950/90 px-2.5 py-1 rounded-lg border border-cyan-500/60 shadow">
+                  {conflictData.activeShotId}
+                </span>
+              </div>
             </div>
           </div>
 
