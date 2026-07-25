@@ -11,7 +11,6 @@ let memoryProjects = [
     aspectRatio: "2.39:1 Anamorphic",
     roomId: "SPS-CLOUD-8821_002",
     lastModified: new Date().toLocaleDateString(),
-    allottedTo: "pedditiram@gmail.com, pedditivarshini@gmail.com",
     shots: [
       { sceneShotId: "SC01_SH01", shotComposition: "Extreme Close-Up (ECU)", cameraMotionTag: "[Camera: Push In Rapid Zoom]" },
       { sceneShotId: "SC01_SH02", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Tracking Pan Right]" },
@@ -27,7 +26,6 @@ let memoryProjects = [
     aspectRatio: "2.39:1 Anamorphic",
     roomId: "SPS-PROJ-8476",
     lastModified: new Date().toLocaleDateString(),
-    allottedTo: "pedditiram@gmail.com, pedditivarshini@gmail.com",
     shots: [
       { sceneShotId: "SC01_SH01", shotComposition: "Extreme Close-Up (ECU)", cameraMotionTag: "[Camera: Push In Rapid Zoom]" },
       { sceneShotId: "SC01_SH02", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Tracking Pan Right]" }
@@ -41,7 +39,6 @@ let memoryProjects = [
     aspectRatio: "2.39:1 Anamorphic",
     roomId: "SPS-2-4287",
     lastModified: new Date().toLocaleDateString(),
-    allottedTo: "pedditiram@gmail.com",
     shots: [
       { sceneShotId: "SC01_SH01", shotComposition: "Medium Shot (MS)", cameraMotionTag: "[Camera: Static Anchor]" }
     ]

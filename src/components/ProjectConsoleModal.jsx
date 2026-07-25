@@ -251,6 +251,20 @@ export default function ProjectConsoleModal({
     return allottedProjectsList.includes(projTitle);
   };
 
+  const getDynamicAllottedUsersForProject = (projTitle) => {
+    const matchedUsers = authorizedUsers.filter(u => {
+      if (u.status === 'Suspended') return false;
+      const userAllotments = Array.isArray(u.allottedProjects) ? u.allottedProjects : [];
+      return userAllotments.includes(projTitle) || userAllotments.includes('All Studio Projects') || userAllotments.includes('All Studio Projects (Full Access)');
+    }).map(u => u.email || u.name || u.phone);
+
+    if (matchedUsers.length > 0) {
+      return matchedUsers.join(', ');
+    }
+
+    return 'pedditiram@gmail.com';
+  };
+
   // 1. SWITCH PROJECT (WITH ENFORCED GUEST & ALLOTTED PERMISSION GUARD)
   const handleSwitchProject = (proj) => {
     const savedEmail = typeof window !== 'undefined' ? localStorage.getItem('sps_authorized_user_email') : '';
@@ -630,20 +644,20 @@ export default function ProjectConsoleModal({
                                 </span>
                               )}
                               {!isActive && isAllotted && (
-                                 <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 font-mono font-bold flex items-center gap-1 shadow-sm" title={`Allotted access granted to ${currentUserEmail}`}>
-                                   🟢 Allotted ({proj.allottedTo || proj.assignedTo || (currentUserEmail ? currentUserEmail.split('@')[0] : 'pedditiram@gmail.com')})
-                                 </span>
-                               )}
-                               {isActive && isAllotted && (
-                                 <span className="text-[10px] bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 font-mono text-[10px] font-bold">
-                                   👤 {proj.allottedTo || proj.assignedTo || (currentUserEmail ? currentUserEmail.split('@')[0] : 'pedditiram@gmail.com')}
-                                 </span>
-                               )}
-                               {!isAllotted && (
-                                 <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 font-mono font-bold flex items-center gap-1" title="Not allotted to your collaborator account">
-                                   🔒 Locked (Not Allotted)
-                                 </span>
-                               )}
+                                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 font-mono font-bold flex items-center gap-1 shadow-sm" title={`Allotted access granted to ${getDynamicAllottedUsersForProject(proj.title)}`}>
+                                  🟢 Allotted ({getDynamicAllottedUsersForProject(proj.title)})
+                                </span>
+                              )}
+                              {isActive && isAllotted && (
+                                <span className="text-[10px] bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 font-mono text-[10px] font-bold" title={`Allotted access granted to ${getDynamicAllottedUsersForProject(proj.title)}`}>
+                                  👤 Allotted ({getDynamicAllottedUsersForProject(proj.title)})
+                                </span>
+                              )}
+                              {!isAllotted && (
+                                <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 font-mono font-bold flex items-center gap-1" title="Not allotted to your collaborator account">
+                                  🔒 Locked (Not Allotted)
+                                </span>
+                              )}
                             </h4>
                           )}
                         </div>
