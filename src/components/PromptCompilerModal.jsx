@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -12,7 +12,9 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
 
-  // Custom Target Folder Path State
+  // Active Native Folder Handle & Custom Path State
+  const [folderHandle, setFolderHandle] = useState(null);
+  const [folderName, setFolderName] = useState('');
   const [customFolderPath, setCustomFolderPath] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sps_custom_export_folder') || "Seedance_Prompts";
@@ -24,6 +26,27 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     setCustomFolderPath(val);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_custom_export_folder', val);
+    }
+  };
+
+  // Option 1: Native Folder Picker Dialog
+  const handleSelectTargetFolder = async () => {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const handle = await window.showDirectoryPicker({
+          mode: 'readwrite',
+          startIn: 'downloads'
+        });
+        setFolderHandle(handle);
+        setFolderName(handle.name);
+        handleCustomFolderPathChange(handle.name);
+        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". All generated files will be written directly here!`);
+        setTimeout(() => setExportSuccessMsg(null), 4000);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    } else {
+      alert("Folder Picker API is supported in Chrome, Edge, and modern Mac browsers. You can also type your custom folder name in the input box!");
     }
   };
 
@@ -249,7 +272,26 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const downloadSingleTxtFile = (filename, content) => {
+  // Direct Write to Active Target Folder or Browser Download
+  const generateAndSaveSingleShotFile = async (shot, idx) => {
+    const filename = getShotFilename(shot, idx);
+    const content = getShotPromptText(shot, idx);
+
+    if (folderHandle) {
+      try {
+        const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${folderName}/"!`);
+        setTimeout(() => setExportSuccessMsg(null), 3000);
+        return;
+      } catch (err) {
+        console.warn("Direct folder save failed, falling back to download:", err);
+      }
+    }
+
+    // Fallback standard download
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -261,46 +303,59 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Native Directory Access API with Subfolder Creation Support
+  // Batch Export to Locked Directory or Directory Picker
   const handleExportAllIndividualFiles = async () => {
-    const cleanSubfolder = (customFolderPath || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    let targetDir = folderHandle;
 
-    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+    if (!targetDir && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {
-        const rootDirHandle = await window.showDirectoryPicker({
+        targetDir = await window.showDirectoryPicker({
           mode: 'readwrite',
           startIn: 'downloads'
         });
-        
-        // Create custom subfolder inside picked root directory
-        const subDirHandle = await rootDirHandle.getDirectoryHandle(cleanSubfolder, { create: true });
+        setFolderHandle(targetDir);
+        setFolderName(targetDir.name);
+        handleCustomFolderPathChange(targetDir.name);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    const cleanSubfolder = (customFolderPath || folderName || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    if (targetDir) {
+      try {
+        let destinationDir = targetDir;
+        if (cleanSubfolder && cleanSubfolder !== targetDir.name) {
+          destinationDir = await targetDir.getDirectoryHandle(cleanSubfolder, { create: true });
+        }
 
         let count = 0;
         for (let i = 0; i < shots.length; i++) {
           const shot = shots[i];
           const filename = getShotFilename(shot, i);
           const content = getShotPromptText(shot, i);
-          const fileHandle = await subDirHandle.getFileHandle(filename, { create: true });
+          const fileHandle = await destinationDir.getFileHandle(filename, { create: true });
           const writable = await fileHandle.createWritable();
           await writable.write(content);
           await writable.close();
           count++;
         }
 
-        setExportSuccessMsg(`🟢 Saved ${count} prompt files in folder "${cleanSubfolder}/" on local computer!`);
+        setExportSuccessMsg(`🟢 Successfully saved ${count} prompt files directly inside folder "${cleanSubfolder}/"!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
-        if (err.name === 'AbortError') return; // User cancelled directory picker
+        console.warn("Folder export error:", err);
       }
     }
 
-    // Fallback: Download each prompt file with prefix folder name
+    // Browser Fallback Download
     shots.forEach((shot, i) => {
       setTimeout(() => {
         const filename = `${cleanSubfolder}_${getShotFilename(shot, i)}`;
         const content = getShotPromptText(shot, i);
-        downloadSingleTxtFile(filename, content);
+        generateAndSaveSingleShotFile({ ...shot, sceneShotId: filename.replace(/\.txt$/, '') }, i);
       }, i * 350);
     });
 
@@ -310,8 +365,16 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
   const handleDownloadFullDoc = () => {
     const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
-    const cleanSubfolder = (customFolderPath || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-    downloadSingleTxtFile(`${cleanSubfolder}_full_script.${ext}`, compiledOutput);
+    const cleanSubfolder = (customFolderPath || folderName || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    const blob = new Blob([compiledOutput], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${cleanSubfolder}_full_script.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -443,53 +506,71 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </button>
           </div>
 
-          {/* View Mode, Custom Folder Path Input & Batch Export Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+          {/* Action Bar: View Mode, Folder Picker, Folder Path Input & Save Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('cards')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
+                    viewMode === 'cards' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
+                  }`}
+                  title="View Individual Shot Cards with Local TXT Generator"
+                >
+                  <Grid className="w-3.5 h-3.5" />
+                  <span>Cards View</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setViewMode('single')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
+                    viewMode === 'single' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
+                  }`}
+                  title="View Full Single Document Text"
+                >
+                  <FileCode className="w-3.5 h-3.5" />
+                  <span>Full Script</span>
+                </button>
+              </div>
+
+              {/* OPTION 1: INTERACTIVE TARGET FOLDER PICKER BUTTON */}
               <button
                 type="button"
-                onClick={() => setViewMode('cards')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
-                  viewMode === 'cards' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
+                onClick={handleSelectTargetFolder}
+                className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
+                  folderHandle
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900'
+                    : 'bg-zinc-900 text-amber-300 border-zinc-700 hover:bg-zinc-800 hover:text-amber-200'
                 }`}
-                title="View Individual Shot Cards with Local TXT Generator"
+                title="Click to visually pick any target folder location on your computer"
               >
-                <Grid className="w-3.5 h-3.5" />
-                <span>Cards View</span>
+                <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+                <span>{folderName ? `📁 ${folderName}` : '📁 Choose Save Location'}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setViewMode('single')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
-                  viewMode === 'single' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
-                }`}
-                title="View Full Single Document Text"
-              >
-                <FileCode className="w-3.5 h-3.5" />
-                <span>Full Script</span>
-              </button>
+              {/* OPTION 2: CUSTOM FOLDER PATH / SUBFOLDER INPUT FIELD */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
+                <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Folder Path:</span>
+                <input
+                  type="text"
+                  value={customFolderPath}
+                  onChange={(e) => handleCustomFolderPathChange(e.target.value)}
+                  placeholder="e.g. /Users/pedditiram/Desktop/jai sri ram prompts/"
+                  className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-48 lg:w-64 truncate"
+                  title="Specify target folder path or subfolder name on your computer"
+                />
+              </div>
             </div>
 
-            {/* NEW: CUSTOM FOLDER PATH INPUT FIELD */}
-            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
-              <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden sm:inline">Folder Path:</span>
-              <input
-                type="text"
-                value={customFolderPath}
-                onChange={(e) => handleCustomFolderPathChange(e.target.value)}
-                placeholder="e.g. Seedance_Prompts/Scene_01"
-                className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-36 sm:w-48"
-                title="Specify custom folder name or target path for exporting TXT prompt files"
-              />
-            </div>
-
+            {/* BATCH EXPORT BUTTON */}
             <button
               type="button"
               onClick={handleExportAllIndividualFiles}
-              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer"
-              title={`Save all prompts as individual TXT files into folder "${customFolderPath}"`}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
+              title={`Save all ${shots.length} prompts as individual TXT files into target location`}
             >
               <FolderDown className="w-4 h-4 text-emerald-200" />
               <span>⚡ Save All TXT Files to Folder</span>
@@ -506,8 +587,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
-                <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-md hidden md:inline">
-                  Target Folder: <span className="text-white font-bold">{customFolderPath}/</span>
+                <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-lg hidden md:inline">
+                  Target Destination: <span className="text-white font-bold">{customFolderPath || folderName || 'Default Downloads'}/</span>
                 </span>
               </div>
 
@@ -516,6 +597,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   const filename = getShotFilename(shot, idx);
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
+                  const targetDisplayPath = customFolderPath ? `${customFolderPath.endsWith('/') ? customFolderPath : customFolderPath + '/'}${filename}` : `${filename}`;
 
                   return (
                     <div 
@@ -524,20 +606,20 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                     >
                       {/* Box Header */}
                       <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/80 p-2.5 px-3 rounded-lg border border-zinc-800">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1">
+                        <div className="flex items-center gap-2 truncate max-w-xl">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1 shrink-0">
                             <FileCode className="w-3.5 h-3.5" />
-                            {customFolderPath ? `${customFolderPath}/` : ''}{filename}
+                            {targetDisplayPath}
                           </span>
-                          <span className="text-zinc-300 font-bold font-mono text-xs">
+                          <span className="text-zinc-300 font-bold font-mono text-xs shrink-0">
                             Shot #{idx + 1}
                           </span>
-                          <span className="text-zinc-400 text-xs truncate max-w-xs font-sans">
+                          <span className="text-zinc-400 text-xs truncate font-sans">
                             {shot.shotComposition || 'Medium Shot'}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => handleCopySingle(promptText, idx)}
@@ -549,9 +631,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
                           <button
                             type="button"
-                            onClick={() => downloadSingleTxtFile(filename, promptText)}
+                            onClick={() => generateAndSaveSingleShotFile(shot, idx)}
                             className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow border border-cyan-400/40 cursor-pointer"
-                            title={`Generate & save ${filename} locally on your computer`}
+                            title={`Generate & save ${filename} directly into target folder`}
                           >
                             <Download className="w-3.5 h-3.5 text-cyan-100" />
                             <span>⚡ Generate {filename}</span>
