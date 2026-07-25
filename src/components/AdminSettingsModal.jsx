@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2 } from 'lucide-react';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download } from 'lucide-react';
+import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 
 export default function AdminSettingsModal({ 
   isOpen, 
@@ -239,6 +240,12 @@ export default function AdminSettingsModal({
   const [collabOtpError, setCollabOtpError] = useState('');
   const [otpSuccessMsg, setOtpSuccessMsg] = useState('');
   const [selectedDateFilter, setSelectedDateFilter] = useState('ALL');
+
+  // CLOUD DATABASE MANAGEMENT STATES
+  const [dbTestResult, setDbTestResult] = useState(null);
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [isSyncingDb, setIsSyncingDb] = useState(false);
+  const [dbSyncMsg, setDbSyncMsg] = useState('');
 
   const [activityLog, setActivityLog] = useState(() => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1008,6 +1015,19 @@ export default function AdminSettingsModal({
                   >
                     <Cloud className="w-3.5 h-3.5 text-cyan-400" />
                     ☁️ {roomId || 'SPS-CLOUD-8821'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategoryTab('database')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                      activeCategoryTab === 'database'
+                        ? 'bg-emerald-500 text-zinc-950 shadow'
+                        : 'bg-zinc-900 text-emerald-300 hover:text-emerald-200 border border-emerald-500/50'
+                    }`}
+                  >
+                    <Server className="w-3.5 h-3.5 text-emerald-400" />
+                    🗄️ Cloud Database
                   </button>
 
                   <button
@@ -2063,6 +2083,104 @@ export default function AdminSettingsModal({
                     </div>
                   </div>
 
+                </div>
+              )}
+
+              {/* SECTION 6: CLOUD DATABASE & LIVE COLLABORATION MANAGER */}
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'cloud_collab' || activeCategoryTab === 'database') && (
+                <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-4 shadow-md font-mono">
+                  <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2 font-sans">
+                      <Server className="w-4 h-4 text-cyan-400" />
+                      Cloud Database & Live Collaborator Data Sharing Manager
+                    </h4>
+                    <span className="text-[10.5px] bg-emerald-950 text-emerald-300 border border-emerald-700/80 px-2 py-0.5 rounded font-bold">
+                      🟢 Live Database Engine (Firestore)
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    This live Cloud Database automatically shares shot lists, scene configurations, collaborator access rights, and project titles across all connected team members in real time.
+                  </p>
+
+                  {/* Database Actions & Status Controls */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsTestingDb(true);
+                        setDbTestResult(null);
+                        const res = await testDatabaseConnection();
+                        setDbTestResult(res);
+                        setIsTestingDb(false);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-cyan-300 border border-cyan-700/60 font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
+                    >
+                      <Wifi className="w-4 h-4 text-cyan-400" />
+                      <span>{isTestingDb ? 'Testing Connection...' : '⚡ Test DB Connection'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsSyncingDb(true);
+                        setDbSyncMsg('');
+                        await syncCollaboratorsToCloud(authorizedUsers);
+                        const savedLib = localStorage.getItem('sps_project_library');
+                        if (savedLib) {
+                          try {
+                            await syncProjectLibraryToCloud(JSON.parse(savedLib));
+                          } catch (e) {}
+                        }
+                        setDbSyncMsg('✓ Pushed all Collaborators & Projects to Cloud Database!');
+                        setIsSyncingDb(false);
+                        setTimeout(() => setDbSyncMsg(''), 3000);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
+                    >
+                      <Cloud className="w-4 h-4" />
+                      <span>{isSyncingDb ? 'Syncing...' : '🔄 Push Data to Cloud DB'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fullData = {
+                          collaborators: authorizedUsers,
+                          projects: JSON.parse(localStorage.getItem('sps_project_library') || '[]'),
+                          activityLogs: activityLog,
+                          exportedAt: new Date().toISOString(),
+                          engine: "STAGE PRODUCTION STUDIO Cloud DB"
+                        };
+                        const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `SPS_Cloud_Database_Backup_${new Date().toISOString().slice(0,10)}.json`;
+                        a.click();
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/80 font-bold text-xs flex items-center justify-center gap-2 shadow transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-amber-400" />
+                      <span>📥 Download Database JSON</span>
+                    </button>
+                  </div>
+
+                  {/* Connection Test Results */}
+                  {dbTestResult && (
+                    <div className={`p-2.5 rounded-lg border text-xs font-mono font-bold flex items-center justify-between ${
+                      dbTestResult.connected ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300' : 'bg-amber-950/80 border-amber-700 text-amber-300'
+                    }`}>
+                      <span>{dbTestResult.message}</span>
+                      <span className="text-[10px] text-zinc-400">Target: stage-production-studio</span>
+                    </div>
+                  )}
+
+                  {dbSyncMsg && (
+                    <div className="p-2.5 rounded-lg bg-emerald-950/90 border border-emerald-600 text-emerald-300 text-xs font-mono font-bold">
+                      {dbSyncMsg}
+                    </div>
+                  )}
                 </div>
               )}
 

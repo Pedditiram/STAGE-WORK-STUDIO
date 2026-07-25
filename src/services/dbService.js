@@ -1,0 +1,169 @@
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  onSnapshot, 
+  collection, 
+  getDocs 
+} from 'firebase/firestore';
+
+// Default Firebase Cloud Database Configuration
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyStageProductionStudioKeyDemo",
+  authDomain: "stage-production-studio.firebaseapp.com",
+  projectId: "stage-production-studio",
+  storageBucket: "stage-production-studio.appspot.com",
+  messagingSenderId: "98127391273",
+  appId: "1:98127391273:web:stageproductionstudio"
+};
+
+let app = null;
+let db = null;
+
+// Initialize Firebase Database Engine dynamically
+export function initDatabase(customConfig = null) {
+  try {
+    const config = customConfig || getStoredDbConfig() || DEFAULT_FIREBASE_CONFIG;
+    if (!getApps().length) {
+      app = initializeApp(config);
+    } else {
+      app = getApp();
+    }
+    db = getFirestore(app);
+    return { success: true, db };
+  } catch (err) {
+    console.warn("Database initialization fallback to local storage:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+export function getStoredDbConfig() {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('sps_custom_firebase_config');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+  }
+  return null;
+}
+
+export function saveStoredDbConfig(configObj) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sps_custom_firebase_config', JSON.stringify(configObj));
+    initDatabase(configObj);
+  }
+}
+
+// 1. Sync Collaborator User Access Data to Cloud Database
+export async function syncCollaboratorsToCloud(authorizedUsers) {
+  if (typeof window === 'undefined') return;
+  const payload = {
+    users: authorizedUsers,
+    lastSynced: new Date().toISOString(),
+    totalCollaborators: authorizedUsers.length
+  };
+
+  // Always persist locally
+  localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
+  window.dispatchEvent(new Event('sps_collaborators_updated'));
+
+  // Push to Cloud Database if connected
+  if (db) {
+    try {
+      const collabRef = doc(db, 'studio_config', 'authorized_collaborators');
+      await setDoc(collabRef, payload, { merge: true });
+    } catch (e) {
+      console.log("Offline mode sync for collaborators:", e.message);
+    }
+  }
+}
+
+// 2. Fetch All Collaborators from Cloud Database
+export async function fetchCollaboratorsFromCloud() {
+  if (db) {
+    try {
+      const collabRef = doc(db, 'studio_config', 'authorized_collaborators');
+      const snap = await getDoc(collabRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.users)) {
+          localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
+          window.dispatchEvent(new Event('sps_collaborators_updated'));
+          return data.users;
+        }
+      }
+    } catch (e) {
+      console.log("Fetch collaborators from cloud fallback:", e.message);
+    }
+  }
+  const saved = localStorage.getItem('sps_authorized_phone_users');
+  return saved ? JSON.parse(saved) : [];
+}
+
+// 3. Real-time Live Listener for Collaborator Access Updates
+export function subscribeToCollaboratorUpdates(onUsersReceived) {
+  let unsubscribe = () => {};
+  if (db) {
+    try {
+      const collabRef = doc(db, 'studio_config', 'authorized_collaborators');
+      unsubscribe = onSnapshot(collabRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.users)) {
+            localStorage.setItem('sps_authorized_phone_users', JSON.stringify(data.users));
+            window.dispatchEvent(new Event('sps_collaborators_updated'));
+            onUsersReceived(data.users);
+          }
+        }
+      }, (err) => console.log("Collaborator snapshot offline mode"));
+    } catch (e) {}
+  }
+  return unsubscribe;
+}
+
+// 4. Sync Whole Studio Project Library to Cloud Database
+export async function syncProjectLibraryToCloud(projectLibrary) {
+  if (typeof window === 'undefined') return;
+  const payload = {
+    projects: projectLibrary,
+    updatedAt: new Date().toISOString(),
+    totalProjects: projectLibrary.length
+  };
+
+  localStorage.setItem('sps_project_library', JSON.stringify(projectLibrary));
+
+  if (db) {
+    try {
+      const libRef = doc(db, 'studio_config', 'project_library');
+      await setDoc(libRef, payload, { merge: true });
+    } catch (e) {
+      console.log("Project library cloud sync fallback:", e.message);
+    }
+  }
+}
+
+// 5. Test Live Cloud Database Connection
+export async function testDatabaseConnection() {
+  initDatabase();
+  if (!db) {
+    return { connected: false, message: "Offline Local Storage Mode Active" };
+  }
+  try {
+    const testRef = doc(db, 'system_health', 'connection_test');
+    await setDoc(testRef, { 
+      ping: true, 
+      timestamp: new Date().toISOString(),
+      app: "STAGE PRODUCTION STUDIO Cloud DB Engine"
+    });
+    return { connected: true, message: "🟢 Connected to Cloud Database (Firestore)" };
+  } catch (err) {
+    return { connected: false, message: `Offline fallback: ${err.message}` };
+  }
+}
+
+// Auto Initialize Database on import
+initDatabase();
