@@ -12,13 +12,17 @@ export default function SlotEditor({
   onCloseForcePopup,
   onOpenPopup,
   onNavigateNextSlot,
-  onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
+  const [activeConfig, setActiveConfig] = useState(slotConfig);
+
+  useEffect(() => {
+    setActiveConfig(slotConfig);
+  }, [slotConfig]);
 
   const availableSlotsList = (allSlots && allSlots.length > 0) ? allSlots : SEEDANCE_SLOTS;
 
@@ -34,6 +38,32 @@ export default function SlotEditor({
     if (onOpenPopup) onOpenPopup();
   };
 
+  const handlePrevSlot = () => {
+    const idx = availableSlotsList.findIndex(s => s.key === activeConfig.key);
+    const prevIdx = idx > 0 ? idx - 1 : availableSlotsList.length - 1;
+    const targetSlot = availableSlotsList[prevIdx];
+    setActiveConfig(targetSlot);
+    if (onJumpToSlot) onJumpToSlot(targetSlot.key);
+    if (onNavigatePrevSlot) onNavigatePrevSlot(activeConfig.key);
+  };
+
+  const handleNextSlot = () => {
+    const idx = availableSlotsList.findIndex(s => s.key === activeConfig.key);
+    const nextIdx = idx < availableSlotsList.length - 1 ? idx + 1 : 0;
+    const targetSlot = availableSlotsList[nextIdx];
+    setActiveConfig(targetSlot);
+    if (onJumpToSlot) onJumpToSlot(targetSlot.key);
+    if (onNavigateNextSlot) onNavigateNextSlot(activeConfig.key);
+  };
+
+  const handleDirectJump = (targetKey) => {
+    const targetSlot = availableSlotsList.find(s => s.key === targetKey);
+    if (targetSlot) {
+      setActiveConfig(targetSlot);
+      if (onJumpToSlot) onJumpToSlot(targetKey);
+    }
+  };
+
   // Keyboard navigation for Cmd + Right Arrow and Cmd + Left Arrow
   useEffect(() => {
     if (!isModalActive) return;
@@ -43,23 +73,19 @@ export default function SlotEditor({
       if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
         e.preventDefault();
         e.stopPropagation();
-        if (typeof onNavigateNextSlot === 'function') {
-          onNavigateNextSlot(slotConfig.key);
-        }
+        handleNextSlot();
       }
       // Cmd + Left Arrow (⌘←) or Ctrl + Left Arrow -> Prev Slot
       else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
-        if (typeof onNavigatePrevSlot === 'function') {
-          onNavigatePrevSlot(slotConfig.key);
-        }
+        handlePrevSlot();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isModalActive, slotConfig.key, onNavigateNextSlot, onNavigatePrevSlot]);
+  }, [isModalActive, activeConfig.key]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
@@ -205,60 +231,32 @@ export default function SlotEditor({
                 <Sparkles className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white font-sans">{slotConfig.label}</h3>
-                <p className="text-[11px] text-zinc-400 font-mono">{slotConfig.description}</p>
+                <h3 className="text-sm font-bold text-white font-sans">{activeConfig.label}</h3>
+                <p className="text-[11px] text-zinc-400 font-mono">{activeConfig.description}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {onNavigatePrevSlot && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigatePrevSlot(slotConfig.key);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 font-mono"
-                  title="Previous Slot (Cmd + Left Arrow)"
-                >
-                  ◀ Prev <span className="text-[9px] text-zinc-400 font-mono font-normal">(⌘←)</span>
-                </button>
-              )}
-              {onNavigateNextSlot && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigateNextSlot(slotConfig.key);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 font-mono"
-                  title="Next Slot (Cmd + Right Arrow)"
-                >
-                  Next ▶ <span className="text-[9px] text-zinc-400 font-mono font-normal">(⌘→)</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors ml-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="overflow-y-auto space-y-3 flex-1 pr-1">
             {/* SLOT TIP CARD INSIDE POPUP MODAL */}
-            {slotConfig.tip && (
+            {activeConfig.tip && (
               <div className="p-3.5 rounded-xl border border-zinc-800/90 bg-zinc-900/90 space-y-2 font-mono shadow-sm">
                 <div className="flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
                   <h4 className="text-xs font-bold text-white font-sans">
-                    {slotConfig.tipTitle || slotConfig.label}
+                    {activeConfig.tipTitle || activeConfig.label}
                   </h4>
                 </div>
                 <p className="text-[11px] text-zinc-300 leading-relaxed p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80 font-mono shadow-inner">
-                  {slotConfig.tip}
+                  {activeConfig.tip}
                 </p>
               </div>
             )}
@@ -275,7 +273,7 @@ export default function SlotEditor({
                 value={value || ''}
                 onChange={handleCustomInput}
                 autoFocus
-                placeholder={`Enter complete ${slotConfig.label.toLowerCase()} text...`}
+                placeholder={`Enter complete ${(activeConfig.label || '').toLowerCase()} text...`}
                 className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-xl p-3 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
               />
             </div>
