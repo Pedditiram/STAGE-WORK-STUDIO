@@ -593,22 +593,27 @@ export default function ProjectConsoleModal({
                                 </span>
                               )}
                               {!isActive && isAllotted && (
-                                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 font-mono font-bold flex items-center gap-1">
-                                  🟢 Allotted
-                                </span>
-                              )}
-                              {!isAllotted && (
-                                <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 font-mono font-bold flex items-center gap-1" title="Not allotted to your collaborator account">
-                                  🔒 Locked (Not Allotted)
-                                </span>
-                              )}
+                                 <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 font-mono font-bold flex items-center gap-1 shadow-sm" title={`Allotted access granted to ${currentUserEmail}`}>
+                                   🟢 Allotted ({proj.allottedTo || proj.assignedTo || (currentUserEmail ? currentUserEmail.split('@')[0] : 'pedditiram@gmail.com')})
+                                 </span>
+                               )}
+                               {isActive && isAllotted && (
+                                 <span className="text-[10px] bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 font-mono text-[10px] font-bold">
+                                   👤 {proj.allottedTo || proj.assignedTo || (currentUserEmail ? currentUserEmail.split('@')[0] : 'pedditiram@gmail.com')}
+                                 </span>
+                               )}
+                               {!isAllotted && (
+                                 <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 font-mono font-bold flex items-center gap-1" title="Not allotted to your collaborator account">
+                                   🔒 Locked (Not Allotted)
+                                 </span>
+                               )}
                             </h4>
                           )}
                         </div>
                         <p className="text-xs text-slate-600 dark:text-zinc-400 font-mono">{proj.description}</p>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-700 dark:text-zinc-300 pt-1">
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">🎬 {proj.shots?.length || 0} Shots</span>
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-cyan-700 dark:text-cyan-400">⚙️ {proj.targetModel}</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-cyan-700 dark:text-cyan-400">⚙️ {proj.targetModel ? proj.targetModel.replace(/Seedance/gi, 'SPS Direct Cinema').replace(/SeeDream/gi, 'SPS High Fidelity') : 'SPS Direct Cinema 2.0'}</span>
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-amber-700 dark:text-amber-400">📐 {proj.aspectRatio}</span>
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-400">🔑 {proj.roomId}</span>
                         </div>
