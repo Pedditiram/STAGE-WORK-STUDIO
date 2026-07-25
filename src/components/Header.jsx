@@ -56,33 +56,45 @@ export default function Header({
         }
       }
 
-      const savedUsers = localStorage.getItem('sps_authorized_phone_users');
-      if (savedUsers) {
-        try {
-          const users = JSON.parse(savedUsers);
-          if (authEmail) {
-            const cleanAuth = authEmail.trim().toLowerCase();
+      if (authEmail) {
+        const cleanAuth = authEmail.trim().toLowerCase();
+        const savedUsers = localStorage.getItem('sps_authorized_phone_users');
+        if (savedUsers) {
+          try {
+            const users = JSON.parse(savedUsers);
             const found = users.find(u => 
               (u.email && u.email.trim().toLowerCase() === cleanAuth) || 
               (u.phone && u.phone.trim().toLowerCase() === cleanAuth)
             );
             if (found) return found;
-          }
-          // Default fallback matching for Varshini if non-admin user
-          if (!isAdminLoggedIn) {
-            const varshini = users.find(u => u.email && u.email.toLowerCase().includes('varshini'));
-            if (varshini) return varshini;
-          }
-          if (users.length > 0) return users[0];
-        } catch (e) {}
+          } catch (e) {}
+        }
+        return {
+          name: cleanAuth.split('@')[0],
+          designation: 'Lead Director',
+          role: isAdminLoggedIn ? 'Director & Owner' : 'Email Authorized Collaborator',
+          email: cleanAuth,
+          allottedProjects: [projectTitle || 'STAGE PRODUCTION STUDIO']
+        };
       }
     }
+
+    if (isAdminLoggedIn) {
+      return {
+        name: 'Pedditi Ram',
+        designation: 'Lead Director',
+        role: 'Director & Owner',
+        email: 'pedditiram@gmail.com',
+        allottedProjects: ['All Studio Projects (Full Access)']
+      };
+    }
+
     return {
-      name: isAdminLoggedIn ? 'Pedditi Ram' : 'Pedditi Varshini',
-      designation: 'Lead Director',
-      role: isAdminLoggedIn ? 'Director & Owner' : 'Email Authorized Collaborator',
-      email: isAdminLoggedIn ? 'pedditiram@gmail.com' : 'pedditivarshini@gmail.com',
-      allottedProjects: [projectTitle || 'STAGE PRODUCTION STUDIO']
+      name: 'Guest / Unauthenticated',
+      designation: 'Access Panel Required',
+      role: 'Logged Out',
+      email: 'Click to Login',
+      allottedProjects: []
     };
   };
 

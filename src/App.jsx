@@ -180,8 +180,16 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const email = localStorage.getItem('sps_authorized_user_email');
+      const isAdmin = localStorage.getItem('sps_is_admin_logged_in') === 'true';
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlEmail = urlParams.get('email') || urlParams.get('phone');
+      if (!email && !urlEmail && !isAdmin) return true; // Show Access Panel on Launch if unauthenticated
+    }
+    return false;
+  });
   const [activeConflict, setActiveConflict] = useState(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
@@ -322,7 +330,8 @@ export default function App() {
   // -------------------------------------------------------------
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'pedditiram@gmail.com';
+    const currentUserEmail = localStorage.getItem('sps_authorized_user_email');
+    if (!currentUserEmail) return;
     const activeShot = shots[activeShotIndex];
     if (activeShot && activeShot.sceneShotId) {
       broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId);
@@ -331,7 +340,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'pedditiram@gmail.com';
+    const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'unauthenticated';
     const unsubPresence = subscribeToActiveEditingSlots(currentUserEmail, (otherActiveUsers) => {
       const activeShot = shots[activeShotIndex];
       if (activeShot && activeShot.sceneShotId) {
