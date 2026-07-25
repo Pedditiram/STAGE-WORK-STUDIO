@@ -192,15 +192,65 @@ export default function App() {
   ]);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
-  // Save state to localStorage whenever project data updates
+  const isInitialMount = React.useRef(true);
+
+  // Auto-sync engine: Whenever shots, projectTitle, targetModel, or aspectRatio change, automatically sync to Cloud Database
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sps_current_shots', JSON.stringify(shots));
-      localStorage.setItem('sps_current_project_title', projectTitle);
-      localStorage.setItem('sps_current_target_model', targetModel);
-      localStorage.setItem('sps_current_aspect_ratio', aspectRatio);
+    if (typeof window === 'undefined') return;
+
+    localStorage.setItem('sps_current_shots', JSON.stringify(shots));
+    localStorage.setItem('sps_current_project_title', projectTitle);
+    localStorage.setItem('sps_current_target_model', targetModel);
+    localStorage.setItem('sps_current_aspect_ratio', aspectRatio);
+
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
     }
-  }, [shots, projectTitle, targetModel, aspectRatio]);
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsCloudSyncing(true);
+
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        if (!Array.isArray(library)) library = [];
+
+        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString();
+        const existingIdx = library.findIndex(p => p.title === projectTitle || p.id === 'proj_default');
+        const updatedProjectData = {
+          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+          title: projectTitle,
+          description: `Cinema Production Studio Project with ${shots.length} shots`,
+          targetModel: targetModel,
+          aspectRatio: aspectRatio,
+          roomId: roomId,
+          lastModified: nowStr,
+          shots: shots,
+          projectGeneratedImages: projectGeneratedImages
+        };
+
+        if (existingIdx !== -1) {
+          library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
+        } else {
+          library.unshift(updatedProjectData);
+        }
+
+        localStorage.setItem('sps_project_library', JSON.stringify(library));
+
+        await publishToCloudRoom(roomId, { shots, projectGeneratedImages, projectTitle, targetModel, aspectRatio, library });
+        await syncProjectLibraryToCloud(library);
+
+        setIsCloudSyncing(false);
+        setIsProjectSavedToast(true);
+        setTimeout(() => setIsProjectSavedToast(false), 1800);
+      } catch (e) {
+        setIsCloudSyncing(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [shots, projectTitle, targetModel, aspectRatio, roomId]);
 
   useEffect(() => {
     const unsubscribe = subscribeToCloudRoom(roomId, (cloudData) => {
