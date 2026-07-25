@@ -713,6 +713,7 @@ export default function App() {
         showCanvasTab={showCanvasTab}
         onSaveProject={handleSaveProjectToApp}
         isProjectSavedToast={isProjectSavedToast}
+        isCloudSyncing={isCloudSyncing}
         shotCount={shots.length}
         colorTheme={colorTheme}
         onChangeColorTheme={handleSetColorTheme}
