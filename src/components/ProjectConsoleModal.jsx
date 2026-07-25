@@ -261,15 +261,21 @@ export default function ProjectConsoleModal({
   const getDynamicAllottedUsersForProject = (projTitle) => {
     const matchedUsers = authorizedUsers.filter(u => {
       if (u.status === 'Suspended') return false;
+      if (projTitle === '002' && (u.email?.includes('varshini') || u.name?.includes('Varshini'))) return true;
       const userAllotments = Array.isArray(u.allottedProjects) ? u.allottedProjects : [];
       return userAllotments.includes(projTitle) || userAllotments.includes('All Studio Projects') || userAllotments.includes('All Studio Projects (Full Access)');
-    }).map(u => u.email || u.name || u.phone);
+    }).map(u => {
+      if (u.email) return u.email.split('@')[0];
+      return u.name || u.phone;
+    });
 
     if (matchedUsers.length > 0) {
-      return matchedUsers.join(', ');
+      const unique = Array.from(new Set(matchedUsers));
+      return unique.join(', ');
     }
 
-    return 'pedditiram@gmail.com';
+    if (projTitle === '002') return 'pedditiram, pedditivarshini';
+    return 'pedditiram';
   };
 
   // 1. SWITCH PROJECT (WITH ENFORCED GUEST & ALLOTTED PERMISSION GUARD)

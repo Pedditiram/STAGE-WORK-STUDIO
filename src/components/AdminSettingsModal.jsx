@@ -330,6 +330,7 @@ export default function AdminSettingsModal({
         email: 'pedditiram@gmail.com', 
         role: 'Director & Owner', 
         status: 'Active', 
+        allottedProjects: ['PROJECT RAM', '002', 'JAI SRI RAM', '2', 'All Studio Projects'],
         verifiedAt: 'Today, 09:00 AM' 
       },
       { 
@@ -338,6 +339,7 @@ export default function AdminSettingsModal({
         email: 'pedditivarshini@gmail.com', 
         role: 'Director & Owner', 
         status: 'Active', 
+        allottedProjects: ['002', 'PROJECT RAM'],
         verifiedAt: 'Today, 10:15 AM' 
       }
     ];
