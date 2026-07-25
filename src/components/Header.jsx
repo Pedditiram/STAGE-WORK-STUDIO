@@ -43,14 +43,33 @@ export default function Header({
 
   const getLoggedInUser = () => {
     if (typeof window !== 'undefined') {
-      const authEmail = localStorage.getItem('sps_authorized_user_email');
+      let authEmail = localStorage.getItem('sps_authorized_user_email');
+      
+      // Auto-detect email from URL query parameter if not yet in localStorage
+      if (!authEmail) {
+        const urlParams = new URLSearchParams(window.location.search);
+        authEmail = urlParams.get('email') || urlParams.get('phone');
+        if (authEmail) {
+          localStorage.setItem('sps_authorized_user_email', authEmail);
+        }
+      }
+
       const savedUsers = localStorage.getItem('sps_authorized_phone_users');
       if (savedUsers) {
         try {
           const users = JSON.parse(savedUsers);
           if (authEmail) {
-            const found = users.find(u => u.email === authEmail || u.phone === authEmail);
+            const cleanAuth = authEmail.trim().toLowerCase();
+            const found = users.find(u => 
+              (u.email && u.email.trim().toLowerCase() === cleanAuth) || 
+              (u.phone && u.phone.trim().toLowerCase() === cleanAuth)
+            );
             if (found) return found;
+          }
+          // Default fallback matching for Varshini if non-admin user
+          if (!isAdminLoggedIn) {
+            const varshini = users.find(u => u.email && u.email.toLowerCase().includes('varshini'));
+            if (varshini) return varshini;
           }
           if (users.length > 0) return users[0];
         } catch (e) {}
@@ -59,11 +78,27 @@ export default function Header({
     return {
       name: isAdminLoggedIn ? 'Pedditi Ram' : 'Pedditi Varshini',
       designation: 'Lead Director',
-      role: isAdminLoggedIn ? 'Director & Owner' : 'Editor'
+      role: isAdminLoggedIn ? 'Director & Owner' : 'Email Authorized Collaborator',
+      email: isAdminLoggedIn ? 'pedditiram@gmail.com' : 'pedditivarshini@gmail.com',
+      allottedProjects: [projectTitle || 'STAGE PRODUCTION STUDIO']
     };
   };
 
-  const currentUser = getLoggedInUser();
+  const [currentUser, setCurrentUser] = useState(getLoggedInUser);
+
+  // Real-time automatic synchronization when collaborator projects or profiles change
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setCurrentUser(getLoggedInUser());
+    };
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('sps_collaborators_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('sps_collaborators_updated', handleUpdate);
+    };
+  }, [isAdminLoggedIn, projectTitle]);
+
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Director & Owner' : 'Editor');
@@ -299,7 +334,10 @@ export default function Header({
           <div className="shrink-0 relative">
             <button
               type="button"
-              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              onClick={() => {
+                setCurrentUser(getLoggedInUser());
+                setIsProfileOpen(!isProfileOpen);
+              }}
               className="flex items-center gap-2 p-1.5 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500 transition-all cursor-pointer shadow shrink-0"
               title="Click to view logged-in profile, designation & allotted projects"
             >
