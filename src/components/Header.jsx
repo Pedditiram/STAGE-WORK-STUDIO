@@ -93,13 +93,16 @@ export default function Header({
     const handleUpdate = () => {
       setCurrentUser(getLoggedInUser());
     };
+    if (isProfileOpen) {
+      handleUpdate();
+    }
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('sps_collaborators_updated', handleUpdate);
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('sps_collaborators_updated', handleUpdate);
     };
-  }, [isAdminLoggedIn, projectTitle]);
+  }, [isAdminLoggedIn, projectTitle, isProfileOpen]);
 
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';

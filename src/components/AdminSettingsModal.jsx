@@ -347,6 +347,7 @@ export default function AdminSettingsModal({
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_collaboration_activity_log', JSON.stringify(activityLog));
       localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
+      syncCollaboratorsToCloud(authorizedUsers);
     }
   }, [activityLog, authorizedUsers]);
 

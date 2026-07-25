@@ -17,6 +17,7 @@ import {
   syncProjectLibraryToCloud, 
   syncCollaboratorsToCloud, 
   subscribeToProjectLibraryUpdates,
+  subscribeToCollaboratorUpdates,
   fetchProjectLibraryFromCloud,
   fetchCollaboratorsFromCloud,
   broadcastActiveSlotEditing,
@@ -300,10 +301,12 @@ export default function App() {
     });
 
     const unsubLib = subscribeToProjectLibraryUpdates();
+    const unsubCollab = subscribeToCollaboratorUpdates();
 
     return () => {
       unsubscribe();
       if (typeof unsubLib === 'function') unsubLib();
+      if (typeof unsubCollab === 'function') unsubCollab();
     };
   }, [roomId, projectTitle]);
 
