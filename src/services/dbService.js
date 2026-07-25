@@ -275,7 +275,42 @@ export function subscribeToProjectLibraryUpdates(callback) {
   };
 }
 
-// 6. Fetch Latest Project Library from Cloud Database
+function mergeProjectArrays(cloudProjs, localProjs) {
+  const map = new Map();
+  (localProjs || []).forEach(p => {
+    if (p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
+      map.set(p.title.trim().toUpperCase(), p);
+    }
+  });
+  (cloudProjs || []).forEach(p => {
+    if (p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
+      const key = p.title.trim().toUpperCase();
+      const existing = map.get(key);
+      map.set(key, existing ? { ...existing, ...p } : p);
+    }
+  });
+  return Array.from(map.values());
+}
+
+function processAndStoreProjects(rawCloudProjects) {
+  if (!Array.isArray(rawCloudProjects)) return [];
+  const localStr = localStorage.getItem('sps_project_library');
+  let localProjs = [];
+  if (localStr) {
+    try { localProjs = JSON.parse(localStr); } catch (e) {}
+  }
+  if (!Array.isArray(localProjs)) localProjs = [];
+
+  const merged = mergeProjectArrays(rawCloudProjects, localProjs);
+  const newStr = JSON.stringify(merged);
+  if (newStr !== localStr) {
+    localStorage.setItem('sps_project_library', newStr);
+    window.dispatchEvent(new Event('sps_projects_updated'));
+  }
+  return merged;
+}
+
+// 6. Fetch Latest Project Library from Cloud Database (With Non-Destructive Union Merging)
 export async function fetchProjectLibraryFromCloud() {
   // 1. Try Native Vercel Serverless Sync Engine (/api/sync)
   try {
@@ -283,13 +318,7 @@ export async function fetchProjectLibraryFromCloud() {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.projects) && data.projects.length > 0) {
-        const newStr = JSON.stringify(data.projects);
-        const oldStr = localStorage.getItem('sps_project_library');
-        if (newStr !== oldStr) {
-          localStorage.setItem('sps_project_library', newStr);
-          window.dispatchEvent(new Event('sps_projects_updated'));
-        }
-        return data.projects;
+        return processAndStoreProjects(data.projects);
       }
     }
   } catch (e) {}
@@ -301,13 +330,7 @@ export async function fetchProjectLibraryFromCloud() {
       const resData = await res.json();
       const projects = resData?.data?.projects || resData?.projects;
       if (Array.isArray(projects) && projects.length > 0) {
-        const newStr = JSON.stringify(projects);
-        const oldStr = localStorage.getItem('sps_project_library');
-        if (newStr !== oldStr) {
-          localStorage.setItem('sps_project_library', newStr);
-          window.dispatchEvent(new Event('sps_projects_updated'));
-        }
-        return projects;
+        return processAndStoreProjects(projects);
       }
     }
   } catch (e) {}
@@ -318,13 +341,7 @@ export async function fetchProjectLibraryFromCloud() {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.projects) && data.projects.length > 0) {
-        const newStr = JSON.stringify(data.projects);
-        const oldStr = localStorage.getItem('sps_project_library');
-        if (newStr !== oldStr) {
-          localStorage.setItem('sps_project_library', newStr);
-          window.dispatchEvent(new Event('sps_projects_updated'));
-        }
-        return data.projects;
+        return processAndStoreProjects(data.projects);
       }
     }
   } catch (e) {}
@@ -335,14 +352,8 @@ export async function fetchProjectLibraryFromCloud() {
       const snap = await getDoc(libRef);
       if (snap.exists()) {
         const data = snap.data();
-        if (Array.isArray(data.projects)) {
-          const newStr = JSON.stringify(data.projects);
-          const oldStr = localStorage.getItem('sps_project_library');
-          if (newStr !== oldStr) {
-            localStorage.setItem('sps_project_library', newStr);
-            window.dispatchEvent(new Event('sps_projects_updated'));
-          }
-          return data.projects;
+        if (Array.isArray(data.projects) && data.projects.length > 0) {
+          return processAndStoreProjects(data.projects);
         }
       }
     } catch (e) {}
