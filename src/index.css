@@ -129,11 +129,20 @@ body {
 /* Crisp Light Buttons for Dark-Class Buttons in Light Theme */
 .theme-paper button.bg-zinc-900,
 .theme-paper button.bg-zinc-950,
-.theme-paper button.bg-zinc-800,
 .theme-paper button.bg-black {
   background-color: #FFFFFF !important;
   color: #0F172A !important;
   border-color: #CBD5E1 !important;
+}
+
+.theme-paper button.bg-zinc-800 {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+.theme-paper button.bg-zinc-800 * {
+  color: #0F172A !important;
 }
 
 /* ALWAYS KEEP WHITE TEXT ON COLORED BUTTONS & GRADIENTS */

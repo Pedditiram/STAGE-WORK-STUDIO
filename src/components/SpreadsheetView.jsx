@@ -113,7 +113,7 @@ export default function SpreadsheetView({
                 className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer border ${
                   isSelected
                     ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.4)] scale-105'
-                    : 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700 hover:text-white hover:border-zinc-500'
+                    : 'bg-zinc-800 text-zinc-100 border-zinc-700 hover:bg-zinc-700 hover:text-white hover:border-zinc-500'
                 }`}
               >
                 <span>{cat.label}</span>
