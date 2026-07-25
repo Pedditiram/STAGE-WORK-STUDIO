@@ -110,10 +110,10 @@ export default function SpreadsheetView({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer border ${
                   isSelected
-                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.4)] scale-105'
-                    : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.4)] scale-105'
+                    : 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700 hover:text-white hover:border-zinc-500'
                 }`}
               >
                 <span>{cat.label}</span>
