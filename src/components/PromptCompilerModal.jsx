@@ -293,6 +293,19 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     downloadSingleTxtFile(`full_script.${ext}`, compiledOutput);
   };
 
+  const getFormatModeLabel = (mode) => {
+    switch (mode) {
+      case 'seedance_tagged': return 'SPS Standard Tagging';
+      case 'engine_optimized': return 'Target Syntax';
+      case 'first_last_frame': return 'First & Last Frame';
+      case 'seedream_beat_breakdown': return 'Beat Breakdown';
+      case 'natural_language': return 'Narrative Prose';
+      case 'json': return 'JSON';
+      case 'csv': return 'CSV';
+      default: return 'SPS Standard Tagging';
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
       <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -484,7 +497,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pb-1 border-b border-zinc-800/80">
                 <span className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
+                  Showing {shots.length} Individual Shot Prompts ({getFormatModeLabel(formatMode)} Format)
                 </span>
                 <span className="text-zinc-400 font-mono text-[11px]">
                   Filenames: <span className="text-emerald-400 font-bold">SC01_SH01.txt, SC01_SH02.txt...</span>
