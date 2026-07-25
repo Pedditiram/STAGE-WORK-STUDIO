@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -11,6 +11,21 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
   const [copied, setCopied] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
+
+  // Custom Target Folder Path State
+  const [customFolderPath, setCustomFolderPath] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_custom_export_folder') || "Seedance_Prompts";
+    }
+    return "Seedance_Prompts";
+  });
+
+  const handleCustomFolderPathChange = (val) => {
+    setCustomFolderPath(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_custom_export_folder', val);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -246,28 +261,33 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Modern Native Folder Access API + Direct File Downloader
+  // Native Directory Access API with Subfolder Creation Support
   const handleExportAllIndividualFiles = async () => {
+    const cleanSubfolder = (customFolderPath || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {
-        const dirHandle = await window.showDirectoryPicker({
+        const rootDirHandle = await window.showDirectoryPicker({
           mode: 'readwrite',
           startIn: 'downloads'
         });
         
+        // Create custom subfolder inside picked root directory
+        const subDirHandle = await rootDirHandle.getDirectoryHandle(cleanSubfolder, { create: true });
+
         let count = 0;
         for (let i = 0; i < shots.length; i++) {
           const shot = shots[i];
           const filename = getShotFilename(shot, i);
           const content = getShotPromptText(shot, i);
-          const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+          const fileHandle = await subDirHandle.getFileHandle(filename, { create: true });
           const writable = await fileHandle.createWritable();
           await writable.write(content);
           await writable.close();
           count++;
         }
 
-        setExportSuccessMsg(`🟢 Successfully saved ${count} individual .txt prompt files directly to selected local folder!`);
+        setExportSuccessMsg(`🟢 Saved ${count} prompt files in folder "${cleanSubfolder}/" on local computer!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
@@ -275,22 +295,23 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       }
     }
 
-    // Fallback: Download each prompt file sequentially
+    // Fallback: Download each prompt file with prefix folder name
     shots.forEach((shot, i) => {
       setTimeout(() => {
-        const filename = getShotFilename(shot, i);
+        const filename = `${cleanSubfolder}_${getShotFilename(shot, i)}`;
         const content = getShotPromptText(shot, i);
         downloadSingleTxtFile(filename, content);
       }, i * 350);
     });
 
-    setExportSuccessMsg(`🟢 Exporting ${shots.length} individual TXT files to local computer downloads!`);
+    setExportSuccessMsg(`🟢 Downloading ${shots.length} files with prefix "${cleanSubfolder}_"!`);
     setTimeout(() => setExportSuccessMsg(null), 4000);
   };
 
   const handleDownloadFullDoc = () => {
     const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
-    downloadSingleTxtFile(`stage_production_studio_all_prompts.${ext}`, compiledOutput);
+    const cleanSubfolder = (customFolderPath || 'Seedance_Prompts').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    downloadSingleTxtFile(`${cleanSubfolder}_full_script.${ext}`, compiledOutput);
   };
 
   return (
@@ -307,7 +328,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 Stage Production Studio Compiler
               </h3>
               <p className="text-xs text-zinc-400">
-                Generate individual TXT prompt files for Seedance 2.0 or export multi-shot scripts.
+                Generate individual TXT prompt files for Seedance 2.0 or export multi-shot scripts into local folders.
               </p>
             </div>
           </div>
@@ -422,8 +443,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </button>
           </div>
 
-          {/* View Mode & Batch Export Actions */}
-          <div className="flex items-center gap-2">
+          {/* View Mode, Custom Folder Path Input & Batch Export Actions */}
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
               <button
                 type="button"
@@ -450,11 +471,25 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               </button>
             </div>
 
+            {/* NEW: CUSTOM FOLDER PATH INPUT FIELD */}
+            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
+              <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden sm:inline">Folder Path:</span>
+              <input
+                type="text"
+                value={customFolderPath}
+                onChange={(e) => handleCustomFolderPathChange(e.target.value)}
+                placeholder="e.g. Seedance_Prompts/Scene_01"
+                className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-36 sm:w-48"
+                title="Specify custom folder name or target path for exporting TXT prompt files"
+              />
+            </div>
+
             <button
               type="button"
               onClick={handleExportAllIndividualFiles}
               className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer"
-              title="Save all prompts as individual TXT files into a local folder on your computer"
+              title={`Save all prompts as individual TXT files into folder "${customFolderPath}"`}
             >
               <FolderDown className="w-4 h-4 text-emerald-200" />
               <span>⚡ Save All TXT Files to Folder</span>
@@ -471,8 +506,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
-                <span className="text-zinc-500 hidden sm:inline">
-                  Each box below has a dedicated local TXT generator button
+                <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-md hidden md:inline">
+                  Target Folder: <span className="text-white font-bold">{customFolderPath}/</span>
                 </span>
               </div>
 
@@ -492,7 +527,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1">
                             <FileCode className="w-3.5 h-3.5" />
-                            {filename}
+                            {customFolderPath ? `${customFolderPath}/` : ''}{filename}
                           </span>
                           <span className="text-zinc-300 font-bold font-mono text-xs">
                             Shot #{idx + 1}
