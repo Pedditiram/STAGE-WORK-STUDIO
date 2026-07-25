@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import SlotEditor from './SlotEditor';
 import { 
-  Plus, Copy, Trash2, ArrowUp, ArrowDown, Sparkles, 
+  Plus, Copy, VolumeX, Volume2, ArrowUp, ArrowDown, Sparkles, 
   Check, Layers, Search, Filter
 } from 'lucide-react';
 
@@ -20,6 +20,7 @@ export default function SpreadsheetView({
   onUpdateShot, 
   onAddShot, 
   onDeleteShot, 
+  onToggleMuteShot,
   onCloneShot, 
   onMoveShot,
   onReorderShots, 
@@ -31,9 +32,24 @@ export default function SpreadsheetView({
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
 
-  // Drag and drop state for shot reordering
   const [draggedShotIdx, setDraggedShotIdx] = useState(null);
   const [dragOverShotIdx, setDragOverShotIdx] = useState(null);
+
+  const toggleMuteFn = onToggleMuteShot || onDeleteShot;
+
+  const currentCategoryObj = CATEGORIES.find(c => c.id === activeCategory);
+  const filteredSlots = (slots || []).filter(slot => {
+    if (activeCategory === 'all') return true;
+    return currentCategoryObj?.keys.includes(slot.key);
+  });
+
+  const filteredShots = (shots || []).filter((shot, idx) => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return Object.values(shot || {}).some(val => 
+      val && String(val).toLowerCase().includes(searchLower)
+    ) || `shot ${idx + 1}`.includes(searchLower);
+  });
 
   const handleDragStart = (e, index) => {
     setDraggedShotIdx(index);
@@ -65,7 +81,7 @@ export default function SpreadsheetView({
 
   const handleCellChange = (shotIdx, key, newValue) => {
     if (shots && shots[shotIdx] && onUpdateShot) {
-      onUpdateShot(shotIdx, { ...shots[shotIdx], [key]: newValue });
+      onUpdateShot(shotIdx, key, newValue);
     }
   };
 
@@ -79,104 +95,130 @@ export default function SpreadsheetView({
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const currentCategoryObj = CATEGORIES.find(c => c.id === activeCategory);
-  const filteredSlots = (slots || []).filter(slot => {
-    if (activeCategory === 'all') return true;
-    return currentCategoryObj?.keys.includes(slot.key);
-  });
-
-  const filteredShots = (shots || []).filter((shot, idx) => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return Object.values(shot || {}).some(val => 
-      val && String(val).toLowerCase().includes(searchLower)
-    ) || `shot ${idx + 1}`.includes(searchLower);
-  });
-
   return (
-    <div className="flex flex-col h-full w-full bg-zinc-950 rounded-xl border border-zinc-800/80 shadow-2xl overflow-hidden backdrop-blur-xl">
-      {/* Ultra-Compact Top Action & Filter Toolbar */}
-      <div className="p-2 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0 font-mono text-xs">
-        
-        {/* Column Category Focus Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl">
+      {/* Category Tab Bar & Quick Search Controls */}
+      <div className="p-2.5 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0 backdrop-blur-md">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
           <span className="text-[11px] text-zinc-400 font-bold shrink-0 flex items-center gap-1">
             <Filter className="w-3 h-3 text-cyan-400" /> Focus:
           </span>
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all shrink-0 ${
-                activeCategory === cat.id
-                  ? 'bg-cyan-500 text-zinc-950 font-bold shadow'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {CATEGORIES.map((cat) => {
+            const isSelected = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                  isSelected
+                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.4)] scale-105'
+                    : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                }`}
+              >
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Search & Add Shot */}
+        {/* Search Bar & Action Trigger */}
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               placeholder="Search shots..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 rounded-lg pl-7 pr-2.5 py-1 focus:outline-none focus:border-cyan-500 w-36 sm:w-44 font-mono"
+              className="pl-8 pr-3 py-1 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:border-cyan-500 w-36 sm:w-48"
             />
           </div>
 
           <button
             type="button"
             onClick={onAddShot}
-            className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:brightness-125 text-white font-bold text-xs transition-all flex items-center gap-1 shadow shrink-0"
+            className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-bold text-xs flex items-center gap-1 shadow-md transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Shot</span>
+            <span>Add Shot</span>
           </button>
         </div>
       </div>
 
-      {/* Spreadsheet Table Container */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-950">
-        <table className="w-full text-left border-collapse text-xs min-w-[1200px]">
+      {/* Main High-Density Spreadsheet Table */}
+      <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-950 relative">
+        <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-zinc-900 text-zinc-300 font-semibold border-b border-zinc-800 sticky top-0 z-30 backdrop-blur-md">
               <th className="p-2 w-[42px] min-w-[42px] text-center border-r-2 border-zinc-800 bg-zinc-900 sticky left-0 z-40 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                 #
               </th>
-              <th className="p-2 w-[90px] min-w-[90px] text-center border-r border-zinc-800 bg-zinc-900">
+              <th className="p-2 w-[95px] min-w-[95px] text-center border-r border-zinc-800 bg-zinc-900">
                 Actions
               </th>
-              
-              {filteredSlots.map((slot) => {
-                const isSpecial = slot.key === 'sceneShotId' || slot.key === 'shotComposition' || slot.key === 'coArtistInteraction';
-                return (
-                  <th key={slot.key} className={`p-2 px-3 border-r border-zinc-800 min-w-[190px] font-mono text-zinc-200 ${
-                    isSpecial ? 'bg-zinc-900 border-t-2 border-t-amber-500/80' : 'bg-zinc-900'
-                  }`}>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className={`truncate font-bold ${isSpecial ? 'text-amber-300' : 'text-cyan-300'}`}>
-                        {slot.label}
-                      </span>
-                    </div>
-                  </th>
-                );
-              })}
+              {filteredSlots.map((slot) => (
+                <th key={slot.key} className="p-2 px-3 border-r border-zinc-800 min-w-[190px] font-mono text-cyan-300">
+                  {slot.label}
+                </th>
+              ))}
             </tr>
           </thead>
 
           <tbody className="divide-y divide-zinc-800/60 bg-zinc-950 font-sans">
             {filteredShots.map((shot, shotIdx) => {
               const isActive = shotIdx === activeShotIndex;
+              const isMuted = !!shot.isMuted;
               const isBeingDragged = draggedShotIdx === shotIdx;
               const isTargetDrop = dragOverShotIdx === shotIdx;
+
+              // MINIMIZED MUTED ROW (MODERATE THIN RED LINE)
+              if (isMuted) {
+                return (
+                  <tr 
+                    key={shotIdx}
+                    onClick={() => setActiveShotIndex(shotIdx)}
+                    className="bg-red-950/40 hover:bg-red-900/60 border-y border-red-500/50 transition-all text-xs h-8"
+                  >
+                    <td className="p-1 text-center font-mono border-r border-red-500/40 bg-red-950/90 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-[10px] text-red-400/80 font-mono">⋮⋮</span>
+                        <span className="text-red-300 font-bold text-xs">{shotIdx + 1}</span>
+                      </div>
+                    </td>
+                    <td className="p-1 border-r border-red-500/40 text-center bg-red-950/90">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (toggleMuteFn) toggleMuteFn(shotIdx);
+                          }}
+                          className="px-2 py-0.5 rounded bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold flex items-center gap-1 transition-all border border-red-400 shadow-sm cursor-pointer"
+                          title="Unmute Shot & Restore Full Row View"
+                        >
+                          <Volume2 className="w-3 h-3 text-white" />
+                          <span>UNMUTE</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td colSpan={filteredSlots.length} className="px-3 py-1 text-red-200 font-mono text-xs">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                          <span className="text-red-400 font-bold tracking-wide">MUTED SHOT #{shotIdx + 1}</span>
+                          <span className="text-red-300/80 text-[11px] truncate max-w-xl">
+                            [{shot.sceneShotId || `SC01_SH${String(shotIdx + 1).padStart(2, '0')}`}] — {shot.shotComposition || 'Medium Shot (MS)'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-red-400/90 italic font-sans hidden md:inline shrink-0">
+                          (Shot Muted & Minimized — Click UNMUTE to expand)
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
 
               return (
                 <tr 
@@ -192,7 +234,6 @@ export default function SpreadsheetView({
                     isTargetDrop ? 'border-t-2 border-t-amber-400 bg-cyan-950/50' : ''
                   }`}
                 >
-                  {/* Row Index - Floating / Sticky on Left - Drag & Drop Handle */}
                   <td 
                     draggable
                     onDragStart={(e) => handleDragStart(e, shotIdx)}
@@ -200,7 +241,6 @@ export default function SpreadsheetView({
                     onDrop={(e) => handleDrop(e, shotIdx)}
                     onDragEnd={handleDragEnd}
                     className="p-1.5 text-center text-zinc-400 font-mono border-r-2 border-zinc-800 bg-zinc-950 sticky left-0 z-20 group-hover:bg-zinc-900 shadow-[4px_0_10px_rgba(0,0,0,0.5)] cursor-grab active:cursor-grabbing hover:bg-amber-950/30 select-none transition-all"
-                    title="Click, hold & drag shot number to move up/down"
                   >
                     <div className="flex items-center justify-center gap-1 font-bold">
                       <span className="text-[10px] text-zinc-500 group-hover:text-amber-400 font-mono transition-colors">⋮⋮</span>
@@ -211,7 +251,6 @@ export default function SpreadsheetView({
                     </div>
                   </td>
 
-                  {/* Row Actions */}
                   <td className="p-1 border-r border-zinc-800 bg-zinc-950 group-hover:bg-zinc-900">
                     <div className="flex items-center justify-center gap-1">
                       <button
@@ -238,16 +277,18 @@ export default function SpreadsheetView({
 
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onDeleteShot(shotIdx); }}
-                        className="p-1 rounded bg-zinc-800 hover:bg-amber-600 text-zinc-300 hover:text-white transition-colors"
-                        title="Archive Shot (Rule Enforcement: No Permanent Deletion Prohibited)"
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (toggleMuteFn) toggleMuteFn(shotIdx);
+                        }}
+                        className="p-1 rounded bg-zinc-800 hover:bg-red-600 text-zinc-300 hover:text-white transition-colors"
+                        title="Mute Shot (Minimise as Thin Red Line)"
                       >
-                        <Trash2 className="w-3 h-3 text-amber-400" />
+                        <VolumeX className="w-3 h-3 text-red-400 group-hover:text-white" />
                       </button>
                     </div>
                   </td>
 
-                  {/* Filtered Slot Cells */}
                   {filteredSlots.map((slot) => (
                     <td key={slot.key} className="p-2 border-r border-zinc-800/80 align-top">
                       <SlotEditor
@@ -273,17 +314,17 @@ export default function SpreadsheetView({
           </span>
           <span className="text-zinc-600">•</span>
           <span className="text-amber-300 font-mono text-[11px] truncate">
-            Focus: {currentCategoryObj?.label} ({filteredSlots.length} slots)
+            Focus: {currentCategoryObj?.label || 'All 17 Slots'} ({filteredSlots.length} slots)
           </span>
         </div>
 
         <button
           type="button"
           onClick={onCompilePrompt}
-          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 flex items-center gap-1.5 transition-colors"
+          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          Compile Prompts
+          <span>Compile Prompts</span>
         </button>
       </div>
     </div>

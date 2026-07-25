@@ -618,7 +618,19 @@ export default function App() {
     }
   };
 
-  const handleDeleteShot = handleArchiveShot;
+  const handleToggleMuteShot = (index) => {
+    const newShots = [...shots];
+    if (newShots[index]) {
+      newShots[index] = {
+        ...newShots[index],
+        isMuted: !newShots[index].isMuted
+      };
+      setShots(newShots);
+      syncToCloud({ shots: newShots });
+    }
+  };
+
+  const handleDeleteShot = handleToggleMuteShot;
 
   const handleCloneShot = (index) => {
     const cloned = { ...shots[index] };
@@ -956,6 +968,7 @@ export default function App() {
                 onUpdateShot={handleUpdateShot}
                 onAddShot={handleAddShot}
                 onDeleteShot={handleDeleteShot}
+                onToggleMuteShot={handleToggleMuteShot}
                 onCloneShot={handleCloneShot}
                 onMoveShot={handleMoveShot}
                 onReorderShots={handleReorderShots}
