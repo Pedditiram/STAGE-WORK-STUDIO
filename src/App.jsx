@@ -307,7 +307,8 @@ export default function App() {
     if (!currentUserEmail) return;
     const activeShot = shots[activeShotIndex];
     if (activeShot && activeShot.sceneShotId) {
-      broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId);
+      // Passive presence: isEditing = false by default
+      broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId, false);
     }
   }, [activeShotIndex, shots, projectTitle]);
 
@@ -317,7 +318,8 @@ export default function App() {
     const unsubPresence = subscribeToActiveEditingSlots(currentUserEmail, (otherActiveUsers) => {
       const activeShot = shots[activeShotIndex];
       if (activeShot && activeShot.sceneShotId) {
-        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitle);
+        // ONLY trigger popup if collaborator is actively typing/editing a field (isEditing === true)
+        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitle && u.isEditing === true);
         if (matchingConflict) {
           setActiveConflict(matchingConflict);
           setIsConflictModalOpen(true);

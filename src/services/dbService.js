@@ -353,7 +353,7 @@ export async function fetchProjectLibraryFromCloud() {
 }
 
 // 7. Broadcast user active editing slot to Cloud
-export async function broadcastActiveSlotEditing(userEmail, userName, projectTitle, shotId) {
+export async function broadcastActiveSlotEditing(userEmail, userName, projectTitle, shotId, isEditing = false) {
   if (!userEmail || !shotId) return;
   const cleanEmail = userEmail.trim().toLowerCase();
   const presenceId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
@@ -364,6 +364,7 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
     userName: userName || cleanEmail.split('@')[0],
     projectTitle: projectTitle || 'STAGE PRODUCTION STUDIO',
     activeShotId: shotId,
+    isEditing: Boolean(isEditing),
     timestamp: Date.now()
   };
 
