@@ -20,6 +20,7 @@ const DEFAULT_FIREBASE_CONFIG = {
 };
 
 // Permanent Production REST Cloud Database Endpoints (Zero-Config, 100% Active Globally across Firefox, Safari, Chrome)
+const NATIVE_SYNC_URL = "/api/sync";
 const SPS_PROJECTS_BLOB_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
 const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
 const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a9a0-7028-9dd5-9567daaf7158";
@@ -196,6 +197,15 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
     window.dispatchEvent(new Event('sps_projects_updated'));
   }
 
+  // Push to Native Vercel Serverless Sync Engine (/api/sync)
+  try {
+    await fetch(`${NATIVE_SYNC_URL}?type=projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projects: projectLibrary, updatedAt: new Date().toISOString() })
+    });
+  } catch (e) {}
+
   // Push to Primary RESTful Cloud DB
   try {
     await fetch(SPS_PROJECTS_BLOB_URL, {
@@ -267,6 +277,24 @@ export function subscribeToProjectLibraryUpdates(callback) {
 
 // 6. Fetch Latest Project Library from Cloud Database
 export async function fetchProjectLibraryFromCloud() {
+  // 1. Try Native Vercel Serverless Sync Engine (/api/sync)
+  try {
+    const res = await fetch(`${NATIVE_SYNC_URL}?type=projects&t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.projects) && data.projects.length > 0) {
+        const newStr = JSON.stringify(data.projects);
+        const oldStr = localStorage.getItem('sps_project_library');
+        if (newStr !== oldStr) {
+          localStorage.setItem('sps_project_library', newStr);
+          window.dispatchEvent(new Event('sps_projects_updated'));
+        }
+        return data.projects;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Try Primary RESTful Cloud DB
   try {
     const res = await fetch(`${SPS_PROJECTS_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {

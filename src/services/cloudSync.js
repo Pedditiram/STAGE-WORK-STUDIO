@@ -10,7 +10,8 @@ const firebaseConfig = {
   appId: "1:98127391273:web:stageproductionstudio"
 };
 
-// High-Performance Dual REST Cloud Sync Endpoints (Universal Cross-Browser Support)
+// High-Performance Production Serverless Cloud Sync Engine (/api/sync)
+const NATIVE_ROOM_SYNC_URL = "/api/sync";
 const RESTFUL_ROOM_SYNC_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556";
 const JSONBLOB_ROOM_SYNC_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 
@@ -88,21 +89,32 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     broadcastChannel.addEventListener('message', handleBroadcast);
   }
 
-  // 4. Fast Real-Time REST Cloud Polling (Every 2.5 Seconds for 100% Cross-Browser Firefox/Safari Sync)
+  // 4. Fast Real-Time REST Cloud Polling (Every 1.5 Seconds for 100% Cross-Browser Firefox/Safari Sync)
   const pollCloudDatabase = async () => {
     try {
       let payload = null;
       
-      // Try Primary RESTful API Endpoint
+      // 1. Try Native Vercel Serverless Sync Engine (/api/sync)
       try {
-        const res = await fetch(`${RESTFUL_ROOM_SYNC_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        const res = await fetch(`${NATIVE_ROOM_SYNC_URL}?type=room&roomId=${encodeURIComponent(roomId)}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const resObj = await res.json();
-          payload = resObj?.data || resObj;
+          payload = resObj?.data || null;
         }
       } catch (e) {}
 
-      // Fallback to JSONBlob Endpoint
+      // 2. Try Primary RESTful API Endpoint
+      if (!payload) {
+        try {
+          const res = await fetch(`${RESTFUL_ROOM_SYNC_URL}?t=${Date.now()}`, { cache: 'no-store' });
+          if (res.ok) {
+            const resObj = await res.json();
+            payload = resObj?.data || resObj;
+          }
+        } catch (e) {}
+      }
+
+      // 3. Fallback to JSONBlob Endpoint
       if (!payload) {
         try {
           const res = await fetch(`${JSONBLOB_ROOM_SYNC_URL}?t=${Date.now()}`, { cache: 'no-store' });
@@ -131,7 +143,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
 
   // Poll immediately on mount
   pollCloudDatabase();
-  const pollInterval = setInterval(pollCloudDatabase, 2500);
+  const pollInterval = setInterval(pollCloudDatabase, 1500);
 
   let unsubscribeFirestore = () => {};
   if (db) {
@@ -181,7 +193,16 @@ export async function publishToCloudRoom(roomId, projectData) {
     broadcastChannel.postMessage({ roomId, payload });
   }
 
-  // 3. Push to Primary RESTful Cloud Database
+  // 3. Push to Native Vercel Serverless Sync Engine (/api/sync)
+  try {
+    await fetch(`${NATIVE_ROOM_SYNC_URL}?type=room&roomId=${encodeURIComponent(roomId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {}
+
+  // 4. Push to Primary RESTful Cloud Database
   try {
     await fetch(RESTFUL_ROOM_SYNC_URL, {
       method: 'PUT',
