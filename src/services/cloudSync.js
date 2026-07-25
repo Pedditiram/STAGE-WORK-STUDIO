@@ -39,7 +39,7 @@ export const ROLES = [
 export function subscribeToCloudRoom(roomId, onDataReceived) {
   if (typeof onDataReceived !== 'function') return () => {};
 
-  let subscriberLastTimestamp = 0;
+  let lastProcessedTimestamp = 0;
 
   // Load cached room data from localStorage immediately on subscribe
   if (typeof window !== 'undefined') {
@@ -47,18 +47,35 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     if (cachedStr) {
       try {
         const cachedData = JSON.parse(cachedStr);
-        if (cachedData.lastUpdated) {
-          subscriberLastTimestamp = new Date(cachedData.lastUpdated).getTime();
-        }
         onDataReceived(cachedData);
       } catch (e) {}
     }
   }
 
+  // 1. Listen for Native Browser Storage Events (0ms Instant Tab-to-Tab Sync)
+  const handleStorageChange = (e) => {
+    if (e.key === `sps_cloud_${roomId}` && e.newValue) {
+      try {
+        const payload = JSON.parse(e.newValue);
+        if (payload && payload.lastUpdated) {
+          lastProcessedTimestamp = new Date(payload.lastUpdated).getTime();
+        }
+        if (typeof onDataReceived === 'function') {
+          onDataReceived(payload);
+        }
+      } catch (err) {}
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorageChange);
+  }
+
+  // 2. Listen for BroadcastChannel Messages (Instant Cross-Tab Signal)
   const handleBroadcast = (event) => {
     if (event.data && event.data.roomId === roomId && typeof onDataReceived === 'function') {
       if (event.data.payload && event.data.payload.lastUpdated) {
-        subscriberLastTimestamp = new Date(event.data.payload.lastUpdated).getTime();
+        lastProcessedTimestamp = new Date(event.data.payload.lastUpdated).getTime();
       }
       onDataReceived(event.data.payload);
     }
@@ -68,7 +85,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     broadcastChannel.addEventListener('message', handleBroadcast);
   }
 
-  // Ultra-Fast Real-Time 2-Second Cloud REST Polling (Cross-Machine Worldwide Sync)
+  // 3. Ultra-Fast Real-Time 2-Second Cloud REST Polling (Cross-Device Worldwide Sync)
   const pollInterval = setInterval(async () => {
     try {
       const res = await fetch(REALTIME_ROOM_SYNC_URL, { cache: 'no-store' });
@@ -77,8 +94,8 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
         const payload = resObj?.data;
         if (payload && payload.lastUpdated) {
           const remoteTime = new Date(payload.lastUpdated).getTime();
-          if (remoteTime > subscriberLastTimestamp) {
-            subscriberLastTimestamp = remoteTime;
+          if (remoteTime > lastProcessedTimestamp) {
+            lastProcessedTimestamp = remoteTime;
             if (typeof window !== 'undefined') {
               localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
             }
@@ -105,6 +122,9 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
 
   return () => {
     clearInterval(pollInterval);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorageChange);
+    }
     if (broadcastChannel) {
       broadcastChannel.removeEventListener('message', handleBroadcast);
     }
@@ -120,7 +140,7 @@ export async function publishToCloudRoom(roomId, projectData) {
     lastUpdated: nowIso
   };
 
-  // 1. Local Storage Cache
+  // 1. Local Storage Cache (Triggers 0ms Native Storage Event in Other Open Tabs)
   if (typeof window !== 'undefined') {
     localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
   }
