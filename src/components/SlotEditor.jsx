@@ -26,7 +26,7 @@ export default function SlotEditor({
 
   const availableSlotsList = (allSlots && allSlots.length > 0) ? allSlots : SEEDANCE_SLOTS;
 
-  const isModalActive = isForcePopupOpen !== undefined ? isForcePopupOpen : isPopupOpen;
+  const isModalActive = Boolean(isForcePopupOpen || isPopupOpen);
   
   const handleCloseModal = () => {
     setIsPopupOpen(false);
@@ -483,7 +483,7 @@ export default function SlotEditor({
           value={value || ''}
           onChange={handleCustomInput}
           onFocus={handleFocus}
-          onDoubleClick={() => setIsPopupOpen(true)}
+          onDoubleClick={handleOpenModal}
           placeholder={`Type ${slotConfig.label}...`}
           title={value ? `Full Text:\n${value}\n\n(Double-click or click 🔍 to manage favorites & presets)` : `Type ${slotConfig.label}`}
           className="w-full bg-zinc-950 text-amber-200 border border-zinc-800 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-amber-500/80 font-mono truncate shadow-inner cursor-pointer"
@@ -493,7 +493,7 @@ export default function SlotEditor({
           type="button"
           onClick={() => {
             handleFocus();
-            setIsPopupOpen(true);
+            handleOpenModal();
           }}
           className="p-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 border border-zinc-700/90 text-xs font-mono shrink-0 transition-colors shadow-sm flex items-center gap-0.5"
           title={`View full text, add/delete & favorite presets for ${slotConfig.label}`}
@@ -572,7 +572,7 @@ export default function SlotEditor({
             onClick={(e) => {
               e.stopPropagation();
               handleFocus();
-              setIsPopupOpen(true);
+              handleOpenModal();
             }}
             className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold shrink-0 transition-colors flex items-center gap-0.5"
             title="Expand full text & preset manager window"
