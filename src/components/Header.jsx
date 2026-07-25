@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Film, Folder, Wand2, Cloud, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown, RefreshCw
+  Film, Folder, Wand2, Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown, RefreshCw
 } from 'lucide-react';
 
 export default function Header({ 
@@ -19,6 +19,9 @@ export default function Header({
   onOpenProjectConsole,
   onOpenHelpModal,
   onOpenLoginModal,
+  onOpenInvestorDeck,
+  appVersionMode = 'local',
+  onOpenAppVersionModal,
   roomId,
   collaboratorCount,
   isAdminLoggedIn,
@@ -247,23 +250,52 @@ export default function Header({
 
         {/* RIGHT: Quick Action Tools + EXTREME TOP RIGHT User Profile Dropdown */}
         <div className="flex items-center gap-1.5 shrink-0">
+
+          {/* App Version Mode Badge Button (Local Version vs Cloud Version) */}
+          <button
+            type="button"
+            onClick={onOpenAppVersionModal}
+            className={`py-1.5 px-2.5 rounded-xl border font-bold text-xs font-mono flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 ${
+              appVersionMode === 'local'
+                ? 'bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                : 'bg-cyan-950/80 hover:bg-cyan-900/90 text-cyan-300 border-cyan-500/60 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+            }`}
+            title="Click to switch App Version Mode (Local Version vs Cloud Version)"
+          >
+            {appVersionMode === 'local' ? (
+              <>
+                <HardDrive className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="tracking-tight text-[11px] uppercase hidden sm:inline">Local Version</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              </>
+            ) : (
+              <>
+                <Cloud className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="tracking-tight text-[11px] uppercase hidden sm:inline">Cloud Version</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+              </>
+            )}
+          </button>
           
           {/* Sync All Projects & Data to Cloud Database Button */}
           <button
             type="button"
             onClick={onSaveProject}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow shrink-0 cursor-pointer ${
-              isCloudSyncing
-                ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-500 animate-pulse text-slate-950 border-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.9)] scale-105'
-                : isProjectSavedToast
-                  ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-[0_0_25px_rgba(52,211,153,0.95)] scale-105'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/50 hover:shadow-emerald-500/20'
+            disabled={isCloudSyncing}
+            className={`py-1.5 px-3 rounded-xl transition-all duration-300 flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95 border ${
+              isProjectSavedToast
+                ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-black border-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.6)]"
+                : isCloudSyncing
+                  ? "bg-cyan-500/80 text-slate-950 font-black border-cyan-400 cursor-wait animate-pulse"
+                  : colorTheme === 'paper'
+                    ? "bg-slate-900 hover:bg-slate-800 text-white font-bold border-slate-700 shadow-slate-300/40"
+                    : "bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-800 text-cyan-300 border-cyan-500/50 shadow-cyan-950/50"
             }`}
             title={
-              isCloudSyncing
-                ? "⚡ Syncing All Studio Data to Cloud Database..."
-                : isProjectSavedToast
-                  ? "✓ Bi-Directional Cloud Sync Complete!"
+              isProjectSavedToast
+                ? "Saved & Synced Successfully!"
+                : isCloudSyncing
+                  ? "Syncing in progress..."
                   : "⚡ Sync All Projects, Shots & Collaborator Data to Cloud Database"
             }
           >

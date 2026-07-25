@@ -14,6 +14,7 @@ import LoginModal from './components/LoginModal';
 import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
+import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { 
   syncProjectLibraryToCloud, 
@@ -178,6 +179,22 @@ export default function App() {
     }
     return 'SPS-CLOUD-8821';
   });
+  // App Version Mode: 'local' (Default 100% offline & local) vs 'cloud' (Firebase real-time sync)
+  const [appVersionMode, setAppVersionMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_app_version_mode') || 'local';
+    }
+    return 'local';
+  });
+  const [isAppVersionModalOpen, setIsAppVersionModalOpen] = useState(false);
+
+  const handleSelectAppVersionMode = (mode) => {
+    setAppVersionMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_app_version_mode', mode);
+    }
+  };
+
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
@@ -208,7 +225,7 @@ export default function App() {
   const isInitialMount = React.useRef(true);
   const lastSyncedHash = React.useRef('');
 
-  // Local Storage Persistence (Does NOT publish to cloud - explicit user actions handle cloud sync)
+  // Local Storage Persistence (Does NOT publish to cloud when in Local Version)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     localStorage.setItem('sps_current_shots', JSON.stringify(shots));
@@ -217,8 +234,10 @@ export default function App() {
     localStorage.setItem('sps_current_aspect_ratio', aspectRatio);
   }, [shots, projectTitle, targetModel, aspectRatio]);
 
-  // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount
+  // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount (Cloud Mode Only)
   useEffect(() => {
+    if (appVersionMode !== 'cloud') return;
+
     fetchProjectLibraryFromCloud().then(projs => {
       let updatedProjs = Array.isArray(projs) 
         ? projs.filter(p => p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') 
@@ -277,11 +296,12 @@ export default function App() {
         window.dispatchEvent(new Event('sps_collaborators_updated'));
       }
     }).catch(() => {});
-  }, []);
+  }, [appVersionMode]);
 
   const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
   useEffect(() => {
+    if (appVersionMode !== 'cloud') return;
     const unsubscribe = subscribeToCloudRoom(effectiveRoomId, (cloudData) => {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
         const cloudHash = JSON.stringify({ 
@@ -331,13 +351,13 @@ export default function App() {
       if (typeof unsubLib === 'function') unsubLib();
       if (typeof unsubCollab === 'function') unsubCollab();
     };
-  }, [effectiveRoomId, projectTitle]);
+  }, [effectiveRoomId, projectTitle, appVersionMode]);
 
   // -------------------------------------------------------------
   // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
   // -------------------------------------------------------------
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || appVersionMode !== 'cloud') return;
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email');
     if (!currentUserEmail) return;
     const activeShot = shots[activeShotIndex];
@@ -942,6 +962,8 @@ export default function App() {
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
         onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
+        appVersionMode={appVersionMode}
+        onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
         roomId={roomId}
         collaboratorCount={collaborators.length}
         isAdminLoggedIn={isAdminLoggedIn}
@@ -1265,6 +1287,14 @@ export default function App() {
         onCancel={() => {
           setMergePromptState(prev => ({ ...prev, isOpen: false }));
         }}
+      />
+
+      {/* App Version Mode Selection Modal (Local Version vs Cloud Version) */}
+      <AppVersionSelectorModal
+        isOpen={isAppVersionModalOpen}
+        onClose={() => setIsAppVersionModalOpen(false)}
+        currentMode={appVersionMode}
+        onSelectMode={handleSelectAppVersionMode}
       />
 
       {/* Live Bi-Directional Sync Confirmation Toast Banner */}
