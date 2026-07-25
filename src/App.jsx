@@ -434,6 +434,39 @@ export default function App() {
     const newHash = JSON.stringify({ shots: newShots, projectTitle: newTitle, targetModel: newModel, aspectRatio: newRatio });
     lastSyncedHash.current = newHash;
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_current_shots', JSON.stringify(newShots));
+      localStorage.setItem('sps_current_project_title', newTitle);
+
+      try {
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        if (!Array.isArray(library)) library = [];
+
+        const existingIdx = library.findIndex(p => p.title === newTitle);
+        const updatedProjectData = {
+          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+          title: newTitle,
+          description: `Cinema Production Studio Project with ${newShots.length} shots`,
+          targetModel: newModel,
+          aspectRatio: newRatio,
+          roomId: roomId,
+          lastModified: new Date().toLocaleDateString(),
+          shots: newShots,
+          projectGeneratedImages: projectGeneratedImages
+        };
+
+        if (existingIdx !== -1) {
+          library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
+        } else {
+          library.unshift(updatedProjectData);
+        }
+
+        localStorage.setItem('sps_project_library', JSON.stringify(library));
+        syncProjectLibraryToCloud(library);
+      } catch (e) {}
+    }
+
     const targetRoom = `${roomId}_${(newTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
     publishToCloudRoom(targetRoom, {
