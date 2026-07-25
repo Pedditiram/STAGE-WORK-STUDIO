@@ -205,73 +205,14 @@ export default function App() {
   const isInitialMount = React.useRef(true);
   const lastSyncedHash = React.useRef('');
 
-  // Auto-sync engine: Whenever shots, projectTitle, targetModel, or aspectRatio change, automatically sync to Cloud Database
+  // Local Storage Persistence (Does NOT publish to cloud - explicit user actions handle cloud sync)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     localStorage.setItem('sps_current_shots', JSON.stringify(shots));
     localStorage.setItem('sps_current_project_title', projectTitle);
     localStorage.setItem('sps_current_target_model', targetModel);
     localStorage.setItem('sps_current_aspect_ratio', aspectRatio);
-
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      const initialHash = JSON.stringify({ shots, projectTitle, targetModel, aspectRatio });
-      lastSyncedHash.current = initialHash;
-      return;
-    }
-
-    const currentHash = JSON.stringify({ shots, projectTitle, targetModel, aspectRatio });
-
-    // Prevent re-publishing if state matches cloud hash or hasn't changed
-    if (currentHash === lastSyncedHash.current) {
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        setIsCloudSyncing(true);
-        lastSyncedHash.current = currentHash;
-
-        const savedLibStr = localStorage.getItem('sps_project_library');
-        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
-        if (!Array.isArray(library)) library = [];
-
-        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString();
-        const existingIdx = library.findIndex(p => p.title === projectTitle || p.id === 'proj_default');
-        const updatedProjectData = {
-          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
-          title: projectTitle,
-          description: `Cinema Production Studio Project with ${shots.length} shots`,
-          targetModel: targetModel,
-          aspectRatio: aspectRatio,
-          roomId: roomId,
-          lastModified: nowStr,
-          shots: shots,
-          projectGeneratedImages: projectGeneratedImages
-        };
-
-        if (existingIdx !== -1) {
-          library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
-        } else {
-          library.unshift(updatedProjectData);
-        }
-
-        localStorage.setItem('sps_project_library', JSON.stringify(library));
-
-        await publishToCloudRoom(roomId, { shots, projectGeneratedImages, projectTitle, targetModel, aspectRatio, library });
-        await syncProjectLibraryToCloud(library);
-
-        setIsCloudSyncing(false);
-        setIsProjectSavedToast(true);
-        setTimeout(() => setIsProjectSavedToast(false), 1800);
-      } catch (e) {
-        setIsCloudSyncing(false);
-      }
-    }, 600);
-
-    return () => clearTimeout(timer);
-  }, [shots, projectTitle, targetModel, aspectRatio, roomId]);
+  }, [shots, projectTitle, targetModel, aspectRatio]);
 
   // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount
   useEffect(() => {
@@ -463,17 +404,25 @@ export default function App() {
     }
   });
 
-  const syncToCloud = (updatedState) => {
+  const syncToCloud = (updatedState = {}) => {
     setIsCloudSyncing(true);
+    const newShots = updatedState?.shots || shots;
+    const newTitle = updatedState?.projectTitle || projectTitle;
+    const newModel = updatedState?.targetModel || targetModel;
+    const newRatio = updatedState?.aspectRatio || aspectRatio;
+
+    const newHash = JSON.stringify({ shots: newShots, projectTitle: newTitle, targetModel: newModel, aspectRatio: newRatio });
+    lastSyncedHash.current = newHash;
+
     publishToCloudRoom(roomId, {
-      projectTitle,
-      targetModel,
-      aspectRatio,
-      shots,
+      projectTitle: newTitle,
+      targetModel: newModel,
+      aspectRatio: newRatio,
+      shots: newShots,
       projectGeneratedImages,
       ...updatedState
     });
-    setTimeout(() => setIsCloudSyncing(false), 500);
+    setTimeout(() => setIsCloudSyncing(false), 400);
   };
 
   const [isProjectSavedToast, setIsProjectSavedToast] = useState(false);
