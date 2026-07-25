@@ -3,56 +3,15 @@ import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { createZipArchive } from '../utils/zipUtils';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, Archive
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Archive
 } from 'lucide-react';
 
-export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
+export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Stage Production Studio" }) {
   const [formatMode, setFormatMode] = useState('seedance_tagged'); // Default to SPS Standard Tagged
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'single'
   const [copied, setCopied] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
-
-  const isDirectoryPickerSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
-
-  // Active Native Folder Handle & Custom Path State
-  const [folderHandle, setFolderHandle] = useState(null);
-  const [folderName, setFolderName] = useState('');
-  const [customFolderPath, setCustomFolderPath] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_custom_export_folder') || "/Users/pedditiram/Desktop/jai sri ram prompts";
-    }
-    return "/Users/pedditiram/Desktop/jai sri ram prompts";
-  });
-
-  const handleCustomFolderPathChange = (val) => {
-    setCustomFolderPath(val);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sps_custom_export_folder', val);
-    }
-  };
-
-  // Synchronous User Gesture Native Folder Picker
-  const handleSelectTargetFolder = async () => {
-    if (isDirectoryPickerSupported) {
-      try {
-        const handle = await window.showDirectoryPicker({
-          mode: 'readwrite',
-          startIn: 'desktop'
-        });
-        setFolderHandle(handle);
-        setFolderName(handle.name);
-        handleCustomFolderPathChange(`Desktop/${handle.name}`);
-        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". Files will save directly here!`);
-        setTimeout(() => setExportSuccessMsg(null), 5000);
-        return handle;
-      } catch (err) {
-        if (err.name === 'AbortError') return null;
-        console.warn("Directory picker error:", err);
-      }
-    }
-    return null;
-  };
 
   if (!isOpen) return null;
 
@@ -116,7 +75,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
 
   const compileMiniMaxFormat = (shot) => {
     const parts = [];
-    parts.push(`[MiniMax Video-01 Engine]`);
+    parts.push(`[MiniMax Engine]`);
     if (shot.cameraMotionTag) parts.push(`Camera Movement: ${shot.cameraMotionTag.replace(/\[|\]/g, '')}.`);
     if (shot.shotComposition) parts.push(`Framing: ${shot.shotComposition}.`);
     if (shot.characterIdAssetRef) parts.push(`Subject: ${shot.characterIdAssetRef}.`);
@@ -128,7 +87,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
 
   const compileBytePlusFormat = (shot) => {
     const parts = [];
-    parts.push(`[BytePlus Seaweed Engine]`);
+    parts.push(`[BytePlus Engine]`);
     if (shot.shotComposition) parts.push(`--shot_type "${shot.shotComposition}"`);
     if (shot.cameraMotionTag) parts.push(`--camera_motion "${shot.cameraMotionTag}"`);
     if (shot.characterIdAssetRef) parts.push(`--main_subject "${shot.characterIdAssetRef}"`);
@@ -165,9 +124,9 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     const env = shot.actionEnvContext || 'concert stage';
     const dialogue = shot.characterDialogue && !shot.characterDialogue.includes('Silent') ? shot.characterDialogue : null;
 
-    const beat1 = `masterpiece 8k render, SEEDREAM 5.0 KEYFRAME 1 (BEAT 0.0s - Establishing Stance), ${framing}, ${artist} standing at starting position, ${env}, ${lighting}, ${color}, static establishing keyframe, crisp focus, extreme detail, 8k`;
-    const beat2 = `masterpiece 8k render, SEEDREAM 5.0 KEYFRAME 2 (BEAT 1.5s - Motion Peak), ${framing}, ${artist} executing ${shot.characterMovement || 'dynamic performance movement'}, ${motion} vector blur, ${coArtist}, dynamic action pose, intense energy, ${lighting}, 8k`;
-    const beat3 = `masterpiece 8k render, SEEDREAM 5.0 KEYFRAME 3 (BEAT 3.5s - Emotional Climax), Extreme Close-Up, ${artist} expression: ${shot.characterExpression || 'intense passion'}, ${dialogue ? `vocal mouth open singing ${dialogue}` : 'eyes locked onto camera'}, ${coArtist} reacting in background, climax keyframe, 8k resolution`;
+    const beat1 = `masterpiece 8k render, KEYFRAME 1 (BEAT 0.0s - Establishing Stance), ${framing}, ${artist} standing at starting position, ${env}, ${lighting}, ${color}, static establishing keyframe, crisp focus, extreme detail, 8k`;
+    const beat2 = `masterpiece 8k render, KEYFRAME 2 (BEAT 1.5s - Motion Peak), ${framing}, ${artist} executing ${shot.characterMovement || 'dynamic performance movement'}, ${motion} vector blur, ${coArtist}, dynamic action pose, intense energy, ${lighting}, 8k`;
+    const beat3 = `masterpiece 8k render, KEYFRAME 3 (BEAT 3.5s - Emotional Climax), Extreme Close-Up, ${artist} expression: ${shot.characterExpression || 'intense passion'}, ${dialogue ? `vocal mouth open singing ${dialogue}` : 'eyes locked onto camera'}, ${coArtist} reacting in background, climax keyframe, 8k resolution`;
 
     return `=== SPS PRODUCTION PROMPT -> BEAT BREAKDOWN (SHOT #${shotIdx + 1} - ${shotId}) ===
 ⚡ [BEAT 1 @ 0.0s - Establishing Keyframe]:
@@ -211,12 +170,6 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
   };
 
   const compileEngineSpecific = (shot) => {
-    if (activeTargetModel === 'OpenAI Sora') return compileSoraFormat(shot);
-    if (activeTargetModel === 'Runway Gen-3') return compileRunwayFormat(shot);
-    if (activeTargetModel === 'Luma Dream Machine') return compileLumaFormat(shot);
-    if (activeTargetModel === 'Kling AI 1.5') return compileKlingFormat(shot);
-    if (activeTargetModel === 'MiniMax Video-01') return compileMiniMaxFormat(shot);
-    if (activeTargetModel === 'BytePlus Seaweed') return compileBytePlusFormat(shot);
     return compileTaggedFormat(shot);
   };
 
@@ -230,7 +183,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     return compileTaggedFormat(shot);
   };
 
-  // STRICT SHORT FILENAME ONLY (e.g. SC01_SH01.txt, SC01_SH02.txt) - NEVER PATH PREVIEW!
+  // STRICT SHORT FILENAME ONLY (SC01_SH01.txt, SC01_SH02.txt...)
   const getShotFilename = (shot, idx) => {
     const rawId = shot.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
     const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -289,7 +242,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Universal Clean ZIP Package Downloader - Strictly short filenames SC01_SH01.txt inside zip!
+  // Clean ZIP Package Downloader
   const handleDownloadZipPackage = () => {
     const zipFiles = shots.map((shot, idx) => ({
       name: getShotFilename(shot, idx), // STRICT SHORT NAME: SC01_SH01.txt
@@ -308,70 +261,21 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Unzips clean short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
-    setTimeout(() => setExportSuccessMsg(null), 6000);
+    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}" containing clean short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
+    setTimeout(() => setExportSuccessMsg(null), 5000);
   };
 
-  // Direct Write to Active Locked Target Directory (Chrome API)
-  const generateAndSaveSingleShotFile = async (shot, idx) => {
+  // Individual Shot File Download
+  const generateAndSaveSingleShotFile = (shot, idx) => {
     const filename = getShotFilename(shot, idx); // STRICT SHORT NAME: SC01_SH01.txt
     const content = getShotPromptText(shot, idx);
-
-    let activeHandle = folderHandle;
-
-    if (!activeHandle && isDirectoryPickerSupported) {
-      activeHandle = await handleSelectTargetFolder();
-    }
-
-    if (activeHandle) {
-      try {
-        const fileHandle = await activeHandle.getFileHandle(filename, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(content);
-        await writable.close();
-        setExportSuccessMsg(`🟢 Saved "${filename}" directly into folder "${activeHandle.name}"!`);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
-        return;
-      } catch (err) {
-        console.error("Direct folder save error:", err);
-      }
-    }
-
-    // Standard download fallback
     downloadSingleTxtFile(filename, content);
+    setExportSuccessMsg(`🟢 Downloaded "${filename}"!`);
+    setTimeout(() => setExportSuccessMsg(null), 3000);
   };
 
-  // Batch Export to Locked Directory or ZIP Fallback
-  const handleExportAllIndividualFiles = async () => {
-    let targetDir = folderHandle;
-
-    if (!targetDir && isDirectoryPickerSupported) {
-      targetDir = await handleSelectTargetFolder();
-    }
-
-    if (targetDir) {
-      try {
-        let count = 0;
-        for (let i = 0; i < shots.length; i++) {
-          const shot = shots[i];
-          const filename = getShotFilename(shot, i); // STRICT SHORT NAME: SC01_SH01.txt
-          const content = getShotPromptText(shot, i);
-          const fileHandle = await targetDir.getFileHandle(filename, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(content);
-          await writable.close();
-          count++;
-        }
-
-        setExportSuccessMsg(`🟢 Successfully saved ${count} files (SC01_SH01.txt...) inside folder "${targetDir.name}"!`);
-        setTimeout(() => setExportSuccessMsg(null), 5000);
-        return;
-      } catch (err) {
-        console.error("Folder export error:", err);
-      }
-    }
-
-    // Fallback: Individual Short File Downloads (SC01_SH01.txt, SC01_SH02.txt...)
+  // Batch Individual Short Files Download (SC01_SH01.txt, SC01_SH02.txt...)
+  const handleExportAllIndividualFiles = () => {
     shots.forEach((shot, i) => {
       setTimeout(() => {
         const filename = getShotFilename(shot, i); // STRICT SHORT NAME: SC01_SH01.txt
@@ -403,7 +307,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 Stage Production Studio Compiler
               </h3>
               <p className="text-xs text-zinc-400">
-                Generate individual TXT prompt files or export multi-shot production scripts into local folders.
+                Generate individual TXT prompt files or export multi-shot production scripts.
               </p>
             </div>
           </div>
@@ -518,7 +422,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </button>
           </div>
 
-          {/* Action Bar: View Mode, Clean Action Buttons */}
+          {/* Action Bar: View Mode & Direct Action Buttons */}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
@@ -546,26 +450,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   <span>Full Script</span>
                 </button>
               </div>
-
-              {/* CHROME DIRECT FOLDER PICKER BUTTON */}
-              {isDirectoryPickerSupported && (
-                <button
-                  type="button"
-                  onClick={handleSelectTargetFolder}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border shadow-sm cursor-pointer ${
-                    folderHandle
-                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900 ring-2 ring-emerald-500/40'
-                      : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
-                  }`}
-                  title="Click to visually pick your desktop target folder (Chrome/Edge)"
-                >
-                  <FolderPlus className="w-4 h-4 text-cyan-400" />
-                  <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Pick Target Folder'}</span>
-                </button>
-              )}
             </div>
 
-            {/* BATCH EXPORT CLEAN SHORT TXT FILES BUTTON */}
+            {/* DIRECT ACTION BUTTONS */}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -584,7 +471,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 title={`Save all ${shots.length} prompts as short individual TXT files (SC01_SH01.txt, SC01_SH02.txt...)`}
               >
                 <FolderDown className="w-4 h-4 text-emerald-200" />
-                <span>⚡ Save All TXT Files to Folder</span>
+                <span>⚡ Save All TXT Files</span>
               </button>
             </div>
           </div>
@@ -599,8 +486,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
-                <span className="text-zinc-400 font-mono text-[11px] truncate max-w-lg hidden md:inline">
-                  Export Filenames: <span className="text-emerald-400 font-bold">SC01_SH01.txt, SC01_SH02.txt...</span>
+                <span className="text-zinc-400 font-mono text-[11px]">
+                  Filenames: <span className="text-emerald-400 font-bold">SC01_SH01.txt, SC01_SH02.txt...</span>
                 </span>
               </div>
 
@@ -644,7 +531,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                             type="button"
                             onClick={() => generateAndSaveSingleShotFile(shot, idx)}
                             className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow border border-cyan-400/40 cursor-pointer"
-                            title={`Generate & save ${filename} directly into target folder`}
+                            title={`Generate & save ${filename}`}
                           >
                             <Download className="w-3.5 h-3.5 text-cyan-100" />
                             <span>⚡ Generate {filename}</span>
