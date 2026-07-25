@@ -534,13 +534,26 @@ export default function ProjectConsoleModal({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Logged-In User Profile Badge on Top Right */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-100 dark:bg-cyan-950/90 border border-cyan-300 dark:border-cyan-700/60 text-cyan-900 dark:text-cyan-300 font-mono text-xs font-bold shadow-sm">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
+              <span className="truncate max-w-[160px]">
+                👤 {currentUserProfile?.name || (currentUserEmail ? currentUserEmail.split('@')[0] : 'Pedditi Ram')}
+              </span>
+              <span className="text-[10px] text-cyan-700 dark:text-cyan-400/80 font-normal hidden lg:inline">
+                ({currentUserEmail})
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Unified Tab Navigation */}
