@@ -168,7 +168,79 @@ export function subscribeToProjectLibraryUpdates(callback) {
   return unsubscribe;
 }
 
-// 6. Test Live Cloud Database Connection
+// 6. Fetch Latest Project Library from Cloud Database
+export async function fetchProjectLibraryFromCloud() {
+  initDatabase();
+  if (db) {
+    try {
+      const libRef = doc(db, 'studio_config', 'project_library');
+      const snap = await getDoc(libRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.projects)) {
+          localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
+          window.dispatchEvent(new Event('sps_projects_updated'));
+          return data.projects;
+        }
+      }
+    } catch (e) {
+      console.log("Fetch project library from cloud fallback:", e.message);
+    }
+  }
+  const saved = localStorage.getItem('sps_project_library');
+  return saved ? JSON.parse(saved) : [];
+}
+
+// 7. Broadcast user active editing slot to Cloud
+export async function broadcastActiveSlotEditing(userEmail, userName, projectTitle, shotId) {
+  initDatabase();
+  if (!userEmail || !shotId) return;
+  const cleanEmail = userEmail.trim().toLowerCase();
+  const presenceId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+
+  const payload = {
+    userEmail: cleanEmail,
+    userName: userName || cleanEmail.split('@')[0],
+    projectTitle: projectTitle || 'STAGE PRODUCTION STUDIO',
+    activeShotId: shotId,
+    timestamp: Date.now()
+  };
+
+  if (db) {
+    try {
+      const pRef = doc(db, 'active_editing_slots', presenceId);
+      await setDoc(pRef, payload, { merge: true });
+    } catch (e) {}
+  }
+}
+
+// 8. Subscribe to Active Editing Slots in Real Time to detect conflicts
+export function subscribeToActiveEditingSlots(currentEmail, callback) {
+  initDatabase();
+  let unsubscribe = () => {};
+  if (db && typeof window !== 'undefined') {
+    try {
+      const colRef = collection(db, 'active_editing_slots');
+      unsubscribe = onSnapshot(colRef, (snapshot) => {
+        const activeUsersMap = [];
+        const now = Date.now();
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          // Keep active presence within last 2 minutes
+          if (data && (now - (data.timestamp || 0)) < 120000) {
+            if (data.userEmail !== (currentEmail || '').trim().toLowerCase()) {
+              activeUsersMap.push(data);
+            }
+          }
+        });
+        if (callback) callback(activeUsersMap);
+      }, (err) => {});
+    } catch (e) {}
+  }
+  return unsubscribe;
+}
+
+// 9. Test Live Cloud Database Connection
 export async function testDatabaseConnection() {
   initDatabase();
   if (!db) {

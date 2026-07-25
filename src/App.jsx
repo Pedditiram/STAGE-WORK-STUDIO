@@ -11,8 +11,17 @@ import ProjectConsoleModal from './components/ProjectConsoleModal';
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
+import ConflictAlertModal from './components/ConflictAlertModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
-import { syncProjectLibraryToCloud, syncCollaboratorsToCloud, subscribeToProjectLibraryUpdates } from './services/dbService';
+import { 
+  syncProjectLibraryToCloud, 
+  syncCollaboratorsToCloud, 
+  subscribeToProjectLibraryUpdates,
+  fetchProjectLibraryFromCloud,
+  fetchCollaboratorsFromCloud,
+  broadcastActiveSlotEditing,
+  subscribeToActiveEditingSlots
+} from './services/dbService';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
 import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward, RefreshCw } from 'lucide-react';
 
@@ -172,6 +181,8 @@ export default function App() {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [activeConflict, setActiveConflict] = useState(null);
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [currentRole, setCurrentRole] = useState('director');
   const [collaborators, setCollaborators] = useState([
@@ -228,6 +239,36 @@ export default function App() {
       if (typeof unsubLib === 'function') unsubLib();
     };
   }, [roomId, projectTitle]);
+
+  // -------------------------------------------------------------
+  // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
+  // -------------------------------------------------------------
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'pedditiram@gmail.com';
+    const activeShot = shots[activeShotIndex];
+    if (activeShot && activeShot.sceneShotId) {
+      broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId);
+    }
+  }, [activeShotIndex, shots, projectTitle]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'pedditiram@gmail.com';
+    const unsubPresence = subscribeToActiveEditingSlots(currentUserEmail, (otherActiveUsers) => {
+      const activeShot = shots[activeShotIndex];
+      if (activeShot && activeShot.sceneShotId) {
+        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitle);
+        if (matchingConflict) {
+          setActiveConflict(matchingConflict);
+          setIsConflictModalOpen(true);
+        }
+      }
+    });
+    return () => {
+      if (typeof unsubPresence === 'function') unsubPresence();
+    };
+  }, [activeShotIndex, shots, projectTitle]);
 
   // -------------------------------------------------------------
   // AUTOMATIC 30-MINUTE PROJECT BACKUP & VERSION SNAPSHOT ENGINE
@@ -356,7 +397,7 @@ export default function App() {
       localStorage.setItem('sps_current_shots', JSON.stringify(shots));
       localStorage.setItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
-      // SYNC ALL DATA TO CLOUD DATABASE (Projects + Room + Collaborators)
+      // 1. UPLOAD LOCAL EDITS TO CLOUD
       await syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
       await syncProjectLibraryToCloud(library);
 
@@ -367,9 +408,21 @@ export default function App() {
           await syncCollaboratorsToCloud(authUsers);
         } catch (err) {}
       }
+
+      // 2. PULL LATEST DATA FROM CLOUD
+      try {
+        const latestCloudLib = await fetchProjectLibraryFromCloud();
+        const latestCloudUsers = await fetchCollaboratorsFromCloud();
+        if (Array.isArray(latestCloudLib) && latestCloudLib.length > 0) {
+          const activeProj = latestCloudLib.find(p => p.title === projectTitle);
+          if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+            setShots(activeProj.shots);
+          }
+        }
+      } catch (err) {}
       
       setIsProjectSavedToast(true);
-      setTimeout(() => setIsProjectSavedToast(false), 3000);
+      setTimeout(() => setIsProjectSavedToast(false), 3500);
       setTimeout(() => setIsCloudSyncing(false), 500);
     } catch (e) {
       console.warn("Failed to sync project data to cloud database:", e);
@@ -924,13 +977,35 @@ export default function App() {
         setIsAdminLoggedIn={setIsAdminLoggedIn}
       />
 
-      {/* Live Sync Confirmation Toast Banner */}
+      {/* Real-Time Active User Slot Conflict Alert Modal */}
+      <ConflictAlertModal
+        isOpen={isConflictModalOpen}
+        onClose={() => setIsConflictModalOpen(false)}
+        conflictData={activeConflict}
+        onPullCloudVersion={async () => {
+          setIsConflictModalOpen(false);
+          const cloudProjects = await fetchProjectLibraryFromCloud();
+          if (Array.isArray(cloudProjects)) {
+            const matchProj = cloudProjects.find(p => p.title === projectTitle);
+            if (matchProj && Array.isArray(matchProj.shots)) setShots(matchProj.shots);
+          }
+        }}
+        onMergeShots={() => {
+          setIsConflictModalOpen(false);
+          handleSaveProjectToApp();
+        }}
+        onKeepLocal={() => {
+          setIsConflictModalOpen(false);
+        }}
+      />
+
+      {/* Live Bi-Directional Sync Confirmation Toast Banner */}
       {isProjectSavedToast && (
-        <div className="fixed top-16 right-4 z-50 p-3.5 rounded-2xl bg-slate-950/95 border-2 border-emerald-500 text-emerald-300 font-mono text-xs font-bold shadow-[0_10px_40px_rgba(16,185,129,0.4)] flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
-          <div className="p-1.5 rounded-lg bg-emerald-500 text-slate-950">
+        <div className="fixed top-16 right-4 z-50 p-3.5 rounded-2xl bg-slate-950/95 border-2 border-cyan-500 text-cyan-200 font-mono text-xs font-bold shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+          <div className="p-1.5 rounded-lg bg-cyan-500 text-slate-950">
             <RefreshCw className="w-4 h-4 animate-spin" />
           </div>
-          <span>⚡ All Studio Projects, Shots & Collaborator Data Synced to Cloud Database!</span>
+          <span>⚡ Bi-Directional Cloud Sync Complete! (Uploaded Local Edits & Pulled Latest Cloud Projects)</span>
         </div>
       )}
     </div>
