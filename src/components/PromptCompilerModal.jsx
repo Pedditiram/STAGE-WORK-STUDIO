@@ -43,16 +43,13 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
         setFolderHandle(handle);
         setFolderName(handle.name);
         handleCustomFolderPathChange(`Desktop/${handle.name}`);
-        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". All files will now be written directly here!`);
+        setExportSuccessMsg(`🟢 Target Folder Locked: "${handle.name}". Files will save directly here!`);
         setTimeout(() => setExportSuccessMsg(null), 5000);
         return handle;
       } catch (err) {
         if (err.name === 'AbortError') return null;
         console.warn("Directory picker error:", err);
       }
-    } else {
-      setExportSuccessMsg("ℹ️ Safari/Firefox Security Notice: Directory picker is Chrome-only. Use '📦 Download ZIP Folder' below for 1-click folder extraction in Safari!");
-      setTimeout(() => setExportSuccessMsg(null), 6000);
     }
     return null;
   };
@@ -233,6 +230,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     return compileTaggedFormat(shot);
   };
 
+  // STRICT CLEAN FILENAME (e.g. SC01_SH01.txt, SC01_SH02.txt) - NO PATH PREFIXES!
   const getShotFilename = (shot, idx) => {
     const rawId = shot.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
     const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -291,16 +289,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     URL.revokeObjectURL(url);
   };
 
-  // Universal Cross-Browser ZIP Package Downloader (Safari, Chrome, Firefox)
+  // Universal Clean ZIP Package Downloader - Strictly clean filenames SC01_SH01.txt inside zip!
   const handleDownloadZipPackage = () => {
-    const folderLabel = (folderName || customFolderPath || 'jai_sri_ram_prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
     const zipFiles = shots.map((shot, idx) => ({
-      name: `${folderLabel}/${getShotFilename(shot, idx)}`,
+      name: getShotFilename(shot, idx), // STRICT CLEAN NAME: SC01_SH01.txt
       content: getShotPromptText(shot, idx)
     }));
 
     const zipBlob = createZipArchive(zipFiles);
-    const zipFilename = `${folderLabel}.zip`;
+    const zipFilename = `jai_sri_ram_prompts.zip`;
 
     const url = URL.createObjectURL(zipBlob);
     const link = document.createElement('a');
@@ -311,13 +308,13 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Unzips directly into "${folderLabel}" folder on your Desktop!`);
+    setExportSuccessMsg(`🟢 Downloaded "${zipFilename}"! Extracts clean files (SC01_SH01.txt, SC01_SH02.txt...) directly!`);
     setTimeout(() => setExportSuccessMsg(null), 6000);
   };
 
   // Direct Write to Active Locked Target Directory (Chrome API)
   const generateAndSaveSingleShotFile = async (shot, idx) => {
-    const filename = getShotFilename(shot, idx);
+    const filename = getShotFilename(shot, idx); // CLEAN FILENAME: SC01_SH01.txt
     const content = getShotPromptText(shot, idx);
 
     let activeHandle = folderHandle;
@@ -332,7 +329,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         const writable = await fileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        setExportSuccessMsg(`🟢 Saved "${filename}" directly into folder "${activeHandle.name}" on disk!`);
+        setExportSuccessMsg(`🟢 Saved "${filename}" directly into folder "${activeHandle.name}"!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
@@ -344,7 +341,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     downloadSingleTxtFile(filename, content);
   };
 
-  // Batch Export to Locked Directory or Prompt Directory Picker
+  // Batch Export to Locked Directory or ZIP Fallback
   const handleExportAllIndividualFiles = async () => {
     let targetDir = folderHandle;
 
@@ -357,7 +354,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         let count = 0;
         for (let i = 0; i < shots.length; i++) {
           const shot = shots[i];
-          const filename = getShotFilename(shot, i);
+          const filename = getShotFilename(shot, i); // CLEAN FILENAME: SC01_SH01.txt
           const content = getShotPromptText(shot, i);
           const fileHandle = await targetDir.getFileHandle(filename, { create: true });
           const writable = await fileHandle.createWritable();
@@ -366,7 +363,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           count++;
         }
 
-        setExportSuccessMsg(`🟢 Successfully saved ${count} prompt files directly inside folder "${targetDir.name}"!`);
+        setExportSuccessMsg(`🟢 Successfully saved ${count} files (SC01_SH01.txt...) inside folder "${targetDir.name}"!`);
         setTimeout(() => setExportSuccessMsg(null), 5000);
         return;
       } catch (err) {
@@ -374,14 +371,13 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       }
     }
 
-    // Fallback: Download ZIP Package for Safari/Firefox/non-Chrome
+    // Universal Fallback: Download Clean ZIP Package for Safari/Firefox/non-Chrome
     handleDownloadZipPackage();
   };
 
   const handleDownloadFullDoc = () => {
     const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
-    const prefix = (folderName || customFolderPath || 'Seedance_Prompts').replace(/[^a-zA-Z0-9_-]/g, '_');
-    downloadSingleTxtFile(`${prefix}_full_script.${ext}`, compiledOutput);
+    downloadSingleTxtFile(`full_script.${ext}`, compiledOutput);
   };
 
   return (
@@ -428,11 +424,10 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </div>
             <div>
               <div className="font-bold text-white flex items-center gap-2 text-xs">
-                <span>📦 SAFARI & ALL BROWSERS (1-CLICK FOLDER EXPORT):</span>
-                <span className="text-emerald-300 font-extrabold">RECOMMENDED FOR SAFARI</span>
+                <span>📦 SAFARI & ALL BROWSERS (1-CLICK CLEAN FILE EXPORT):</span>
               </div>
               <p className="text-[11px] text-cyan-200/90">
-                Click <strong className="text-white underline">"📦 Download ZIP Folder"</strong> to instantly get a folder containing all individual TXT files!
+                Click <strong className="text-white underline">"📦 Download ZIP Folder"</strong> to get clean files <code className="text-emerald-300 font-bold">SC01_SH01.txt</code>, <code className="text-emerald-300 font-bold">SC01_SH02.txt</code>... inside your folder!
               </p>
             </div>
           </div>
@@ -443,7 +438,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-mono text-xs font-black flex items-center gap-2 shadow-xl border border-cyan-300/40 cursor-pointer transition-all hover:scale-105"
           >
             <Archive className="w-4 h-4 text-cyan-100" />
-            <span>📦 Download "jai_sri_ram_prompts.zip" Folder</span>
+            <span>📦 Download "jai_sri_ram_prompts.zip"</span>
           </button>
         </div>
 
@@ -589,14 +584,14 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               {/* FOLDER PATH DISPLAY / INPUT FIELD */}
               <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
                 <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Path:</span>
+                <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Target Folder:</span>
                 <input
                   type="text"
                   value={customFolderPath}
                   onChange={(e) => handleCustomFolderPathChange(e.target.value)}
-                  placeholder="/Users/pedditiram/Desktop/jai sri ram prompts"
+                  placeholder="jai sri ram prompts"
                   className="bg-transparent text-xs font-mono text-cyan-300 font-bold focus:outline-none w-48 lg:w-64 truncate"
-                  title="Specify target folder path on your computer"
+                  title="Target folder name"
                 />
               </div>
             </div>
@@ -624,16 +619,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
                 <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-lg hidden md:inline">
-                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: Desktop/${folderName}]` : (customFolderPath || 'Downloads')}</span>
+                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: ${folderName}]` : 'jai sri ram prompts'}</span>
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
                 {shots.map((shot, idx) => {
-                  const filename = getShotFilename(shot, idx);
+                  const filename = getShotFilename(shot, idx); // STRICT CLEAN FILENAME (e.g. SC01_SH01.txt)
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
-                  const displayPath = folderName ? `Desktop/${folderName}/${filename}` : `${customFolderPath}/${filename}`;
 
                   return (
                     <div 
@@ -645,7 +639,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                         <div className="flex items-center gap-2 truncate max-w-xl">
                           <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1 shrink-0">
                             <FileCode className="w-3.5 h-3.5 text-emerald-300" />
-                            {displayPath}
+                            {filename}
                           </span>
                           <span className="text-zinc-300 font-bold font-mono text-xs shrink-0">
                             Shot #{idx + 1}
