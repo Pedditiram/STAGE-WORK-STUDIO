@@ -110,6 +110,20 @@ export default function App() {
     }
   };
 
+  // Persistent shots state from localStorage
+  const [shots, setShots] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sps_current_shots');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
+    return INITIAL_SHOTS;
+  });
+
   // Dynamic Script-Aware Preset Engine State
   const [presetProfile, setPresetProfile] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -123,7 +137,7 @@ export default function App() {
   useEffect(() => {
     const detected = detectScriptGenre(projectTitle, shots);
     setPresetProfile(detected);
-  }, [projectTitle]);
+  }, [projectTitle, shots]);
 
   const handleSetPresetProfile = (profileKey) => {
     setPresetProfile(profileKey);
@@ -141,20 +155,6 @@ export default function App() {
       return canShowCanvas ? "canvas" : "spreadsheet";
     }
     return "spreadsheet";
-  });
-
-  // Persistent shots state from localStorage
-  const [shots, setShots] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sps_current_shots');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (e) {}
-      }
-    }
-    return INITIAL_SHOTS;
   });
 
   const [activeShotIndex, setActiveShotIndex] = useState(0);
