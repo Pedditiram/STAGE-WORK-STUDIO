@@ -15,10 +15,10 @@ const GUIDE_SECTIONS = [
       <div className="space-y-4 text-xs font-mono">
         <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/40 text-cyan-200 space-y-2">
           <h4 className="font-bold text-sm text-cyan-300 font-sans flex items-center gap-2">
-            🎬 Stage Production Studio (SeeDance 2.0 & SeeDream 5.0)
+            🎬 Stage Production Studio User Guide
           </h4>
           <p className="leading-relaxed">
-            Stage Production Studio is a professional film production prompt matrix, AI screenplay breakdown engine, and real-time collaboration workstation engineered specifically for next-gen cinema generation models including <strong>SeeDance 2.0</strong>, <strong>SeeDream 5.0</strong>, <strong>Sora 2</strong>, <strong>Runway Gen-3</strong>, and <strong>Kling 1.5</strong>.
+            Stage Production Studio is a professional film production prompt matrix, AI screenplay breakdown engine, and real-time collaboration workstation engineered specifically for next-generation cinema generation and prompt compilation.
           </p>
         </div>
 

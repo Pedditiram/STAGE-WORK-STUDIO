@@ -74,9 +74,9 @@ export default function App() {
   const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
   const [targetModel, setTargetModel] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_current_target_model') || "Seedance 2.0";
+      return localStorage.getItem('sps_current_target_model') || "SPS Direct Cinema";
     }
-    return "Seedance 2.0";
+    return "SPS Direct Cinema";
   });
   const [aspectRatio, setAspectRatio] = useState(() => {
     if (typeof window !== 'undefined') {

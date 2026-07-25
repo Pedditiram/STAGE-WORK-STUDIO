@@ -11,7 +11,7 @@ export default function TemplateSelector({ onLoadTemplate }) {
         </div>
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-2">
-            Seedance 2.0 Cinema Production Kits
+            Stage Production Cinema Kits
             <span className="text-xs font-mono font-normal text-amber-300 bg-amber-950 px-2 py-0.5 rounded border border-amber-800">
               Preset Kits
             </span>

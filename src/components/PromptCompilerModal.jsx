@@ -169,7 +169,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     const beat2 = `masterpiece 8k render, SEEDREAM 5.0 KEYFRAME 2 (BEAT 1.5s - Motion Peak), ${framing}, ${artist} executing ${shot.characterMovement || 'dynamic performance movement'}, ${motion} vector blur, ${coArtist}, dynamic action pose, intense energy, ${lighting}, 8k`;
     const beat3 = `masterpiece 8k render, SEEDREAM 5.0 KEYFRAME 3 (BEAT 3.5s - Emotional Climax), Extreme Close-Up, ${artist} expression: ${shot.characterExpression || 'intense passion'}, ${dialogue ? `vocal mouth open singing ${dialogue}` : 'eyes locked onto camera'}, ${coArtist} reacting in background, climax keyframe, 8k resolution`;
 
-    return `=== SEEDANCE 2.0 VIDEO PROMPT -> SEEDREAM 5.0 BEAT BREAKDOWN (SHOT #${shotIdx + 1} - ${shotId}) ===
+    return `=== SPS PRODUCTION PROMPT -> BEAT BREAKDOWN (SHOT #${shotIdx + 1} - ${shotId}) ===
 ⚡ [BEAT 1 @ 0.0s - Establishing Keyframe]:
 ${beat1}
 
@@ -403,7 +403,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 Stage Production Studio Compiler
               </h3>
               <p className="text-xs text-zinc-400">
-                Generate individual TXT prompt files for Seedance 2.0 or export multi-shot scripts into local folders.
+                Generate individual TXT prompt files or export multi-shot production scripts into local folders.
               </p>
             </div>
           </div>

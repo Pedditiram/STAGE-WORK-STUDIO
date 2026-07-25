@@ -734,7 +734,7 @@ export const SEEDANCE_SLOTS = [
     icon: "Clock",
     description: "Shot length duration & extracted character image references (Image 1 to Image 9).",
     tipTitle: "Shot Duration & 9 Image Reference Bindings",
-    tip: "Specify shot duration (e.g., 5s, 10s) and binding tags for up to 9 character/scene image inputs (Image_1: @LeadHero, Image_2: @CoArtist, etc.) for SeeDance 2.0 multi-image conditioning.",
+    tip: "Specify shot duration (e.g., 5s, 10s) and binding tags for up to 9 character/scene image inputs (Image_1: @LeadHero, Image_2: @CoArtist, etc.) for multi-image conditioning.",
     presets: [
       "Duration: 5s | Image_1: @LeadHero_Rama | Image_2: @Princess_Sita | Image_3: @Lakshmana | Image_4: @RoyalPalace_Ayodhya | Image_5: @DivineBow_Pinaka",
       "Duration: 4s | Image_1: @LeadSinger_Aria | Image_2: @Guitarist_Leo | Image_3: @ConcertStage_Neon | Image_4: @Cybervisor_Prop",

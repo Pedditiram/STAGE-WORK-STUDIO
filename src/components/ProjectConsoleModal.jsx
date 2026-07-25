@@ -76,8 +76,8 @@ export default function ProjectConsoleModal({
       {
         id: 'proj_default',
         title: currentProjectTitle || 'STAGE PRODUCTION STUDIO',
-        description: 'Primary stage production master project for SeeDance 2.0 & SeeDream 5.0',
-        targetModel: targetModel || 'Seedance 2.0',
+        description: 'Primary stage production master project',
+        targetModel: targetModel || 'SPS Direct Cinema',
         aspectRatio: aspectRatio || '2.39:1 Anamorphic',
         roomId: roomId || 'SPS-CLOUD-8821',
         lastModified: new Date().toLocaleDateString(),
@@ -869,12 +869,12 @@ export default function ProjectConsoleModal({
                       onChange={(e) => setNewModel(e.target.value)}
                       className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white font-mono focus:outline-none"
                     >
-                      <option value="Seedance 2.0">Seedance 2.0 (Direct Cinema Prompting)</option>
-                      <option value="Sora 2">Sora 2 (High Fidelity Dynamic Physics)</option>
-                      <option value="Runway Gen-3">Runway Gen-3 Alpha (Camera Motion Control)</option>
-                      <option value="Kling 1.5">Kling 1.5 Pro (Realistic Asian/Global Faces)</option>
-                      <option value="Luma Dream Machine">Luma Dream Machine (Smooth Camera Rotations)</option>
-                      <option value="BytePlus Seedream 5.0">BytePlus Seedream 5.0 (2K Keyframe Generation)</option>
+                      <option value="SPS Direct Cinema">SPS Direct Cinema (Stage Production Studio)</option>
+                      <option value="High Fidelity Physics">High Fidelity Dynamic Physics Engine</option>
+                      <option value="Camera Motion Control">Camera Motion Control Engine</option>
+                      <option value="Ultra Photoreal">Ultra Photoreal Global Cinema Engine</option>
+                      <option value="Dynamic Rotations">Smooth Camera Motion Engine</option>
+                      <option value="Keyframe 2K">2K High-Res Keyframe Generation Engine</option>
                     </select>
                   </div>
 
