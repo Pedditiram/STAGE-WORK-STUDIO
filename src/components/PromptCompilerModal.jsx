@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
-import { X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, Cpu, Image as ImageIcon, Disc, Film } from 'lucide-react';
+import { 
+  X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid
+} from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
-  const [formatMode, setFormatMode] = useState('engine_optimized');
+  const [formatMode, setFormatMode] = useState('seedance_tagged'); // Default to SPS Standard Tagged
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'single'
   const [copied, setCopied] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
 
   if (!isOpen) return null;
 
@@ -90,7 +96,6 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     return parts.join(' ');
   };
 
-  // Single shot SeeDream 5.0 compilation
   const compileSeeDreamFormat = (shot) => {
     const tags = ['masterpiece epic visual illustration', 'ultra-detailed 8k photorealistic render'];
     if (shot.shotComposition) tags.push(`cinematic ${shot.shotComposition.toLowerCase()}`);
@@ -107,7 +112,6 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     return tags.join(', ');
   };
 
-  // Beat-by-Beat Multi-Keyframe SeeDream 5.0 Deconstruction Engine
   const compileSeeDreamBeatBreakdown = (shot, shotIdx) => {
     const shotId = shot.sceneShotId || `SC01_SH${shotIdx + 1 < 10 ? '0' + (shotIdx + 1) : shotIdx + 1}`;
     const artist = (shot.characterIdAssetRef || '@LeadArtist').replace(/\[CharID:\s*/, '').replace(/\]/, '');
@@ -134,7 +138,6 @@ ${beat2}
 ${beat3}`;
   };
 
-  // NEW: FIRST FRAME & LAST FRAME KEYFRAME INTERPOLATION COMPILER
   const compileFirstLastFrameFormat = (shot, shotIdx) => {
     const shotId = shot.sceneShotId || `SC01_SH${shotIdx + 1 < 10 ? '0' + (shotIdx + 1) : shotIdx + 1}`;
     const artist = (shot.characterIdAssetRef || '@LeadArtist').replace(/\[CharID:\s*/, '').replace(/\]/, '');
@@ -175,8 +178,24 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     return compileTaggedFormat(shot);
   };
 
-  let compiledOutput = '';
+  const getShotPromptText = (shot, idx) => {
+    if (formatMode === 'engine_optimized') return compileEngineSpecific(shot);
+    if (formatMode === 'first_last_frame') return compileFirstLastFrameFormat(shot, idx);
+    if (formatMode === 'seedream_beat_breakdown') return compileSeeDreamBeatBreakdown(shot, idx);
+    if (formatMode === 'seedream_image') return compileSeeDreamFormat(shot);
+    if (formatMode === 'natural_language') return compileSoraFormat(shot);
+    if (formatMode === 'json') return JSON.stringify(shot, null, 2);
+    return compileTaggedFormat(shot);
+  };
 
+  const getShotFilename = (shot, idx) => {
+    const rawId = shot.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
+    const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
+    return `${cleanId}.${ext}`;
+  };
+
+  let compiledOutput = '';
   if (formatMode === 'engine_optimized') {
     compiledOutput = shots.map((shot, idx) => 
       `=== OPTIMIZED STAGE PRODUCTION PROMPT (SHOT #${idx + 1} - ${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileEngineSpecific(shot)}`
@@ -203,29 +222,82 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
     compiledOutput = `${headers}\n${rows}`;
   }
 
-  const handleCopy = () => {
+  const handleCopyAll = () => {
     navigator.clipboard.writeText(compiledOutput);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = () => {
-    const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
-    const blob = new Blob([compiledOutput], { type: 'text/plain;charset=utf-8' });
+  const handleCopySingle = (text, idx) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(idx);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const downloadSingleTxtFile = (filename, content) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `stage_production_studio_prompts.${ext}`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Modern Native Folder Access API + Direct File Downloader
+  const handleExportAllIndividualFiles = async () => {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await window.showDirectoryPicker({
+          mode: 'readwrite',
+          startIn: 'downloads'
+        });
+        
+        let count = 0;
+        for (let i = 0; i < shots.length; i++) {
+          const shot = shots[i];
+          const filename = getShotFilename(shot, i);
+          const content = getShotPromptText(shot, i);
+          const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(content);
+          await writable.close();
+          count++;
+        }
+
+        setExportSuccessMsg(`🟢 Successfully saved ${count} individual .txt prompt files directly to selected local folder!`);
+        setTimeout(() => setExportSuccessMsg(null), 4000);
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // User cancelled directory picker
+      }
+    }
+
+    // Fallback: Download each prompt file sequentially
+    shots.forEach((shot, i) => {
+      setTimeout(() => {
+        const filename = getShotFilename(shot, i);
+        const content = getShotPromptText(shot, i);
+        downloadSingleTxtFile(filename, content);
+      }, i * 350);
+    });
+
+    setExportSuccessMsg(`🟢 Exporting ${shots.length} individual TXT files to local computer downloads!`);
+    setTimeout(() => setExportSuccessMsg(null), 4000);
+  };
+
+  const handleDownloadFullDoc = () => {
+    const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
+    downloadSingleTxtFile(`stage_production_studio_all_prompts.${ext}`, compiledOutput);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="p-5 border-b border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
+        <div className="p-4 px-5 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-amber-500/20 border border-cyan-500/30 text-amber-400">
               <Sparkles className="w-5 h-5" />
@@ -235,7 +307,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 Stage Production Studio Compiler
               </h3>
               <p className="text-xs text-zinc-400">
-                Export shot sheets in standard SPS tagged format, First/Last frame keyframes, beat breakdowns, JSON, or CSV.
+                Generate individual TXT prompt files for Seedance 2.0 or export multi-shot scripts.
               </p>
             </div>
           </div>
@@ -249,9 +321,30 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           </button>
         </div>
 
+        {/* Success Toast Notification */}
+        {exportSuccessMsg && (
+          <div className="bg-emerald-950/90 border-b border-emerald-500/40 p-2.5 px-5 text-emerald-200 text-xs font-mono flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{exportSuccessMsg}</span>
+          </div>
+        )}
+
         {/* Format Selector Tabs */}
-        <div className="p-4 bg-zinc-900/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+        <div className="p-3 px-4 bg-zinc-900/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setFormatMode('seedance_tagged')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
+                formatMode === 'seedance_tagged'
+                  ? 'bg-cyan-500 text-slate-950 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                  : 'text-zinc-300 hover:text-white'
+              }`}
+            >
+              <Code className="w-3.5 h-3.5" />
+              SPS Standard Tagged
+            </button>
+
             <button
               type="button"
               onClick={() => setFormatMode('engine_optimized')}
@@ -262,10 +355,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               }`}
             >
               <Cpu className="w-3.5 h-3.5" />
-              ⚡ Optimized Target Syntax
+              ⚡ Target Syntax
             </button>
 
-            {/* NEW: FIRST FRAME & LAST FRAME INTERPOLATION TAB */}
             <button
               type="button"
               onClick={() => setFormatMode('first_last_frame')}
@@ -276,10 +368,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               }`}
             >
               <Film className="w-3.5 h-3.5 text-cyan-300" />
-              🎬 First & Last Frame Prompts
+              🎬 First & Last Frame
             </button>
 
-            {/* BEAT-BY-BEAT MULTI-KEYFRAME DECONSTRUCTION TAB */}
             <button
               type="button"
               onClick={() => setFormatMode('seedream_beat_breakdown')}
@@ -291,33 +382,6 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             >
               <Disc className="w-3.5 h-3.5 text-amber-950 fill-zinc-950" />
               🥁 Beat Breakdown
-            </button>
-
-            {/* SINGLE IMAGE GENERATION TAB */}
-            <button
-              type="button"
-              onClick={() => setFormatMode('seedream_image')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                formatMode === 'seedream_image'
-                  ? 'bg-purple-600 text-white font-bold shadow'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-amber-300" />
-              🖼️ Image Generation
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFormatMode('seedance_tagged')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                formatMode === 'seedance_tagged'
-                  ? 'bg-cyan-600 text-white font-bold shadow'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              SPS Standard Tagged
             </button>
 
             <button
@@ -358,32 +422,146 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
             </button>
           </div>
 
+          {/* View Mode & Batch Export Actions */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 flex items-center gap-1.5 transition-colors"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
-              {copied ? 'Copied!' : 'Copy Prompt Text'}
-            </button>
+            <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
+                  viewMode === 'cards' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+                title="View Individual Shot Cards with Local TXT Generator"
+              >
+                <Grid className="w-3.5 h-3.5" />
+                <span>Cards View</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('single')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
+                  viewMode === 'single' ? 'bg-zinc-800 text-cyan-300 font-bold' : 'text-zinc-400 hover:text-white'
+                }`}
+                title="View Full Single Document Text"
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                <span>Full Script</span>
+              </button>
+            </div>
 
             <button
               type="button"
-              onClick={handleDownload}
-              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-medium flex items-center gap-1.5 shadow transition-all"
+              onClick={handleExportAllIndividualFiles}
+              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer"
+              title="Save all prompts as individual TXT files into a local folder on your computer"
             >
-              <Download className="w-4 h-4" />
-              Download File
+              <FolderDown className="w-4 h-4 text-emerald-200" />
+              <span>⚡ Save All TXT Files to Folder</span>
             </button>
           </div>
         </div>
 
-        {/* Modal Output Codebox */}
+        {/* Modal Output Body */}
         <div className="p-5 flex-1 overflow-y-auto bg-zinc-950">
-          <pre className="w-full h-full p-4 rounded-xl bg-zinc-900 border border-zinc-800/80 font-mono text-xs text-amber-200/90 leading-relaxed shadow-inner overflow-x-auto whitespace-pre-wrap">
-            {compiledOutput}
-          </pre>
+          {viewMode === 'cards' ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pb-1 border-b border-zinc-800/80">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
+                </span>
+                <span className="text-zinc-500 hidden sm:inline">
+                  Each box below has a dedicated local TXT generator button
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {shots.map((shot, idx) => {
+                  const filename = getShotFilename(shot, idx);
+                  const promptText = getShotPromptText(shot, idx);
+                  const isCopiedSingle = copiedIndex === idx;
+
+                  return (
+                    <div 
+                      key={idx}
+                      className="bg-zinc-900/90 border border-zinc-800 hover:border-cyan-500/40 rounded-xl p-4 shadow-lg transition-all space-y-3"
+                    >
+                      {/* Box Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/80 p-2.5 px-3 rounded-lg border border-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1">
+                            <FileCode className="w-3.5 h-3.5" />
+                            {filename}
+                          </span>
+                          <span className="text-zinc-300 font-bold font-mono text-xs">
+                            Shot #{idx + 1}
+                          </span>
+                          <span className="text-zinc-400 text-xs truncate max-w-xs font-sans">
+                            {shot.shotComposition || 'Medium Shot'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopySingle(promptText, idx)}
+                            className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-mono flex items-center gap-1 transition-all border border-zinc-700"
+                          >
+                            {isCopiedSingle ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                            <span>{isCopiedSingle ? 'Copied!' : 'Copy'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => downloadSingleTxtFile(filename, promptText)}
+                            className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow border border-cyan-400/40 cursor-pointer"
+                            title={`Generate & save ${filename} locally on your computer`}
+                          >
+                            <Download className="w-3.5 h-3.5 text-cyan-100" />
+                            <span>⚡ Generate {filename}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Prompt Content Box */}
+                      <pre className="w-full p-3 rounded-lg bg-zinc-950 border border-zinc-800/90 font-mono text-xs text-amber-200/90 leading-relaxed overflow-x-auto whitespace-pre-wrap select-all">
+                        {promptText}
+                      </pre>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col space-y-3">
+              <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
+                <span>Single Document Script View ({shots.length} Shots)</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyAll}
+                    className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700 flex items-center gap-1.5 transition-colors"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                    {copied ? 'Copied All!' : 'Copy All Text'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadFullDoc}
+                    className="px-3 py-1 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-medium flex items-center gap-1.5 shadow transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download Full Script
+                  </button>
+                </div>
+              </div>
+
+              <pre className="w-full flex-1 p-4 rounded-xl bg-zinc-900 border border-zinc-800/80 font-mono text-xs text-amber-200/90 leading-relaxed shadow-inner overflow-x-auto whitespace-pre-wrap">
+                {compiledOutput}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     </div>
