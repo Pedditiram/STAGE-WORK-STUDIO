@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Folder, FolderPlus, HardDrive, Info, AlertTriangle, PackageCheck
 } from 'lucide-react';
 
 export default function PromptCompilerModal({ isOpen, onClose, shots, activeTargetModel = "Seedance 2.0" }) {
@@ -29,7 +29,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     }
   };
 
-  // Option 1: Native Folder Picker Dialog to grant browser write access to exact Desktop folder
+  // Synchronous User Gesture Native Folder Picker
   const handleSelectTargetFolder = async () => {
     if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       try {
@@ -292,7 +292,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
     let activeHandle = folderHandle;
 
-    // If folder handle is not granted yet, automatically open directory picker
+    // Trigger directory picker IMMEDIATELY inside user click gesture if handle is null
     if (!activeHandle && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       activeHandle = await handleSelectTargetFolder();
     }
@@ -303,12 +303,12 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         const writable = await fileHandle.createWritable();
         await writable.write(content);
         await writable.close();
-        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${activeHandle.name}" on your disk!`);
+        setExportSuccessMsg(`🟢 Direct Saved "${filename}" into folder "${activeHandle.name}" on disk!`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       } catch (err) {
         console.error("Direct folder save error:", err);
-        setExportSuccessMsg(`❌ Could not save file into folder: ${err.message}`);
+        setExportSuccessMsg(`❌ Folder save error: ${err.message}`);
         setTimeout(() => setExportSuccessMsg(null), 4000);
         return;
       }
@@ -322,6 +322,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
   const handleExportAllIndividualFiles = async () => {
     let targetDir = folderHandle;
 
+    // Trigger directory picker IMMEDIATELY inside user click gesture if handle is null
     if (!targetDir && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
       targetDir = await handleSelectTargetFolder();
     }
@@ -407,24 +408,36 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           </div>
         )}
 
-        {/* Browser Security Guidance Info Bar */}
-        {!folderHandle && (
-          <div className="bg-amber-950/80 border-b border-amber-500/50 p-2.5 px-5 text-amber-200 text-xs font-mono flex flex-wrap items-center justify-between gap-2 shadow-inner">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
-              <span>
-                To save files directly into your folder <strong className="text-white">"jai sri ram prompts"</strong> on Desktop, click <strong>"📁 Select Desktop Folder Now"</strong> to grant browser permission once!
-              </span>
+        {/* STEP-BY-STEP STEPPER INSTRUCTION BANNER */}
+        <div className="bg-amber-950/90 border-b border-amber-500/50 p-3 px-5 text-amber-100 text-xs font-mono flex flex-wrap items-center justify-between gap-3 shadow-inner">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300">
+              <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
             </div>
-            <button
-              type="button"
-              onClick={handleSelectTargetFolder}
-              className="px-3 py-1 rounded bg-amber-400 hover:bg-amber-300 text-zinc-950 font-extrabold text-xs shrink-0 cursor-pointer shadow-lg transition-all"
-            >
-              📁 Select Desktop Folder Now
-            </button>
+            <div>
+              <div className="font-bold text-white flex items-center gap-2 text-xs">
+                <span>📁 DIRECT FOLDER SAVE INSTRUCTIONS:</span>
+                <span className="text-amber-300 font-extrabold underline">STEP 1 OF 2</span>
+              </div>
+              <p className="text-[11px] text-amber-200/90">
+                Click <strong className="text-white underline">"STEP 1: Pick 'jai sri ram prompts' Folder"</strong> below to select your Desktop folder once!
+              </p>
+            </div>
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={handleSelectTargetFolder}
+            className={`px-4 py-1.5 rounded-xl font-mono text-xs font-black flex items-center gap-2 shadow-xl border cursor-pointer transition-all ${
+              folderHandle
+                ? 'bg-emerald-500 text-zinc-950 border-emerald-300 hover:bg-emerald-400 ring-2 ring-emerald-400/50'
+                : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 border-amber-300 animate-pulse'
+            }`}
+          >
+            <FolderPlus className="w-4 h-4 text-zinc-950" />
+            <span>{folderName ? `🟢 Folder Locked: ${folderName}` : '👉 STEP 1: Pick "jai sri ram prompts" Folder'}</span>
+          </button>
+        </div>
 
         {/* Format Selector Tabs */}
         <div className="p-3 px-4 bg-zinc-900/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
@@ -548,7 +561,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 </button>
               </div>
 
-              {/* OPTION 1: INTERACTIVE TARGET FOLDER PICKER BUTTON */}
+              {/* STEP 1: INTERACTIVE TARGET FOLDER PICKER BUTTON */}
               <button
                 type="button"
                 onClick={handleSelectTargetFolder}
@@ -560,10 +573,10 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 title="Click to visually pick your desktop target folder"
               >
                 <FolderPlus className="w-4 h-4 text-zinc-950" />
-                <span>{folderName ? `🟢 Locked: ${folderName}` : '📁 Select Save Folder'}</span>
+                <span>{folderName ? `🟢 Locked: ${folderName}` : '👉 STEP 1: Pick Folder'}</span>
               </button>
 
-              {/* OPTION 2: CUSTOM FOLDER PATH / SUBFOLDER INPUT FIELD */}
+              {/* FOLDER PATH DISPLAY / INPUT FIELD */}
               <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 focus-within:border-cyan-500 transition-all">
                 <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap hidden lg:inline">Path:</span>
@@ -578,7 +591,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               </div>
             </div>
 
-            {/* BATCH EXPORT BUTTON */}
+            {/* STEP 2: BATCH EXPORT BUTTON */}
             <button
               type="button"
               onClick={handleExportAllIndividualFiles}
@@ -586,7 +599,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               title={`Save all ${shots.length} prompts as individual TXT files into target location`}
             >
               <FolderDown className="w-4 h-4 text-emerald-200" />
-              <span>⚡ Save All TXT Files to Folder</span>
+              <span>⚡ STEP 2: Save All TXT Files to Folder</span>
             </button>
           </div>
         </div>
@@ -601,7 +614,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   Showing {shots.length} Individual Shot Prompts ({formatMode.toUpperCase()} Format)
                 </span>
                 <span className="text-amber-300/90 font-mono text-[11px] truncate max-w-lg hidden md:inline">
-                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: ${folderName}]` : (customFolderPath || 'Downloads')}</span>
+                  Target Save Location: <span className="text-white font-bold">{folderName ? `[LOCKED: Desktop/${folderName}]` : (customFolderPath || 'Downloads')}</span>
                 </span>
               </div>
 
@@ -610,7 +623,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                   const filename = getShotFilename(shot, idx);
                   const promptText = getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
-                  const displayPath = folderName ? `${folderName}/${filename}` : `${customFolderPath}/${filename}`;
+                  const displayPath = folderName ? `Desktop/${folderName}/${filename}` : `${customFolderPath}/${filename}`;
 
                   return (
                     <div 
