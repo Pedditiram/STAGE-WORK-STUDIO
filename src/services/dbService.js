@@ -359,12 +359,22 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
   const presenceId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
 
   const payload = {
+    presenceId,
     userEmail: cleanEmail,
     userName: userName || cleanEmail.split('@')[0],
     projectTitle: projectTitle || 'STAGE PRODUCTION STUDIO',
     activeShotId: shotId,
     timestamp: Date.now()
   };
+
+  // Push to Native Vercel Serverless Sync Engine (/api/sync)
+  try {
+    await fetch(`${NATIVE_SYNC_URL}?type=presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {}
 
   try {
     const res = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
@@ -390,14 +400,34 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
   }
 }
 
-// 8. Subscribe to Active Editing Slots in Real Time to detect conflicts
+// 8. Subscribe to Active Editing Slots in Real Time (3.5s fast polling for conflict detection)
 export function subscribeToActiveEditingSlots(currentEmail, callback) {
-  const interval = setInterval(async () => {
+  const checkPresence = async () => {
     if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      const res = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
+      // 1. Try Native Vercel Serverless Sync Engine
+      const res = await fetch(`${NATIVE_SYNC_URL}?type=presence&t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
-        const data = await res.json();
+        const resData = await res.json();
+        const activeUsersMap = [];
+        const now = Date.now();
+        if (resData && resData.activeSlots) {
+          Object.values(resData.activeSlots).forEach((item) => {
+            if (item && (now - (item.timestamp || 0)) < 120000) {
+              if (item.userEmail !== (currentEmail || '').trim().toLowerCase()) {
+                activeUsersMap.push(item);
+              }
+            }
+          });
+          if (typeof callback === 'function') callback(activeUsersMap);
+          return;
+        }
+      }
+
+      // 2. Fallback to RESTful Presence Blob
+      const resBlob = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
+      if (resBlob.ok) {
+        const data = await resBlob.json();
         const activeUsersMap = [];
         const now = Date.now();
         if (data && data.activeSlots) {
@@ -412,7 +442,10 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
         if (typeof callback === 'function') callback(activeUsersMap);
       }
     } catch (e) {}
-  }, 20000);
+  };
+
+  checkPresence();
+  const interval = setInterval(checkPresence, 3500);
 
   return () => clearInterval(interval);
 }

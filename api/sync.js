@@ -4,11 +4,13 @@
 let memoryRooms = {};
 let memoryProjects = [];
 let memoryCollaborators = [];
+let memoryPresence = {};
 
 const RESTFUL_ROOM_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556";
 const RESTFUL_PROJECTS_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
 const JSONBLOB_ROOM_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
+const JSONBLOB_PRESENCE_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -56,6 +58,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, users: memoryCollaborators });
     }
 
+    if (type === 'presence') {
+      const now = Date.now();
+      const activeSlots = {};
+      Object.entries(memoryPresence).forEach(([key, val]) => {
+        if (val && (now - (val.timestamp || 0)) < 120000) {
+          activeSlots[key] = val;
+        }
+      });
+      return res.status(200).json({ success: true, activeSlots });
+    }
+
     // Room Sync Request
     if (memoryRooms[roomId]) {
       return res.status(200).json({ success: true, data: memoryRooms[roomId] });
@@ -95,7 +108,6 @@ export default async function handler(req, res) {
       const projs = body.projects || body;
       if (Array.isArray(projs)) {
         memoryProjects = projs;
-        // Asynchronously update persistence endpoints
         fetch(RESTFUL_PROJECTS_URL, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -119,21 +131,63 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    // Room update
+    if (type === 'presence') {
+      const presenceId = body.presenceId || (body.userEmail ? body.userEmail.replace(/[^a-zA-Z0-9]/g, '_') : 'anon');
+      memoryPresence[presenceId] = {
+        ...body,
+        timestamp: Date.now()
+      };
+      return res.status(200).json({ success: true });
+    }
+
+    // Room update with smart shot-level merging for multi-user safety
     const payload = body.data || body;
     if (payload) {
-      memoryRooms[roomId] = payload;
+      const existingRoom = memoryRooms[roomId] || {};
+      
+      // Perform shot-level merge if incoming payload has shots and existing room has shots
+      let finalShots = payload.shots;
+      if (Array.isArray(payload.shots) && Array.isArray(existingRoom.shots) && existingRoom.shots.length > 0) {
+        const shotMap = new Map();
+        existingRoom.shots.forEach(s => {
+          if (s && s.sceneShotId) shotMap.set(s.sceneShotId, s);
+        });
+
+        // Merge incoming shots into existing map
+        payload.shots.forEach(s => {
+          if (s && s.sceneShotId) {
+            const existingShot = shotMap.get(s.sceneShotId);
+            if (existingShot) {
+              shotMap.set(s.sceneShotId, { ...existingShot, ...s });
+            } else {
+              shotMap.set(s.sceneShotId, s);
+            }
+          }
+        });
+
+        finalShots = Array.from(shotMap.values());
+      }
+
+      const mergedPayload = {
+        ...existingRoom,
+        ...payload,
+        shots: finalShots || payload.shots,
+        lastUpdated: new Date().toISOString()
+      };
+
+      memoryRooms[roomId] = mergedPayload;
+
       // Asynchronously update persistence endpoints
       fetch(RESTFUL_ROOM_URL, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: "Stage Production Studio Room", data: payload })
+        body: JSON.stringify({ name: "Stage Production Studio Room", data: mergedPayload })
       }).catch(() => {});
 
       fetch(JSONBLOB_ROOM_URL, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(mergedPayload)
       }).catch(() => {});
     }
 
