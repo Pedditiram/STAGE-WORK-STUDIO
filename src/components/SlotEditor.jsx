@@ -12,6 +12,7 @@ export default function SlotEditor({
   onCloseForcePopup,
   onOpenPopup,
   onNavigateNextSlot,
+  onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot
 }) {
@@ -406,10 +407,9 @@ export default function SlotEditor({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onNavigatePrevSlot) onNavigatePrevSlot(slotConfig.key);
+                  handlePrevSlot();
                 }}
-                disabled={!onNavigatePrevSlot}
-                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs disabled:opacity-40 cursor-pointer active:scale-95"
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                 title="Previous Slot (Cmd + Left Arrow)"
               >
                 <ChevronLeft className="w-4 h-4 text-cyan-400" />
@@ -420,17 +420,8 @@ export default function SlotEditor({
               {/* Direct Slot Jump Dropdown Pill */}
               <div className="relative flex items-center">
                 <select
-                  value={slotConfig.key}
-                  onChange={(e) => {
-                    const selectedKey = e.target.value;
-                    if (selectedKey !== slotConfig.key) {
-                      if (typeof onJumpToSlot === 'function') {
-                        onJumpToSlot(selectedKey);
-                      } else if (typeof onNavigateNextSlot === 'function') {
-                        onNavigateNextSlot(selectedKey);
-                      }
-                    }
-                  }}
+                  value={activeConfig.key}
+                  onChange={(e) => handleDirectJump(e.target.value)}
                   className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-3 py-1.5 pr-7 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-center"
                   title="Directly jump to any slot number in matrix"
                 >
@@ -448,10 +439,9 @@ export default function SlotEditor({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onNavigateNextSlot) onNavigateNextSlot(slotConfig.key);
+                  handleNextSlot();
                 }}
-                disabled={!onNavigateNextSlot}
-                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs disabled:opacity-40 cursor-pointer active:scale-95"
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                 title="Next Slot (Cmd + Right Arrow)"
               >
                 <span>Next</span>
