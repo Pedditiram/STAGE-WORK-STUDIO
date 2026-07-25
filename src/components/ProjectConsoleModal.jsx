@@ -204,7 +204,14 @@ export default function ProjectConsoleModal({
               });
             }
 
-            const merged = Array.from(map.values());
+            let merged = Array.from(map.values());
+            if (currentProjectTitle) {
+              merged.sort((a, b) => {
+                if (a.title === currentProjectTitle) return -1;
+                if (b.title === currentProjectTitle) return 1;
+                return 0;
+              });
+            }
             return sanitizeLibraryTitles(merged);
           });
         }

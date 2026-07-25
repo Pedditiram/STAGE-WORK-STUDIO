@@ -731,6 +731,37 @@ export default function App() {
     setProjectTitle(titleToApply);
     setActiveShotIndex(0);
     setActiveView("canvas");
+
+    if (typeof window !== 'undefined') {
+      try {
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        if (!Array.isArray(library)) library = [];
+
+        const existingIdx = library.findIndex(p => p.title === titleToApply);
+        const newProj = {
+          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+          title: titleToApply,
+          description: `Cinema Production Studio Project with ${finalShots.length} shots`,
+          targetModel: targetModel || 'SPS Direct Cinema 2.0',
+          aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+          roomId: roomId || 'SPS-CLOUD-8821',
+          lastModified: new Date().toLocaleDateString(),
+          shots: finalShots
+        };
+
+        if (existingIdx !== -1) {
+          library[existingIdx] = newProj;
+        } else {
+          library.unshift(newProj);
+        }
+
+        localStorage.setItem('sps_project_library', JSON.stringify(library));
+        window.dispatchEvent(new Event('sps_projects_updated'));
+        syncProjectLibraryToCloud(library);
+      } catch (e) {}
+    }
+
     syncToCloud({ shots: finalShots, projectTitle: titleToApply });
   };
 
