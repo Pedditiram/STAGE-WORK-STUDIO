@@ -151,12 +151,12 @@ export default function ProjectConsoleModal({
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
 
-  // Helper function to cleanse any duplicate project titles in library
+  // Helper function to cleanse any duplicate project titles in library & purge dummy app-name projects
   const sanitizeLibraryTitles = (library) => {
     if (!Array.isArray(library)) return [];
     const seen = new Set();
-    return library.map(p => {
-      if (!p || !p.title) return p;
+    const filtered = library.filter(p => p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO');
+    return filtered.map(p => {
       let clean = p.title.trim().toUpperCase();
       if (seen.has(clean)) {
         let count = 1;

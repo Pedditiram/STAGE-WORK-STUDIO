@@ -219,10 +219,12 @@ export default function App() {
   // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount
   useEffect(() => {
     fetchProjectLibraryFromCloud().then(projs => {
-      let updatedProjs = Array.isArray(projs) ? [...projs] : [];
+      let updatedProjs = Array.isArray(projs) 
+        ? projs.filter(p => p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') 
+        : [];
       
       // Self-healing guard: ensure active loaded project is NEVER missing from Projects Library
-      const activeTitle = projectTitle || 'STAGE PRODUCTION STUDIO';
+      const activeTitle = (projectTitle && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO') ? projectTitle : '001';
       const exists = updatedProjs.some(p => p.title === activeTitle);
       if (!exists && shots && shots.length > 0) {
         updatedProjs.unshift({

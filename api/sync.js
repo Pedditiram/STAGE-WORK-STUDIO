@@ -62,10 +62,11 @@ export default async function handler(req, res) {
 
   const { type = 'room', roomId = 'SPS-CLOUD-8821' } = req.query || {};
 
-  // GET Request: Return latest data
+  // GET Request: Return latest data (Filter out STAGE PRODUCTION STUDIO dummy project)
   if (req.method === 'GET') {
     if (type === 'projects') {
-      return res.status(200).json({ success: true, projects: memoryProjects });
+      const cleanProjs = memoryProjects.filter(p => p && p.title && p.title !== 'STAGE PRODUCTION STUDIO');
+      return res.status(200).json({ success: true, projects: cleanProjs });
     }
 
     if (type === 'collaborators') {
@@ -111,13 +112,13 @@ export default async function handler(req, res) {
       const incomingProjs = body.projects || body;
       if (Array.isArray(incomingProjs)) {
         const projMap = new Map();
-        // Keep existing memory projects
+        // Keep existing memory projects (excluding STAGE PRODUCTION STUDIO)
         memoryProjects.forEach(p => {
-          if (p && p.title) projMap.set(p.title, p);
+          if (p && p.title && p.title !== 'STAGE PRODUCTION STUDIO') projMap.set(p.title, p);
         });
-        // Merge incoming projects
+        // Merge incoming projects (excluding STAGE PRODUCTION STUDIO)
         incomingProjs.forEach(p => {
-          if (p && p.title) {
+          if (p && p.title && p.title !== 'STAGE PRODUCTION STUDIO') {
             const existing = projMap.get(p.title);
             if (existing) {
               projMap.set(p.title, { ...existing, ...p });
