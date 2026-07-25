@@ -112,6 +112,13 @@ export default function ProjectConsoleModal({
     const cleanName = newName.trim().toUpperCase();
     if (!cleanName) return;
 
+    // Check if another project already has this exact title
+    const isDuplicate = projectLibrary.some(p => p.id !== projId && p.title.trim().toUpperCase() === cleanName);
+    if (isDuplicate) {
+      alert(`⚠️ DUPLICATE PROJECT TITLE:\nA project named "${cleanName}" already exists in the studio library. Projects cannot have identical names. Please enter a unique title.`);
+      return;
+    }
+
     setProjectLibrary(prev => {
       const updated = prev.map(p => {
         if (p.id === projId) {
@@ -142,6 +149,27 @@ export default function ProjectConsoleModal({
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
 
+  // Helper function to cleanse any duplicate project titles in library
+  const sanitizeLibraryTitles = (library) => {
+    if (!Array.isArray(library)) return [];
+    const seen = new Set();
+    return library.map(p => {
+      if (!p || !p.title) return p;
+      let clean = p.title.trim().toUpperCase();
+      if (seen.has(clean)) {
+        let count = 1;
+        let altTitle = `${clean} (COPY)`;
+        while (seen.has(altTitle)) {
+          count++;
+          altTitle = `${clean} (COPY ${count})`;
+        }
+        clean = altTitle;
+      }
+      seen.add(clean);
+      return { ...p, title: clean };
+    });
+  };
+
   // Sync tab if initialTab updates on open & fetch latest cloud projects
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -150,7 +178,7 @@ export default function ProjectConsoleModal({
     if (isOpen) {
       fetchProjectLibraryFromCloud().then(cloudProjs => {
         if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
-          setProjectLibrary(cloudProjs);
+          setProjectLibrary(sanitizeLibraryTitles(cloudProjs));
         }
       }).catch(() => {});
     }
@@ -220,6 +248,13 @@ export default function ProjectConsoleModal({
 
     const projId = `proj_${Date.now()}`;
     const cleanTitle = newTitle.trim().toUpperCase();
+
+    // Check if a project with this exact title already exists
+    const isDuplicate = projectLibrary.some(p => p.title.trim().toUpperCase() === cleanTitle);
+    if (isDuplicate) {
+      alert(`⚠️ DUPLICATE PROJECT TITLE:\nA project named "${cleanTitle}" already exists. Projects cannot have identical names. Please choose a unique name.`);
+      return;
+    }
 
     let initialShots = [...shots];
     if (newTemplate === 'epic_war') {
@@ -316,7 +351,12 @@ export default function ProjectConsoleModal({
   // 4. DUPLICATE PROJECT
   const handleDuplicateProject = (proj) => {
     const dupId = `proj_${Date.now()}`;
-    const dupTitle = `${proj.title} (COPY)`;
+    let copyCount = 1;
+    let dupTitle = `${proj.title} (COPY)`;
+    while (projectLibrary.some(p => p.title.trim().toUpperCase() === dupTitle.toUpperCase())) {
+      copyCount++;
+      dupTitle = `${proj.title} (COPY ${copyCount})`;
+    }
     const dupObj = {
       ...proj,
       id: dupId,
