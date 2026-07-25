@@ -12,6 +12,7 @@ import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
+import { syncProjectLibraryToCloud, subscribeToProjectLibraryUpdates } from './services/dbService';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
 import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward } from 'lucide-react';
 
@@ -220,7 +221,12 @@ export default function App() {
       }
     });
 
-    return () => unsubscribe();
+    const unsubLib = subscribeToProjectLibraryUpdates();
+
+    return () => {
+      unsubscribe();
+      if (typeof unsubLib === 'function') unsubLib();
+    };
   }, [roomId, projectTitle]);
 
   // -------------------------------------------------------------
@@ -349,7 +355,8 @@ export default function App() {
       localStorage.setItem('sps_current_shots', JSON.stringify(shots));
       localStorage.setItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
-      syncToCloud({ shots, projectGeneratedImages, projectTitle });
+      syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
+      syncProjectLibraryToCloud(library);
       
       setIsProjectSavedToast(true);
       setTimeout(() => setIsProjectSavedToast(false), 2500);

@@ -146,7 +146,29 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   }
 }
 
-// 5. Test Live Cloud Database Connection
+// 5. Subscribe to Real-Time Project Library Updates from Cloud
+export function subscribeToProjectLibraryUpdates(callback) {
+  initDatabase();
+  let unsubscribe = () => {};
+  if (db && typeof window !== 'undefined') {
+    try {
+      const libRef = doc(db, 'studio_config', 'project_library');
+      unsubscribe = onSnapshot(libRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && Array.isArray(data.projects)) {
+            localStorage.setItem('sps_project_library', JSON.stringify(data.projects));
+            if (callback) callback(data.projects);
+            window.dispatchEvent(new Event('sps_projects_updated'));
+          }
+        }
+      }, (err) => console.log("Project library snapshot fallback:", err.message));
+    } catch (e) {}
+  }
+  return unsubscribe;
+}
+
+// 6. Test Live Cloud Database Connection
 export async function testDatabaseConnection() {
   initDatabase();
   if (!db) {
