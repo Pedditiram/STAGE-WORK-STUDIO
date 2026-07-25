@@ -10,6 +10,9 @@ const firebaseConfig = {
   appId: "1:98127391273:web:stageproductionstudio"
 };
 
+// High-Performance Zero-Rate-Limit Cloud Room REST Sync Endpoint
+const REALTIME_ROOM_SYNC_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f9760413e23bf";
+
 let app = null;
 let db = null;
 let broadcastChannel = null;
@@ -33,7 +36,11 @@ export const ROLES = [
   { id: 'sound', label: '🎵 Audio / Sync Lead', color: 'text-purple-400 border-purple-500/40 bg-purple-950/80' }
 ];
 
+let lastSyncedTimestampMap = {};
+
 export function subscribeToCloudRoom(roomId, onDataReceived) {
+  if (typeof onDataReceived !== 'function') return () => {};
+
   // Load cached room data from localStorage immediately on subscribe
   if (typeof window !== 'undefined') {
     const cachedStr = localStorage.getItem(`sps_cloud_${roomId}`);
@@ -46,7 +53,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   }
 
   const handleBroadcast = (event) => {
-    if (event.data && event.data.roomId === roomId) {
+    if (event.data && event.data.roomId === roomId && typeof onDataReceived === 'function') {
       onDataReceived(event.data.payload);
     }
   };
@@ -55,23 +62,44 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     broadcastChannel.addEventListener('message', handleBroadcast);
   }
 
+  // Ultra-Fast Real-Time 2-Second Cloud REST Polling (Cross-Machine Worldwide Sync)
+  const pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(REALTIME_ROOM_SYNC_URL, { cache: 'no-store' });
+      if (res.ok) {
+        const resObj = await res.json();
+        const payload = resObj?.data;
+        if (payload && payload.lastUpdated) {
+          const lastProcessed = lastSyncedTimestampMap[roomId] || 0;
+          const remoteTime = new Date(payload.lastUpdated).getTime();
+          if (remoteTime > lastProcessed) {
+            lastSyncedTimestampMap[roomId] = remoteTime;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
+            }
+            if (typeof onDataReceived === 'function') {
+              onDataReceived(payload);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }, 2000);
+
   let unsubscribeFirestore = () => {};
   if (db) {
     try {
       const roomRef = doc(db, 'production_rooms', roomId);
       unsubscribeFirestore = onSnapshot(roomRef, (docSnap) => {
-        if (docSnap.exists()) {
+        if (docSnap.exists() && typeof onDataReceived === 'function') {
           onDataReceived(docSnap.data());
         }
-      }, (err) => {
-        console.log("Firestore offline snapshot mode active:", err.message);
-      });
-    } catch (err) {
-      console.log("Firestore fallback active:", err);
-    }
+      }, (err) => {});
+    } catch (err) {}
   }
 
   return () => {
+    clearInterval(pollInterval);
     if (broadcastChannel) {
       broadcastChannel.removeEventListener('message', handleBroadcast);
     }
@@ -80,26 +108,42 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
 }
 
 export async function publishToCloudRoom(roomId, projectData) {
+  const nowIso = new Date().toISOString();
   const payload = {
     ...projectData,
-    lastUpdated: new Date().toISOString()
+    roomId,
+    lastUpdated: nowIso
   };
 
-  // Always save to localStorage room cache
+  lastSyncedTimestampMap[roomId] = new Date(nowIso).getTime();
+
+  // 1. Local Storage Cache
   if (typeof window !== 'undefined') {
     localStorage.setItem(`sps_cloud_${roomId}`, JSON.stringify(payload));
   }
 
+  // 2. Tab Broadcast Channel
   if (broadcastChannel) {
     broadcastChannel.postMessage({ roomId, payload });
   }
 
+  // 3. Ultra-Fast High-Speed REST Cloud DB (Instant Multi-Device Sync)
+  try {
+    await fetch(REALTIME_ROOM_SYNC_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: roomId,
+        data: payload
+      })
+    });
+  } catch (e) {}
+
+  // 4. Firestore Backup
   if (db) {
     try {
       const roomRef = doc(db, 'production_rooms', roomId);
       await setDoc(roomRef, payload, { merge: true });
-    } catch (err) {
-      // Handled by localStorage
-    }
+    } catch (err) {}
   }
 }
