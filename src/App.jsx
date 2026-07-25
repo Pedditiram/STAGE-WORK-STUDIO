@@ -194,6 +194,7 @@ export default function App() {
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
   const isInitialMount = React.useRef(true);
+  const isReceivingCloudUpdate = React.useRef(false);
 
   // Auto-sync engine: Whenever shots, projectTitle, targetModel, or aspectRatio change, automatically sync to Cloud Database
   useEffect(() => {
@@ -206,6 +207,11 @@ export default function App() {
 
     if (isInitialMount.current) {
       isInitialMount.current = false;
+      return;
+    }
+
+    if (isReceivingCloudUpdate.current) {
+      isReceivingCloudUpdate.current = false;
       return;
     }
 
@@ -273,6 +279,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = subscribeToCloudRoom(roomId, (cloudData) => {
       if (cloudData) {
+        isReceivingCloudUpdate.current = true;
         if (cloudData.shots && Array.isArray(cloudData.shots)) setShots(cloudData.shots);
         if (cloudData.projectTitle) setProjectTitle(cloudData.projectTitle);
         if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
