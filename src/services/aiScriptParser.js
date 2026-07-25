@@ -166,7 +166,7 @@ Return ONLY valid JSON array without markdown formatting.`;
 function smartSegmentTextIntoShots(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
-  // 1. Check if structured by scene/shot markers (S01, EXT., INT., SHOT)
+  // Step 1. Check if structured by explicit scene/shot markers (S01, EXT., INT., SHOT)
   const structuredBlocks = scriptText
     .split(/\n(?=(?:S\d+|SC\.\d+|SC\d+_SH\d+|SHOT\s+\d+|ACT\s+[I|V|X]+|EXT\.|INT\.))/i)
     .map(b => b.trim())
@@ -174,30 +174,50 @@ function smartSegmentTextIntoShots(scriptText) {
 
   if (structuredBlocks.length > 1) return structuredBlocks;
 
-  // 2. Check double linebreaks
-  const paraBlocks = scriptText.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
-  if (paraBlocks.length > 1) return paraBlocks;
+  // Step 2. Break input into paragraphs
+  const paragraphs = scriptText.split(/\n+/).map(p => p.trim()).filter(Boolean);
+  const finalBeats = [];
 
-  // 3. Single paragraph or unformatted narrative prose!
-  // Split by sentence boundaries and cinematic visual markers (e.g. "multiple shots", "grand entry", "closeup", "revealing shot", "next", "then")
-  const transitionRegex = /(?:\.\s+|\n+|(?:,\s*)(?=(?:multiple shots|grand entry|revealing shot|closeup shots|close up|close-up|next|then|meanwhile|establishing shot|entry of|holding|shots of|versus|vs|fight|fighting|start a fight)\b))/gi;
+  paragraphs.forEach(para => {
+    // If paragraph has an explicit shot marker like S01 or SHOT 1
+    if (/^(?:S\d+|SC\d+|SHOT|EXT\.|INT\.)/i.test(para)) {
+      finalBeats.push(para);
+      return;
+    }
 
-  const rawSegments = scriptText
-    .split(transitionRegex)
-    .map(s => s.replace(/^[\.,;\s]+/, '').trim())
-    .filter(s => s.length > 8);
+    // Split paragraph by period, semicolon, OR cinematic transition phrase
+    // transition triggers: "multiple shots", "grand entry", "revealing shot", "closeup", "close up", "close-up", "next", "then", "sometimes", "after a long", "stands as", "holding", "tying", "brought together", "failed to win", "kills", "beating", "rooster fight", "unbeatable"
+    const splitRegex = /(?:\.\s+|\n+|(?:,\s*|\s+and\s+|\s+but\s+)(?=(?:multiple shots|grand entry|revealing shot|closeup|close-up|close up|next|then|meanwhile|establishing|entry of|holding|tying|brought together|start a fight|sometimes|after a long|stands as|kills|beating|unbeatable|rooster fight)\b))/gi;
 
-  if (rawSegments.length > 1) return rawSegments;
+    const subBeats = para
+      .split(splitRegex)
+      .map(s => s.replace(/^[\.,;\s]+/, '').trim())
+      .filter(s => s.length > 8);
 
-  // 4. Fallback: split by period or semicolon
-  const sentenceSegments = scriptText
-    .split(/[.;]+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 6);
+    if (subBeats.length > 0) {
+      finalBeats.push(...subBeats);
+    } else if (para.length > 0) {
+      finalBeats.push(para);
+    }
+  });
 
-  if (sentenceSegments.length > 1) return sentenceSegments;
+  // Step 3. If still fewer than 5 shots for a rich story, split long sentences by commas:
+  if (finalBeats.length < 5 && scriptText.length > 150) {
+    const fallbackBeats = [];
+    finalBeats.forEach(beat => {
+      if (beat.length > 80) {
+        const commaSplit = beat.split(/(?:,\s*|\.\s+)/).map(s => s.trim()).filter(s => s.length > 10);
+        if (commaSplit.length > 1) {
+          fallbackBeats.push(...commaSplit);
+          return;
+        }
+      }
+      fallbackBeats.push(beat);
+    });
+    if (fallbackBeats.length > finalBeats.length) return fallbackBeats;
+  }
 
-  return [scriptText];
+  return finalBeats.length > 0 ? finalBeats : [scriptText];
 }
 
 function parseRawScriptFallback(scriptText) {
