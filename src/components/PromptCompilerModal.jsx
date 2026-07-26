@@ -71,6 +71,48 @@ Prompt Text:
 ${promptNarrative.trim()}`;
   };
 
+  const compileComfyUISeedanceFormat = (shot, shotIdx) => {
+    const shotId = shot.sceneShotId || `SC01_SH${shotIdx + 1 < 10 ? '0' + (shotIdx + 1) : shotIdx + 1}`;
+    const framing = shot.shotComposition || 'Medium Shot';
+    const motion = (shot.cameraMotionTag || 'Tracking Shot').replace(/\[Camera:\s*/, '').replace(/\]/, '');
+    const lighting = (shot.subjectLightingTag || 'Golden Hour').replace(/\[|\]/g, '');
+    const color = (shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
+
+    const rawImagesStr = shot.shotDurationAndImages || '';
+    const subjectsList = [];
+    const pairMatches = rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g);
+    for (const match of pairMatches) {
+      const imgNum = match[1];
+      const tag = match[2].replace('@', '').toUpperCase();
+      subjectsList.push(`Image_${imgNum} = ${tag}`);
+    }
+
+    if (subjectsList.length === 0) {
+      if (shot.characterIdAssetRef) subjectsList.push(`Image_1 = MAIN_SUBJECT`);
+      if (shot.coArtistInteraction) subjectsList.push(`Image_2 = CO_ARTIST`);
+      subjectsList.push(`Image_3 = SCENE_ENVIRONMENT`);
+    }
+
+    let promptBody = `A cinematic ${framing.toLowerCase()} (${shotId}). `;
+    if (shot.actionEnvContext) promptBody += `Environment: ${shot.actionEnvContext}. `;
+    if (shot.characterIdAssetRef) promptBody += `Featuring ${shot.characterIdAssetRef}. `;
+    if (shot.coArtistInteraction) promptBody += `Interaction: ${shot.coArtistInteraction}. `;
+    if (motion) promptBody += `Camera moves with ${motion}. `;
+    if (lighting) promptBody += `Lighting styled with ${lighting}. `;
+    if (color) promptBody += `Color graded in ${color}. `;
+    if (shot.atmosphereVolumetricsTag) promptBody += `Atmosphere: ${shot.atmosphereVolumetricsTag.replace(/\[|\]/g, '')}. `;
+    if (shot.characterMovement) promptBody += `Action performance: ${shot.characterMovement}. `;
+    if (shot.characterExpression) promptBody += `Facial expression: ${shot.characterExpression}. `;
+
+    return `SUBJECTS :
+${subjectsList.join('\n')}
+
+Note: Do not repeat any of these subjects or characters
+
+PROMPT :
+${promptBody.trim()}`;
+  };
+
   const compileSoraFormat = (shot) => {
     const parts = [];
     parts.push(`A cinematic ${shot.shotComposition ? shot.shotComposition.toLowerCase() : 'shot'} (${shot.sceneShotId || 'SC01_SH01'}).`);
@@ -226,13 +268,14 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
   };
 
   const getShotPromptText = (shot, idx) => {
-    if (formatMode === 'engine_optimized') return compileSeedanceDirectFormat(shot, idx);
+    if (formatMode === 'comfyui_seedance') return compileComfyUISeedanceFormat(shot, idx);
+    if (formatMode === 'engine_optimized') return compileComfyUISeedanceFormat(shot, idx);
     if (formatMode === 'first_last_frame') return compileFirstLastFrameFormat(shot, idx);
     if (formatMode === 'seedream_beat_breakdown') return compileSeeDreamBeatBreakdown(shot, idx);
     if (formatMode === 'seedream_image') return compileSeeDreamFormat(shot);
     if (formatMode === 'natural_language') return compileSeedanceDirectFormat(shot, idx);
     if (formatMode === 'json') return JSON.stringify(shot, null, 2);
-    return compileSeedanceDirectFormat(shot, idx);
+    return compileComfyUISeedanceFormat(shot, idx);
   };
 
   // STRICT SHORT FILENAME ONLY (SC01_SH01.txt, SC01_SH02.txt...)
@@ -244,10 +287,10 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
   };
 
   let compiledOutput = '';
-  if (formatMode === 'engine_optimized') {
-    compiledOutput = shots.map((shot, idx) => 
-      `=== OPTIMIZED STAGE PRODUCTION PROMPT (SHOT #${idx + 1} - ${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileEngineSpecific(shot)}`
-    ).join('\n\n');
+  if (formatMode === 'comfyui_seedance') {
+    compiledOutput = shots.map((shot, idx) => compileComfyUISeedanceFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
+  } else if (formatMode === 'engine_optimized') {
+    compiledOutput = shots.map((shot, idx) => compileComfyUISeedanceFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
   } else if (formatMode === 'first_last_frame') {
     compiledOutput = shots.map((shot, idx) => compileFirstLastFrameFormat(shot, idx)).join('\n\n' + '='.repeat(80) + '\n\n');
   } else if (formatMode === 'seedream_beat_breakdown') {
@@ -399,6 +442,19 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
           <div className="flex flex-wrap items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
             <button
               type="button"
+              onClick={() => setFormatMode('comfyui_seedance')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
+                formatMode === 'comfyui_seedance'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-950 font-extrabold shadow-[0_0_15px_rgba(16,185,129,0.5)]'
+                  : 'text-emerald-400 hover:text-white bg-emerald-950/40 border border-emerald-500/30'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              🎛️ ComfyUI Seedance 2.0
+            </button>
+
+            <button
+              type="button"
               onClick={() => setFormatMode('seedance_tagged')}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
                 formatMode === 'seedance_tagged'
@@ -407,20 +463,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               }`}
             >
               <Code className="w-3.5 h-3.5" />
-              SPS Standard Tagged
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFormatMode('engine_optimized')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                formatMode === 'engine_optimized'
-                  ? 'bg-amber-500 text-zinc-950 font-bold shadow'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              ⚡ Target Syntax
+              SPS Direct Seedance
             </button>
 
             <button
