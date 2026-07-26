@@ -71,28 +71,40 @@ export default function SlotEditor({
     }
   };
 
-  // Keyboard navigation for Cmd + Right Arrow and Cmd + Left Arrow
+  // Keyboard navigation: Cmd + Up/Down (Shot Navigation) & Cmd + Left/Right (Craft Navigation)
   useEffect(() => {
     if (!isModalActive) return;
 
     const handleKeyDown = (e) => {
-      // Cmd + Right Arrow (⌘→) or Ctrl + Right Arrow -> Next Slot
+      // Cmd + Right Arrow (⌘→) or Ctrl + Right Arrow -> Next Craft Slot
       if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
         e.preventDefault();
         e.stopPropagation();
         handleNextSlot();
       }
-      // Cmd + Left Arrow (⌘←) or Ctrl + Left Arrow -> Prev Slot
+      // Cmd + Left Arrow (⌘←) or Ctrl + Left Arrow -> Prev Craft Slot
       else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
         handlePrevSlot();
       }
+      // Cmd + Up Arrow (⌘↑) or Ctrl + Up Arrow -> Previous Shot
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onNavigatePrevShot) onNavigatePrevShot();
+      }
+      // Cmd + Down Arrow (⌘↓) or Ctrl + Down Arrow -> Next Shot
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onNavigateNextShot) onNavigateNextShot();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isModalActive, activeConfig.key]);
+  }, [isModalActive, activeConfig.key, onNavigatePrevShot, onNavigateNextShot]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
@@ -549,7 +561,7 @@ export default function SlotEditor({
                     if (onNavigatePrevShot) onNavigatePrevShot();
                   }}
                   className="p-1 rounded hover:bg-amber-600 hover:text-white text-amber-300 transition-colors"
-                  title="Previous Shot"
+                  title="Previous Shot (Cmd + Up Arrow | ⌘↑)"
                 >
                   <ChevronLeft className="w-3.5 h-3.5 text-amber-400" />
                 </button>
@@ -561,7 +573,7 @@ export default function SlotEditor({
                       if (onJumpToShot) onJumpToShot(parseInt(e.target.value, 10));
                     }}
                     className="bg-transparent text-amber-300 text-[11px] font-bold font-mono py-0.5 pl-1 pr-4 appearance-none cursor-pointer focus:outline-none"
-                    title="Jump to Shot #"
+                    title="Jump to Shot # (Cmd + Up / Down to navigate)"
                   >
                     {Array.from({ length: totalShotsCount || 1 }).map((_, idx) => (
                       <option key={idx} value={idx} className="bg-zinc-950 text-white font-mono">
@@ -579,7 +591,7 @@ export default function SlotEditor({
                     if (onNavigateNextShot) onNavigateNextShot();
                   }}
                   className="p-1 rounded hover:bg-amber-600 hover:text-white text-amber-300 transition-colors"
-                  title="Next Shot"
+                  title="Next Shot (Cmd + Down Arrow | ⌘↓)"
                 >
                   <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
                 </button>
