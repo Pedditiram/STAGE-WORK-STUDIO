@@ -222,7 +222,7 @@ export default function SlotEditor({
         onClick={handleCloseModal}
       >
         <div 
-          className="bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-5 w-full max-w-xl shadow-2xl space-y-3.5 max-h-[88vh] flex flex-col font-mono"
+          className="bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-5 w-full max-w-2xl shadow-2xl space-y-3.5 max-h-[90vh] flex flex-col font-mono overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header Bar */}
@@ -307,8 +307,8 @@ export default function SlotEditor({
             {/* FAVORITES PRESETS SECTION */}
             {favoriteItems.length > 0 && (
               <div className="space-y-1.5">
-                <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <label className="text-[11px] text-[#FFD700] font-bold flex items-center gap-1 font-mono">
+                  <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                   ⭐ Favorite Presets ({favoriteItems.length}):
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -318,20 +318,20 @@ export default function SlotEditor({
                       onClick={() => onChange(preset)}
                       className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-sm ${
                         value === preset
-                          ? 'bg-amber-400 text-zinc-950 font-black border-amber-300 shadow-md scale-105'
-                          : 'bg-amber-950/70 text-amber-200 border-amber-500/60 hover:border-amber-400'
+                          ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-md scale-105'
+                          : 'bg-zinc-900/90 text-[#FFD700] border-amber-500/80 hover:border-amber-300 shadow-sm'
                       }`}
                     >
                       <button
                         type="button"
                         onClick={(e) => handleToggleFavorite(preset, e)}
-                        className="text-amber-400 hover:scale-125 transition-transform shrink-0"
+                        className="text-[#FFD700] hover:scale-125 transition-transform shrink-0"
                         title="Remove from favorites"
                       >
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                       </button>
 
-                      <span className="truncate max-w-[240px]">{preset}</span>
+                      <span className="truncate max-w-[240px] text-[#FFD700]">{preset}</span>
 
                       <button
                         type="button"
@@ -399,9 +399,9 @@ export default function SlotEditor({
           </div>
 
           {/* Modal Footer Bar with Navigation & Direct Slot Jump Selector */}
-          <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0 font-mono flex-wrap gap-2">
+          <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0 font-mono gap-2 flex-wrap sm:flex-nowrap">
             {/* Left / Center Navigation Toolbar */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
               {/* Previous Slot Button */}
               <button
                 type="button"
@@ -409,7 +409,7 @@ export default function SlotEditor({
                   e.stopPropagation();
                   handlePrevSlot();
                 }}
-                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
                 title="Previous Slot (Cmd + Left Arrow)"
               >
                 <ChevronLeft className="w-4 h-4 text-cyan-400" />
@@ -418,11 +418,11 @@ export default function SlotEditor({
               </button>
 
               {/* Direct Slot Jump Dropdown Pill */}
-              <div className="relative flex items-center">
+              <div className="relative flex items-center min-w-0 flex-1 max-w-[220px] sm:max-w-[300px]">
                 <select
                   value={activeConfig.key}
                   onChange={(e) => handleDirectJump(e.target.value)}
-                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-3 py-1.5 pr-7 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-center"
+                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-2.5 py-1.5 pr-6 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-left truncate w-full"
                   title="Directly jump to any slot number in matrix"
                 >
                   {availableSlotsList.map((s, idx) => (
@@ -431,7 +431,7 @@ export default function SlotEditor({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2.5 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2 pointer-events-none" />
               </div>
 
               {/* Next Slot Button */}
@@ -441,7 +441,7 @@ export default function SlotEditor({
                   e.stopPropagation();
                   handleNextSlot();
                 }}
-                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
                 title="Next Slot (Cmd + Right Arrow)"
               >
                 <span>Next</span>
@@ -454,10 +454,10 @@ export default function SlotEditor({
             <button
               type="button"
               onClick={handleCloseModal}
-              className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow-md transition-all active:scale-95 ml-auto flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1 ml-auto"
             >
               <Check className="w-4 h-4 text-white" />
-              Done & Close
+              <span>Done & Close</span>
             </button>
           </div>
         </div>
