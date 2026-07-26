@@ -992,23 +992,39 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                               totalShotsCount={shots.length}
                               currentShotIndex={editingShotIdx}
                               onNavigateNextShot={() => {
-                                if (editingShotIdx < shots.length - 1) setEditingShotIdx(editingShotIdx + 1);
+                                setEditingShotIdx(prev => (prev < shots.length - 1 ? prev + 1 : 0));
                               }}
                               onNavigatePrevShot={() => {
-                                if (editingShotIdx > 0) setEditingShotIdx(editingShotIdx - 1);
+                                setEditingShotIdx(prev => (prev > 0 ? prev - 1 : shots.length - 1));
                               }}
                               onJumpToShot={(targetShotIdx) => setEditingShotIdx(targetShotIdx)}
                               scenesList={scenesList}
                               currentSceneId={currentSceneId}
                               onNavigateNextScene={() => {
-                                if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
-                                  setEditingShotIdx(scenesList[currSceneIdx + 1].firstShotIndex);
-                                }
+                                setEditingShotIdx(prev => {
+                                  const currShotObj = shots[prev];
+                                  const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
+                                  const matchCurr = rawCurrId.match(/^(SC\d+)/i);
+                                  const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${prev + 1}`;
+                                  const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+                                  if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
+                                    return scenesList[currSceneIdx + 1].firstShotIndex;
+                                  }
+                                  return scenesList[0]?.firstShotIndex || 0;
+                                });
                               }}
                               onNavigatePrevScene={() => {
-                                if (currSceneIdx > 0) {
-                                  setEditingShotIdx(scenesList[currSceneIdx - 1].firstShotIndex);
-                                }
+                                setEditingShotIdx(prev => {
+                                  const currShotObj = shots[prev];
+                                  const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
+                                  const matchCurr = rawCurrId.match(/^(SC\d+)/i);
+                                  const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${prev + 1}`;
+                                  const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+                                  if (currSceneIdx > 0) {
+                                    return scenesList[currSceneIdx - 1].firstShotIndex;
+                                  }
+                                  return scenesList[scenesList.length - 1]?.firstShotIndex || 0;
+                                });
                               }}
                               onJumpToScene={(targetScId) => {
                                 const found = scenesList.find(sc => sc.sceneId === targetScId);

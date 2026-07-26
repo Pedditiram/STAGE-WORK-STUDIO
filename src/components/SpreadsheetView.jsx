@@ -330,32 +330,32 @@ export default function SpreadsheetView({
                           totalShotsCount={(shots || []).length}
                           currentShotIndex={shotIdx}
                           onNavigateNextShot={() => {
-                            if (shotIdx < (shots || []).length - 1) {
-                              if (setActiveShotIndex) setActiveShotIndex(shotIdx + 1);
-                              setActiveModalCell({ shotIdx: shotIdx + 1, slotKey: slot.key });
-                            }
+                            const total = (shots || []).length;
+                            const nextShotIdx = (shotIdx + 1) % total;
+                            if (setActiveShotIndex) setActiveShotIndex(nextShotIdx);
+                            setActiveModalCell({ shotIdx: nextShotIdx, slotKey: slot.key });
                           }}
                           onNavigatePrevShot={() => {
-                            if (shotIdx > 0) {
-                              if (setActiveShotIndex) setActiveShotIndex(shotIdx - 1);
-                              setActiveModalCell({ shotIdx: shotIdx - 1, slotKey: slot.key });
-                            }
+                            const total = (shots || []).length;
+                            const prevShotIdx = (shotIdx - 1 + total) % total;
+                            if (setActiveShotIndex) setActiveShotIndex(prevShotIdx);
+                            setActiveModalCell({ shotIdx: prevShotIdx, slotKey: slot.key });
                           }}
                           scenesList={scenesList}
                           currentSceneId={currentSceneId}
                           onNavigateNextScene={() => {
-                            if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
-                              const targetIdx = scenesList[currSceneIdx + 1].firstShotIndex;
-                              if (setActiveShotIndex) setActiveShotIndex(targetIdx);
-                              setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
-                            }
+                            const targetIdx = (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1)
+                              ? scenesList[currSceneIdx + 1].firstShotIndex
+                              : (scenesList[0]?.firstShotIndex || 0);
+                            if (setActiveShotIndex) setActiveShotIndex(targetIdx);
+                            setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
                           }}
                           onNavigatePrevScene={() => {
-                            if (currSceneIdx > 0) {
-                              const targetIdx = scenesList[currSceneIdx - 1].firstShotIndex;
-                              if (setActiveShotIndex) setActiveShotIndex(targetIdx);
-                              setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
-                            }
+                            const targetIdx = currSceneIdx > 0
+                              ? scenesList[currSceneIdx - 1].firstShotIndex
+                              : (scenesList[scenesList.length - 1]?.firstShotIndex || 0);
+                            if (setActiveShotIndex) setActiveShotIndex(targetIdx);
+                            setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
                           }}
                           onJumpToScene={(targetScId) => {
                             const found = scenesList.find(sc => sc.sceneId === targetScId);
