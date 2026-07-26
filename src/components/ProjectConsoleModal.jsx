@@ -678,29 +678,29 @@ export default function ProjectConsoleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md font-mono">
-      <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md font-mono">
+      <div className="relative w-full max-w-6xl bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 text-slate-900 dark:text-white rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[92vh] max-h-[96vh]">
         
         {/* Modal Header */}
-        <div className="p-4 px-6 border-b border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/30">
-              <FolderKanban className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+        <div className="p-3 px-5 border-b border-slate-200 dark:border-zinc-800 bg-slate-100/90 dark:bg-zinc-900/90 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/30">
+              <FolderKanban className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 font-mono">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 font-mono">
                 Stage Production Studio Console & AI Intelligence
                 <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-900 dark:text-cyan-300 px-2 py-0.5 rounded border border-cyan-300 dark:border-cyan-800 font-mono font-bold">
                   {projectLibrary.length} Projects Saved
                 </span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono">Unified management for Projects, AI Script Breakdown & Genre Presets.</p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">Unified management for Projects, AI Script Breakdown & Genre Presets.</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {/* Logged-In User Profile Badge on Top Right */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-100 dark:bg-cyan-950/90 border border-cyan-300 dark:border-cyan-700/60 text-cyan-900 dark:text-cyan-300 font-mono text-xs font-bold shadow-sm">
+            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-cyan-100 dark:bg-cyan-950/90 border border-cyan-300 dark:border-cyan-700/60 text-cyan-900 dark:text-cyan-300 font-mono text-[11px] font-bold shadow-sm">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
               <span className="truncate max-w-[160px]">
                 👤 {currentUserProfile?.name || (currentUserEmail ? currentUserEmail.split('@')[0] : 'Pedditi Ram')}
@@ -715,55 +715,68 @@ export default function ProjectConsoleModal({
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Modal Unified Tab Navigation */}
-        <div className="flex items-center gap-2 px-6 pt-3 border-b border-slate-200 dark:border-zinc-800 bg-slate-100/70 dark:bg-zinc-900/50 flex-wrap">
+        <div className="flex items-center gap-1.5 px-5 pt-2 border-b border-slate-200 dark:border-zinc-800 bg-slate-100/70 dark:bg-zinc-900/50 flex-wrap shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('library')}
-            className={`px-3 py-2 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'library'
                 ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Folder className="w-4 h-4" />
+            <Folder className="w-3.5 h-3.5" />
             <span>📂 Projects Library</span>
           </button>
 
           <button
             type="button"
+            onClick={() => setActiveTab('ai_breakdown')}
+            className={`px-3 py-1.5 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'ai_breakdown'
+                ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
+                : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>🪄 AI Script Breakdown</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('genre')}
-            className={`px-3 py-2 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'genre'
                 ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span>🎭 Script Genre ({GENRE_PRESET_PROFILES[presetProfile]?.name || presetProfile})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('create')}
-            className={`px-3 py-2 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-bold font-mono border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'create'
                 ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span>➕ Create Project</span>
           </button>
         </div>
 
-        {/* Modal Tab Content */}
-        <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
+        {/* Modal Tab Content Area - Expanded to Fill Height */}
+        <div className="p-4 space-y-3 overflow-y-auto flex-1 h-full">
           
           {/* TAB 1: PROJECT LIBRARY */}
           {activeTab === 'library' && (
@@ -945,84 +958,80 @@ export default function ProjectConsoleModal({
             </div>
           )}
 
-          {/* TAB 2: AI SCRIPT BREAKDOWN */}
+          {/* TAB 2: AI SCRIPT BREAKDOWN (50/50 DUAL PANE DASHBOARD) */}
           {activeTab === 'ai_breakdown' && (
-            <div className="space-y-4 font-mono">
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-cyan-300 dark:border-cyan-500/40 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Wand2 className="w-4 h-4 text-amber-500" />
-                      AI Screenplay Breakdown & Cinema Parser:
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full font-mono">
+              {/* LEFT PANE: Script Input & Controls */}
+              <div className="p-3.5 rounded-xl bg-slate-50/90 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 flex flex-col justify-between space-y-2.5">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Wand2 className="w-3.5 h-3.5 text-amber-500" />
+                      AI Screenplay Breakdown & Cinema Parser
                     </h4>
-                    <span className="text-[11px] bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-800/80 font-mono font-bold">
-                      Target Project: {customProjectTitle || currentProjectTitle}
-                    </span>
+                    <label className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] cursor-pointer flex items-center gap-1 shadow">
+                      <Upload className="w-3 h-3" />
+                      <span>Upload File</span>
+                      <input type="file" accept=".pdf,.txt,.fountain,.fdx" onChange={handleFileUpload} className="hidden" />
+                    </label>
                   </div>
-                  <label className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 shadow">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Upload PDF / TXT Script</span>
-                    <input type="file" accept=".pdf,.txt,.fountain,.fdx" onChange={handleFileUpload} className="hidden" />
-                  </label>
-                </div>
 
-                {/* Sample Scripts Selector */}
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-bold shrink-0">Sample Scripts:</span>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-none">
-                    {SAMPLE_SCRIPTS.map((sample, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setRawScriptText(sample.script);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-cyan-600 dark:text-cyan-300 text-[11px] font-bold shrink-0 hover:border-cyan-400 shadow-xs"
-                      >
-                        📄 {sample.title}
-                      </button>
-                    ))}
+                  {/* Sample Scripts Selector */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400 font-bold shrink-0">Sample Scripts:</span>
+                    <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+                      {SAMPLE_SCRIPTS.map((sample, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setRawScriptText(sample.script)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-cyan-600 dark:text-cyan-300 text-[10.5px] font-bold shrink-0 hover:border-cyan-400"
+                        >
+                          📄 {sample.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10.5px] text-slate-600 dark:text-zinc-400 font-bold block mb-1">Paste Screenplay Text:</label>
+                    <textarea
+                      rows={7}
+                      value={rawScriptText}
+                      onChange={(e) => setRawScriptText(e.target.value)}
+                      placeholder="Paste scene description, screenplay sluglines (INT/EXT), or shot list..."
+                      className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 text-[11.5px] text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-cyan-500 leading-relaxed min-h-[140px] max-h-[240px] resize-y"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] text-slate-700 dark:text-zinc-300 font-bold block mb-1">Paste Raw Screenplay or Scene Script:</label>
-                  <textarea
-                    rows={6}
-                    value={rawScriptText}
-                    onChange={(e) => setRawScriptText(e.target.value)}
-                    placeholder="Paste scene description, screenplay sluglines (INT/EXT), or shot list..."
-                    className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-3 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2 pt-1">
+                <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (25 Crafts Matrix Aware)</strong>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">
+                      Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Gemini 3.6 (25 Crafts)</strong>
                     </span>
                     <button
                       type="button"
                       onClick={handleParseScript}
                       disabled={isLoadingFile || !rawScriptText.trim()}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1 transition-all disabled:opacity-50"
                     >
-                      {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-zinc-950" />}
-                      <span>{isLoadingFile ? `Parsing Script (${parseProgress}%)...` : '⚡ Generate 25 Crafts Shots Breakdown'}</span>
+                      {isLoadingFile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 fill-zinc-950" />}
+                      <span>{isLoadingFile ? `Parsing (${parseProgress}%)...` : '⚡ Parse 25 Crafts Shots'}</span>
                     </button>
                   </div>
 
                   {/* Dynamic Thin Progress Bar Animation with Percentages */}
                   {(isLoadingFile || parseProgress > 0) && (
-                    <div className="w-full space-y-1.5 pt-1 animate-fadeIn">
-                      <div className="flex items-center justify-between text-[11px] font-mono text-cyan-600 dark:text-cyan-400 font-bold">
-                        <span className="flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                          AI Cinema Engine Analyzing Screenplay & 25 Crafts...
+                    <div className="w-full space-y-1 pt-1 animate-fadeIn">
+                      <div className="flex items-center justify-between text-[10.5px] font-mono text-cyan-600 dark:text-cyan-400 font-bold">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 animate-spin text-amber-500" />
+                          Analyzing 25 Crafts...
                         </span>
-                        <span className="bg-cyan-500/10 text-cyan-500 px-2 py-0.5 rounded border border-cyan-500/30 text-[10px]">{parseProgress}% COMPLETE</span>
+                        <span className="bg-cyan-500/10 text-cyan-500 px-1.5 py-0.5 rounded text-[10px]">{parseProgress}%</span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden relative shadow-inner">
+                      <div className="w-full h-1 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden relative shadow-inner">
                         <div 
                           className="h-full bg-gradient-to-r from-cyan-500 via-amber-400 to-emerald-400 transition-all duration-200 ease-out rounded-full relative"
                           style={{ width: `${parseProgress}%` }}
@@ -1035,35 +1044,58 @@ export default function ProjectConsoleModal({
                 </div>
               </div>
 
-              {/* Parsed Preview Results */}
-              {isGenerated && parsedPreview.length > 0 && (
-                <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-cyan-400/50 space-y-3 shadow-md">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      Generated {parsedPreview.length} Shot Entries:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleApplyAIShotsToCurrent}
-                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1"
-                    >
-                      <Check className="w-4 h-4" /> Apply to Current Project
-                    </button>
-                  </div>
+              {/* RIGHT PANE: Live 25-Craft Generated Breakdown Panel */}
+              <div className="p-3.5 rounded-xl bg-slate-50/90 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 flex flex-col justify-between h-full">
+                {isGenerated && parsedPreview.length > 0 ? (
+                  <div className="space-y-2 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        Generated {parsedPreview.length} Shots (25 Crafts)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleApplyAIShotsToCurrent}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Apply to Studio
+                      </button>
+                    </div>
 
-                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    {parsedPreview.map((s, idx) => (
-                      <div key={idx} className="p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-bold text-amber-600 dark:text-amber-300 font-mono">{s.sceneShotId}</span>
-                        <span className="text-slate-600 dark:text-zinc-300 truncate max-w-[200px]">{s.shotComposition}</span>
-                        <span className="text-cyan-600 dark:text-cyan-400 font-mono truncate max-w-[180px]">{s.cameraMotionTag}</span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-mono truncate max-w-[180px]">{s.subjectLightingTag}</span>
-                      </div>
-                    ))}
+                    <div className="space-y-1.5 overflow-y-auto flex-1 max-h-[340px] pr-1">
+                      {parsedPreview.map((s, idx) => (
+                        <div key={idx} className="p-2 rounded-lg bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-[11px] space-y-1 hover:border-cyan-500/50 transition-all">
+                          <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-900 pb-1">
+                            <span className="font-bold text-amber-600 dark:text-amber-300 font-mono text-xs">{s.sceneShotId}</span>
+                            <span className="text-slate-500 dark:text-zinc-400 font-mono">{s.shotComposition}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-[10.5px]">
+                            <span className="text-cyan-600 dark:text-cyan-400 font-mono truncate">🎥 {s.cameraMotionTag}</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-mono truncate">💡 {s.subjectLightingTag}</span>
+                          </div>
+                          {s.characterIdMatrix && (
+                            <div className="text-[10px] font-mono text-zinc-400 bg-zinc-900/60 p-1 rounded border border-zinc-800/60 truncate">
+                              🎭 {s.characterIdMatrix}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 flex-1 my-auto">
+                    <div className="p-3 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse">
+                      <Wand2 className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1 max-w-xs">
+                      <h5 className="text-xs font-bold text-slate-900 dark:text-white">Live 25-Craft Breakdown Preview</h5>
+                      <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-normal">
+                        Paste your screenplay text on the left or select a sample script, then click <strong>⚡ Parse 25 Crafts Shots</strong> to preview generated breakdown entries.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1359,12 +1391,15 @@ export default function ProjectConsoleModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900 flex items-center justify-between text-xs text-slate-600 dark:text-zinc-400 font-mono">
-          <span>Active Project: <strong className="text-slate-900 dark:text-white font-bold">{currentProjectTitle}</strong></span>
+        <div className="p-2.5 px-5 border-t border-slate-200 dark:border-zinc-800 bg-slate-100/90 dark:bg-zinc-900/90 flex items-center justify-between text-xs text-slate-600 dark:text-zinc-400 font-mono shrink-0">
+          <span className="flex items-center gap-1.5 text-[11px]">
+            <Folder className="w-3.5 h-3.5 text-cyan-500" />
+            Active Project: <strong className="text-slate-900 dark:text-white font-bold">{currentProjectTitle}</strong>
+          </span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 border border-slate-300 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 font-bold transition-colors shadow-sm"
+            className="px-3.5 py-1 rounded-lg bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 border border-slate-300 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-bold transition-colors shadow-sm"
           >
             Close Console
           </button>
