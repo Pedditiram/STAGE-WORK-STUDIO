@@ -37,6 +37,37 @@ export default function SpreadsheetView({
   const [draggedShotIdx, setDraggedShotIdx] = useState(null);
   const [dragOverShotIdx, setDragOverShotIdx] = useState(null);
 
+  // Global keyboard navigation for main matrix view when no cell modal is active
+  React.useEffect(() => {
+    if (activeModalCell !== null) return;
+
+    const handleGlobalMatrixKeyDown = (e) => {
+      const isModifier = e.metaKey || e.ctrlKey || e.altKey;
+      const key = e.key;
+      const isUp = key === 'ArrowUp' || key === 'Up';
+      const isDown = key === 'ArrowDown' || key === 'Down';
+
+      if (!isModifier) return;
+
+      if (!e.shiftKey && isDown) {
+        e.preventDefault();
+        const total = (shots || []).length;
+        if (total > 0 && setActiveShotIndex) {
+          setActiveShotIndex(prev => (prev < total - 1 ? prev + 1 : 0));
+        }
+      } else if (!e.shiftKey && isUp) {
+        e.preventDefault();
+        const total = (shots || []).length;
+        if (total > 0 && setActiveShotIndex) {
+          setActiveShotIndex(prev => (prev > 0 ? prev - 1 : total - 1));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalMatrixKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalMatrixKeyDown, true);
+  }, [activeModalCell, shots, setActiveShotIndex]);
+
   const toggleMuteFn = onToggleMuteShot || onDeleteShot;
 
   const currentCategoryObj = CATEGORIES.find(c => c.id === activeCategory);

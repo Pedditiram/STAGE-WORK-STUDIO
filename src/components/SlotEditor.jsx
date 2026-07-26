@@ -77,52 +77,82 @@ export default function SlotEditor({
     }
   };
 
-  // Keyboard navigation: Cmd+Shift+Up/Down (Scene), Cmd+Up/Down (Shot), Cmd+Left/Right (Craft)
+  // Store callbacks in ref to prevent stale closures during rapid keydown navigation
+  const callbacksRef = React.useRef({
+    onNavigatePrevScene,
+    onNavigateNextScene,
+    onNavigatePrevShot,
+    onNavigateNextShot,
+    handlePrevSlot,
+    handleNextSlot
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onNavigatePrevScene,
+      onNavigateNextScene,
+      onNavigatePrevShot,
+      onNavigateNextShot,
+      handlePrevSlot,
+      handleNextSlot
+    };
+  });
+
+  // Keyboard navigation: Cmd/Alt/Ctrl + Shift + Up/Down (Scene), Cmd/Alt/Ctrl + Up/Down (Shot), Cmd/Alt/Ctrl + Left/Right (Craft)
   useEffect(() => {
     if (!isModalActive) return;
 
     const handleKeyDown = (e) => {
-      // Cmd + Shift + Up Arrow (⌘⇧↑) -> Previous Scene
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'ArrowUp') {
+      const isModifier = e.metaKey || e.ctrlKey || e.altKey;
+      const key = e.key;
+      const isUp = key === 'ArrowUp' || key === 'Up';
+      const isDown = key === 'ArrowDown' || key === 'Down';
+      const isLeft = key === 'ArrowLeft' || key === 'Left';
+      const isRight = key === 'ArrowRight' || key === 'Right';
+
+      if (!isModifier) return;
+
+      // Cmd / Alt / Ctrl + Shift + Up Arrow (⌘⇧↑ / ⌥⇧↑) -> Previous Scene
+      if (e.shiftKey && isUp) {
         e.preventDefault();
         e.stopPropagation();
-        if (onNavigatePrevScene) onNavigatePrevScene();
+        if (callbacksRef.current.onNavigatePrevScene) callbacksRef.current.onNavigatePrevScene();
       }
-      // Cmd + Shift + Down Arrow (⌘⇧↓) -> Next Scene
-      else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'ArrowDown') {
+      // Cmd / Alt / Ctrl + Shift + Down Arrow (⌘⇧↓ / ⌥⇧↓) -> Next Scene
+      else if (e.shiftKey && isDown) {
         e.preventDefault();
         e.stopPropagation();
-        if (onNavigateNextScene) onNavigateNextScene();
+        if (callbacksRef.current.onNavigateNextScene) callbacksRef.current.onNavigateNextScene();
       }
-      // Cmd + Right Arrow (⌘→) -> Next Craft Slot
-      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowRight') {
+      // Cmd / Alt / Ctrl + Right Arrow (⌘→ / ⌥→) -> Next Craft Slot
+      else if (!e.shiftKey && isRight) {
         e.preventDefault();
         e.stopPropagation();
-        handleNextSlot();
+        if (callbacksRef.current.handleNextSlot) callbacksRef.current.handleNextSlot();
       }
-      // Cmd + Left Arrow (⌘←) -> Prev Craft Slot
-      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowLeft') {
+      // Cmd / Alt / Ctrl + Left Arrow (⌘← / ⌥←) -> Prev Craft Slot
+      else if (!e.shiftKey && isLeft) {
         e.preventDefault();
         e.stopPropagation();
-        handlePrevSlot();
+        if (callbacksRef.current.handlePrevSlot) callbacksRef.current.handlePrevSlot();
       }
-      // Cmd + Up Arrow (⌘↑) -> Previous Shot
-      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowUp') {
+      // Cmd / Alt / Ctrl + Up Arrow (⌘↑ / ⌥↑) -> Previous Shot
+      else if (!e.shiftKey && isUp) {
         e.preventDefault();
         e.stopPropagation();
-        if (onNavigatePrevShot) onNavigatePrevShot();
+        if (callbacksRef.current.onNavigatePrevShot) callbacksRef.current.onNavigatePrevShot();
       }
-      // Cmd + Down Arrow (⌘↓) -> Next Shot
-      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowDown') {
+      // Cmd / Alt / Ctrl + Down Arrow (⌘↓ / ⌥↓) -> Next Shot
+      else if (!e.shiftKey && isDown) {
         e.preventDefault();
         e.stopPropagation();
-        if (onNavigateNextShot) onNavigateNextShot();
+        if (callbacksRef.current.onNavigateNextShot) callbacksRef.current.onNavigateNextShot();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isModalActive, activeConfig.key, onNavigatePrevShot, onNavigateNextShot, onNavigatePrevScene, onNavigateNextScene]);
+  }, [isModalActive]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
