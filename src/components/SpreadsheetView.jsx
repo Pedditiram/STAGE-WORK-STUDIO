@@ -8,11 +8,11 @@ import {
 
 const CATEGORIES = [
   { id: 'all', label: 'All 25 Crafts', keys: [] },
-  { id: 'camera', label: '🎥 Camera & Rigging (Crafts 1-3)', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag'] },
-  { id: 'lighting', label: '💡 Lighting & Color (Crafts 4-7)', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag'] },
-  { id: 'vfx', label: '✨ Volumetrics & FX (Craft #8, #21)', keys: ['atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
-  { id: 'character', label: '👥 Acting & Characters (Crafts 9-16, #23, #25)', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'characterIdMatrix'] },
-  { id: 'audio_optics', label: '🎵 Audio, Optics & Edit (Crafts 17-20, #22, #24)', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood', 'lensAndFocalLength', 'stuntAndSafetyNotes', 'editTransitionCut'] }
+  { id: 'camera', label: '🎥 Camera & Rigging (1-3)', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag'] },
+  { id: 'lighting', label: '💡 Lighting & Color (4-7)', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag'] },
+  { id: 'vfx', label: '✨ Volumetrics & FX (#8, #21)', keys: ['atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
+  { id: 'character', label: '👥 Acting & Characters (9-16, #23, #25)', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'characterIdMatrix'] },
+  { id: 'audio_optics', label: '🎵 Audio, Optics & Edit (17-20, #22, #24)', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood', 'lensAndFocalLength', 'stuntAndSafetyNotes', 'editTransitionCut'] }
 ];
 
 const LINE_1_KEYS = [
@@ -143,10 +143,29 @@ export default function SpreadsheetView({
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl font-mono">
       {/* Category Tab Bar Header */}
       <div className="p-2 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0 backdrop-blur-md">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          <span className="text-[11px] text-zinc-400 font-bold shrink-0 flex items-center gap-1">
+        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          {/* Matrix View Mode Switcher Anchored First */}
+          {activeCategory === 'all' && (
+            <button
+              type="button"
+              onClick={() => setIsTwoLineMatrix(!isTwoLineMatrix)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border cursor-pointer shrink-0 ${
+                isTwoLineMatrix
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'
+              }`}
+              title="Toggle between 2-Line High Density Matrix and Single Row Layout"
+            >
+              <Rows className="w-3.5 h-3.5 text-amber-400" />
+              <span>{isTwoLineMatrix ? '⚡ 2-Line Matrix' : '1-Line Layout'}</span>
+            </button>
+          )}
+
+          <span className="text-[11px] text-zinc-400 font-bold shrink-0 flex items-center gap-1 ml-1">
             <Filter className="w-3 h-3 text-cyan-400" /> Focus:
           </span>
+
+          {/* Focus Category Pills fill out remaining space gracefully */}
           {CATEGORIES.map((cat) => {
             const isSelected = activeCategory === cat.id;
             return (
@@ -165,23 +184,6 @@ export default function SpreadsheetView({
             );
           })}
         </div>
-
-        {/* Matrix View Mode Switcher */}
-        {activeCategory === 'all' && (
-          <button
-            type="button"
-            onClick={() => setIsTwoLineMatrix(!isTwoLineMatrix)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-              isTwoLineMatrix
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
-                : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'
-            }`}
-            title="Toggle between 2-Line High Density Matrix and Single Row Layout"
-          >
-            <Rows className="w-3.5 h-3.5 text-amber-400" />
-            <span>{isTwoLineMatrix ? '⚡ 2-Line Matrix (13+12 Crafts)' : '1-Line Layout'}</span>
-          </button>
-        )}
       </div>
 
       {/* Main High-Density Spreadsheet Table */}
