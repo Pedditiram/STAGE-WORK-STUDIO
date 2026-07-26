@@ -78,17 +78,31 @@ ${promptNarrative.trim()}`;
     const lighting = (shot.subjectLightingTag || 'Golden Hour').replace(/\[|\]/g, '');
     const color = (shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
 
-    const rawImagesStr = shot.shotDurationAndImages || '';
     const subjectsMap = new Map();
+    const rawMatrixStr = shot.characterIdMatrix || '';
+    if (rawMatrixStr.includes('Image_')) {
+      const parts = rawMatrixStr.split('|').map(s => s.trim()).filter(Boolean);
+      parts.forEach(p => {
+        const m = p.match(/Image_(\d+)\s*=\s*(.*)/i);
+        if (m) {
+          const num = parseInt(m[1], 10);
+          subjectsMap.set(num, m[2].trim());
+        }
+      });
+    }
+
+    const rawImagesStr = shot.shotDurationAndImages || '';
     const pairMatches = Array.from(rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g));
 
     if (pairMatches.length > 0) {
       for (const match of pairMatches) {
         const imgNum = parseInt(match[1], 10);
-        const tag = match[2].replace('@', '').toLowerCase();
-        let cleanName = tag.split('_')[0];
-        if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
-        subjectsMap.set(imgNum, cleanName);
+        if (!subjectsMap.has(imgNum)) {
+          const tag = match[2].replace('@', '').toLowerCase();
+          let cleanName = tag.split('_')[0];
+          if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
+          subjectsMap.set(imgNum, cleanName);
+        }
       }
     }
 

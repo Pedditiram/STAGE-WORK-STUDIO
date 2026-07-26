@@ -116,9 +116,12 @@ export async function parseRawScriptToShots(scriptText) {
 
   if (provider === 'google_gemini' && apiKey.trim()) {
     try {
-      const prompt = `You are a Hollywood Technical Director and Master Cinematographer. Parse the following screenplay script into a JSON array of 24-craft stage production shots.
-Each shot in the JSON array MUST strictly contain these 24 keys:
-"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut".
+      const prompt = `You are a Hollywood Technical Director and Master Cinematographer. Parse the following screenplay script into a JSON array of 25-craft stage production shots.
+Each shot in the JSON array MUST strictly contain these 25 keys:
+"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
+
+In "characterIdMatrix", specify the ComfyUI Seedance 2.0 multi-modal reference slots formatted as:
+"Image_1 = [char/subject 1] | Image_2 = [char/subject 2] | Image_3 = [char/subject 3] | Image_4 = [char 4] | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = "
 
 Script to breakdown:
 ${scriptText.slice(0, 4000)}
@@ -374,7 +377,8 @@ function parseRawScriptFallback(scriptText) {
       vfxCgiBreakdown: "[VFX: Practical Shot - 100% In-Camera Live Action]",
       stuntAndSafetyNotes: "[Stunt: Safe Handler Control & Rubber Blade Prop Knife]",
       makeupAndHairStyle: "[Makeup: Authentic 1980s Village Sun-Tanned Skin & Natural Sweat Glow]",
-      editTransitionCut: "Hard Cut (Standard Scene Beat)"
+      editTransitionCut: "Hard Cut (Standard Scene Beat)",
+      characterIdMatrix: `Image_1 = sunil | Image_2 = bujji | Image_3 = sunil | Image_4 = samudra | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = `
     });
   });
 

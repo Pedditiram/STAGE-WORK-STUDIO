@@ -1159,6 +1159,19 @@ export const SEEDANCE_SLOTS = [
       "Smash Cut to High-Action Impact",
       "Invisible Match Cut on Character Motion"
     ]
+  },
+  {
+    key: "characterIdMatrix",
+    label: "🎭 Craft #25: Character ID & Multi-Modal Asset Matrix",
+    icon: "Users",
+    description: "Multi-modal reference bindings: Image_1..9, Video_1..3, Audio_1..3 for Seedance & ComfyUI.",
+    tipTitle: "Character ID & Multi-Modal Reference Matrix",
+    tip: "Manage resolved character tags, scene reference images, video clips, and audio tracks (Image_1..9, Video_1..3, Audio_1..3) to feed ByteDance Seedance 2.0 & ComfyUI nodes.",
+    presets: [
+      "Image_1 = sunil | Image_2 = bujji | Image_3 = sunil | Image_4 = samudra | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = ",
+      "Image_1 = lord_rama | Image_2 = kara_dhushan | Image_3 = ayodhya_palace | Image_4 = crowd | Image_5 = supporting artist | Video_1 = crane_sweep | Audio_1 = dappu_drums",
+      "Image_1 = hero_cyber | Image_2 = aria_singer | Image_3 = warehouse_stage | Image_4 = crowd | Video_1 = camera_orbit | Audio_1 = vocal_track"
+    ]
   }
 ];
 

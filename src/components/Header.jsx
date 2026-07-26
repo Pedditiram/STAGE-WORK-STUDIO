@@ -229,7 +229,7 @@ export default function Header({
                 ? "bg-cyan-500 text-zinc-950 shadow"
                 : "text-zinc-400 hover:text-white"
             }`}
-            title="24-Craft Cinema Matrix View"
+            title="25-Craft Cinema Matrix View"
           >
             <LayoutGrid className="w-4 h-4" />
           </button>

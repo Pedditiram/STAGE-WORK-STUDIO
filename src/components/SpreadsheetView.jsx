@@ -7,11 +7,12 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  { id: 'all', label: 'All 24 Crafts', keys: [] },
-  { id: 'framing', label: '🎬 Framing, Optics & 9-Image Inputs', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag', 'actionEnvContext', 'lensAndFocalLength', 'shotDurationAndImages'] },
-  { id: 'lighting', label: '💡 Lighting, Color & Atmosphere SFX', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
-  { id: 'artists', label: '🎭 Artists, Makeup & Stunt Safety', keys: ['characterIdAssetRef', 'coArtistInteraction', 'characterExpression', 'characterPlacement', 'makeupAndHairStyle', 'stuntAndSafetyNotes'] },
-  { id: 'audio_post', label: '🎵 Sound, Music Score & Edit Cuts', keys: ['characterDialogue', 'characterMovement', 'characterEyeLooks', 'soundFxAndFoley', 'backgroundScoreMood', 'editTransitionCut'] }
+  { id: 'all', label: 'All 25 Crafts', keys: [] },
+  { id: 'camera', label: '🎥 Camera & Rigging (Crafts 1-3)', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag'] },
+  { id: 'lighting', label: '💡 Lighting & Color (Crafts 4-7)', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag'] },
+  { id: 'vfx', label: '✨ Volumetrics & FX (Craft #8, #21)', keys: ['atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
+  { id: 'character', label: '👥 Acting & Characters (Crafts 9-16, #23, #25)', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'characterIdMatrix'] },
+  { id: 'audio_optics', label: '🎵 Audio, Optics & Edit (Crafts 17-20, #22, #24)', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood', 'lensAndFocalLength', 'stuntAndSafetyNotes', 'editTransitionCut'] }
 ];
 
 export default function SpreadsheetView({ 
@@ -358,7 +359,7 @@ export default function SpreadsheetView({
           </span>
           <span className="text-zinc-600">•</span>
           <span className="text-amber-300 font-mono text-[11px] truncate">
-            Focus: {currentCategoryObj?.label || 'All 24 Crafts'} ({filteredSlots.length} crafts)
+            Focus: {currentCategoryObj?.label || 'All 25 Crafts'} ({filteredSlots.length} crafts)
           </span>
         </div>
 

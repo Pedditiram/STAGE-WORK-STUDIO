@@ -999,7 +999,7 @@ export default function ProjectConsoleModal({
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (24 Crafts Matrix Aware)</strong>
+                      Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (25 Crafts Matrix Aware)</strong>
                     </span>
                     <button
                       type="button"
@@ -1008,7 +1008,7 @@ export default function ProjectConsoleModal({
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
                     >
                       {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-zinc-950" />}
-                      <span>{isLoadingFile ? `Parsing Script (${parseProgress}%)...` : '⚡ Generate 24 Crafts Shots Breakdown'}</span>
+                      <span>{isLoadingFile ? `Parsing Script (${parseProgress}%)...` : '⚡ Generate 25 Crafts Shots Breakdown'}</span>
                     </button>
                   </div>
 
@@ -1018,7 +1018,7 @@ export default function ProjectConsoleModal({
                       <div className="flex items-center justify-between text-[11px] font-mono text-cyan-600 dark:text-cyan-400 font-bold">
                         <span className="flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                          AI Cinema Engine Analyzing Screenplay & 24 Crafts...
+                          AI Cinema Engine Analyzing Screenplay & 25 Crafts...
                         </span>
                         <span className="bg-cyan-500/10 text-cyan-500 px-2 py-0.5 rounded border border-cyan-500/30 text-[10px]">{parseProgress}% COMPLETE</span>
                       </div>
@@ -1075,7 +1075,7 @@ export default function ProjectConsoleModal({
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-500" />
-                      Script Genre Profile & 24 Crafts of Cinema Adaptation:
+                      Script Genre Profile & 25 Crafts of Cinema Adaptation:
                     </h4>
                     <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-0.5">
                       Select, create, or edit production genre profiles below to auto-adapt all 24 crafts matrix slot preset parameters for your screenplay.

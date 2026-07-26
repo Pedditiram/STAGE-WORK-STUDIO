@@ -21,7 +21,7 @@ const DECK_SLIDES = [
     id: 2,
     badge: "DIRECTORIAL PRECISION",
     badgeColor: "from-amber-500 to-orange-600",
-    title: "24 Crafts of Cinema Matrix",
+    title: "25 Crafts of Cinema & Multi-Modal Matrix",
     subtitle: "Granular control over every frame, composition tag, and acoustic atmosphere.",
     content: [
       "Shot Composition: Extreme Close-Up, Wide Anamorphic, Tracking Low-Angle.",
