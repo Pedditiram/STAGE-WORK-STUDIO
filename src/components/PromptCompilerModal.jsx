@@ -16,6 +16,8 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateSh
   const [editingShotIdx, setEditingShotIdx] = useState(null);
   const [activeCraftKey, setActiveCraftKey] = useState(null);
 
+  const [splitRatioMode, setSplitRatioMode] = useState('standard'); // 'standard' (35/65) | 'inverse' (65/35) | 'equal' (50/50)
+
   if (!isOpen) return null;
 
   const compileTaggedFormat = (shot) => {
@@ -758,12 +760,12 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
         </div>
       </div>
 
-      {/* PINNED 25 CRAFTS BREAKDOWN POPUP WINDOW */}
+      {/* PINNED 25 CRAFTS BREAKDOWN POPUP WORKSPACE */}
       {editingShotIdx !== null && (
-        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-amber-500/50 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden font-mono">
-            {/* Popup Header */}
-            <div className="p-4 px-5 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 font-mono">
+          <div className="bg-zinc-950 border border-amber-500/50 rounded-2xl w-full max-w-[96vw] h-[92vh] flex flex-col shadow-2xl overflow-hidden font-mono">
+            {/* Popup Header Bar */}
+            <div className="p-3.5 px-5 border-b border-zinc-800 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
                   <Edit3 className="w-5 h-5 text-amber-400" />
@@ -776,51 +778,195 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                     </span>
                   </h3>
                   <p className="text-[11px] text-zinc-400">
-                    📌 Pinned Window — All 25 crafts appear simultaneously. Click any craft to open its editor.
+                    📌 Pinned Dual-Pane Workspace • Click any craft to edit in right panel.
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setEditingShotIdx(null)}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700 cursor-pointer"
-                title="Close Pinned Window"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {/* RATIO & VIEW CONTROLS */}
+              <div className="flex items-center gap-2">
+                {activeCraftKey !== null && (
+                  <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setSplitRatioMode('standard')}
+                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                        splitRatioMode === 'standard' ? 'bg-cyan-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                      }`}
+                      title="Standard Split: 35% Sidebar List / 65% Editor Focus"
+                    >
+                      📊 35/65
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitRatioMode('equal')}
+                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                        splitRatioMode === 'equal' ? 'bg-purple-500 text-white font-black shadow' : 'text-zinc-400 hover:text-white'
+                      }`}
+                      title="Equal Split: 50% Sidebar / 50% Editor"
+                    >
+                      ⚖️ 50/50
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplitRatioMode('inverse')}
+                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                        splitRatioMode === 'inverse' ? 'bg-amber-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                      }`}
+                      title="Inverse Split: 65% Crafts Grid / 35% Editor Focus"
+                    >
+                      🔄 65/35 (Inverse)
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setEditingShotIdx(null)}
+                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700 cursor-pointer"
+                  title="Close Pinned Workspace"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* All 25 Crafts Grid Body */}
-            <div className="p-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 space-y-3 bg-zinc-950">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {SEEDANCE_SLOTS.map((slot, sIdx) => {
-                  const currentVal = shots[editingShotIdx]?.[slot.key] || '';
-                  const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
+            {/* DUAL-PANE BODY WORKSPACE */}
+            <div className="flex-1 flex overflow-hidden bg-zinc-950">
+              {activeCraftKey === null ? (
+                /* FULL 25 CRAFTS GRID VIEW (100% WIDTH) */
+                <div className="p-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 space-y-3 bg-zinc-950">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                    {SEEDANCE_SLOTS.map((slot, sIdx) => {
+                      const currentVal = shots[editingShotIdx]?.[slot.key] || '';
+                      const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
 
-                  return (
-                    <div
-                      key={slot.key}
-                      onClick={() => setActiveCraftKey(slot.key)}
-                      className="p-3 rounded-xl border border-zinc-800/90 bg-zinc-900/80 hover:bg-zinc-900 hover:border-cyan-500/60 transition-all cursor-pointer space-y-1.5 group shadow-sm flex flex-col justify-between"
-                    >
-                      <div className="flex items-center justify-between gap-1 border-b border-zinc-800/60 pb-1.5">
-                        <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-950 text-cyan-400 border border-zinc-800">
-                          {numStr}
-                        </span>
-                        <h4 className="text-[11px] font-bold text-zinc-200 group-hover:text-cyan-300 font-sans truncate flex-1 ml-1">
-                          {slot.label}
-                        </h4>
-                        <Edit3 className="w-3 h-3 text-zinc-500 group-hover:text-amber-400 shrink-0" />
-                      </div>
+                      return (
+                        <div
+                          key={slot.key}
+                          onClick={() => setActiveCraftKey(slot.key)}
+                          className="p-3 rounded-xl border border-zinc-800/90 bg-zinc-900/80 hover:bg-zinc-900 hover:border-cyan-500/60 transition-all cursor-pointer space-y-1.5 group shadow-sm flex flex-col justify-between"
+                        >
+                          <div className="flex items-center justify-between gap-1 border-b border-zinc-800/60 pb-1.5">
+                            <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-950 text-cyan-400 border border-zinc-800">
+                              {numStr}
+                            </span>
+                            <h4 className="text-[11px] font-bold text-zinc-200 group-hover:text-cyan-300 font-sans truncate flex-1 ml-1">
+                              {slot.label}
+                            </h4>
+                            <Edit3 className="w-3 h-3 text-zinc-500 group-hover:text-amber-400 shrink-0" />
+                          </div>
 
-                      <p className="text-[11px] font-mono text-amber-200/90 bg-zinc-950 p-2 rounded-lg border border-zinc-800/80 line-clamp-2 min-h-[36px] break-words">
-                        {currentVal || <span className="text-zinc-600 italic font-sans">Empty slot value...</span>}
-                      </p>
+                          <p className="text-[11px] font-mono text-amber-200/90 bg-zinc-950 p-2 rounded-lg border border-zinc-800/80 line-clamp-2 min-h-[36px] break-words">
+                            {currentVal || <span className="text-zinc-600 italic font-sans">Empty slot value...</span>}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* INVERSE DUAL-PANE SPLIT WORKSPACE */
+                <div className="flex-1 flex w-full h-full overflow-hidden">
+                  {/* LEFT PANEL: 25 Crafts Sidebar List */}
+                  <div 
+                    className={`border-r border-zinc-800 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950/90 p-3 space-y-2 shrink-0 transition-all ${
+                      splitRatioMode === 'standard' ? 'w-full md:w-[35%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[65%]' : 'w-full md:w-[50%]')
+                    }`}
+                  >
+                    <div className="flex items-center justify-between px-1 pb-1">
+                      <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
+                        25 Crafts List ({SEEDANCE_SLOTS.length}):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveCraftKey(null)}
+                        className="text-[10.5px] text-cyan-400 hover:text-cyan-300 font-mono underline"
+                      >
+                        Expand All Grid
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="space-y-1.5">
+                      {SEEDANCE_SLOTS.map((slot, sIdx) => {
+                        const isSelected = activeCraftKey === slot.key;
+                        const currentVal = shots[editingShotIdx]?.[slot.key] || '';
+                        const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
+
+                        return (
+                          <div
+                            key={slot.key}
+                            onClick={() => setActiveCraftKey(slot.key)}
+                            className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all space-y-1 ${
+                              isSelected
+                                ? 'bg-cyan-950/40 border-cyan-400 text-white font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)] scale-[1.01]'
+                                : 'bg-zinc-900/70 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:border-zinc-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                isSelected ? 'bg-cyan-500 text-zinc-950 font-black' : 'bg-zinc-950 text-cyan-400 border border-zinc-800'
+                              }`}>
+                                {numStr}
+                              </span>
+                              <span className="font-sans text-[11.5px] truncate flex-1 ml-1 font-bold">
+                                {slot.label}
+                              </span>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
+                            </div>
+
+                            <p className="text-[10.5px] font-mono text-zinc-400 truncate bg-zinc-950/80 p-1 px-1.5 rounded border border-zinc-800/60">
+                              {currentVal || <span className="text-zinc-600 italic">Empty...</span>}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* RIGHT PANEL: Embedded Active Craft Editor Workspace */}
+                  <div 
+                    className={`flex-1 h-full overflow-hidden p-3 bg-zinc-950 transition-all ${
+                      splitRatioMode === 'standard' ? 'w-full md:w-[65%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[35%]' : 'w-full md:w-[50%]')
+                    }`}
+                  >
+                    {(() => {
+                      const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
+                      if (!slotConfig) return null;
+
+                      return (
+                        <SlotEditor
+                          slotConfig={slotConfig}
+                          value={shots[editingShotIdx]?.[activeCraftKey] || ''}
+                          onChange={(val) => {
+                            if (onUpdateShot) {
+                              onUpdateShot(editingShotIdx, activeCraftKey, val);
+                            }
+                          }}
+                          compact={false}
+                          allSlots={SEEDANCE_SLOTS}
+                          isForcePopupOpen={true}
+                          embedded={true}
+                          onCloseForcePopup={() => setActiveCraftKey(null)}
+                          onNavigateNextSlot={(currKey) => {
+                            const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
+                            if (idx !== -1 && idx < SEEDANCE_SLOTS.length - 1) {
+                              setActiveCraftKey(SEEDANCE_SLOTS[idx + 1].key);
+                            }
+                          }}
+                          onNavigatePrevSlot={(currKey) => {
+                            const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
+                            if (idx > 0) {
+                              setActiveCraftKey(SEEDANCE_SLOTS[idx - 1].key);
+                            }
+                          }}
+                          onJumpToSlot={(targetKey) => setActiveCraftKey(targetKey)}
+                        />
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Popup Footer */}
@@ -839,40 +985,6 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
               </button>
             </div>
           </div>
-
-          {/* SlotEditor Overlay when a craft is clicked */}
-          {activeCraftKey && (() => {
-            const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
-            if (!slotConfig) return null;
-            return (
-              <SlotEditor
-                slotConfig={slotConfig}
-                value={shots[editingShotIdx]?.[activeCraftKey] || ''}
-                onChange={(val) => {
-                  if (onUpdateShot) {
-                    onUpdateShot(editingShotIdx, activeCraftKey, val);
-                  }
-                }}
-                compact={false}
-                allSlots={SEEDANCE_SLOTS}
-                isForcePopupOpen={true}
-                onCloseForcePopup={() => setActiveCraftKey(null)}
-                onNavigateNextSlot={(currKey) => {
-                  const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                  if (idx !== -1 && idx < SEEDANCE_SLOTS.length - 1) {
-                    setActiveCraftKey(SEEDANCE_SLOTS[idx + 1].key);
-                  }
-                }}
-                onNavigatePrevSlot={(currKey) => {
-                  const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                  if (idx > 0) {
-                    setActiveCraftKey(SEEDANCE_SLOTS[idx - 1].key);
-                  }
-                }}
-                onJumpToSlot={(targetKey) => setActiveCraftKey(targetKey)}
-              />
-            );
-          })()}
         </div>
       )}
     </div>
