@@ -495,6 +495,189 @@ export const GENRE_PRESET_PROFILES = {
         "[Subject Color: Speed Yellow & Glossy Midnight Blue]"
       ]
     }
+  },
+
+  spy: {
+    label: "🕵️‍♂️ Spy Espionage & Covert Agent Thriller",
+    description: "Tailored for Secret Intelligence, Tactical Recon, High-Tech Gadgets & Infiltration Ops",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Agent_Vanguard - Secret agent in tailored tuxedo & earpiece]",
+        "[CharID: @Handler_M - MI6 Director in briefing room with glass screens]"
+      ],
+      actionEnvContext: [
+        "High-security embassy gala in Monte Carlo with glass balconies overlooking Mediterranean.",
+        "Underground server vault with blue laser grid sensors and cooling vapor."
+      ],
+      subjectLightingTag: ["[Lighting: Cold Laser Blue & Discreet Tungsten Key]"],
+      subjectColorTag: ["[Subject Color: Midnight Tuxedo Black & Steel Silver]"]
+    }
+  },
+
+  samurai: {
+    label: "⚔️ Samurai, Martial Arts & Wuxia Legends",
+    description: "Tailored for Katana Sword Duels, Dojo Battles, Bamboo Forest Showdowns & Honor Epics",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Ronin_Kenshin - Master swordsman in traditional hakama with straw hat]",
+        "[CharID: @Ninja_Kage - Shadow assassin in black shinobi outfit]"
+      ],
+      actionEnvContext: [
+        "Swaying green bamboo forest during autumn leaves shower with moonlight filtering through.",
+        "Traditional Japanese wooden dojo with tatami mats and paper shoji screens."
+      ],
+      subjectLightingTag: ["[Lighting: Moonlight Silver Sparkle on Katana Steel]"],
+      subjectColorTag: ["[Subject Color: Ink Black, Bamboo Green & Autumn Crimson]"]
+    }
+  },
+
+  western: {
+    label: "🤠 Western Frontier & Outlaw Legend",
+    description: "Tailored for Saloon Showdowns, Quick-Draw Gunslingers, Red Rock Canyons & Train Robberies",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Outlaw_Colt - Gunslinger in leather duster coat, Stetson hat & revolver]",
+        "[CharID: @Sheriff_Wyatt - Frontier lawman with brass star badge]"
+      ],
+      actionEnvContext: [
+        "Sun-bleached dusty main street of frontier town at high noon, tumbleweed rolling past.",
+        "Red rock canyon pass with steam train chugging along iron tracks."
+      ],
+      subjectLightingTag: ["[Lighting: High-Noon Scorching Sunbeam & Heavy Shadow]"],
+      subjectColorTag: ["[Subject Color: Dust Ochre, Leather Brown & Sun-Faded Blue]"]
+    }
+  },
+
+  romance: {
+    label: "💔 Romantic Drama & Emotional Melodrama",
+    description: "Tailored for Monsoon Rain Romance, Intimate Relationships, Heartbreak & Nostalgic Encounters",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Lover_Kavya - Young woman in handloom pastel saree under umbrella]",
+        "[CharID: @Protagonist_Arjun - Artist in linen shirt with sketchpad]"
+      ],
+      actionEnvContext: [
+        "Cozy coffee shop by rain-streaked window overlooking vintage cobblestone street.",
+        "Sunset beach shoreline with gentle waves lapping against wet golden sand."
+      ],
+      subjectLightingTag: ["[Lighting: Soft Diffused Golden Hour Sunset Glow]"],
+      subjectColorTag: ["[Subject Color: Soft Pastel Pink, Coral & Cream Ivory]"]
+    }
+  },
+
+  noir: {
+    label: "🏙️ Neo-Noir & Gritty Crime Syndicate",
+    description: "Tailored for Underworld Mafia, Wet Rain Pavements, Venetian Blinds & Detective Investigations",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Detective_Marlowe - Hardboiled investigator in trench coat & fedora]",
+        "[CharID: @MobBoss_Don - Syndicate leader in pinstripe suit smoking cigar]"
+      ],
+      actionEnvContext: [
+        "Dimly lit detective office at 2 AM with streetlight casting Venetian blind shadows.",
+        "Rain-drenched city alleyway with neon sign reflections on wet asphalt."
+      ],
+      subjectLightingTag: ["[Lighting: High-Contrast Venetian Blind Chiaroscuro]"],
+      subjectColorTag: ["[Subject Color: Monochrome Charcoal, Crimson & Neon Cyan]"]
+    }
+  },
+
+  superhero: {
+    label: "🦸 Superhero & Comic Book VFX Epic",
+    description: "Tailored for Superhuman Powers, Skyscraper City Battles, VFX Energy Beams & Heroic Capes",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Hero_Titan - Superhero in armored suit with glowing chest emblem]",
+        "[CharID: @Villain_Malakor - Alien warlord in obsidian battle armor]"
+      ],
+      actionEnvContext: [
+        "Skyscraper rooftop looking over metropolis under alien invasion sky portal.",
+        "Destroyed city street with levitating concrete debris and electrical arcs."
+      ],
+      subjectLightingTag: ["[Lighting: Blinding Energy Beam Flare & Volumetric Lightning]"],
+      subjectColorTag: ["[Subject Color: Metallic Gold, Heroic Red & Cobalt Blue]"]
+    }
+  },
+
+  period_history: {
+    label: "📜 Period Historical & Royal Dynasty",
+    description: "Tailored for Ancient Empires, Royal Court Intrigues, Silk Standards & Historical Battles",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Emperor_Vikram - Sovereign ruler in embroidered royal silk & jewels]",
+        "[CharID: @Commander_Rudra - Armored general holding battle standard]"
+      ],
+      actionEnvContext: [
+        "Grand marble throne room of royal palace lined with burning incense braziers.",
+        "Vast grassy battle plain with thousands of armored cavalry units in formation."
+      ],
+      subjectLightingTag: ["[Lighting: Regal Torchlight Ambience & Gold Leaf Sparkle]"],
+      subjectColorTag: ["[Subject Color: Royal Maroon, Imperial Gold & Deep Jade]"]
+    }
+  },
+
+  surrealist: {
+    label: "🎨 Surrealist Cinema & Mind-Bender",
+    description: "Tailored for Dreamscapes, Floating Geometry, Mind Traps & Abstract Visual Realities",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Dreamer_Orpheus - Wanderer in velvet coat surrounded by floating clocks]"
+      ],
+      actionEnvContext: [
+        "Infinite mirror hall stretching into optical illusion kaleidoscope.",
+        "Surreal desert where giant floating hourglasses spill golden sand upwards."
+      ],
+      subjectLightingTag: ["[Lighting: Iridescent Prism Flare & Ethereal Bioluminescence]"],
+      subjectColorTag: ["[Subject Color: Magenta Prism, Electric Violet & Pearl White]"]
+    }
+  },
+
+  cosmic_horror: {
+    label: "🌌 Cosmic Horror & Dark Mystery",
+    description: "Tailored for Lovecraftian Monsters, Deep Abyss, Uncanny Ruins & Eldritch Obelisks",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Scholar_Armitage - Occult researcher holding glowing lantern & ancient book]"
+      ],
+      actionEnvContext: [
+        "Ancient submerged stone temple rising from dark abyssal ocean depths.",
+        "Fog-shrouded monolith crater emitting unearthly violet bioluminescence."
+      ],
+      subjectLightingTag: ["[Lighting: Eerie Eldritch Green & Void Shadow]"],
+      subjectColorTag: ["[Subject Color: Abyssal Black, Eldritch Green & Bone White]"]
+    }
+  },
+
+  sports: {
+    label: "⚽ Sports Drama & Athletic Triumph",
+    description: "Tailored for Stadium Spectacle, Championship Finals, High-Stakes Matches & Athlete Triumph",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Striker_Kabir - Champion athlete in team jersey #10 with sweat-glistening brow]"
+      ],
+      actionEnvContext: [
+        "Packed 80,000 seat stadium under massive floodlights with roaring fans.",
+        "Training gym at sunrise with shadowboxing reflections in sweat-fogged mirrors."
+      ],
+      subjectLightingTag: ["[Lighting: High-Intensity Stadium Floodlight Flare]"],
+      subjectColorTag: ["[Subject Color: Athletic Tricolor Jersey, Turf Green & Floodlight White]"]
+    }
+  },
+
+  adventure: {
+    label: "🏝️ Tropical Adventure & Treasure Hunt",
+    description: "Tailored for Jungle Expeditions, Ancient Ruins, Secret Traps & Lost Gold Treasures",
+    presets: {
+      characterIdAssetRef: [
+        "[CharID: @Explorer_Drake - Archaeologist in safari shirt, leather holster & compass]"
+      ],
+      actionEnvContext: [
+        "Overgrown jungle temple entrance draped in vines with sun shafts piercing canopy.",
+        "Subterranean treasure chamber filled with gold coins, traps and carved idols."
+      ],
+      subjectLightingTag: ["[Lighting: Flaming Torch Warm Flickering Glow]"],
+      subjectColorTag: ["[Subject Color: Jungle Moss Green, Ancient Gold & Earth Khaki]"]
+    }
   }
 };
 
@@ -504,104 +687,56 @@ export const GENRE_PRESET_PROFILES = {
 export function detectScriptGenre(projectTitle = '', shots = []) {
   const combinedText = (projectTitle + ' ' + JSON.stringify(shots)).toLowerCase();
 
-  if (
-    combinedText.includes('anthology') ||
-    combinedText.includes('konaseema') ||
-    combinedText.includes('malkipuram') ||
-    combinedText.includes('godavari') ||
-    combinedText.includes('andhra') ||
-    combinedText.includes('east godavari') ||
-    combinedText.includes('1980') ||
-    combinedText.includes('multi story') ||
-    combinedText.includes('multistory') ||
-    combinedText.includes('village') ||
-    combinedText.includes('rural')
-  ) {
+  if (combinedText.includes('konaseema') || combinedText.includes('malkipuram') || combinedText.includes('godavari') || combinedText.includes('andhra') || combinedText.includes('east godavari') || combinedText.includes('anthology') || combinedText.includes('1980')) {
     return 'konaseema_anthology';
   }
-
-  if (
-    combinedText.includes('sreeram') ||
-    combinedText.includes('rama') ||
-    combinedText.includes('ayodhya') ||
-    combinedText.includes('sita') ||
-    combinedText.includes('shiva') ||
-    combinedText.includes('bow') ||
-    combinedText.includes('myth') ||
-    combinedText.includes('palace') ||
-    combinedText.includes('king') ||
-    combinedText.includes('dharma') ||
-    combinedText.includes('epic')
-  ) {
+  if (combinedText.includes('rama') || combinedText.includes('ayodhya') || combinedText.includes('sita') || combinedText.includes('shiva') || combinedText.includes('myth') || combinedText.includes('dharma')) {
     return 'mythological';
   }
-
-  if (
-    combinedText.includes('magic') ||
-    combinedText.includes('dragon') ||
-    combinedText.includes('wizard') ||
-    combinedText.includes('spell') ||
-    combinedText.includes('sorcery') ||
-    combinedText.includes('elf')
-  ) {
+  if (combinedText.includes('ninja') || combinedText.includes('samurai') || combinedText.includes('katana') || combinedText.includes('dojo') || combinedText.includes('wuxia')) {
+    return 'samurai';
+  }
+  if (combinedText.includes('spy') || combinedText.includes('agent') || combinedText.includes('espionage') || combinedText.includes('embassy') || combinedText.includes('intel')) {
+    return 'spy';
+  }
+  if (combinedText.includes('cowboy') || combinedText.includes('western') || combinedText.includes('saloon') || combinedText.includes('sheriff') || combinedText.includes('gunslinger')) {
+    return 'western';
+  }
+  if (combinedText.includes('romance') || combinedText.includes('love') || combinedText.includes('heartbreak') || combinedText.includes('rain romance') || combinedText.includes('romantic')) {
+    return 'romance';
+  }
+  if (combinedText.includes('noir') || combinedText.includes('detective') || combinedText.includes('mafia') || combinedText.includes('underworld') || combinedText.includes('crime')) {
+    return 'noir';
+  }
+  if (combinedText.includes('superhero') || combinedText.includes('hero') || combinedText.includes('powers') || combinedText.includes('villain') || combinedText.includes('cape')) {
+    return 'superhero';
+  }
+  if (combinedText.includes('magic') || combinedText.includes('dragon') || combinedText.includes('wizard') || combinedText.includes('sorcery') || combinedText.includes('fantasy')) {
     return 'fantasy';
   }
-
-  if (
-    combinedText.includes('ghost') ||
-    combinedText.includes('horror') ||
-    combinedText.includes('haunted') ||
-    combinedText.includes('mansion') ||
-    combinedText.includes('shadow') ||
-    combinedText.includes('blood')
-  ) {
+  if (combinedText.includes('ghost') || combinedText.includes('horror') || combinedText.includes('haunted') || combinedText.includes('vampire') || combinedText.includes('blood')) {
     return 'horror';
   }
-
-  if (
-    combinedText.includes('dance') ||
-    combinedText.includes('bollywood') ||
-    combinedText.includes('wedding') ||
-    combinedText.includes('holi') ||
-    combinedText.includes('song') ||
-    combinedText.includes('music video')
-  ) {
+  if (combinedText.includes('dance') || combinedText.includes('bollywood') || combinedText.includes('wedding') || combinedText.includes('holi') || combinedText.includes('sangeet')) {
     return 'bollywood';
   }
-
-  if (
-    combinedText.includes('race') ||
-    combinedText.includes('car') ||
-    combinedText.includes('drift') ||
-    combinedText.includes('speed') ||
-    combinedText.includes('heist')
-  ) {
+  if (combinedText.includes('race') || combinedText.includes('car') || combinedText.includes('drift') || combinedText.includes('speed') || combinedText.includes('supercar')) {
     return 'racing';
   }
-
-  if (
-    combinedText.includes('space') ||
-    combinedText.includes('starship') ||
-    combinedText.includes('alien') ||
-    combinedText.includes('holo') ||
-    combinedText.includes('scifi') ||
-    combinedText.includes('orbit')
-  ) {
+  if (combinedText.includes('space') || combinedText.includes('starship') || combinedText.includes('alien') || combinedText.includes('scifi') || combinedText.includes('orbit')) {
     return 'scifi';
   }
-
-  if (
-    combinedText.includes('action') ||
-    combinedText.includes('chase') ||
-    combinedText.includes('gun') ||
-    combinedText.includes('agent') ||
-    combinedText.includes('crime') ||
-    combinedText.includes('fight')
-  ) {
-    return 'action';
+  if (combinedText.includes('sports') || combinedText.includes('match') || combinedText.includes('stadium') || combinedText.includes('strikers') || combinedText.includes('champion')) {
+    return 'sports';
+  }
+  if (combinedText.includes('jungle') || combinedText.includes('treasure') || combinedText.includes('expedition') || combinedText.includes('adventure')) {
+    return 'adventure';
+  }
+  if (combinedText.includes('cyber') || combinedText.includes('cyberpunk') || combinedText.includes('neon') || combinedText.includes('concert')) {
+    return 'cyberpunk';
   }
 
-  return 'mythological';
+  return 'action';
 }
 
 // ==========================================
@@ -883,6 +1018,114 @@ export const SEEDANCE_SLOTS = [
       "Duration: 4s | Image_1: @LeadSinger_Aria | Image_2: @Guitarist_Leo | Image_3: @ConcertStage_Neon | Image_4: @Cybervisor_Prop",
       "Duration: 6s | Image_1: @Captain_Vane | Image_2: @Pilot_Nova | Image_3: @StarshipBridge | Image_4: @HoloHUD",
       "Duration: 8s | Image_1: @Agent_Cross | Image_2: @Detective_Vance | Image_3: @RainAlleyway | Image_4: @TacticalSUV"
+    ]
+  },
+  {
+    key: "soundFxAndFoley",
+    label: "🎵 Craft #18: Sound Design & Foley FX",
+    icon: "Volume2",
+    description: "Foley sound effects, ambient environmental audio, impact hits, and acoustic cues.",
+    tipTitle: "Sound Design & Foley Acoustics",
+    tip: "Define environmental acoustic layers (Roaring Village Crowd, Metallic Knife Blade Ringing, Thunder Crack, Neon Synth Hum) to drive audio generation pipelines.",
+    presets: [
+      "[SFX: Roaring Village Crowd & Rooster Wing Flap Foley]",
+      "[SFX: Metallic Blade Ringing & Razor Knife Slash FX]",
+      "[SFX: Volumetric Thunder Crack & Heavy Rain Impact]",
+      "[SFX: Laser Blast & Cyberpunk Synth Energy Charge]",
+      "[SFX: Heavy Horse Hooves & Ancient War Horn Echo]",
+      "[SFX: Whispering Wind through Coconut Palms & Canal Water Ripples]"
+    ]
+  },
+  {
+    key: "backgroundScoreMood",
+    label: "🎼 Craft #19: Music Composition & Original Score",
+    icon: "Music",
+    description: "Musical score motif, tempo BPM, orchestral instrumentation, and emotional tone.",
+    tipTitle: "Music Score & Emotional Motif",
+    tip: "Specify musical genre & rhythm (High-Energy Dappu Percussion, Sacred Sanskrit Chants, Synthwave Bassline, Tense String Tremolo) to guide background score generation.",
+    presets: [
+      "[Score: High-Energy 1980s Folk Drums & Dappu Percussion Rhythms]",
+      "[Score: Epic Celestial Orchestral Brass & Sacred Sanskrit Chants]",
+      "[Score: Heavy Industrial Cyberpunk Bassline & Synthwave Arpeggio]",
+      "[Score: Tense Suspenseful String Tremolo & Low Sub-Bass Drone]",
+      "[Score: Nostalgic Acoustic Flute Melody & Warm Guitar Strums]"
+    ]
+  },
+  {
+    key: "lensAndFocalLength",
+    label: "📷 Craft #20: Camera Lens & Focal Optics",
+    icon: "Camera",
+    description: "Focal length in mm, lens prime series, anamorphic squeeze, and aperture f-stop.",
+    tipTitle: "Camera Lens Optics & Depth Field",
+    tip: "Choose exact optical characteristics (35mm Anamorphic Scope, 50mm Master Prime f/1.4, 100mm Macro f/2.8) to govern perspective compression and background bokeh.",
+    presets: [
+      "35mm Anamorphic Prime (f/1.8) - Deep Cinema Scope",
+      "50mm Master Prime (f/1.4) - Shallow Depth Bokeh",
+      "85mm Portrait Prime (f/1.2) - Silky Background Separation",
+      "24mm Ultra Wide Angle (f/2.8) - Dynamic Environmental Scale",
+      "100mm Macro Lens (f/2.8) - Razor Blade Close-Up Detail",
+      "70-200mm Telephoto Zoom (f/2.8) - Compressed Action Tracking"
+    ]
+  },
+  {
+    key: "vfxCgiBreakdown",
+    label: "✨ Craft #21: Visual Effects & CGI Compositing",
+    icon: "Sparkles",
+    description: "CGI assets, green screen keying, particle FX, and digital matte painting.",
+    tipTitle: "VFX & CGI Asset Layering",
+    tip: "Tag digital compositing layers (Green Screen Keying, 3D Particle Destruction, Holographic HUD Overlay, Digital Matte Painting) for post-production VFX teams.",
+    presets: [
+      "[VFX: Practical Shot - 100% In-Camera Live Action]",
+      "[VFX: Digital Environment Matte Painting & Sky Replacement]",
+      "[VFX: 3D CGI Particle Destruction & Volumetric Smoke Composite]",
+      "[VFX: Green Screen Keying & Cyberpunk Hologram Overlay]",
+      "[VFX: Slow-Motion 1000fps High-Speed Impact FX]"
+    ]
+  },
+  {
+    key: "stuntAndSafetyNotes",
+    label: "🛡️ Craft #22: Stunt Rigging & Action Safety",
+    icon: "Shield",
+    description: "Stunt harness wirework, prop safety weapons, and controlled impact rigging.",
+    tipTitle: "Stunt Choreography & Safety Protocols",
+    tip: "Document stunt execution parameters (Wire Harness Jump Landing, Rubber Prop Knife, Precision Car Drift, Certified Pyrotechnic Charge) for action sequences.",
+    presets: [
+      "[Stunt: Safe Handler Control & Rubber Blade Prop Knife]",
+      "[Stunt: High-Wire Harness Rigging for Aerial Jump Landing]",
+      "[Stunt: Controlled Precision Car Drift with Trained Stunt Driver]",
+      "[Stunt: Martial Arts Choreography with Soft Mat Landing Area]",
+      "[Stunt: Certified Pyrotechnic Fire Charge with Safety Marshal]"
+    ]
+  },
+  {
+    key: "makeupAndHairStyle",
+    label: "💄 Craft #23: Makeup, Hair & Prosthetics",
+    icon: "Sparkle",
+    description: "Character makeup design, prosthetics, wound FX, facial hair, and period hairstyles.",
+    tipTitle: "Character Makeup & Prosthetics",
+    tip: "Detail character grooming and FX (Sun-Tanned Rural Skin, Saffron Tilak, Cyberpunk LED Liner, Prosthetic Battle Scratches, 1980s Vintage Hairstyle) to maintain character visual consistency.",
+    presets: [
+      "[Makeup: Authentic 1980s Village Sun-Tanned Skin & Natural Sweat Glow]",
+      "[Makeup: Celestial Divine Saffron Tilak & Royal Gold Powder]",
+      "[Makeup: Cyberpunk Metallic Face Tattoo & Neon LED Liner]",
+      "[Makeup: Gritty Battle Scratches & Prosthetic Wound FX]",
+      "[Makeup: Vintage 1980s Telugu Hairstyle & Traditional Bindi]"
+    ]
+  },
+  {
+    key: "editTransitionCut",
+    label: "✂️ Craft #24: Film Editing Cut & Transition",
+    icon: "Scissors",
+    description: "Editing cut style, J-Cut/L-Cut audio transitions, match cuts, and scene pacing.",
+    tipTitle: "Film Editing & Transition Pacing",
+    tip: "Specify post-production edit cuts (Hard Cut, L-Cut Audio Overlap, Fast Whip Pan Match Cut, Smash Cut) to dictate scene pacing and seamless shot flow.",
+    presets: [
+      "Hard Cut (Standard Scene Beat)",
+      "L-Cut / J-Cut Audio Overlap",
+      "Fast Whip Pan Match Cut",
+      "Slow Cross-Dissolve Fade (60 Frames)",
+      "Smash Cut to High-Action Impact",
+      "Invisible Match Cut on Character Motion"
     ]
   }
 ];

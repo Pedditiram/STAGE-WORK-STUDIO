@@ -116,9 +116,9 @@ export async function parseRawScriptToShots(scriptText) {
 
   if (provider === 'google_gemini' && apiKey.trim()) {
     try {
-      const prompt = `You are a Hollywood Technical Director and Master Cinematographer. Parse the following screenplay script into a JSON array of 15-slot stage production shots.
-Each shot in the JSON array MUST strictly contain these 15 keys:
-"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks".
+      const prompt = `You are a Hollywood Technical Director and Master Cinematographer. Parse the following screenplay script into a JSON array of 24-craft stage production shots.
+Each shot in the JSON array MUST strictly contain these 24 keys:
+"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut".
 
 Script to breakdown:
 ${scriptText.slice(0, 4000)}
@@ -357,7 +357,14 @@ function parseRawScriptFallback(scriptText) {
       characterDialogue: dialogue,
       characterMovement: "Dynamic movement focused on action sequence",
       characterEyeLooks: "[Eye Look: Direct Laser Focus on Opponent / Arena Target]",
-      shotDurationAndImages: durationAndImagesStr
+      shotDurationAndImages: durationAndImagesStr,
+      soundFxAndFoley: "[SFX: Roaring Village Crowd & Metallic Blade Ringing]",
+      backgroundScoreMood: "[Score: High-Energy 1980s Folk Drums & Dappu Percussion Rhythms]",
+      lensAndFocalLength: "50mm Master Prime (f/1.4) - Shallow Depth Bokeh",
+      vfxCgiBreakdown: "[VFX: Practical Shot - 100% In-Camera Live Action]",
+      stuntAndSafetyNotes: "[Stunt: Safe Handler Control & Rubber Blade Prop Knife]",
+      makeupAndHairStyle: "[Makeup: Authentic 1980s Village Sun-Tanned Skin & Natural Sweat Glow]",
+      editTransitionCut: "Hard Cut (Standard Scene Beat)"
     });
   });
 
