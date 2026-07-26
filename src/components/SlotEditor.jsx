@@ -270,14 +270,146 @@ export default function SlotEditor({
               </div>
 
               <textarea
-                rows={3}
+                rows={2}
                 value={value || ''}
                 onChange={handleCustomInput}
                 autoFocus
                 placeholder={`Enter complete ${(activeConfig.label || '').toLowerCase()} text...`}
-                className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-xl p-3 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
+                className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
               />
             </div>
+
+            {/* CRAFT #25: FIXED MULTI-MODAL ASSET SLOTS (image_1..9, video_1..3, audio_1..3) */}
+            {activeConfig.key === 'characterIdMatrix' && (() => {
+              const parseMatrixMap = (matrixStr = '') => {
+                const map = {
+                  image_1: '', image_2: '', image_3: '', image_4: '', image_5: '', image_6: '', image_7: '', image_8: '', image_9: '',
+                  video_1: '', video_2: '', video_3: '',
+                  audio_1: '', audio_2: '', audio_3: ''
+                };
+                if (!matrixStr) return map;
+                const parts = matrixStr.split('|').map(s => s.trim()).filter(Boolean);
+                parts.forEach(part => {
+                  const match = part.match(/(Image_\d+|Video_\d+|Audio_\d+)\s*=\s*(.*)/i);
+                  if (match) {
+                    const k = match[1].toLowerCase();
+                    if (Object.prototype.hasOwnProperty.call(map, k)) {
+                      map[k] = match[2].trim();
+                    }
+                  }
+                });
+                return map;
+              };
+
+              const buildMatrixStr = (map) => {
+                const parts = [];
+                for (let i = 1; i <= 9; i++) {
+                  const val = map[`image_${i}`];
+                  if (val && val.trim()) parts.push(`Image_${i} = ${val.trim()}`);
+                }
+                for (let i = 1; i <= 3; i++) {
+                  const val = map[`video_${i}`];
+                  if (val && val.trim()) parts.push(`Video_${i} = ${val.trim()}`);
+                }
+                for (let i = 1; i <= 3; i++) {
+                  const val = map[`audio_${i}`];
+                  if (val && val.trim()) parts.push(`Audio_${i} = ${val.trim()}`);
+                }
+                return parts.join(' | ');
+              };
+
+              const currentMap = parseMatrixMap(value);
+
+              return (
+                <div className="p-3 rounded-xl border border-cyan-500/40 bg-zinc-900/90 space-y-3 shadow-inner">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5 font-mono">
+                      <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                      Fixed ComfyUI Seedance 2.0 Multi-Modal Asset Slots:
+                    </h4>
+                    <span className="text-[10px] text-cyan-400 font-mono">15 Fixed Slots (image_1..9, video_1..3, audio_1..3)</span>
+                  </div>
+
+                  {/* IMAGE SLOTS 1..9 */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10.5px] font-bold text-cyan-300 font-mono block">🖼️ Image Reference Slots (image_1 to image_9):</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                        const k = `image_${num}`;
+                        return (
+                          <div key={k} className="flex items-center gap-1 bg-zinc-950 p-1 px-1.5 rounded-lg border border-zinc-800 focus-within:border-cyan-500">
+                            <span className="text-[11px] font-bold text-amber-400 font-mono w-14 shrink-0 text-right">image_{num}</span>
+                            <input
+                              type="text"
+                              value={currentMap[k] || ''}
+                              onChange={(e) => {
+                                const updated = { ...currentMap, [k]: e.target.value };
+                                onChange(buildMatrixStr(updated));
+                              }}
+                              placeholder={`Subject ${num}`}
+                              className="w-full bg-zinc-900 text-white border border-zinc-700/80 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* VIDEO & AUDIO SLOTS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* VIDEO SLOTS */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-emerald-300 font-mono block">🎥 Video Clip Slots (video_1 to video_3):</span>
+                      <div className="space-y-1">
+                        {[1, 2, 3].map((num) => {
+                          const k = `video_${num}`;
+                          return (
+                            <div key={k} className="flex items-center gap-1 bg-zinc-950 p-1 px-1.5 rounded-lg border border-zinc-800 focus-within:border-emerald-500">
+                              <span className="text-[11px] font-bold text-emerald-400 font-mono w-14 shrink-0 text-right">video_{num}</span>
+                              <input
+                                type="text"
+                                value={currentMap[k] || ''}
+                                onChange={(e) => {
+                                  const updated = { ...currentMap, [k]: e.target.value };
+                                  onChange(buildMatrixStr(updated));
+                                }}
+                                placeholder={`Video Ref ${num}`}
+                                className="w-full bg-zinc-900 text-white border border-zinc-700/80 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-emerald-400"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* AUDIO SLOTS */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-purple-300 font-mono block">🎵 Audio Reference Slots (audio_1 to audio_3):</span>
+                      <div className="space-y-1">
+                        {[1, 2, 3].map((num) => {
+                          const k = `audio_${num}`;
+                          return (
+                            <div key={k} className="flex items-center gap-1 bg-zinc-950 p-1 px-1.5 rounded-lg border border-zinc-800 focus-within:border-purple-500">
+                              <span className="text-[11px] font-bold text-purple-400 font-mono w-14 shrink-0 text-right">audio_{num}</span>
+                              <input
+                                type="text"
+                                value={currentMap[k] || ''}
+                                onChange={(e) => {
+                                  const updated = { ...currentMap, [k]: e.target.value };
+                                  onChange(buildMatrixStr(updated));
+                                }}
+                                placeholder={`Audio Track ${num}`}
+                                className="w-full bg-zinc-900 text-white border border-zinc-700/80 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-purple-400"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Add New Custom Preset Input Box */}
             <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-1.5">
