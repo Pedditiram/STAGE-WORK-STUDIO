@@ -19,6 +19,58 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, activeTarg
     return SEEDANCE_SLOTS.map(slot => shot[slot.key]).filter(Boolean).join(' | ');
   };
 
+  const compileSeedanceDirectFormat = (shot, shotIdx) => {
+    const shotId = shot.sceneShotId || `SC01_SH${shotIdx + 1 < 10 ? '0' + (shotIdx + 1) : shotIdx + 1}`;
+    const framing = shot.shotComposition || 'Medium Shot';
+    const motion = (shot.cameraMotionTag || 'Tracking Shot').replace(/\[Camera:\s*/, '').replace(/\]/, '');
+    const lighting = (shot.subjectLightingTag || 'Golden Hour').replace(/\[|\]/g, '');
+    const color = (shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
+    const env = shot.actionEnvContext || 'Sankranti fight arena';
+
+    // Parse and resolve Image_1 to Image_9 bindings cleanly
+    const rawImagesStr = shot.shotDurationAndImages || '';
+    const durationMatch = rawImagesStr.match(/Duration:\s*([\d\.-]+s?)/i);
+    const duration = durationMatch ? durationMatch[1] : '5.0s';
+
+    const imagePairs = [];
+    const pairMatches = rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g);
+    for (const match of pairMatches) {
+      const imgNum = match[1];
+      const tag = match[2];
+      let desc = tag.replace('@', '').replace(/_/g, ' ');
+      imagePairs.push(`  • Image_${imgNum}: ${tag} (${desc})`);
+    }
+
+    if (imagePairs.length === 0) {
+      if (shot.characterIdAssetRef) imagePairs.push(`  • Image_1: @PrimarySubject (${shot.characterIdAssetRef})`);
+      if (shot.coArtistInteraction) imagePairs.push(`  • Image_2: @CoArtist (${shot.coArtistInteraction})`);
+      imagePairs.push(`  • Image_3: @Environment (${env})`);
+    }
+
+    const resolvedImageHeader = imagePairs.join('\n');
+
+    // Build ultra-clean cinematic Seedance prompt text with explicit @Tag bindings
+    let promptNarrative = `A cinematic ${framing.toLowerCase()} (${shotId}). `;
+    if (shot.actionEnvContext) promptNarrative += `Environment: ${shot.actionEnvContext}. `;
+    if (shot.characterIdAssetRef) promptNarrative += `Featuring ${shot.characterIdAssetRef}. `;
+    if (shot.coArtistInteraction) promptNarrative += `Co-artist: ${shot.coArtistInteraction}. `;
+    if (motion) promptNarrative += `The camera moves with ${motion}. `;
+    if (lighting) promptNarrative += `Lighting styled with ${lighting}. `;
+    if (color) promptNarrative += `Color graded in ${color}. `;
+    if (shot.atmosphereVolumetricsTag) promptNarrative += `Atmosphere: ${shot.atmosphereVolumetricsTag.replace(/\[|\]/g, '')}. `;
+    if (shot.characterMovement) promptNarrative += `Action performance: ${shot.characterMovement}. `;
+    if (shot.characterExpression) promptNarrative += `Facial expression: ${shot.characterExpression}. `;
+    if (shot.characterDialogue) promptNarrative += `Vocal sync: ${shot.characterDialogue}. `;
+
+    return `[SEEDANCE DIRECT CONDITIONING PROMPT - SHOT #${shotIdx + 1} (${shotId})]
+Shot: ${framing} | Duration: ${duration}
+Resolved Image Inputs:
+${resolvedImageHeader}
+
+Prompt Text:
+${promptNarrative.trim()}`;
+  };
+
   const compileSoraFormat = (shot) => {
     const parts = [];
     parts.push(`A cinematic ${shot.shotComposition ? shot.shotComposition.toLowerCase() : 'shot'} (${shot.sceneShotId || 'SC01_SH01'}).`);
@@ -169,18 +221,18 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 🎥 ${videoCommand}`;
   };
 
-  const compileEngineSpecific = (shot) => {
-    return compileTaggedFormat(shot);
+  const compileEngineSpecific = (shot, idx) => {
+    return compileSeedanceDirectFormat(shot, idx);
   };
 
   const getShotPromptText = (shot, idx) => {
-    if (formatMode === 'engine_optimized') return compileEngineSpecific(shot);
+    if (formatMode === 'engine_optimized') return compileSeedanceDirectFormat(shot, idx);
     if (formatMode === 'first_last_frame') return compileFirstLastFrameFormat(shot, idx);
     if (formatMode === 'seedream_beat_breakdown') return compileSeeDreamBeatBreakdown(shot, idx);
     if (formatMode === 'seedream_image') return compileSeeDreamFormat(shot);
-    if (formatMode === 'natural_language') return compileSoraFormat(shot);
+    if (formatMode === 'natural_language') return compileSeedanceDirectFormat(shot, idx);
     if (formatMode === 'json') return JSON.stringify(shot, null, 2);
-    return compileTaggedFormat(shot);
+    return compileSeedanceDirectFormat(shot, idx);
   };
 
   // STRICT SHORT FILENAME ONLY (SC01_SH01.txt, SC01_SH02.txt...)
@@ -205,9 +257,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       `=== HIGH-RES IMAGE GENERATION PROMPT (SHOT #${idx + 1} - ${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileSeeDreamFormat(shot)}`
     ).join('\n\n');
   } else if (formatMode === 'seedance_tagged') {
-    compiledOutput = shots.map((shot, idx) => `=== SPS STAGE PRODUCTION SHOT #${idx + 1} (${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileTaggedFormat(shot)}`).join('\n\n');
+    compiledOutput = shots.map((shot, idx) => compileSeedanceDirectFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
   } else if (formatMode === 'natural_language') {
-    compiledOutput = shots.map((shot, idx) => `--- SHOT ${idx + 1} (${shot.sceneShotId || 'SC01_SH01'} - ${shot.shotComposition || 'Medium Shot'}) ---\n${compileSoraFormat(shot)}`).join('\n\n');
+    compiledOutput = shots.map((shot, idx) => compileSeedanceDirectFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
   } else if (formatMode === 'json') {
     compiledOutput = JSON.stringify(shots, null, 2);
   } else if (formatMode === 'csv') {
