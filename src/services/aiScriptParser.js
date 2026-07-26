@@ -111,7 +111,7 @@ function parsePdfBinaryAdvanced(arrayBuffer) {
  * Uses Google Gemini 3.6 Flash / 3.1 Pro API when provider & key configured in Settings, else fast heuristic fallback.
  */
 export async function parseRawScriptToShots(scriptText) {
-  const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'built_in') : 'built_in';
+  const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'google_gemini') : 'google_gemini';
   const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
 
   if (provider === 'google_gemini' && apiKey.trim()) {
@@ -386,7 +386,7 @@ function parseRawScriptFallback(scriptText) {
 }
 
 export async function generateScriptFromConcept(conceptPrompt, shotCount = 5) {
-  const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'built_in') : 'built_in';
+  const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'google_gemini') : 'google_gemini';
   const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
 
   if (provider === 'google_gemini' && apiKey.trim()) {

@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap } from 'lucide-react';
 import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
+import { 
+  getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
+  exportAppSettingsToFile, importAppSettingsFromFile 
+} from '../services/appSettingsDiskVault';
 
 export default function AdminSettingsModal({ 
   isOpen, 
@@ -214,8 +218,36 @@ export default function AdminSettingsModal({
 
 
   // 1. LLM PROVIDER & API KEY STATE
+  const settingsFileInputRef = React.useRef(null);
+  const [allottedSettingsFolder, setAllottedSettingsFolder] = useState(() => getAllottedSettingsFolderPath());
+
+  const handleEditAllottedSettingsFolder = () => {
+    const current = getAllottedSettingsFolderPath();
+    const newPath = prompt("Set Allotted Local Storage Directory Path for App Settings & API Keys:", current);
+    if (newPath && newPath.trim()) {
+      const cleanPath = newPath.trim();
+      setAllottedSettingsFolderPath(cleanPath);
+      setAllottedSettingsFolder(cleanPath);
+    }
+  };
+
+  const handleImportSettingsFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedSettings = await importAppSettingsFromFile(file);
+      if (importedSettings.sps_llm_provider) setLlmProvider(importedSettings.sps_llm_provider);
+      if (importedSettings.sps_api_key) setApiKey(importedSettings.sps_api_key);
+      alert("📥 APP SETTINGS & API KEYS RESTORED SUCCESSFULLY:\nAll settings, API keys, and LLM allotments imported & saved to local vault!");
+    } catch (err) {
+      alert(`❌ IMPORT SETTINGS ERROR:\n${err.message}`);
+    }
+    if (e.target) e.target.value = '';
+  };
+
   const [llmProvider, setLlmProvider] = useState(() => {
-    return localStorage.getItem('sps_llm_provider') || 'built_in';
+    return localStorage.getItem('sps_llm_provider') || 'google_gemini';
   });
   const [apiKey, setApiKey] = useState(() => {
     return localStorage.getItem('sps_api_key') || '';
@@ -2296,6 +2328,65 @@ export default function AdminSettingsModal({
                   )}
                 </div>
               )}
+
+              {/* ALLOTTED LOCAL APP SETTINGS VAULT BANNER */}
+              <input 
+                type="file" 
+                ref={settingsFileInputRef} 
+                onChange={handleImportSettingsFile} 
+                accept=".json" 
+                className="hidden" 
+              />
+              <div className="mt-4 p-3 rounded-xl border border-amber-500/40 bg-zinc-950 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-800/80 shrink-0">
+                    <Key className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white font-sans flex items-center gap-2">
+                      <span>📁 Allotted Local App Settings & API Keys Vault</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                        🔒 Persistent & Auto-Restored
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-amber-200/80 font-mono truncate max-w-xl">
+                      {allottedSettingsFolder}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleEditAllottedSettingsFolder}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all"
+                    title="Change Allotted Settings Storage Directory Path"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Path</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => exportAppSettingsToFile()}
+                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1 shadow-md transition-all"
+                    title="Export & Save sps_app_settings.json to Local Folder"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Settings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => settingsFileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-md transition-all"
+                    title="Import & Restore sps_app_settings.json from Local Folder"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import Settings</span>
+                  </button>
+                </div>
+              </div>
 
               {/* MASTER SAVE ALL SETTINGS BUTTON */}
               <div className="pt-4 border-t border-zinc-800">

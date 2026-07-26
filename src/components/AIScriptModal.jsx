@@ -141,7 +141,7 @@ export default function AIScriptModal({ isOpen, onClose, onApplyShots, setProjec
       .toUpperCase();
   };
 
-  const activeLlmProvider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'built_in') : 'built_in';
+  const activeLlmProvider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'google_gemini') : 'google_gemini';
   const hasApiKey = typeof window !== 'undefined' ? Boolean(localStorage.getItem('sps_api_key')) : false;
   const isGeminiActive = activeLlmProvider === 'google_gemini' && hasApiKey;
 
