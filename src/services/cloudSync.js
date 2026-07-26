@@ -169,6 +169,8 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   };
 }
 
+import { safeLocalStorageSetItem } from '../utils/safeStorage';
+
 export async function publishToCloudRoom(roomId, projectData) {
   const nowIso = new Date().toISOString();
   const payload = {
@@ -180,11 +182,11 @@ export async function publishToCloudRoom(roomId, projectData) {
   const payloadStr = JSON.stringify(payload);
   lastSyncedPayloadStr = payloadStr;
 
-  // 1. Save to Local Storage
+  // 1. Save to Local Storage safely
   if (typeof window !== 'undefined') {
-    localStorage.setItem(`sps_cloud_${roomId}`, payloadStr);
+    safeLocalStorageSetItem(`sps_cloud_${roomId}`, payloadStr);
     if (payload.shots && Array.isArray(payload.shots)) {
-      localStorage.setItem('sps_current_shots', JSON.stringify(payload.shots));
+      safeLocalStorageSetItem('sps_current_shots', JSON.stringify(payload.shots));
     }
   }
 

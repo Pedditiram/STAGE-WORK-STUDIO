@@ -27,6 +27,7 @@ import {
   subscribeToActiveEditingSlots
 } from './services/dbService';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
+import { safeLocalStorageSetItem } from './utils/safeStorage';
 import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward, RefreshCw } from 'lucide-react';
 
 const INITIAL_SHOTS = [
@@ -235,10 +236,10 @@ export default function App() {
   // Local Storage Persistence (Does NOT publish to cloud when in Local Version)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('sps_current_shots', JSON.stringify(shots));
-    localStorage.setItem('sps_current_project_title', projectTitle);
-    localStorage.setItem('sps_current_target_model', targetModel);
-    localStorage.setItem('sps_current_aspect_ratio', aspectRatio);
+    safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
+    safeLocalStorageSetItem('sps_current_project_title', projectTitle);
+    safeLocalStorageSetItem('sps_current_target_model', targetModel);
+    safeLocalStorageSetItem('sps_current_aspect_ratio', aspectRatio);
   }, [shots, projectTitle, targetModel, aspectRatio]);
 
   // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount (Cloud Mode Only)
@@ -266,7 +267,7 @@ export default function App() {
         });
       }
 
-      localStorage.setItem('sps_project_library', JSON.stringify(updatedProjs));
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(updatedProjs));
       window.dispatchEvent(new Event('sps_projects_updated'));
       syncProjectLibraryToCloud(updatedProjs);
 
@@ -423,7 +424,7 @@ export default function App() {
           };
 
           const existingVersions = activeProj.versions || [];
-          const updatedVersions = [newSnapshot, ...existingVersions].slice(0, 50);
+          const updatedVersions = [newSnapshot, ...existingVersions].slice(0, 3);
 
           library[targetIdx] = {
             ...activeProj,
@@ -432,7 +433,7 @@ export default function App() {
             versions: updatedVersions
           };
 
-          localStorage.setItem('sps_project_library', JSON.stringify(library));
+          safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
 
           const globalBackupsStr = localStorage.getItem('sps_global_project_backups');
           let globalBackups = globalBackupsStr ? JSON.parse(globalBackupsStr) : [];
@@ -446,7 +447,7 @@ export default function App() {
             shots: [...shots]
           });
 
-          localStorage.setItem('sps_global_project_backups', JSON.stringify(globalBackups.slice(0, 100)));
+          safeLocalStorageSetItem('sps_global_project_backups', JSON.stringify(globalBackups.slice(0, 10)));
         }
       } catch (err) {
         console.warn("Auto-backup error:", err);
@@ -507,7 +508,7 @@ export default function App() {
           library.unshift(updatedProjectData);
         }
 
-        localStorage.setItem('sps_project_library', JSON.stringify(library));
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
         syncProjectLibraryToCloud(library);
       } catch (e) {}
     }
@@ -558,10 +559,10 @@ export default function App() {
         library.unshift(updatedProjectData);
       }
 
-      localStorage.setItem('sps_project_library', JSON.stringify(library));
-      localStorage.setItem('sps_current_project_title', projectTitle);
-      localStorage.setItem('sps_current_shots', JSON.stringify(shots));
-      localStorage.setItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+      safeLocalStorageSetItem('sps_current_project_title', projectTitle);
+      safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
+      safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
       // 1. UPLOAD LOCAL EDITS TO CLOUD
       await syncToCloud({ shots, projectGeneratedImages, projectTitle, library });

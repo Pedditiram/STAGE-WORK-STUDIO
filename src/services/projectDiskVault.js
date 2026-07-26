@@ -2,6 +2,8 @@
 // STAGE PRODUCTION STUDIO - PERSISTENT LOCAL DISK VAULT
 // =========================================================
 
+import { safeLocalStorageSetItem } from '../utils/safeStorage';
+
 const DB_NAME = 'sps_local_disk_vault_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'sps_projects_store';
@@ -72,7 +74,7 @@ export const saveProjectToVault = async (project) => {
     } else {
       lib.push(project);
     }
-    localStorage.setItem('sps_project_library', JSON.stringify(lib));
+    safeLocalStorageSetItem('sps_project_library', JSON.stringify(lib));
   } catch (e) {}
 
   return true;
