@@ -220,8 +220,8 @@ export default function SlotEditor({
 
     const cardContent = (
       <div 
-        className={`bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-4 w-full shadow-2xl space-y-3.5 flex flex-col font-mono overflow-hidden ${
-          embedded ? 'h-full max-h-full border-cyan-500/40' : 'max-w-2xl max-h-[90vh] p-5'
+        className={`bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-4 w-full shadow-2xl space-y-3.5 flex flex-col font-mono ${
+          embedded ? 'h-full max-h-full border-cyan-500/40 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700' : 'max-w-2xl max-h-[90vh] p-5 overflow-hidden'
         }`}
         onClick={(e) => e.stopPropagation()}
       >

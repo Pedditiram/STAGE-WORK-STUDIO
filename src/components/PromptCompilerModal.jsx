@@ -926,7 +926,7 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
                   {/* RIGHT PANEL: Embedded Active Craft Editor Workspace */}
                   <div 
-                    className={`flex-1 h-full overflow-hidden p-3 bg-zinc-950 transition-all ${
+                    className={`flex-1 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950 p-2 sm:p-3 transition-all ${
                       splitRatioMode === 'standard' ? 'w-full md:w-[65%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[35%]' : 'w-full md:w-[50%]')
                     }`}
                   >
