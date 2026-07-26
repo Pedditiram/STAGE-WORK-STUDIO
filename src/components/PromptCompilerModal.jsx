@@ -930,49 +930,82 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                       splitRatioMode === 'standard' ? 'w-full md:w-[65%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[35%]' : 'w-full md:w-[50%]')
                     }`}
                   >
-                    {(() => {
-                      const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
-                      if (!slotConfig) return null;
+                        {(() => {
+                          const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
+                          if (!slotConfig) return null;
 
-                      return (
-                        <SlotEditor
-                          slotConfig={slotConfig}
-                          value={shots[editingShotIdx]?.[activeCraftKey] || ''}
-                          onChange={(val) => {
-                            if (onUpdateShot) {
-                              onUpdateShot(editingShotIdx, activeCraftKey, val);
+                          const scenesList = (shots || []).reduce((acc, s, idx) => {
+                            const rawId = s.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
+                            const match = rawId.match(/^(SC\d+)/i);
+                            const sceneId = match ? match[1].toUpperCase() : `Scene #${idx + 1}`;
+                            if (!acc.some(sc => sc.sceneId === sceneId)) {
+                              acc.push({ sceneId, label: sceneId, firstShotIndex: idx });
                             }
-                          }}
-                          compact={false}
-                          allSlots={SEEDANCE_SLOTS}
-                          isForcePopupOpen={true}
-                          embedded={true}
-                          totalShotsCount={shots.length}
-                          currentShotIndex={editingShotIdx}
-                          onNavigateNextShot={() => {
-                            if (editingShotIdx < shots.length - 1) setEditingShotIdx(editingShotIdx + 1);
-                          }}
-                          onNavigatePrevShot={() => {
-                            if (editingShotIdx > 0) setEditingShotIdx(editingShotIdx - 1);
-                          }}
-                          onJumpToShot={(targetShotIdx) => setEditingShotIdx(targetShotIdx)}
-                          onCloseForcePopup={() => setActiveCraftKey(null)}
-                          onNavigateNextSlot={(currKey) => {
-                            const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                            if (idx !== -1 && idx < SEEDANCE_SLOTS.length - 1) {
-                              setActiveCraftKey(SEEDANCE_SLOTS[idx + 1].key);
-                            }
-                          }}
-                          onNavigatePrevSlot={(currKey) => {
-                            const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                            if (idx > 0) {
-                              setActiveCraftKey(SEEDANCE_SLOTS[idx - 1].key);
-                            }
-                          }}
-                          onJumpToSlot={(targetKey) => setActiveCraftKey(targetKey)}
-                        />
-                      );
-                    })()}
+                            return acc;
+                          }, []);
+
+                          const currShotObj = shots[editingShotIdx];
+                          const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${editingShotIdx + 1 < 10 ? '0' + (editingShotIdx + 1) : editingShotIdx + 1}`;
+                          const matchCurr = rawCurrId.match(/^(SC\d+)/i);
+                          const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${editingShotIdx + 1}`;
+
+                          const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+
+                          return (
+                            <SlotEditor
+                              slotConfig={slotConfig}
+                              value={shots[editingShotIdx]?.[activeCraftKey] || ''}
+                              onChange={(val) => {
+                                if (onUpdateShot) {
+                                  onUpdateShot(editingShotIdx, activeCraftKey, val);
+                                }
+                              }}
+                              compact={false}
+                              allSlots={SEEDANCE_SLOTS}
+                              isForcePopupOpen={true}
+                              embedded={true}
+                              totalShotsCount={shots.length}
+                              currentShotIndex={editingShotIdx}
+                              onNavigateNextShot={() => {
+                                if (editingShotIdx < shots.length - 1) setEditingShotIdx(editingShotIdx + 1);
+                              }}
+                              onNavigatePrevShot={() => {
+                                if (editingShotIdx > 0) setEditingShotIdx(editingShotIdx - 1);
+                              }}
+                              onJumpToShot={(targetShotIdx) => setEditingShotIdx(targetShotIdx)}
+                              scenesList={scenesList}
+                              currentSceneId={currentSceneId}
+                              onNavigateNextScene={() => {
+                                if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
+                                  setEditingShotIdx(scenesList[currSceneIdx + 1].firstShotIndex);
+                                }
+                              }}
+                              onNavigatePrevScene={() => {
+                                if (currSceneIdx > 0) {
+                                  setEditingShotIdx(scenesList[currSceneIdx - 1].firstShotIndex);
+                                }
+                              }}
+                              onJumpToScene={(targetScId) => {
+                                const found = scenesList.find(sc => sc.sceneId === targetScId);
+                                if (found) setEditingShotIdx(found.firstShotIndex);
+                              }}
+                              onCloseForcePopup={() => setActiveCraftKey(null)}
+                              onNavigateNextSlot={(currKey) => {
+                                const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
+                                if (idx !== -1 && idx < SEEDANCE_SLOTS.length - 1) {
+                                  setActiveCraftKey(SEEDANCE_SLOTS[idx + 1].key);
+                                }
+                              }}
+                              onNavigatePrevSlot={(currKey) => {
+                                const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
+                                if (idx > 0) {
+                                  setActiveCraftKey(SEEDANCE_SLOTS[idx - 1].key);
+                                }
+                              }}
+                              onJumpToSlot={(targetKey) => setActiveCraftKey(targetKey)}
+                            />
+                          );
+                        })()}
                   </div>
                 </div>
               )}

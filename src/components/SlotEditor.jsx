@@ -16,12 +16,16 @@ export default function SlotEditor({
   onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot,
-  embedded = false,
   totalShotsCount = 0,
   currentShotIndex = 0,
   onNavigateNextShot,
   onNavigatePrevShot,
-  onJumpToShot
+  onJumpToShot,
+  scenesList = [],
+  currentSceneId = '',
+  onNavigateNextScene,
+  onNavigatePrevScene,
+  onJumpToScene
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
@@ -72,31 +76,43 @@ export default function SlotEditor({
     }
   };
 
-  // Keyboard navigation: Cmd + Up/Down (Shot Navigation) & Cmd + Left/Right (Craft Navigation)
+  // Keyboard navigation: Cmd+Shift+Up/Down (Scene), Cmd+Up/Down (Shot), Cmd+Left/Right (Craft)
   useEffect(() => {
     if (!isModalActive) return;
 
     const handleKeyDown = (e) => {
-      // Cmd + Right Arrow (⌘→) or Ctrl + Right Arrow -> Next Craft Slot
-      if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
+      // Cmd + Shift + Up Arrow (⌘⇧↑) -> Previous Scene
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onNavigatePrevScene) onNavigatePrevScene();
+      }
+      // Cmd + Shift + Down Arrow (⌘⇧↓) -> Next Scene
+      else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onNavigateNextScene) onNavigateNextScene();
+      }
+      // Cmd + Right Arrow (⌘→) -> Next Craft Slot
+      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowRight') {
         e.preventDefault();
         e.stopPropagation();
         handleNextSlot();
       }
-      // Cmd + Left Arrow (⌘←) or Ctrl + Left Arrow -> Prev Craft Slot
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
+      // Cmd + Left Arrow (⌘←) -> Prev Craft Slot
+      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
         handlePrevSlot();
       }
-      // Cmd + Up Arrow (⌘↑) or Ctrl + Up Arrow -> Previous Shot
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowUp') {
+      // Cmd + Up Arrow (⌘↑) -> Previous Shot
+      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowUp') {
         e.preventDefault();
         e.stopPropagation();
         if (onNavigatePrevShot) onNavigatePrevShot();
       }
-      // Cmd + Down Arrow (⌘↓) or Ctrl + Down Arrow -> Next Shot
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowDown') {
+      // Cmd + Down Arrow (⌘↓) -> Next Shot
+      else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'ArrowDown') {
         e.preventDefault();
         e.stopPropagation();
         if (onNavigateNextShot) onNavigateNextShot();
@@ -105,7 +121,7 @@ export default function SlotEditor({
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isModalActive, activeConfig.key, onNavigatePrevShot, onNavigateNextShot]);
+  }, [isModalActive, activeConfig.key, onNavigatePrevShot, onNavigateNextShot, onNavigatePrevScene, onNavigateNextScene]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
@@ -598,6 +614,53 @@ export default function SlotEditor({
         <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800 shrink-0 font-mono gap-1.5 overflow-x-auto text-xs">
           {/* Left: Combined Single-Line Navigation Controls */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
+            {/* SCENE NAV (Compact Purple Pill - BEFORE SHOT NAV) */}
+            {((scenesList && scenesList.length > 0) || onJumpToScene || onNavigatePrevScene || onNavigateNextScene) && (
+              <div className="flex items-center gap-0.5 bg-zinc-950 p-0.5 px-1 rounded-lg border border-purple-500/40 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigatePrevScene) onNavigatePrevScene();
+                  }}
+                  className="p-1 rounded hover:bg-purple-600 hover:text-white text-purple-300 transition-colors"
+                  title="Previous Scene (Cmd + Shift + Up Arrow | ⌘⇧↑)"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-purple-400" />
+                </button>
+
+                <div className="relative flex items-center">
+                  <select
+                    value={currentSceneId || (scenesList[0]?.sceneId || '')}
+                    onChange={(e) => {
+                      if (onJumpToScene) onJumpToScene(e.target.value);
+                    }}
+                    className="bg-transparent text-purple-300 text-[11px] font-bold font-mono py-0.5 pl-1 pr-4 appearance-none cursor-pointer focus:outline-none"
+                    title="Jump to Scene (Cmd + Shift + Up / Down)"
+                  >
+                    {(scenesList || []).map((sc, idx) => (
+                      <option key={sc.sceneId || idx} value={sc.sceneId} className="bg-zinc-950 text-white font-mono">
+                        {sc.label || sc.sceneId}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-purple-400 absolute right-0 pointer-events-none" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateNextScene) onNavigateNextScene();
+                  }}
+                  className="p-1 rounded hover:bg-purple-600 hover:text-white text-purple-300 transition-colors"
+                  title="Next Scene (Cmd + Shift + Down Arrow | ⌘⇧↓)"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-purple-400" />
+                </button>
+              </div>
+            )}
+
             {/* SHOT NAV (Compact Amber Pill) */}
             {((totalShotsCount && totalShotsCount > 1) || onNavigatePrevShot || onNavigateNextShot || onJumpToShot) && (
               <div className="flex items-center gap-0.5 bg-zinc-950 p-0.5 px-1 rounded-lg border border-amber-500/40 shrink-0">
