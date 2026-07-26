@@ -629,9 +629,13 @@ export default function App() {
     setIsEditingTitle(false);
   };
 
-  const handleUpdateShot = (index, updatedShot) => {
+  const handleUpdateShot = (index, updatedShotOrKey, value) => {
     const newShots = [...shots];
-    newShots[index] = updatedShot;
+    if (typeof updatedShotOrKey === 'string') {
+      newShots[index] = { ...newShots[index], [updatedShotOrKey]: value };
+    } else {
+      newShots[index] = updatedShotOrKey;
+    }
     setShots(newShots);
     syncToCloud({ shots: newShots });
   };
@@ -1164,6 +1168,7 @@ export default function App() {
         isOpen={isCompilerOpen}
         onClose={() => setIsCompilerOpen(false)}
         shots={shots}
+        onUpdateShot={handleUpdateShot}
         activeTargetModel={targetModel}
       />
 
