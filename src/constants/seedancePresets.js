@@ -845,13 +845,25 @@ export const SEEDANCE_SLOTS = [
 ];
 
 // ==========================================
-// DYNAMIC PRESET RESOLVER
+// DYNAMIC PRESET RESOLVER & CUSTOM GENRE MERGER
 // ==========================================
+export function getMergedGenreProfiles() {
+  let customProfiles = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('sps_custom_genre_profiles');
+      if (saved) customProfiles = JSON.parse(saved);
+    } catch (e) {}
+  }
+  return { ...GENRE_PRESET_PROFILES, ...customProfiles };
+}
+
 export function getSlotsForGenre(genreKey = 'mythological') {
-  const profile = GENRE_PRESET_PROFILES[genreKey] || GENRE_PRESET_PROFILES.mythological;
+  const allProfiles = getMergedGenreProfiles();
+  const profile = allProfiles[genreKey] || allProfiles.mythological || GENRE_PRESET_PROFILES.mythological;
 
   return SEEDANCE_SLOTS.map((slot) => {
-    const customGenrePresets = profile.presets[slot.key];
+    const customGenrePresets = profile?.presets?.[slot.key];
     if (customGenrePresets && customGenrePresets.length > 0) {
       return {
         ...slot,

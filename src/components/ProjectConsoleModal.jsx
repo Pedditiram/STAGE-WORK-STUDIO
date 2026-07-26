@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders
 } from 'lucide-react';
 import { parseRawScriptToShots, generateScriptFromConcept, extractTextFromPDF } from '../services/aiScriptParser';
-import { GENRE_PRESET_PROFILES } from '../constants/seedancePresets';
+import { GENRE_PRESET_PROFILES, getMergedGenreProfiles } from '../constants/seedancePresets';
 import { syncProjectLibraryToCloud, fetchProjectLibraryFromCloud } from '../services/dbService';
 
 const SAMPLE_SCRIPTS = [
@@ -151,6 +151,137 @@ export default function ProjectConsoleModal({
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
+
+  // Custom & Edited Genre Profiles State
+  const [customGenreProfiles, setCustomGenreProfiles] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sps_custom_genre_profiles');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {};
+  });
+
+  const [isGenreEditorOpen, setIsGenreEditorOpen] = useState(false);
+  const [editingGenreKey, setEditingGenreKey] = useState(null);
+  const [genreForm, setGenreForm] = useState({
+    label: '',
+    description: '',
+    characterIdAssetRef: '',
+    coArtistInteraction: '',
+    actionEnvContext: '',
+    characterExpression: '',
+    characterMovement: '',
+    characterDialogue: '',
+    subjectLightingTag: '',
+    subjectColorTag: '',
+    backgroundLightingTag: '',
+    backgroundColorTag: ''
+  });
+
+  const mergedGenreProfiles = { ...GENRE_PRESET_PROFILES, ...customGenreProfiles };
+
+  const handleOpenGenreEditor = (genreKey = null) => {
+    if (genreKey && mergedGenreProfiles[genreKey]) {
+      const p = mergedGenreProfiles[genreKey];
+      setEditingGenreKey(genreKey);
+      setGenreForm({
+        label: p.label || p.name || '',
+        description: p.description || '',
+        characterIdAssetRef: (p.presets?.characterIdAssetRef || []).join('\n'),
+        coArtistInteraction: (p.presets?.coArtistInteraction || []).join('\n'),
+        actionEnvContext: (p.presets?.actionEnvContext || []).join('\n'),
+        characterExpression: (p.presets?.characterExpression || []).join('\n'),
+        characterMovement: (p.presets?.characterMovement || []).join('\n'),
+        characterDialogue: (p.presets?.characterDialogue || []).join('\n'),
+        subjectLightingTag: (p.presets?.subjectLightingTag || []).join('\n'),
+        subjectColorTag: (p.presets?.subjectColorTag || []).join('\n'),
+        backgroundLightingTag: (p.presets?.backgroundLightingTag || []).join('\n'),
+        backgroundColorTag: (p.presets?.backgroundColorTag || []).join('\n')
+      });
+    } else {
+      setEditingGenreKey(null);
+      setGenreForm({
+        label: '',
+        description: '',
+        characterIdAssetRef: '',
+        coArtistInteraction: '',
+        actionEnvContext: '',
+        characterExpression: '',
+        characterMovement: '',
+        characterDialogue: '',
+        subjectLightingTag: '',
+        subjectColorTag: '',
+        backgroundLightingTag: '',
+        backgroundColorTag: ''
+      });
+    }
+    setIsGenreEditorOpen(true);
+  };
+
+  const handleSaveGenreProfile = (e) => {
+    e.preventDefault();
+    if (!genreForm.label.trim()) {
+      alert("Please enter a Genre Name / Label.");
+      return;
+    }
+
+    const key = editingGenreKey || `custom_genre_${Date.now()}`;
+    const parseLines = (text) => (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+
+    const updatedProfile = {
+      label: genreForm.label.trim(),
+      name: genreForm.label.trim(),
+      description: genreForm.description.trim() || 'Custom user production genre profile',
+      presets: {
+        characterIdAssetRef: parseLines(genreForm.characterIdAssetRef),
+        coArtistInteraction: parseLines(genreForm.coArtistInteraction),
+        actionEnvContext: parseLines(genreForm.actionEnvContext),
+        characterExpression: parseLines(genreForm.characterExpression),
+        characterMovement: parseLines(genreForm.characterMovement),
+        characterDialogue: parseLines(genreForm.characterDialogue),
+        subjectLightingTag: parseLines(genreForm.subjectLightingTag),
+        subjectColorTag: parseLines(genreForm.subjectColorTag),
+        backgroundLightingTag: parseLines(genreForm.backgroundLightingTag),
+        backgroundColorTag: parseLines(genreForm.backgroundColorTag)
+      }
+    };
+
+    const newCustoms = {
+      ...customGenreProfiles,
+      [key]: updatedProfile
+    };
+
+    setCustomGenreProfiles(newCustoms);
+    localStorage.setItem('sps_custom_genre_profiles', JSON.stringify(newCustoms));
+
+    if (setPresetProfile) {
+      setPresetProfile(key);
+    }
+    setIsGenreEditorOpen(false);
+  };
+
+  const handleDeleteCustomGenre = (key, e) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete custom genre "${mergedGenreProfiles[key]?.label || key}"?`)) {
+      const updated = { ...customGenreProfiles };
+      delete updated[key];
+      setCustomGenreProfiles(updated);
+      localStorage.setItem('sps_custom_genre_profiles', JSON.stringify(updated));
+      if (presetProfile === key && setPresetProfile) {
+        setPresetProfile('mythological');
+      }
+    }
+  };
+
+  const handleResetGenresToDefault = () => {
+    if (confirm("Reset all genre profiles back to studio defaults? Any custom or edited genres will be cleared.")) {
+      setCustomGenreProfiles({});
+      localStorage.removeItem('sps_custom_genre_profiles');
+      if (setPresetProfile) setPresetProfile('mythological');
+    }
+  };
 
   // Helper function to cleanse any duplicate project titles in library & purge dummy app-name projects
   const sanitizeLibraryTitles = (library) => {
@@ -874,41 +1005,92 @@ export default function ProjectConsoleModal({
           {/* TAB 3: SCRIPT GENRE & PRESETS */}
           {activeTab === 'genre' && (
             <div className="space-y-4 font-mono">
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-amber-300 dark:border-amber-500/40 space-y-3">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  Script Genre Profile & 15-Slot Matrix Adaptation:
-                </h4>
-                <p className="text-xs text-slate-600 dark:text-zinc-400">
-                  Select a production genre profile below to auto-adapt shot composition parameters, lighting tags, and character reference fields for your screenplay.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  {Object.entries(GENRE_PRESET_PROFILES).map(([key, profile]) => {
-                    const isSelected = presetProfile === key;
-                    return (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-amber-300 dark:border-amber-500/40 space-y-3 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-zinc-800 pb-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      Script Genre Profile & 15-Slot Matrix Adaptation:
+                    </h4>
+                    <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-0.5">
+                      Select, create, or edit production genre profiles below to auto-adapt 17 matrix slot preset parameters for your screenplay.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenGenreEditor(null)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1 transition-all"
+                    >
+                      <Plus className="w-4 h-4" /> + Add New Genre
+                    </button>
+                    {Object.keys(customGenreProfiles).length > 0 && (
                       <button
-                        key={key}
                         type="button"
+                        onClick={handleResetGenresToDefault}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-bold text-xs flex items-center gap-1 transition-all"
+                        title="Reset all genres back to studio default factory profiles"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Reset Defaults
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {Object.entries(mergedGenreProfiles).map(([key, profile]) => {
+                    const isSelected = presetProfile === key;
+                    const isCustom = Boolean(customGenreProfiles[key]);
+                    return (
+                      <div
+                        key={key}
                         onClick={() => setPresetProfile && setPresetProfile(key)}
-                        className={`p-3.5 rounded-xl border text-left transition-all shadow-sm ${
+                        className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all shadow-sm relative group ${
                           isSelected
                             ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-400/50'
                             : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 text-slate-900 dark:text-white'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-1.5">
                           <span className="font-bold text-xs flex items-center gap-1.5 text-slate-900 dark:text-amber-300">
                             {profile.label || profile.name}
+                            {isCustom && (
+                              <span className="text-[9px] bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded font-mono">
+                                Custom
+                              </span>
+                            )}
                           </span>
-                          {isSelected && (
-                            <span className="text-[10px] bg-amber-500 text-zinc-950 font-black px-2 py-0.5 rounded-full">
-                              ACTIVE GENRE
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {isSelected && (
+                              <span className="text-[10px] bg-amber-500 text-zinc-950 font-black px-2 py-0.5 rounded-full">
+                                ACTIVE
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenGenreEditor(key);
+                              }}
+                              className="p-1.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-slate-600 dark:text-zinc-300 hover:text-amber-500 transition-all flex items-center gap-1 text-[11px] font-bold"
+                              title="Edit Genre Profile & Matrix Presets"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
+                            </button>
+                            {isCustom && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteCustomGenre(key, e)}
+                                className="p-1.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-slate-400 hover:text-rose-500 transition-all"
+                                title="Delete Custom Genre"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-snug">{profile.description}</p>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1123,6 +1305,145 @@ export default function ProjectConsoleModal({
           </button>
         </div>
       </div>
+
+      {/* GENRE PROFILE CREATOR & EDITOR MODAL */}
+      {isGenreEditorOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-amber-500/50 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-mono animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-100 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-amber-300 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                {editingGenreKey ? `Edit Genre Profile: ${genreForm.label}` : '+ Add New Custom Genre Profile'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsGenreEditorOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-500 dark:text-zinc-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveGenreProfile} className="p-4 overflow-y-auto space-y-4 flex-1">
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Genre Profile Label / Title (with Emoji):</label>
+                  <input
+                    type="text"
+                    required
+                    value={genreForm.label}
+                    onChange={(e) => setGenreForm(prev => ({ ...prev, label: e.target.value }))}
+                    placeholder="e.g. 🏎️ Action Thriller & High-Speed Car Chase"
+                    className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2.5 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-amber-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Genre Description / Logline:</label>
+                  <input
+                    type="text"
+                    value={genreForm.description}
+                    onChange={(e) => setGenreForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="e.g. Tailored for urban car chases, nitro boosts, drift camera angles & street fights"
+                    className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 dark:border-zinc-800 pt-3">
+                <h4 className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-2">Preset Matrix Dropdown Values (One Preset Per Line):</h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Character Asset Ref Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.characterIdAssetRef}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, characterIdAssetRef: e.target.value }))}
+                      placeholder="[CharID: @LeadRacer_Alex - Driver in leather jacket]&#10;[CharID: @Challenger_Vince - Rival racer]"
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Action & Env Context Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.actionEnvContext}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, actionEnvContext: e.target.value }))}
+                      placeholder="High-speed highway chase at midnight with nitro sparks&#10;Rain-slick street corner drift past neon signs"
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Subject Lighting Tag Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.subjectLightingTag}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, subjectLightingTag: e.target.value }))}
+                      placeholder="[Lighting: High-Contrast Sodium Headlight Beams]&#10;[Lighting: Strobing Neon Street Light Rim]"
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Subject Color Tag Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.subjectColorTag}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, subjectColorTag: e.target.value }))}
+                      placeholder="[Subject Color: Matte Black & Flame Orange Accent]&#10;[Subject Color: Metallic Silver & Cyan Glow]"
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Character Movement Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.characterMovement}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, characterMovement: e.target.value }))}
+                      placeholder="Shifting gear rapidly and slamming gas pedal down&#10;Leaping over hood of car while unsheathing weapon"
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 block mb-1">Character Dialogue Presets:</label>
+                    <textarea
+                      rows={3}
+                      value={genreForm.characterDialogue}
+                      onChange={(e) => setGenreForm(prev => ({ ...prev, characterDialogue: e.target.value }))}
+                      placeholder='&quot;Fasten your seatbelts... this ends here.&quot;&#10;&quot;Catch me if you can!&quot;'
+                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-2 text-xs text-slate-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Action Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGenreEditorOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-bold font-mono"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black font-mono shadow-md flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4 stroke-[3]" /> Save Genre Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
