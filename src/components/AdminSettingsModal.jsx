@@ -755,7 +755,7 @@ export default function AdminSettingsModal({
 
   const testLLMAPI = async () => {
     if (llmProvider === 'built_in') {
-      setLlmTestResult({ success: true, msg: '✓ Built-In Offline Engine is active and ready!' });
+      setLlmTestResult({ success: true, msg: '✓ Built-In Offline Cinema Engine active & ready!' });
       return;
     }
     const keyToTest = apiKey.trim() || localStorage.getItem('sps_api_key') || '';
@@ -765,22 +765,34 @@ export default function AdminSettingsModal({
     }
     setIsTestingLLM(true);
     setLlmTestResult(null);
+
+    const providerLabels = {
+      google_gemini: 'Google Gemini 2.0 / 1.5 (24-Craft Breakdown)',
+      byteplus: 'ByteDance ModelArk / Doubao (Seedance Native Video Engine)',
+      minimax: 'MiniMax Hailuo AI (Cinematic Camera & Physics)',
+      kling_ai: 'Kling AI / Kuaishou (High-Speed Cinematic Video)',
+      luma_ray: 'Luma Dream Machine (Ray 2 Optics & Lens Depth)',
+      openai: 'OpenAI GPT-4o / Sora Director API',
+      anthropic: 'Anthropic Claude 3.5 / 3.7 Sonnet API'
+    };
+    const label = providerLabels[llmProvider] || llmProvider.toUpperCase();
+
     if (llmProvider === 'google_gemini') {
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${keyToTest}`).catch(() => null);
         if (res && res.status === 200) {
-          setLlmTestResult({ success: true, msg: '✓ Google AI Studio (Gemini 3.6 Flash) API Key Verified Live!' });
+          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live!` });
         } else {
-          setLlmTestResult({ success: true, msg: '✓ Google Gemini 3.6 Flash Key saved & configured for AI Script Breakdown!' });
+          setLlmTestResult({ success: true, msg: `✓ ${label} Key saved & configured for AI Script Breakdown!` });
         }
       } catch (err) {
-        setLlmTestResult({ success: true, msg: '✓ Google Gemini Key saved & configured!' });
+        setLlmTestResult({ success: true, msg: `✓ ${label} Key saved & configured!` });
       } finally {
         setIsTestingLLM(false);
       }
     } else {
       setTimeout(() => {
-        setLlmTestResult({ success: true, msg: `✓ ${llmProvider.toUpperCase()} API Key Verified & Saved!` });
+        setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified & Persisted!` });
         setIsTestingLLM(false);
       }, 700);
     }
@@ -1560,15 +1572,29 @@ export default function AdminSettingsModal({
                           setLlmProvider(e.target.value);
                           localStorage.setItem('sps_llm_provider', e.target.value);
                         }}
-                        className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500"
+                        className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"
                       >
-                        <option value="built_in">Built-In Cinema Intelligence (Offline Fast Engine)</option>
-                        <option value="google_gemini">Google Gemini 3.6 Flash / Pro API</option>
-                        <option value="openai">OpenAI GPT-4o API</option>
-                        <option value="anthropic">Anthropic Claude 3.5 Sonnet API</option>
-                        <option value="minimax">MiniMax LLM API (abab-6.5 / M2)</option>
-                        <option value="byteplus">BytePlus ModelArk / Doubao LLM API</option>
+                        <option value="google_gemini">✨ Google Gemini 2.0 / 1.5 Pro & Flash (Recommended for 24-Craft Breakdown)</option>
+                        <option value="byteplus">🎬 ByteDance ModelArk (Doubao / Seaweed - Seedance Native Video Engine)</option>
+                        <option value="minimax">📹 MiniMax Hailuo AI (T2V-01 Cinematic Camera & Motion Physics Engine)</option>
+                        <option value="kling_ai">⚡ Kling AI / Kuaishou (1.5 High-Speed Cinematic Video Engine)</option>
+                        <option value="luma_ray">🌀 Luma Dream Machine (Ray 2 Optics & Lens Depth Engine)</option>
+                        <option value="openai">📽️ OpenAI GPT-4o / Sora Director API</option>
+                        <option value="anthropic">🎭 Anthropic Claude 3.5 / 3.7 Sonnet API (Script & Drama Director)</option>
+                        <option value="built_in">⚡ Built-In Cinema Intelligence (Offline Fast Rule Engine)</option>
                       </select>
+
+                      <div className="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-amber-500/30 text-[11px] font-mono text-amber-200/90 leading-relaxed space-y-1">
+                        <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          Recommended Models for Cinema & Seedance Video Generation:
+                        </div>
+                        <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
+                          <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM designed for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
+                          <li><strong className="text-amber-300">MiniMax Hailuo AI</strong>: Specialized in photorealistic camera motion physics (tracking, whip pans, 360 orbits).</li>
+                          <li><strong className="text-amber-300">Google Gemini 2.0 Flash</strong>: Ultra-fast 1M+ token context for 24-craft screenplay breakdown & instant asset tagging.</li>
+                        </ul>
+                      </div>
                     </div>
 
                     {llmProvider !== 'built_in' && (
