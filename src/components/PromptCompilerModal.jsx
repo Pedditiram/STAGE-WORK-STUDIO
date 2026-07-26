@@ -79,18 +79,61 @@ ${promptNarrative.trim()}`;
     const color = (shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
 
     const rawImagesStr = shot.shotDurationAndImages || '';
-    const subjectsList = [];
-    const pairMatches = rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g);
-    for (const match of pairMatches) {
-      const imgNum = match[1];
-      const tag = match[2].replace('@', '').toUpperCase();
-      subjectsList.push(`Image_${imgNum} = ${tag}`);
+    const subjectsMap = new Map();
+    const pairMatches = Array.from(rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g));
+
+    if (pairMatches.length > 0) {
+      for (const match of pairMatches) {
+        const imgNum = parseInt(match[1], 10);
+        const tag = match[2].replace('@', '').toLowerCase();
+        let cleanName = tag.split('_')[0];
+        if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
+        subjectsMap.set(imgNum, cleanName);
+      }
     }
 
-    if (subjectsList.length === 0) {
-      if (shot.characterIdAssetRef) subjectsList.push(`Image_1 = MAIN_SUBJECT`);
-      if (shot.coArtistInteraction) subjectsList.push(`Image_2 = CO_ARTIST`);
-      subjectsList.push(`Image_3 = SCENE_ENVIRONMENT`);
+    // Auto-extract subjects if not mapped in duration field
+    const fullText = `${shot.characterIdAssetRef || ''} ${shot.coArtistInteraction || ''} ${shot.actionEnvContext || ''} ${shot.characterMovement || ''}`.toLowerCase();
+    
+    if (!subjectsMap.has(1)) {
+      if (fullText.includes('raju')) subjectsMap.set(1, 'raju');
+      else if (shot.characterIdAssetRef) subjectsMap.set(1, shot.characterIdAssetRef.replace(/\[|\]|CharID:\s*|@/g, '').split('_')[0].toLowerCase());
+      else subjectsMap.set(1, 'main subject');
+    }
+
+    if (!subjectsMap.has(2)) {
+      if (fullText.includes('bujji')) subjectsMap.set(2, 'bujji');
+      else if (shot.coArtistInteraction) subjectsMap.set(2, 'co-artist');
+      else subjectsMap.set(2, 'secondary subject');
+    }
+
+    if (!subjectsMap.has(3)) {
+      if (fullText.includes('sunil')) subjectsMap.set(3, 'sunil');
+      else subjectsMap.set(3, 'sunil');
+    }
+
+    if (!subjectsMap.has(4)) {
+      if (fullText.includes('samudra')) subjectsMap.set(4, 'samudra');
+      else subjectsMap.set(4, 'samudra');
+    }
+
+    if (!subjectsMap.has(5)) {
+      if (fullText.includes('crowd') || fullText.includes('spectators') || fullText.includes('arena') || fullText.includes('stadium')) subjectsMap.set(5, 'crowd');
+      else subjectsMap.set(5, 'crowd');
+    }
+
+    if (!subjectsMap.has(6)) {
+      subjectsMap.set(6, 'scene');
+    }
+
+    if (!subjectsMap.has(7)) {
+      subjectsMap.set(7, 'supporting artist');
+    }
+
+    const subjectsLines = [];
+    for (let i = 1; i <= 9; i++) {
+      const val = subjectsMap.get(i) || '';
+      subjectsLines.push(`Image_${i} = ${val}`);
     }
 
     let promptBody = `A cinematic ${framing.toLowerCase()} (${shotId}). `;
@@ -105,7 +148,7 @@ ${promptNarrative.trim()}`;
     if (shot.characterExpression) promptBody += `Facial expression: ${shot.characterExpression}. `;
 
     return `SUBJECTS :
-${subjectsList.join('\n')}
+${subjectsLines.join('\n')}
 
 Note: Do not repeat any of these subjects or characters
 
