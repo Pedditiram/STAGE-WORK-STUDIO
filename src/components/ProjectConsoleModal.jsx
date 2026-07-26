@@ -5,7 +5,7 @@ import {
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders
 } from 'lucide-react';
 import { parseRawScriptToShots, generateScriptFromConcept, extractTextFromPDF } from '../services/aiScriptParser';
-import { GENRE_PRESET_PROFILES, getMergedGenreProfiles } from '../constants/seedancePresets';
+import { GENRE_PRESET_PROFILES, getMergedGenreProfiles, detectScriptGenre } from '../constants/seedancePresets';
 import { syncProjectLibraryToCloud, fetchProjectLibraryFromCloud } from '../services/dbService';
 
 const SAMPLE_SCRIPTS = [
@@ -518,6 +518,16 @@ export default function ProjectConsoleModal({
       const parsedShots = await parseRawScriptToShots(extractedText);
       setParsedPreview(parsedShots);
       setIsGenerated(true);
+
+      // AUTO-DETECT & AUTO-SELECT MATCHING GENRE IMMEDIATELY!
+      const detected = detectScriptGenre(file.name || currentProjectTitle || '', parsedShots, extractedText);
+      if (detected) {
+        if (typeof setSelectedGenre === 'function') setSelectedGenre(detected);
+        if (typeof setScriptGenre === 'function') setScriptGenre(detected);
+        if (typeof setPresetProfile === 'function') setPresetProfile(detected);
+        localStorage.setItem('sps_preset_profile', detected);
+        localStorage.setItem('sps_active_genre', detected);
+      }
     } catch (err) {
       alert("Failed to parse document: " + err.message);
     } finally {
@@ -532,6 +542,16 @@ export default function ProjectConsoleModal({
       const parsedShots = await parseRawScriptToShots(rawScriptText);
       setParsedPreview(parsedShots);
       setIsGenerated(true);
+
+      // AUTO-DETECT & AUTO-SELECT MATCHING GENRE IMMEDIATELY!
+      const detected = detectScriptGenre(currentProjectTitle || '', parsedShots, rawScriptText);
+      if (detected) {
+        if (typeof setSelectedGenre === 'function') setSelectedGenre(detected);
+        if (typeof setScriptGenre === 'function') setScriptGenre(detected);
+        if (typeof setPresetProfile === 'function') setPresetProfile(detected);
+        localStorage.setItem('sps_preset_profile', detected);
+        localStorage.setItem('sps_active_genre', detected);
+      }
     } finally {
       setIsLoadingFile(false);
     }

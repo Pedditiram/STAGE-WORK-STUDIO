@@ -684,15 +684,47 @@ export const GENRE_PRESET_PROFILES = {
 // ==========================================
 // SCRIPT GENRE AUTO-DETECTION
 // ==========================================
-export function detectScriptGenre(projectTitle = '', shots = []) {
-  const combinedText = (projectTitle + ' ' + JSON.stringify(shots)).toLowerCase();
+export function detectScriptGenre(projectTitle = '', shots = [], rawScriptText = '') {
+  const combinedText = (
+    (typeof projectTitle === 'string' ? projectTitle : '') + ' ' + 
+    (typeof rawScriptText === 'string' ? rawScriptText : '') + ' ' + 
+    JSON.stringify(shots)
+  ).toLowerCase();
 
-  if (combinedText.includes('konaseema') || combinedText.includes('malkipuram') || combinedText.includes('godavari') || combinedText.includes('andhra') || combinedText.includes('east godavari') || combinedText.includes('anthology') || combinedText.includes('1980')) {
+  // 1. Rural 1980s Konaseema & East Godavari Anthology / Rooster Fight (Highest Priority)
+  if (
+    combinedText.includes('konaseema') || 
+    combinedText.includes('malkipuram') || 
+    combinedText.includes('godavari') || 
+    combinedText.includes('andhra') || 
+    combinedText.includes('east godavari') || 
+    combinedText.includes('anthology') || 
+    combinedText.includes('1980') ||
+    combinedText.includes('rooster') ||
+    combinedText.includes('bujji') ||
+    combinedText.includes('raju') ||
+    combinedText.includes('sunil') ||
+    combinedText.includes('samudra') ||
+    combinedText.includes('sankranti') ||
+    combinedText.includes('cockfight') ||
+    combinedText.includes('kkrk')
+  ) {
     return 'konaseema_anthology';
   }
-  if (combinedText.includes('rama') || combinedText.includes('ayodhya') || combinedText.includes('sita') || combinedText.includes('shiva') || combinedText.includes('myth') || combinedText.includes('dharma')) {
+
+  // 2. Indian Mythology & Period Epic
+  if (
+    combinedText.includes('ayodhya') || 
+    combinedText.includes('sita') || 
+    combinedText.includes('ramayana') || 
+    combinedText.includes('mahabharata') || 
+    combinedText.includes('kurukshetra') || 
+    combinedText.includes('kara-dhushan') ||
+    combinedText.includes('mythological')
+  ) {
     return 'mythological';
   }
+
   if (combinedText.includes('ninja') || combinedText.includes('samurai') || combinedText.includes('katana') || combinedText.includes('dojo') || combinedText.includes('wuxia')) {
     return 'samurai';
   }
@@ -708,13 +740,13 @@ export function detectScriptGenre(projectTitle = '', shots = []) {
   if (combinedText.includes('noir') || combinedText.includes('detective') || combinedText.includes('mafia') || combinedText.includes('underworld') || combinedText.includes('crime')) {
     return 'noir';
   }
-  if (combinedText.includes('superhero') || combinedText.includes('hero') || combinedText.includes('powers') || combinedText.includes('villain') || combinedText.includes('cape')) {
+  if (combinedText.includes('superhero') || combinedText.includes('powers') || combinedText.includes('cape') || combinedText.includes('vfx hero')) {
     return 'superhero';
   }
   if (combinedText.includes('magic') || combinedText.includes('dragon') || combinedText.includes('wizard') || combinedText.includes('sorcery') || combinedText.includes('fantasy')) {
     return 'fantasy';
   }
-  if (combinedText.includes('ghost') || combinedText.includes('horror') || combinedText.includes('haunted') || combinedText.includes('vampire') || combinedText.includes('blood')) {
+  if (combinedText.includes('ghost') || combinedText.includes('horror') || combinedText.includes('haunted') || combinedText.includes('vampire') || combinedText.includes('dread')) {
     return 'horror';
   }
   if (combinedText.includes('dance') || combinedText.includes('bollywood') || combinedText.includes('wedding') || combinedText.includes('holi') || combinedText.includes('sangeet')) {
@@ -723,10 +755,10 @@ export function detectScriptGenre(projectTitle = '', shots = []) {
   if (combinedText.includes('race') || combinedText.includes('car') || combinedText.includes('drift') || combinedText.includes('speed') || combinedText.includes('supercar')) {
     return 'racing';
   }
-  if (combinedText.includes('space') || combinedText.includes('starship') || combinedText.includes('alien') || combinedText.includes('scifi') || combinedText.includes('orbit')) {
+  if (combinedText.includes('space') || combinedText.includes('starship') || combinedText.includes('alien') || combinedText.includes('scifi')) {
     return 'scifi';
   }
-  if (combinedText.includes('sports') || combinedText.includes('match') || combinedText.includes('stadium') || combinedText.includes('strikers') || combinedText.includes('champion')) {
+  if (combinedText.includes('sports') || combinedText.includes('match') || combinedText.includes('stadium') || combinedText.includes('strikers')) {
     return 'sports';
   }
   if (combinedText.includes('jungle') || combinedText.includes('treasure') || combinedText.includes('expedition') || combinedText.includes('adventure')) {
