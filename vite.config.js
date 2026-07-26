@@ -8,4 +8,8 @@ export default defineConfig({
     react(),
     tailwindcss()
   ],
+  server: {
+    host: true, // Exposes app on local intranet (Wi-Fi / LAN)
+    port: 5173
+  }
 })
