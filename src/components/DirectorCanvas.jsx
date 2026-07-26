@@ -797,7 +797,7 @@ export default function DirectorCanvas({
             Live Image Generation Prompt Input:
           </span>
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-            ✓ Live 15-Slot Integrated
+            ✓ Live 24-Crafts Integrated
           </span>
         </div>
         <p className="text-xs font-mono text-zinc-300 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800/80 leading-relaxed select-all">

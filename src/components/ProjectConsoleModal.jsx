@@ -976,7 +976,7 @@ export default function ProjectConsoleModal({
 
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (15-Slot Matrix Aware)</strong>
+                    Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (24 Crafts Matrix Aware)</strong>
                   </span>
                   <button
                     type="button"
@@ -985,7 +985,7 @@ export default function ProjectConsoleModal({
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
                   >
                     {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-zinc-950" />}
-                    <span>{isLoadingFile ? 'Parsing Script...' : '⚡ Generate 15-Slot Shots Breakdown'}</span>
+                    <span>{isLoadingFile ? 'Parsing Script...' : '⚡ Generate 24 Crafts Shots Breakdown'}</span>
                   </button>
                 </div>
               </div>

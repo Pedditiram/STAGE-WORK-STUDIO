@@ -107,8 +107,8 @@ function parsePdfBinaryAdvanced(arrayBuffer) {
 }
 
 /**
- * PARSE RAW SCRIPT TO 15 PRODUCTION SLOTS
- * Uses Google Gemini 2.0 API when provider & key configured in Settings, else fast heuristic fallback.
+ * PARSE RAW SCRIPT TO 24 PRODUCTION SLOTS
+ * Uses Google Gemini 3.6 Flash / 3.1 Pro API when provider & key configured in Settings, else fast heuristic fallback.
  */
 export async function parseRawScriptToShots(scriptText) {
   const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'built_in') : 'built_in';

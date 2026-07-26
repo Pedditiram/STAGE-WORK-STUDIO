@@ -1115,7 +1115,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: 📊 FULL STAGE MATRIX (15-SLOT) SPREADSHEET VIEW (Full 100% Height for 15-Slot Table) */}
+          {/* TAB 2: 📊 FULL STAGE MATRIX (24-CRAFTS) SPREADSHEET VIEW (Full 100% Height for 24 Crafts Table) */}
           {activeView === 'spreadsheet' && (
             <div className="flex-1 w-full h-full overflow-hidden">
               <SpreadsheetView
