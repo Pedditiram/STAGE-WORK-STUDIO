@@ -237,7 +237,7 @@ export default function AIScriptModal({ isOpen, onClose, onApplyShots, setProjec
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
                     : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                 }`}>
-                  {isGeminiActive ? '🤖 Gemini 3.6 Flash' : '⚡ Built-In Parser'}
+                  {isGeminiActive ? '⚡ Pedditi Labs Cinema Engine' : '⚡ Pedditi Labs Built-In Parser'}
                 </span>
               </h3>
               <p className="text-[11px] text-zinc-400">Upload PDF/screenplay files or type concepts to generate 15-slot matrixes.</p>

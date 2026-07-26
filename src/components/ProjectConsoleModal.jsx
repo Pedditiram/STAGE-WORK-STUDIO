@@ -1109,7 +1109,7 @@ export default function ProjectConsoleModal({
                 <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">
-                      Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Gemini 3.6 (25 Crafts)</strong>
+                      Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Pedditi Labs (25 Crafts)</strong>
                     </span>
                     <button
                       type="button"

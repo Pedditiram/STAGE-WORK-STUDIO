@@ -799,7 +799,7 @@ export default function AdminSettingsModal({
     setLlmTestResult(null);
 
     const providerLabels = {
-      google_gemini: 'Google Gemini 3.6 Flash / 3.1 Pro (24-Craft Breakdown)',
+      google_gemini: 'Pedditi Labs Cinema Intelligence Engine (24-Craft Breakdown)',
       anthropic: 'Claude Sonnet 4.6 / Opus 4.6 Thinking API',
       byteplus: 'ByteDance ModelArk / Doubao (Seedance Native Video Engine)',
       minimax: 'MiniMax Hailuo AI (Cinematic Camera & Physics)',
@@ -1593,7 +1593,7 @@ export default function AdminSettingsModal({
 
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/50 font-mono text-xs font-bold shadow-sm shadow-amber-950">
                         <CheckCircle2 className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-                        <span>✓ Active Default LLM Parser: {llmProvider === 'google_gemini' ? 'Gemini 3.6 Flash' : llmProvider.toUpperCase()}</span>
+                        <span>✓ Active Default LLM Parser: {llmProvider === 'google_gemini' ? 'Pedditi Labs Cinema Engine' : llmProvider.toUpperCase()}</span>
                       </div>
                     </div>
 
@@ -1607,7 +1607,7 @@ export default function AdminSettingsModal({
                         }}
                         className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"
                       >
-                        <option value="google_gemini">✨ Google Gemini 3.6 Flash / 3.1 Pro API (Recommended for 24-Craft Breakdown)</option>
+                        <option value="google_gemini">✨ Pedditi Labs Cinema Intelligence Engine (Recommended for 24-Craft Breakdown)</option>
                         <option value="anthropic">🧠 Claude Sonnet 4.6 / Opus 4.6 Thinking API (Deep Script Breakdown & Reasoning)</option>
                         <option value="byteplus">🎬 ByteDance ModelArk (Doubao / Seaweed - Seedance Native Video Engine)</option>
                         <option value="minimax">📹 MiniMax Hailuo AI (T2V-01 Cinematic Camera & Motion Physics Engine)</option>
@@ -1624,7 +1624,7 @@ export default function AdminSettingsModal({
                           Recommended Models for Cinema & Seedance Video Generation:
                         </div>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
-                          <li><strong className="text-amber-300">Google Gemini 3.6 Flash / 3.1 Pro</strong>: Next-gen flagship model for 24-craft screenplay breakdown & asset tagging.</li>
+                          <li><strong className="text-amber-300">Pedditi Labs Cinema Intelligence Engine</strong>: Next-gen flagship model for 24-craft screenplay breakdown & asset tagging.</li>
                           <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity, emotional subtext & 24-craft alignment.</li>
                           <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
                         </ul>
