@@ -76,7 +76,7 @@ export default function SpreadsheetView({
     return currentCategoryObj?.keys.includes(slot.key);
   });
 
-  const handleNavigateNextSlot = (currentShotIdx, currentSlotKey) => {
+  const handleNavigateNextSlot = React.useCallback((currentShotIdx, currentSlotKey) => {
     const slotKeys = filteredSlots.map(s => s.key);
     const currIdx = slotKeys.indexOf(currentSlotKey);
     if (currIdx !== -1 && currIdx < slotKeys.length - 1) {
@@ -85,9 +85,9 @@ export default function SpreadsheetView({
       if (setActiveShotIndex) setActiveShotIndex(currentShotIdx + 1);
       setActiveModalCell({ shotIdx: currentShotIdx + 1, slotKey: slotKeys[0] });
     }
-  };
+  }, [filteredSlots, shots, setActiveShotIndex]);
 
-  const handleNavigatePrevSlot = (currentShotIdx, currentSlotKey) => {
+  const handleNavigatePrevSlot = React.useCallback((currentShotIdx, currentSlotKey) => {
     const slotKeys = filteredSlots.map(s => s.key);
     const currIdx = slotKeys.indexOf(currentSlotKey);
     if (currIdx > 0) {
@@ -96,7 +96,7 @@ export default function SpreadsheetView({
       if (setActiveShotIndex) setActiveShotIndex(currentShotIdx - 1);
       setActiveModalCell({ shotIdx: currentShotIdx - 1, slotKey: slotKeys[slotKeys.length - 1] });
     }
-  };
+  }, [filteredSlots, shots, setActiveShotIndex]);
 
   const filteredShots = (shots || []).filter((shot, idx) => {
     if (!searchTerm) return true;
@@ -106,39 +106,37 @@ export default function SpreadsheetView({
     ) || `shot ${idx + 1}`.includes(searchLower);
   });
 
-  const handleDragStart = (e, index) => {
+  const handleDragStart = React.useCallback((e, index) => {
     setDraggedShotIdx(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
-  };
+  }, []);
 
-  const handleDragOver = (e, index) => {
+  const handleDragOver = React.useCallback((e, index) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverShotIdx !== index) {
-      setDragOverShotIdx(index);
-    }
-  };
+    setDragOverShotIdx(prev => (prev !== index ? index : prev));
+  }, []);
 
-  const handleDrop = (e, targetIndex) => {
+  const handleDrop = React.useCallback((e, targetIndex) => {
     e.preventDefault();
     if (draggedShotIdx !== null && draggedShotIdx !== targetIndex && onReorderShots) {
       onReorderShots(draggedShotIdx, targetIndex);
     }
     setDraggedShotIdx(null);
     setDragOverShotIdx(null);
-  };
+  }, [draggedShotIdx, onReorderShots]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = React.useCallback(() => {
     setDraggedShotIdx(null);
     setDragOverShotIdx(null);
-  };
+  }, []);
 
-  const handleCellChange = (shotIdx, key, newValue) => {
+  const handleCellChange = React.useCallback((shotIdx, key, newValue) => {
     if (shots && shots[shotIdx] && onUpdateShot) {
       onUpdateShot(shotIdx, key, newValue);
     }
-  };
+  }, [shots, onUpdateShot]);
 
   const copyShotPrompt = (shot, idx) => {
     if (!shot) return;
