@@ -777,7 +777,7 @@ export function detectScriptGenre(projectTitle = '', shots = [], rawScriptText =
 export const SEEDANCE_SLOTS = [
   {
     key: "sceneShotId",
-    label: "Scene & Shot ID",
+    label: "🎬 Scene & Shot ID",
     icon: "Hash",
     description: "Unique scene and shot sequence tag (e.g. SC01_SH01).",
     tipTitle: "Shot Indexing & Scene Hierarchy",
@@ -789,7 +789,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "shotComposition",
-    label: "Shot Framing & Composition",
+    label: "📐 Shot Framing & Composition",
     icon: "Maximize",
     description: "Camera shot distance, framing scale, and focal angle.",
     tipTitle: "Framing & Aspect Scale",
@@ -813,7 +813,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "cameraMotionTag",
-    label: "Camera Motion Tag",
+    label: "🎥 Camera Motion Tag",
     icon: "Video",
     description: "Kinetic vector and camera movement dynamics.",
     tipTitle: "Kinetic Camera Dynamics",
@@ -837,7 +837,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "subjectLightingTag",
-    label: "Subject Lighting Tag",
+    label: "💡 Subject Lighting Tag",
     icon: "Sun",
     description: "Key, fill, and rim lighting setup focused on the primary performing artist.",
     tipTitle: "Subject Key Lighting",
@@ -855,7 +855,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "subjectColorTag",
-    label: "Subject Color Tag",
+    label: "🎨 Subject Color Tag",
     icon: "Palette",
     description: "Color palette and tone grade applied to the primary artist.",
     tipTitle: "Subject Color Palette",
@@ -872,7 +872,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "backgroundLightingTag",
-    label: "Background Lighting Tag",
+    label: "🌆 Background Lighting Tag",
     icon: "SunDim",
     description: "Atmospheric environment lighting and background depth illumination.",
     tipTitle: "Atmospheric Depth Lighting",
@@ -887,7 +887,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "backgroundColorTag",
-    label: "Background Color Tag",
+    label: "🖼️ Background Color Tag",
     icon: "Layers",
     description: "Color palette of the background environment and set design.",
     tipTitle: "Environment Color Tone",
@@ -902,7 +902,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "atmosphereVolumetricsTag",
-    label: "Atmosphere & Volumetric Haze",
+    label: "🌫️ Atmosphere & Volumetric Haze",
     icon: "CloudRain",
     description: "Volumetric light shafts, dust motes, embers, rain, or fog physics.",
     tipTitle: "Volumetrics & Particle Physics",
@@ -919,7 +919,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterIdAssetRef",
-    label: "Main Performing Artist ID",
+    label: "🎭 Main Performing Artist ID",
     icon: "User",
     description: "Primary performer identity tag and outfit specification.",
     tipTitle: "Character Continuity & Outfit",
@@ -934,7 +934,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "coArtistInteraction",
-    label: "Co-Artist Reaction & Interaction",
+    label: "🤝 Co-Artist Reaction & Interaction",
     icon: "Users",
     description: "Secondary performers, backing artists, or co-stars and their reaction.",
     tipTitle: "Co-Artist Dynamics",
@@ -949,7 +949,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "actionEnvContext",
-    label: "Action & Environment Context",
+    label: "🧭 Action & Environment Context",
     icon: "Compass",
     description: "Physical set location, stage environment, and background narrative.",
     tipTitle: "Stage & Environment Setting",
@@ -964,7 +964,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterExpression",
-    label: "Main Artist Expression",
+    label: "😄 Main Artist Expression",
     icon: "Smile",
     description: "Facial emotion, micro-expressions, and eye intent.",
     tipTitle: "Emotional Micro-Expressions",
@@ -979,7 +979,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterPlacement",
-    label: "Character Placement",
+    label: "📍 Character Placement",
     icon: "Grid",
     description: "Subject position in frame and spatial relation to co-artists.",
     tipTitle: "Spatial Framing & Grid Position",
@@ -994,7 +994,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterDialogue",
-    label: "Dialogue & Lip Sync",
+    label: "💬 Dialogue & Lip Sync",
     icon: "MessageSquare",
     description: "Spoken line, song lyric, or lip-sync articulation.",
     tipTitle: "Dialogue & Audio Lip-Sync",
@@ -1009,7 +1009,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterMovement",
-    label: "Main Artist Movement",
+    label: "🏃 Main Artist Movement",
     icon: "Activity",
     description: "Body posture, physical gesture, or choreography.",
     tipTitle: "Choreography & Motion",
@@ -1025,7 +1025,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterEyeLooks",
-    label: "Eye Direction & Look",
+    label: "👀 Eye Direction & Look",
     icon: "Eye",
     description: "Gaze vector, eye contact target, or glance direction.",
     tipTitle: "Gaze Vector & Eye Contact",
@@ -1040,7 +1040,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "shotDurationAndImages",
-    label: "⏱️ Duration & Image References (Image 1-9)",
+    label: "⏱️ Duration & Image References",
     icon: "Clock",
     description: "Shot length duration & extracted character image references (Image 1 to Image 9).",
     tipTitle: "Shot Duration & 9 Image Reference Bindings",
@@ -1054,7 +1054,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "soundFxAndFoley",
-    label: "🎵 Craft #18: Sound Design & Foley FX",
+    label: "🎵 Sound Design & Foley FX",
     icon: "Volume2",
     description: "Foley sound effects, ambient environmental audio, impact hits, and acoustic cues.",
     tipTitle: "Sound Design & Foley Acoustics",
@@ -1070,7 +1070,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "backgroundScoreMood",
-    label: "🎼 Craft #19: Music Composition & Original Score",
+    label: "🎼 Music Composition & Original Score",
     icon: "Music",
     description: "Musical score motif, tempo BPM, orchestral instrumentation, and emotional tone.",
     tipTitle: "Music Score & Emotional Motif",
@@ -1085,7 +1085,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "lensAndFocalLength",
-    label: "📷 Craft #20: Camera Lens & Focal Optics",
+    label: "📷 Camera Lens & Focal Optics",
     icon: "Camera",
     description: "Focal length in mm, lens prime series, anamorphic squeeze, and aperture f-stop.",
     tipTitle: "Camera Lens Optics & Depth Field",
@@ -1101,7 +1101,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "vfxCgiBreakdown",
-    label: "✨ Craft #21: Visual Effects & CGI Compositing",
+    label: "✨ Visual Effects & CGI Compositing",
     icon: "Sparkles",
     description: "CGI assets, green screen keying, particle FX, and digital matte painting.",
     tipTitle: "VFX & CGI Asset Layering",
@@ -1116,7 +1116,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "stuntAndSafetyNotes",
-    label: "🛡️ Craft #22: Stunt Rigging & Action Safety",
+    label: "🛡️ Stunt Rigging & Action Safety",
     icon: "Shield",
     description: "Stunt harness wirework, prop safety weapons, and controlled impact rigging.",
     tipTitle: "Stunt Choreography & Safety Protocols",
@@ -1131,7 +1131,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "makeupAndHairStyle",
-    label: "💄 Craft #23: Makeup, Hair & Prosthetics",
+    label: "💄 Makeup, Hair & Prosthetics",
     icon: "Sparkle",
     description: "Character makeup design, prosthetics, wound FX, facial hair, and period hairstyles.",
     tipTitle: "Character Makeup & Prosthetics",
@@ -1146,7 +1146,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "editTransitionCut",
-    label: "✂️ Craft #24: Film Editing Cut & Transition",
+    label: "✂️ Film Editing Cut & Transition",
     icon: "Scissors",
     description: "Editing cut style, J-Cut/L-Cut audio transitions, match cuts, and scene pacing.",
     tipTitle: "Film Editing & Transition Pacing",
@@ -1162,7 +1162,7 @@ export const SEEDANCE_SLOTS = [
   },
   {
     key: "characterIdMatrix",
-    label: "🎭 Craft #25: Character ID & Multi-Modal Asset Matrix",
+    label: "🎭 Character ID & Multi-Modal Asset Matrix",
     icon: "Users",
     description: "Multi-modal reference bindings: Image_1..9, Video_1..3, Audio_1..3 for Seedance & ComfyUI.",
     tipTitle: "Character ID & Multi-Modal Reference Matrix",
