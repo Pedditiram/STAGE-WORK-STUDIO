@@ -160,6 +160,13 @@ export default function App() {
     return "spreadsheet";
   });
 
+  // Enforce canvas tab hiding when showCanvasTab is OFF (false)
+  useEffect(() => {
+    if (!showCanvasTab && activeView === 'canvas') {
+      setActiveView('spreadsheet');
+    }
+  }, [showCanvasTab, activeView]);
+
   const [activeShotIndex, setActiveShotIndex] = useState(0);
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
   const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
@@ -989,7 +996,7 @@ export default function App() {
         <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
           
           {/* TAB 1: 🎬 2D/3D DIRECTOR CANVAS VIEW (Full 100% Screen Space for Canvas & Live Prompts) */}
-          {activeView === 'canvas' && (
+          {showCanvasTab && activeView === 'canvas' && (
             <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-4 h-full overflow-hidden">
               
               {/* LEFT 7 COLUMNS: Interactive 2D/3D Director Canvas */}
