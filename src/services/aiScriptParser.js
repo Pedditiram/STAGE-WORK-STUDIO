@@ -481,3 +481,96 @@ function generateScriptFromConceptFallback(conceptPrompt, shotCount = 5) {
 
   return shots;
 }
+
+// ---------------------------------------------------------
+// PEDDITI LABS CINEMA ENGINE - SINGLE CRAFT & SHOT ENHANCER
+// ---------------------------------------------------------
+
+export async function enhanceCraftSlotWithLLM(craftKey, currentValue, shotContext = {}) {
+  const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
+  const shotDesc = shotContext.actionEnvContext || shotContext.sceneShotId || 'Cinematic Shot';
+
+  if (apiKey.trim()) {
+    try {
+      const prompt = `You are a legendary Master Director & Cinematographer (Pedditi Labs Cinema Intelligence Engine).
+Enhance the following film craft parameter for a cinema production script:
+Craft Field: "${craftKey}"
+Current Value: "${currentValue || ''}"
+Shot Context: "${shotDesc}"
+
+Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 25 words). Do NOT wrap in quotes or code blocks.`;
+
+      let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey.trim()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+
+      if (!response.ok) {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text.replace(/^"|"$/g, '');
+      }
+    } catch (err) {
+      console.warn("LLM craft enhancer fallback:", err);
+    }
+  }
+
+  // Fallback enhancements if API key not available
+  return currentValue ? `[Enhanced] ${currentValue}` : `[Pedditi Labs Cinematic Preset for ${craftKey}]`;
+}
+
+export async function enhanceEntireShotWithLLM(shot) {
+  const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
+
+  if (apiKey.trim() && shot) {
+    try {
+      const prompt = `You are a Master Film Director (Pedditi Labs Cinema Intelligence Engine).
+Elevate the following shot into an ultra-cinematic masterpiece by enhancing all craft fields:
+Current Shot JSON: ${JSON.stringify(shot)}
+
+Return ONLY a valid JSON object representing the enhanced shot with the same 25 keys:
+"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
+
+Do NOT use markdown codeblocks. Return JSON object ONLY.`;
+
+      let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey.trim()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+
+      if (!response.ok) {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed && typeof parsed === 'object') {
+            return { ...shot, ...parsed };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("LLM shot enhancer fallback:", err);
+    }
+  }
+
+  return shot;
+}

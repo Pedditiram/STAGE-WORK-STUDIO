@@ -5,6 +5,7 @@ import {
   Plus, Copy, VolumeX, Volume2, ArrowUp, ArrowDown, Sparkles, 
   Check, Layers, Search, Filter
 } from 'lucide-react';
+import { enhanceEntireShotWithLLM } from '../services/aiScriptParser';
 
 const CATEGORIES = [
   { id: 'all', label: 'All 25 Crafts', keys: [] },
@@ -25,7 +26,7 @@ export default function SpreadsheetView({
   onCloneShot, 
   onMoveShot,
   onReorderShots, 
-  activeShotIndex, 
+  activeShotIndex = 0, 
   setActiveShotIndex,
   onCompilePrompt
 }) {
@@ -36,6 +37,7 @@ export default function SpreadsheetView({
 
   const [draggedShotIdx, setDraggedShotIdx] = useState(null);
   const [dragOverShotIdx, setDragOverShotIdx] = useState(null);
+  const [enhancingShotIdx, setEnhancingShotIdx] = useState(null);
 
   // Global keyboard navigation for main matrix view when no cell modal is active
   React.useEffect(() => {
@@ -146,6 +148,22 @@ export default function SpreadsheetView({
     }
     setCopiedIndex(idx);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleAIEnhanceShot = async (shot, shotIdx) => {
+    try {
+      setEnhancingShotIdx(shotIdx);
+      const enhancedShot = await enhanceEntireShotWithLLM(shot);
+      if (enhancedShot && onUpdateShot) {
+        Object.entries(enhancedShot).forEach(([k, v]) => {
+          onUpdateShot(shotIdx, k, v);
+        });
+      }
+    } catch (err) {
+      console.warn("Error enhancing shot with AI:", err);
+    } finally {
+      setEnhancingShotIdx(null);
+    }
   };
 
   return (
@@ -294,6 +312,16 @@ export default function SpreadsheetView({
 
                   <td className="p-1 border-r border-zinc-800 bg-zinc-950 group-hover:bg-zinc-900">
                     <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleAIEnhanceShot(shot, shotIdx); }}
+                        disabled={enhancingShotIdx === shotIdx}
+                        className="p-1 rounded bg-zinc-800 hover:bg-purple-600 text-amber-300 hover:text-white transition-all border border-purple-500/30"
+                        title="⚡ AI Enhance Full Shot with Pedditi Labs Engine"
+                      >
+                        <Sparkles className={`w-3 h-3 ${enhancingShotIdx === shotIdx ? 'animate-spin text-purple-400' : 'text-amber-300'}`} />
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); copyShotPrompt(shot, shotIdx); }}

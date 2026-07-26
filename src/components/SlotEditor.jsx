@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { CRAFT_INSPIRATION_DATA } from '../constants/craftInspirationGraphics';
+import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
 
 export default function SlotEditor({ 
   slotConfig, 
@@ -32,6 +33,7 @@ export default function SlotEditor({
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
   const [activeConfig, setActiveConfig] = useState(slotConfig);
+  const [isEnhancingCraft, setIsEnhancingCraft] = useState(false);
 
   useEffect(() => {
     setActiveConfig(slotConfig);
@@ -279,6 +281,25 @@ export default function SlotEditor({
     if (onSelectSlot) onSelectSlot(slotConfig.key);
   };
 
+  const handleAIEnhanceCraft = async () => {
+    try {
+      setIsEnhancingCraft(true);
+      const enhancedStr = await enhanceCraftSlotWithLLM(activeConfig.key, value, {
+        sceneShotId: currentSceneId,
+        actionEnvContext: value
+      });
+      if (enhancedStr) {
+        onChange(enhancedStr);
+        setSavedToast('⚡ Enhanced with Pedditi Labs Engine!');
+        setTimeout(() => setSavedToast(false), 2500);
+      }
+    } catch (e) {
+      console.warn("Craft AI enhance error:", e);
+    } finally {
+      setIsEnhancingCraft(false);
+    }
+  };
+
   // Render Shared Compact Popup Modal Window
   const renderPopupModal = () => {
     if (!isModalActive) return null;
@@ -377,7 +398,19 @@ export default function SlotEditor({
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="text-[11px] text-zinc-200 font-bold font-mono">Complete Text Value:</label>
-              <span className="text-[10px] text-cyan-400 font-mono font-bold">{value ? value.length : 0} chars</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAIEnhanceCraft}
+                  disabled={isEnhancingCraft}
+                  className="px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-md transition-all border border-cyan-400/40 cursor-pointer"
+                  title="Enhance Craft Parameter using Pedditi Labs Cinema Intelligence Engine"
+                >
+                  <Sparkles className={`w-3 h-3 text-amber-300 ${isEnhancingCraft ? 'animate-spin' : ''}`} />
+                  <span>{isEnhancingCraft ? 'Enhancing...' : '⚡ Pedditi Labs AI Enhance'}</span>
+                </button>
+                <span className="text-[10px] text-cyan-400 font-mono font-bold">{value ? value.length : 0} chars</span>
+              </div>
             </div>
 
             <textarea
