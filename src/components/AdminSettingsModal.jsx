@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download } from 'lucide-react';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap } from 'lucide-react';
 import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 
 export default function AdminSettingsModal({ 
@@ -809,15 +809,15 @@ export default function AdminSettingsModal({
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                Stage Production Studio API Settings
+              <h3 className="text-base font-bold text-white flex items-center gap-2 font-mono">
+                Stage Production Studio Settings
                 {isAdminLoggedIn && (
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
                     Admin Active
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-zinc-400">Segregated management for Image Generation, Video Generation & LLM Script Parsing Keys</p>
+              <p className="text-xs text-zinc-400 font-mono">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
             </div>
           </div>
           <button
@@ -1008,103 +1008,103 @@ export default function AdminSettingsModal({
             <div className="space-y-6">
               
               {/* Category Filter Tabs */}
-              <div className="flex items-center justify-between gap-2 bg-zinc-950 p-2 rounded-xl border border-zinc-800 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center justify-between gap-1.5 bg-zinc-950 p-1.5 rounded-xl border border-zinc-800 flex-wrap">
+                <div className="flex items-center gap-1 flex-wrap text-[11px] font-mono">
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all font-bold ${
                       activeCategoryTab === 'all'
                         ? 'bg-amber-400 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-zinc-200 hover:text-white border border-zinc-700'
+                        : 'bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800'
                     }`}
                   >
-                    📋 All Settings
+                    All Settings
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('image')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'image'
                         ? 'bg-emerald-400 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-emerald-300 hover:text-emerald-200 border border-zinc-700'
+                        : 'bg-zinc-900 text-emerald-300 hover:text-emerald-200 border border-zinc-800'
                     }`}
                   >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    🎨 Image Keys
+                    <ImageIcon className="w-3 h-3" />
+                    Image Keys
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('video')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'video'
                         ? 'bg-cyan-400 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-700'
+                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
                     }`}
                   >
-                    <Film className="w-3.5 h-3.5" />
-                    🎥 Video Keys
+                    <Film className="w-3 h-3" />
+                    Video Keys
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('llm')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'llm'
                         ? 'bg-amber-400 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-700'
+                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-800'
                     }`}
                   >
-                    <Server className="w-3.5 h-3.5" />
-                    🤖 LLM Keys
+                    <Server className="w-3 h-3" />
+                    LLM Keys
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('cloud_collab')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'cloud_collab'
                         ? 'bg-cyan-500 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-cyan-500/50'
+                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
                     }`}
                   >
-                    <Cloud className="w-3.5 h-3.5 text-cyan-400" />
-                    ☁️ {roomId || 'SPS-CLOUD-8821'}
+                    <Cloud className="w-3 h-3 text-cyan-400" />
+                    {roomId || 'SPS-CLOUD-8821'}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('database')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'database'
                         ? 'bg-emerald-500 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-emerald-300 hover:text-emerald-200 border border-emerald-500/50'
+                        : 'bg-zinc-900 text-emerald-300 hover:text-emerald-200 border border-zinc-800'
                     }`}
                   >
-                    <Server className="w-3.5 h-3.5 text-emerald-400" />
-                    🗄️ Cloud Database
+                    <Server className="w-3 h-3 text-emerald-400" />
+                    Cloud Database
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveCategoryTab('security')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 font-bold ${
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'security'
                         ? 'bg-amber-400 text-zinc-950 shadow'
-                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-700'
+                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-800'
                     }`}
                   >
-                    <Lock className="w-3.5 h-3.5" />
-                    🔑 Admin Password
+                    <Lock className="w-3 h-3" />
+                    Admin Password
                   </button>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="text-[11px] font-mono text-zinc-400 hover:text-white underline px-2 py-1 bg-zinc-900 rounded border border-zinc-800"
+                  className="text-[10px] font-mono text-zinc-400 hover:text-white px-2 py-1 bg-zinc-900 rounded border border-zinc-800"
                 >
                   Lock / Logout
                 </button>
@@ -1620,26 +1620,29 @@ export default function AdminSettingsModal({
                       </div>
                     )}
 
-                    <div className="pt-1 space-y-2">
+                    <div className="pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={handleSaveLLM}
-                        className="w-full py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
+                        className="py-2 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-zinc-950 font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        {isLlmSaved ? '✓ LLM API Key Saved & Persisted!' : '💾 Save LLM Engine & API Key'}
+                        <Save className="w-4 h-4 shrink-0" />
+                        <span>{isLlmSaved ? '✓ LLM Key Saved!' : 'Save LLM Engine & API Key'}</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={testLLMAPI}
                         disabled={isTestingLLM}
-                        className="w-full py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-amber-300 border border-zinc-700 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                        className="py-2 px-3 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 shadow-sm"
                       >
-                        {isTestingLLM ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TestTube2 className="w-3.5 h-3.5 text-amber-400" />}
-                        {isTestingLLM ? 'Testing LLM Connection...' : '🧪 Test LLM API Key Connection'}
+                        {isTestingLLM ? (
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-amber-400" />
+                        ) : (
+                          <Zap className="w-4 h-4 text-amber-400 fill-amber-400/20 shrink-0" />
+                        )}
+                        <span>{isTestingLLM ? 'Testing Connection...' : 'Test LLM Connection'}</span>
                       </button>
-
                     </div>
                   </div>
                 </div>
