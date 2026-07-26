@@ -150,6 +150,28 @@ export default function ProjectConsoleModal({
   const [isGenerated, setIsGenerated] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState(presetProfile || 'mythological');
+  const [parseProgress, setParseProgress] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (isLoadingFile) {
+      setParseProgress(10);
+      timer = setInterval(() => {
+        setParseProgress((prev) => {
+          if (prev >= 94) return 94;
+          const step = Math.floor(Math.random() * 12) + 6;
+          return Math.min(prev + step, 94);
+        });
+      }, 140);
+    } else if (parseProgress > 0) {
+      setParseProgress(100);
+      const resetTimer = setTimeout(() => setParseProgress(0), 500);
+      return () => clearTimeout(resetTimer);
+    }
+    return () => clearInterval(timer);
+  }, [isLoadingFile]);
+
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
 
   // Custom & Edited Genre Profiles State
@@ -974,19 +996,42 @@ export default function ProjectConsoleModal({
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (24 Crafts Matrix Aware)</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleParseScript}
-                    disabled={isLoadingFile || !rawScriptText.trim()}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
-                  >
-                    {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-zinc-950" />}
-                    <span>{isLoadingFile ? 'Parsing Script...' : '⚡ Generate 24 Crafts Shots Breakdown'}</span>
-                  </button>
+                <div className="flex flex-col gap-2 pt-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Parser Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Built-In Cinema Intelligence (24 Crafts Matrix Aware)</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleParseScript}
+                      disabled={isLoadingFile || !rawScriptText.trim()}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 font-black text-xs shadow flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    >
+                      {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-zinc-950" />}
+                      <span>{isLoadingFile ? `Parsing Script (${parseProgress}%)...` : '⚡ Generate 24 Crafts Shots Breakdown'}</span>
+                    </button>
+                  </div>
+
+                  {/* Dynamic Thin Progress Bar Animation with Percentages */}
+                  {(isLoadingFile || parseProgress > 0) && (
+                    <div className="w-full space-y-1.5 pt-1 animate-fadeIn">
+                      <div className="flex items-center justify-between text-[11px] font-mono text-cyan-600 dark:text-cyan-400 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                          AI Cinema Engine Analyzing Screenplay & 24 Crafts...
+                        </span>
+                        <span className="bg-cyan-500/10 text-cyan-500 px-2 py-0.5 rounded border border-cyan-500/30 text-[10px]">{parseProgress}% COMPLETE</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden relative shadow-inner">
+                        <div 
+                          className="h-full bg-gradient-to-r from-cyan-500 via-amber-400 to-emerald-400 transition-all duration-200 ease-out rounded-full relative"
+                          style={{ width: `${parseProgress}%` }}
+                        >
+                          <div className="absolute inset-0 bg-white/40 animate-pulse" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
