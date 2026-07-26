@@ -947,6 +947,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                           allSlots={SEEDANCE_SLOTS}
                           isForcePopupOpen={true}
                           embedded={true}
+                          totalShotsCount={shots.length}
+                          currentShotIndex={editingShotIdx}
+                          onNavigateNextShot={() => {
+                            if (editingShotIdx < shots.length - 1) setEditingShotIdx(editingShotIdx + 1);
+                          }}
+                          onNavigatePrevShot={() => {
+                            if (editingShotIdx > 0) setEditingShotIdx(editingShotIdx - 1);
+                          }}
+                          onJumpToShot={(targetShotIdx) => setEditingShotIdx(targetShotIdx)}
                           onCloseForcePopup={() => setActiveCraftKey(null)}
                           onNavigateNextSlot={(currKey) => {
                             const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);

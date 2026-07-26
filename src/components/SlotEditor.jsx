@@ -15,7 +15,12 @@ export default function SlotEditor({
   onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot,
-  embedded = false
+  embedded = false,
+  totalShotsCount = 0,
+  currentShotIndex = 0,
+  onNavigateNextShot,
+  onNavigatePrevShot,
+  onJumpToShot
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
@@ -530,59 +535,111 @@ export default function SlotEditor({
           </div>
         </div>
 
-        {/* Modal Footer Bar with Navigation & Direct Slot Jump Selector */}
-        <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0 font-mono gap-2 flex-wrap sm:flex-nowrap">
+        {/* Modal Footer Bar with Shot & Craft Navigation */}
+        <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0 font-mono gap-2 flex-wrap">
           {/* Left / Center Navigation Toolbar */}
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            {/* Previous Slot Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePrevSlot();
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-              title="Previous Slot (Cmd + Left Arrow)"
-            >
-              <ChevronLeft className="w-4 h-4 text-cyan-400" />
-              <span>Prev</span>
-              <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘←)</span>
-            </button>
+          <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+            {/* SHOT NAVIGATION CONTROLS */}
+            {((totalShotsCount && totalShotsCount > 1) || onNavigatePrevShot || onNavigateNextShot || onJumpToShot) && (
+              <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-amber-500/50 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigatePrevShot) onNavigatePrevShot();
+                  }}
+                  className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-amber-600 hover:text-white text-amber-300 text-xs font-bold font-mono flex items-center gap-1 transition-all cursor-pointer border border-zinc-800"
+                  title="Previous Shot"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Shot</span>
+                </button>
 
-            {/* Direct Slot Jump Dropdown Pill */}
-            <div className="relative flex items-center min-w-0 max-w-[200px] sm:max-w-[260px]">
-              <select
-                value={activeConfig.key}
-                onChange={(e) => handleDirectJump(e.target.value)}
-                className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-2.5 py-1.5 pr-6 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-left truncate w-full"
-                title="Directly jump to any slot number in matrix"
+                <div className="relative flex items-center min-w-0 max-w-[130px]">
+                  <select
+                    value={currentShotIndex}
+                    onChange={(e) => {
+                      if (onJumpToShot) onJumpToShot(parseInt(e.target.value, 10));
+                    }}
+                    className="bg-zinc-900 border border-amber-500/50 text-amber-300 text-xs font-bold font-mono px-2 py-1 pr-5 rounded-lg appearance-none cursor-pointer hover:border-amber-400 focus:outline-none text-left truncate w-full"
+                    title="Jump directly to any Shot #"
+                  >
+                    {Array.from({ length: totalShotsCount || 1 }).map((_, idx) => (
+                      <option key={idx} value={idx} className="bg-zinc-950 text-white font-mono">
+                        Shot #{idx + 1}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-amber-400 absolute right-1.5 pointer-events-none" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onNavigateNextShot) onNavigateNextShot();
+                  }}
+                  className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-amber-600 hover:text-white text-amber-300 text-xs font-bold font-mono flex items-center gap-1 transition-all cursor-pointer border border-zinc-800"
+                  title="Next Shot"
+                >
+                  <span className="hidden sm:inline">Shot</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
+                </button>
+              </div>
+            )}
+
+            {/* CRAFT NAVIGATION CONTROLS */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Previous Slot Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrevSlot();
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                title="Previous Slot (Cmd + Left Arrow)"
               >
-                {availableSlotsList.map((s, idx) => {
-                  const numStr = idx + 1 < 10 ? `0${idx + 1}` : `${idx + 1}`;
-                  return (
-                    <option key={s.key} value={s.key} className="bg-zinc-950 text-white font-mono">
-                      {numStr} : {s.label}
-                    </option>
-                  );
-                })}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2 pointer-events-none" />
-            </div>
+                <ChevronLeft className="w-4 h-4 text-cyan-400" />
+                <span>Prev</span>
+                <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘←)</span>
+              </button>
 
-            {/* Next Slot Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleNextSlot();
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-              title="Next Slot (Cmd + Right Arrow)"
-            >
-              <span>Next</span>
-              <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘→)</span>
-              <ChevronRight className="w-4 h-4 text-cyan-400" />
-            </button>
+              {/* Direct Slot Jump Dropdown Pill */}
+              <div className="relative flex items-center min-w-0 max-w-[200px] sm:max-w-[260px]">
+                <select
+                  value={activeConfig.key}
+                  onChange={(e) => handleDirectJump(e.target.value)}
+                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-2.5 py-1.5 pr-6 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-left truncate w-full"
+                  title="Directly jump to any slot number in matrix"
+                >
+                  {availableSlotsList.map((s, idx) => {
+                    const numStr = idx + 1 < 10 ? `0${idx + 1}` : `${idx + 1}`;
+                    return (
+                      <option key={s.key} value={s.key} className="bg-zinc-950 text-white font-mono">
+                        {numStr} : {s.label}
+                      </option>
+                    );
+                  })}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2 pointer-events-none" />
+              </div>
+
+              {/* Next Slot Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNextSlot();
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/80 text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                title="Next Slot (Cmd + Right Arrow)"
+              >
+                <span>Next</span>
+                <span className="text-[10px] text-zinc-500 font-mono font-normal hidden sm:inline">(⌘→)</span>
+                <ChevronRight className="w-4 h-4 text-cyan-400" />
+              </button>
+            </div>
           </div>
 
           {/* Right: Done & Close Button */}

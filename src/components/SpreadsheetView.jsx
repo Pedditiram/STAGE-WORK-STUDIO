@@ -311,6 +311,20 @@ export default function SpreadsheetView({
                         onNavigateNextSlot={(slotKey) => handleNavigateNextSlot(shotIdx, slotKey)}
                         onNavigatePrevSlot={(slotKey) => handleNavigatePrevSlot(shotIdx, slotKey)}
                         onJumpToSlot={(targetSlotKey) => setActiveModalCell({ shotIdx, slotKey: targetSlotKey })}
+                        totalShotsCount={(shots || []).length}
+                        currentShotIndex={shotIdx}
+                        onNavigateNextShot={() => {
+                          if (shotIdx < (shots || []).length - 1) {
+                            if (setActiveShotIndex) setActiveShotIndex(shotIdx + 1);
+                            setActiveModalCell({ shotIdx: shotIdx + 1, slotKey: slot.key });
+                          }
+                        }}
+                        onNavigatePrevShot={() => {
+                          if (shotIdx > 0) {
+                            if (setActiveShotIndex) setActiveShotIndex(shotIdx - 1);
+                            setActiveModalCell({ shotIdx: shotIdx - 1, slotKey: slot.key });
+                          }
+                        }}
                       />
                     </td>
                   ))}
