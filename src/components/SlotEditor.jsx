@@ -418,16 +418,16 @@ export default function SlotEditor({
               </button>
 
               {/* Direct Slot Jump Dropdown Pill */}
-              <div className="relative flex items-center min-w-0 flex-1 max-w-[220px] sm:max-w-[300px]">
+              <div className="relative flex items-center min-w-0 max-w-[140px]">
                 <select
                   value={activeConfig.key}
                   onChange={(e) => handleDirectJump(e.target.value)}
-                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-2.5 py-1.5 pr-6 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-left truncate w-full"
+                  className="bg-zinc-900 border border-cyan-500/50 text-cyan-300 text-xs font-bold font-mono px-2.5 py-1.5 pr-6 rounded-xl appearance-none cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs text-center w-full"
                   title="Directly jump to any slot number in matrix"
                 >
                   {availableSlotsList.map((s, idx) => (
                     <option key={s.key} value={s.key} className="bg-zinc-950 text-white font-mono">
-                      Slot #{idx + 1} of {availableSlotsList.length}: {s.label}
+                      Slot #{idx + 1} of {availableSlotsList.length}:
                     </option>
                   ))}
                 </select>
