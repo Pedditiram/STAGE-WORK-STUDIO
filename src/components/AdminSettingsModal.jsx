@@ -1644,6 +1644,21 @@ export default function AdminSettingsModal({
                         <span>{isTestingLLM ? 'Testing Connection...' : 'Test LLM Connection'}</span>
                       </button>
                     </div>
+
+                    {llmTestResult && (
+                      <div className={`p-3 rounded-lg text-xs font-mono font-bold flex items-center gap-2 animate-in fade-in zoom-in-95 mt-2 ${
+                        llmTestResult.success 
+                          ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow-md shadow-emerald-950' 
+                          : 'bg-red-950/90 text-red-300 border border-red-500/50 shadow-md shadow-red-950'
+                      }`}>
+                        {llmTestResult.success ? (
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 fill-emerald-400/20" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                        )}
+                        <span>{llmTestResult.msg}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
