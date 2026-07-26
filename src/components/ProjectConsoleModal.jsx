@@ -7,6 +7,10 @@ import {
 import { parseRawScriptToShots, generateScriptFromConcept, extractTextFromPDF } from '../services/aiScriptParser';
 import { GENRE_PRESET_PROFILES, getMergedGenreProfiles, detectScriptGenre } from '../constants/seedancePresets';
 import { syncProjectLibraryToCloud, fetchProjectLibraryFromCloud } from '../services/dbService';
+import { 
+  saveProjectToVault, loadProjectsFromVault, getAllottedFolderPath, 
+  setAllottedFolderPath, exportProjectPackageToFile, importProjectPackageFromFile 
+} from '../services/projectDiskVault';
 
 const SAMPLE_SCRIPTS = [
   {
@@ -99,6 +103,43 @@ export default function ProjectConsoleModal({
 
   const [activeTab, setActiveTab] = useState(initialTab || 'library'); // 'library' | 'ai_breakdown' | 'genre' | 'create' | 'share'
   const [copiedLink, setCopiedLink] = useState(false);
+  const importFileRef = React.useRef(null);
+  const [allottedFolder, setAllottedFolder] = useState(() => getAllottedFolderPath());
+
+  const handleEditAllottedFolder = () => {
+    const current = getAllottedFolderPath();
+    const newPath = prompt("Set Allotted Local Storage Directory Path for Project Backups:", current);
+    if (newPath && newPath.trim()) {
+      const cleanPath = newPath.trim();
+      setAllottedFolderPath(cleanPath);
+      setAllottedFolder(cleanPath);
+    }
+  };
+
+  const handleBackupFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedProj = await importProjectPackageFromFile(file);
+      setProjectLibrary(prev => {
+        const cleanTitle = (importedProj.title || 'IMPORTED PROJECT').trim().toUpperCase();
+        const exists = prev.some(p => p.title.trim().toUpperCase() === cleanTitle);
+        let updated;
+        if (exists) {
+          updated = prev.map(p => p.title.trim().toUpperCase() === cleanTitle ? { ...p, ...importedProj } : p);
+        } else {
+          updated = [...prev, importedProj];
+        }
+        localStorage.setItem('sps_project_library', JSON.stringify(updated));
+        return updated;
+      });
+      alert(`📥 PROJECT RESTORED SUCCESSFULLY:\nProject "${importedProj.title}" (${importedProj.shots?.length || 0} shots) imported into studio library & saved to persistent vault!`);
+    } catch (err) {
+      alert(`❌ IMPORT ERROR:\n${err.message}`);
+    }
+    if (e.target) e.target.value = '';
+  };
 
   // New Project Form State
   const [newTitle, setNewTitle] = useState('');
@@ -781,8 +822,58 @@ export default function ProjectConsoleModal({
           {/* TAB 1: PROJECT LIBRARY */}
           {activeTab === 'library' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-600 dark:text-zinc-400 font-mono">Select a project to switch, duplicate, or manage:</span>
+              <input 
+                type="file" 
+                ref={importFileRef} 
+                onChange={handleBackupFileImport} 
+                accept=".json,.sps" 
+                className="hidden" 
+              />
+
+              {/* ALLOTTED LOCAL STORAGE VAULT BANNER */}
+              <div className="p-3 rounded-xl border border-cyan-500/40 bg-cyan-950/40 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-cyan-900/60 text-cyan-300 border border-cyan-700/60 shrink-0">
+                    <FolderKanban className="w-4 h-4 text-cyan-300" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white font-sans flex items-center gap-2">
+                      <span>📁 Allotted Local Storage Folder Vault</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                        🔒 Auto-Persisted & Recoverable
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-cyan-200/80 font-mono truncate max-w-xl">
+                      {allottedFolder}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleEditAllottedFolder}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all"
+                    title="Change Allotted Storage Directory Path"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Path</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => importFileRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-md transition-all"
+                    title="Import & Restore .sps / .json Project Backup File from Local Folder"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import Backup File</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-slate-600 dark:text-zinc-400 font-mono">Select a project to switch, duplicate, backup, or manage:</span>
                 <button
                   type="button"
                   onClick={() => setActiveTab('create')}
@@ -884,10 +975,20 @@ export default function ProjectConsoleModal({
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-cyan-700 dark:text-cyan-400">⚙️ {proj.targetModel ? proj.targetModel.replace(/Seedance/gi, 'SPS Direct Cinema').replace(/SeeDream/gi, 'SPS High Fidelity') : 'SPS Direct Cinema 2.0'}</span>
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-amber-700 dark:text-amber-400">📐 {proj.aspectRatio}</span>
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-400">🔑 {proj.roomId}</span>
+                          <span className="px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/60" title={`Allotted storage folder: ${allottedFolder}`}>📁 Vault Allotted</span>
                         </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => exportProjectPackageToFile(proj)}
+                          className="px-2.5 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40 text-xs flex items-center gap-1 font-bold font-mono shadow"
+                          title={`Export & Save ${proj.title} Backup Package (.sps.json) to Local Disk Folder`}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Save Backup</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
