@@ -16,6 +16,7 @@ export default function SlotEditor({
   onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot,
+  embedded = false,
   totalShotsCount = 0,
   currentShotIndex = 0,
   onNavigateNextShot,
