@@ -1010,10 +1010,10 @@ export default function ProjectConsoleModal({
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-500" />
-                      Script Genre Profile & 15-Slot Matrix Adaptation:
+                      Script Genre Profile & 24 Crafts of Cinema Adaptation:
                     </h4>
                     <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-0.5">
-                      Select, create, or edit production genre profiles below to auto-adapt 17 matrix slot preset parameters for your screenplay.
+                      Select, create, or edit production genre profiles below to auto-adapt all 24 crafts matrix slot preset parameters for your screenplay.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

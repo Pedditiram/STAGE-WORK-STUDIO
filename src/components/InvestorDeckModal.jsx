@@ -10,7 +10,7 @@ const DECK_SLIDES = [
     subtitle: "Reinventing film pre-visualization and production with autonomous directorial intelligence.",
     content: [
       "Real-time multi-user cloud workspace uniting Directors, DPs, and Editors.",
-      "10x faster turnaround from raw script text to 17-slot camera parameters.",
+      "10x faster turnaround from raw script text to 24-craft camera parameters.",
       "Native zero-latency Vercel serverless database with 100% data integrity.",
       "Engineered for high-budget commercial epics, streaming series, and indie visionaries."
     ],
@@ -21,7 +21,7 @@ const DECK_SLIDES = [
     id: 2,
     badge: "DIRECTORIAL PRECISION",
     badgeColor: "from-amber-500 to-orange-600",
-    title: "17-Slot Camera & Lighting Matrix",
+    title: "24 Crafts of Cinema Matrix",
     subtitle: "Granular control over every frame, composition tag, and acoustic atmosphere.",
     content: [
       "Shot Composition: Extreme Close-Up, Wide Anamorphic, Tracking Low-Angle.",

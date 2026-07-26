@@ -7,11 +7,11 @@ import {
 } from 'lucide-react';
 
 const CATEGORIES = [
-  { id: 'all', label: 'All 17 Slots', keys: [] },
-  { id: 'framing', label: '🎬 Framing, Duration & 9-Image Inputs', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag', 'actionEnvContext', 'shotDurationAndImages'] },
-  { id: 'lighting', label: '💡 Lighting, Grade & Atmosphere', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'atmosphereVolumetricsTag'] },
-  { id: 'artists', label: '🎭 Artists & Reactions', keys: ['characterIdAssetRef', 'coArtistInteraction', 'characterExpression', 'characterPlacement'] },
-  { id: 'kinetics', label: '🎵 Movement & Dialogue', keys: ['characterDialogue', 'characterMovement', 'characterEyeLooks'] }
+  { id: 'all', label: 'All 24 Crafts', keys: [] },
+  { id: 'framing', label: '🎬 Framing, Optics & 9-Image Inputs', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag', 'actionEnvContext', 'lensAndFocalLength', 'shotDurationAndImages'] },
+  { id: 'lighting', label: '💡 Lighting, Color & Atmosphere SFX', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
+  { id: 'artists', label: '🎭 Artists, Makeup & Stunt Safety', keys: ['characterIdAssetRef', 'coArtistInteraction', 'characterExpression', 'characterPlacement', 'makeupAndHairStyle', 'stuntAndSafetyNotes'] },
+  { id: 'audio_post', label: '🎵 Sound, Music Score & Edit Cuts', keys: ['characterDialogue', 'characterMovement', 'characterEyeLooks', 'soundFxAndFoley', 'backgroundScoreMood', 'editTransitionCut'] }
 ];
 
 export default function SpreadsheetView({ 
@@ -358,7 +358,7 @@ export default function SpreadsheetView({
           </span>
           <span className="text-zinc-600">•</span>
           <span className="text-amber-300 font-mono text-[11px] truncate">
-            Focus: {currentCategoryObj?.label || 'All 17 Slots'} ({filteredSlots.length} slots)
+            Focus: {currentCategoryObj?.label || 'All 24 Crafts'} ({filteredSlots.length} crafts)
           </span>
         </div>
 
