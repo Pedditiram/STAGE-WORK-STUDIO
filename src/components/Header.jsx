@@ -286,11 +286,16 @@ export default function Header({
               isProjectSavedToast
                 ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-black border-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.6)]"
                 : isCloudSyncing
-                  ? "bg-cyan-500/80 text-slate-950 font-black border-cyan-400 cursor-wait animate-pulse"
+                  ? "bg-amber-500 text-slate-950 font-black border-amber-400 cursor-wait animate-pulse"
                   : colorTheme === 'paper'
-                    ? "bg-slate-900 hover:bg-slate-800 text-white font-bold border-slate-700 shadow-slate-300/40"
-                    : "bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-800 text-cyan-300 border-cyan-500/50 shadow-cyan-950/50"
+                    ? "bg-cyan-600 hover:bg-cyan-700 text-white font-bold border-cyan-700 shadow-sm"
+                    : "bg-cyan-950/90 hover:bg-cyan-900 text-cyan-300 hover:text-cyan-100 border-cyan-500/60 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
             }`}
+            style={!isProjectSavedToast && !isCloudSyncing && colorTheme === 'paper' ? {
+              backgroundColor: '#0284c7',
+              borderColor: '#0369a1',
+              color: '#ffffff'
+            } : undefined}
             title={
               isProjectSavedToast
                 ? "Saved & Synced Successfully!"
@@ -302,17 +307,21 @@ export default function Header({
             {isCloudSyncing ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 text-slate-950 animate-spin shrink-0" />
-                <span className="font-black tracking-tight text-[11.5px]">Syncing...</span>
+                <span className="font-black tracking-tight text-[11.5px] text-slate-950">Syncing...</span>
               </>
             ) : isProjectSavedToast ? (
               <>
                 <Check className="w-4 h-4 text-slate-950 stroke-[3.5] animate-in zoom-in spin-in-12 duration-300 shrink-0" />
-                <span className="font-black tracking-tight text-[11.5px]">Sync Complete</span>
+                <span className="font-black tracking-tight text-[11.5px] text-slate-950">Sync Complete</span>
               </>
             ) : (
               <>
-                <RefreshCw className="w-3.5 h-3.5 text-white hover:rotate-180 transition-all duration-500 shrink-0" />
-                <span className="font-bold tracking-tight text-[11.5px]">Sync</span>
+                <RefreshCw className={`w-3.5 h-3.5 hover:rotate-180 transition-all duration-500 shrink-0 ${
+                  colorTheme === 'paper' ? 'text-white' : 'text-cyan-400'
+                }`} />
+                <span className={`font-bold tracking-tight text-[11.5px] ${
+                  colorTheme === 'paper' ? 'text-white' : 'text-cyan-300'
+                }`}>Sync</span>
               </>
             )}
           </button>
