@@ -767,13 +767,14 @@ export default function AdminSettingsModal({
     setLlmTestResult(null);
 
     const providerLabels = {
-      google_gemini: 'Google Gemini 2.0 / 1.5 (24-Craft Breakdown)',
+      google_gemini: 'Google Gemini 3.6 Flash / 3.1 Pro (24-Craft Breakdown)',
+      anthropic: 'Claude Sonnet 4.6 / Opus 4.6 Thinking API',
       byteplus: 'ByteDance ModelArk / Doubao (Seedance Native Video Engine)',
       minimax: 'MiniMax Hailuo AI (Cinematic Camera & Physics)',
       kling_ai: 'Kling AI / Kuaishou (High-Speed Cinematic Video)',
       luma_ray: 'Luma Dream Machine (Ray 2 Optics & Lens Depth)',
       openai: 'OpenAI GPT-4o / Sora Director API',
-      anthropic: 'Anthropic Claude 3.5 / 3.7 Sonnet API'
+      gpt_oss: 'GPT-OSS 120B Open-Source Cinema API'
     };
     const label = providerLabels[llmProvider] || llmProvider.toUpperCase();
 
@@ -1574,13 +1575,14 @@ export default function AdminSettingsModal({
                         }}
                         className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"
                       >
-                        <option value="google_gemini">✨ Google Gemini 2.0 / 1.5 Pro & Flash (Recommended for 24-Craft Breakdown)</option>
+                        <option value="google_gemini">✨ Google Gemini 3.6 Flash / 3.1 Pro API (Recommended for 24-Craft Breakdown)</option>
+                        <option value="anthropic">🧠 Claude Sonnet 4.6 / Opus 4.6 Thinking API (Deep Script Breakdown & Reasoning)</option>
                         <option value="byteplus">🎬 ByteDance ModelArk (Doubao / Seaweed - Seedance Native Video Engine)</option>
                         <option value="minimax">📹 MiniMax Hailuo AI (T2V-01 Cinematic Camera & Motion Physics Engine)</option>
                         <option value="kling_ai">⚡ Kling AI / Kuaishou (1.5 High-Speed Cinematic Video Engine)</option>
                         <option value="luma_ray">🌀 Luma Dream Machine (Ray 2 Optics & Lens Depth Engine)</option>
                         <option value="openai">📽️ OpenAI GPT-4o / Sora Director API</option>
-                        <option value="anthropic">🎭 Anthropic Claude 3.5 / 3.7 Sonnet API (Script & Drama Director)</option>
+                        <option value="gpt_oss">🤖 GPT-OSS 120B Open-Source Cinema API</option>
                         <option value="built_in">⚡ Built-In Cinema Intelligence (Offline Fast Rule Engine)</option>
                       </select>
 
@@ -1590,9 +1592,9 @@ export default function AdminSettingsModal({
                           Recommended Models for Cinema & Seedance Video Generation:
                         </div>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
-                          <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM designed for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
-                          <li><strong className="text-amber-300">MiniMax Hailuo AI</strong>: Specialized in photorealistic camera motion physics (tracking, whip pans, 360 orbits).</li>
-                          <li><strong className="text-amber-300">Google Gemini 2.0 Flash</strong>: Ultra-fast 1M+ token context for 24-craft screenplay breakdown & instant asset tagging.</li>
+                          <li><strong className="text-amber-300">Google Gemini 3.6 Flash / 3.1 Pro</strong>: Next-gen flagship model for 24-craft screenplay breakdown & asset tagging.</li>
+                          <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity, emotional subtext & 24-craft alignment.</li>
+                          <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
                         </ul>
                       </div>
                     </div>
