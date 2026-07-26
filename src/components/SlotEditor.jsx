@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import { CRAFT_INSPIRATION_DATA } from '../constants/craftInspirationGraphics';
 
 export default function SlotEditor({ 
   slotConfig, 
@@ -264,6 +265,52 @@ export default function SlotEditor({
         </div>
 
         <div className="overflow-y-auto space-y-3 flex-1 pr-1">
+          {/* VISUAL INSPIRATION GRAPHIC BANNER FOR TECHNICIANS (ALL 25 CRAFTS) */}
+          {(() => {
+            const insp = CRAFT_INSPIRATION_DATA[activeConfig.key];
+            if (!insp) return null;
+            const IconComp = insp.icon;
+            const craftIndex = availableSlotsList.findIndex(s => s.key === activeConfig.key) + 1;
+
+            return (
+              <div className={`p-3 rounded-2xl border ${insp.border} bg-gradient-to-r ${insp.gradient} space-y-2 font-mono shadow-lg relative overflow-hidden group`}>
+                {/* Header Row */}
+                <div className="flex items-start justify-between gap-3 relative z-10">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-700/80 text-amber-400 shrink-0 shadow-inner">
+                      <IconComp className="w-4 h-4" style={{ color: insp.accentColor }} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white font-sans flex items-center gap-1.5 flex-wrap">
+                        <span>{insp.title}</span>
+                        <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-zinc-950/90 text-cyan-300 border border-zinc-800 font-mono font-bold">
+                          Craft #{craftIndex < 10 ? '0' + craftIndex : craftIndex}
+                        </span>
+                      </h4>
+                      <p className="text-[10.5px] text-zinc-300/90 font-mono italic leading-tight mt-0.5">
+                        "{insp.quote}"
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Badges */}
+                  <div className="hidden sm:flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[200px]">
+                    {insp.badges.map((b, bIdx) => (
+                      <span key={bIdx} className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-950/90 text-amber-200 border border-zinc-800/80 font-bold shadow-xs">
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SVG Graphic Art Illustration Banner */}
+                <div className="w-full bg-zinc-950/90 rounded-xl p-2 border border-zinc-800/80 flex items-center justify-center shadow-inner relative z-10 overflow-hidden">
+                  {insp.renderGraphic()}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* SLOT TIP CARD INSIDE POPUP MODAL */}
           {activeConfig.tip && (
             <div className="p-3.5 rounded-xl border border-zinc-800/90 bg-zinc-900/90 space-y-2 font-mono shadow-sm">
