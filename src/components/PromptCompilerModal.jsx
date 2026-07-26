@@ -55,7 +55,7 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateSh
     const resolvedImageHeader = imagePairs.join('\n');
 
     // Build ultra-clean cinematic Seedance prompt text with explicit @Tag bindings
-    let promptNarrative = `A cinematic ${framing.toLowerCase()} (${shotId}). `;
+    let promptNarrative = `A cinematic ${framing.toLowerCase()} (${shotId}). Duration: ${duration}. `;
     if (shot.actionEnvContext) promptNarrative += `Environment: ${shot.actionEnvContext}. `;
     if (shot.characterIdAssetRef) promptNarrative += `Featuring ${shot.characterIdAssetRef}. `;
     if (shot.coArtistInteraction) promptNarrative += `Co-artist: ${shot.coArtistInteraction}. `;
@@ -155,7 +155,19 @@ ${promptNarrative.trim()}`;
       subjectsLines.push(`Image_${i} = ${val}`);
     }
 
-    let promptBody = `A cinematic ${framing.toLowerCase()} (${shotId}). `;
+    // Extract duration (default 4s)
+    let duration = '4s';
+    if (shot.shotDurationAndImages) {
+      const match = shot.shotDurationAndImages.match(/(?:Duration:\s*|Duration\s*=|\b)(\d+(?:\.\d+)?\s*s|\d+\s*sec|\d+\s*seconds?)/i);
+      if (match) {
+        duration = match[1].trim();
+      } else if (shot.shotDurationAndImages.trim()) {
+        const firstToken = shot.shotDurationAndImages.trim().split('|')[0].trim();
+        duration = firstToken.startsWith('Duration:') ? firstToken.replace('Duration:', '').trim() : firstToken;
+      }
+    }
+
+    let promptBody = `A cinematic ${framing.toLowerCase()} (${shotId}). Duration: ${duration}. `;
     if (shot.actionEnvContext) promptBody += `Environment: ${shot.actionEnvContext}. `;
     if (shot.characterIdAssetRef) promptBody += `Featuring ${shot.characterIdAssetRef}. `;
     if (shot.coArtistInteraction) promptBody += `Interaction: ${shot.coArtistInteraction}. `;
@@ -170,6 +182,8 @@ ${promptNarrative.trim()}`;
 ${subjectsLines.join('\n')}
 
 Note: Do not repeat any of these subjects or characters
+
+SHOT DURATION : ${duration}
 
 PROMPT :
 ${promptBody.trim()}`;
