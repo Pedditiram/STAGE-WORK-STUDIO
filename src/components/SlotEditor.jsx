@@ -448,10 +448,10 @@ export default function SlotEditor({
                     <div
                       key={`fav_${idx}`}
                       onClick={() => onChange(preset)}
-                      className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-sm ${
+                      className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md ${
                         value === preset
-                          ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-md scale-105'
-                          : 'bg-zinc-900/90 text-[#FFD700] border-amber-500/80 hover:border-amber-300 shadow-sm'
+                          ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg scale-105'
+                          : 'bg-[#2A1810] text-[#FFD700] border-[#5A321E] hover:border-[#FFD700] hover:bg-[#3D2314] shadow-sm'
                       }`}
                     >
                       <button
@@ -463,12 +463,12 @@ export default function SlotEditor({
                         <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                       </button>
 
-                      <span className="truncate max-w-[240px] text-[#FFD700]">{preset}</span>
+                      <span className="truncate max-w-[240px] text-[#FFD700] font-extrabold">{preset}</span>
 
                       <button
                         type="button"
                         onClick={(e) => handleDeletePreset(preset, e)}
-                        className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0"
+                        className="p-0.5 rounded hover:bg-red-500/20 text-[#FFD700]/70 hover:text-red-400 transition-colors shrink-0"
                         title="Delete preset"
                       >
                         <X className="w-3.5 h-3.5" />
