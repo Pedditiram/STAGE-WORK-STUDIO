@@ -7,7 +7,7 @@ import {
   Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Archive, Edit3
 } from 'lucide-react';
 
-export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateShot, activeTargetModel = "Stage Production Studio" }) {
+export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateShot, activeTargetModel = "Stage Production Studio", projectTitle }) {
   const [formatMode, setFormatMode] = useState('seedance_tagged'); // Default to SPS Standard Tagged
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'single'
   const [copied, setCopied] = useState(false);
@@ -420,8 +420,15 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
       content: getShotPromptText(shot, idx)
     }));
 
+    const rawTitle = projectTitle || (typeof window !== 'undefined' ? localStorage.getItem('sps_project_title') : '') || 'sps_project';
+    const cleanTitle = rawTitle
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
     const zipBlob = createZipArchive(zipFiles);
-    const zipFilename = `jai_sri_ram_prompts.zip`;
+    const zipFilename = `${cleanTitle || 'sps_project'}_prompts.zip`;
 
     const url = URL.createObjectURL(zipBlob);
     const link = document.createElement('a');

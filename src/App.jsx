@@ -1177,6 +1177,7 @@ export default function App() {
         shots={shots}
         onUpdateShot={handleUpdateShot}
         activeTargetModel={targetModel}
+        projectTitle={projectTitle}
       />
 
 
