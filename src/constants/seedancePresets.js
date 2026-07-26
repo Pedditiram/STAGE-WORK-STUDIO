@@ -4,87 +4,129 @@
 
 export const GENRE_PRESET_PROFILES = {
   konaseema_anthology: {
-    label: "🌾 Rural Telugu Anthology (Konaseema & Malkipuram)",
-    name: "🌾 Rural Telugu Anthology (Konaseema & Malkipuram)",
-    description: "Tailored for Andhra Pradesh, East Godavari, Konaseema & Malkipuram Village multi-story narratives, rural realism, coconut groves & Godavari backwaters",
+    label: "🌾 Rural 1980s Konaseema Anthology (East Godavari & Malkipuram)",
+    name: "🌾 Rural 1980s Konaseema Anthology (East Godavari & Malkipuram)",
+    description: "Tailored for Andhra Pradesh, East Godavari, Konaseema & Malkipuram Village multi-story narratives from year 1980, rural realism, coconut groves & Godavari backwaters.",
     presets: {
-      characterIdAssetRef: [
-        "[CharID: @VillageElder_Ramaraju - Respected Konaseema elder, white dhoti & kanduva]",
-        "[CharID: @YoungProtagonist_Suri - Malkipuram youth in cotton shirt, vintage bicycle]",
-        "[CharID: @Weaver_Lakshmi - Traditional Konaseema weaver in handloom cotton saree]",
-        "[CharID: @Boatman_Appanna - Godavari river ferryman with rowing pole & sun-tanned skin]",
-        "[CharID: @Teacher_Savitri - Village school teacher carrying brass tiffin & books]",
-        "[CharID: @Farmer_Subbarao - Konaseema paddy farmer with straw hat & sickle]"
+      sceneShotId: [
+        "SC01_SH01",
+        "SC01_SH02",
+        "SC02_SH01",
+        "SC02_SH02",
+        "SC03_SH01",
+        "SC03_SH02"
       ],
-      coArtistInteraction: [
-        "[Co-Artist: Village elders gathered under banyan tree for Panchayat discussion]",
-        "[Co-Artist: Local youth laughing together at rural tea stall by Godavari canal]",
-        "[Co-Artist: Village women gathering water at stone well in Malkipuram lane]",
-        "[Co-Artist: Festive crowd celebrating Sankranti bullock cart procession in village square]",
-        "[Co-Artist: Fishermen casting nets along the lush Konaseema backwaters]"
+      shotComposition: [
+        "Extreme Wide Shot (EWS)",
+        "Establishing Wide Shot (EWS)",
+        "Wide Shot (WS)",
+        "Medium Shot (MS)",
+        "Medium Close-Up (MCU)",
+        "Close-Up (CU)",
+        "Extreme Close-Up (ECU)",
+        "Over-The-Shoulder (OTS)",
+        "Low-Angle Close-Up (CU)"
       ],
-      actionEnvContext: [
-        "Lush green Konaseema coconut orchard with sunbeams filtering through palm fronds and red soil pathway.",
-        "Tranquil Godavari canal in Malkipuram village, wooden ferry boat drifting past banana plantations.",
-        "Traditional East Godavari courtyard house (Panchayati Veedhi) with clay-tile roof, carved wooden pillars, and flower rangoli.",
-        "Bustling Malkipuram village junction at dusk, tea stall smoke mixing with warm yellow bulb lights.",
-        "Vast green paddy fields stretching to the horizon under dramatic monsoon clouds in Godavari district."
-      ],
-      characterExpression: [
-        "Warm, authentic rural Telugu smile with deep eyes full of nostalgia and wisdom",
-        "Contemplative village gaze looking out over Godavari river backwaters",
-        "Determined earthy look with sweat glinting on brow under tropical sun",
-        "Gently laughing with innocent rural joy amidst village festival celebrations",
-        "Intense emotional conflict reflecting family tradition vs modern aspirations"
-      ],
-      characterPlacement: [
-        "Foreground left, leaning against vintage bicycle under coconut palm frame",
-        "Center frame sitting on carved wooden porch bench (Thinnaye) of village house",
-        "Standing at edge of Godavari canal boat with lush green vegetation backdrop",
-        "Positioned right of frame amidst bustling Malkipuram village street market"
-      ],
-      characterDialogue: [
-        '"Mana Konaseema pachani polalu chooste manasuki prasanthatha vasthundi."',
-        '"Malkipuram urukoliya vinayaka chavithi thirunallu eppudaina choosava?"',
-        '"Godavari thalliki mokki polaniki velthunnam thambi."',
-        '"Ee oorilo manushula anubandham entha goppado meeku teliyadu."'
-      ],
-      characterMovement: [
-        "Riding vintage bicycle along narrow dirt path through lush Konaseema coconut groves",
-        "Rowing wooden boat smoothly across Godavari canal with steady rhythmic strokes",
-        "Serving warm tea in small glass to village elders seated on wooden bench",
-        "Walking briskly along paddy field embankment (Gattu) with brass container",
-        "Folding hands in warm traditional Namaskaram greeting to visiting guests"
-      ],
-      characterEyeLooks: [
-        "[Eye Look: Looking out thoughtfully across the calm Godavari river waters]",
-        "[Eye Look: Warm direct eye contact with village neighbor coming down the lane]",
-        "[Eye Look: Looking up through swaying coconut tree canopy towards sunlit sky]",
-        "[Eye Look: Focused gaze on traditional handloom weaving shuttle movement]"
+      cameraMotionTag: [
+        "[Camera: Slow Aerial Drone Pan over 1980s Godavari River]",
+        "[Camera: Vintage 1980s Steadicam Tracking Follow along Dirt Path]",
+        "[Camera: Slow Tilt Up from Clay Rangoli Floor to Village House]",
+        "[Camera: Hero Orbit 180 Deg around Vintage Hero Bicycle]",
+        "[Camera: Dynamic Handheld Action Pan across Rooster Fight Arena]",
+        "[Camera: Macro Focus Push-In on Rooster Leg Knife]"
       ],
       subjectLightingTag: [
-        "[Lighting: Golden Hour Konaseema Sunbeams through Coconut Palm Canopy]",
-        "[Lighting: Warm Monsoon Haze over Godavari River Backwaters]",
-        "[Lighting: Incandescent Yellow Tea Stall Bulb Glow at Malkipuram Dusk]",
-        "[Lighting: Diffuse Natural Sunlight on Red Soil & Lush Vegetation]"
+        "[Lighting: 1980s Warm Golden Hour Sunbeams through Konaseema Palms]",
+        "[Lighting: Incandescent Kerosene Lantern Glow in Village Courtyard]",
+        "[Lighting: Diffuse Monsoon Haze over Godavari Canal Backwaters]",
+        "[Lighting: Evening Dusk Tea Stall Tungsten Bulb Light at Malkipuram]",
+        "[Lighting: Direct High-Sunlight Fill on Red Soil Pathway]"
       ],
       subjectColorTag: [
-        "[Subject Color: Lush Konaseema Emerald Green & Terracotta Red]",
-        "[Subject Color: Godavari Azure Blue & Tropical Palm Green]",
-        "[Subject Color: Sun-Bleached Cotton White & Warm Ochre Earth]",
-        "[Subject Color: Rich Handloom Saffron & Traditional Silk Crimson]"
+        "[Subject Color: 1980s Earthy Terracotta & Lush Konaseema Green]",
+        "[Subject Color: Vintage Sun-Bleached Cotton White & Saffron Ochre]",
+        "[Subject Color: Traditional Handloom Crimson Saree & Paddy Gold]",
+        "[Subject Color: Rustic Clay Brick Red & Godavari Azure Blue]"
       ],
       backgroundLightingTag: [
-        "[BG Lighting: Glistening Water Reflections on Godavari Canal Surface]",
-        "[BG Lighting: Soft Warm Bokeh of Village Street Lamps at Dusk]",
-        "[BG Lighting: Deep Emerald Shadow under Dense Mango & Coconut Groves]",
-        "[BG Lighting: Dramatic Golden Sunset Horizon over Coastal Paddy Fields]"
+        "[BG Lighting: Glistening Water Reflections on 1980s Godavari Canal]",
+        "[BG Lighting: Soft Vintage Amber Bokeh of Malkipuram Street Lamps]",
+        "[BG Lighting: Deep Emerald Shadow under 1980s Coconut Canopy]",
+        "[BG Lighting: Low Atmospheric Evening Mist over Coastal Paddy Fields]"
       ],
       backgroundColorTag: [
-        "[BG Color: Vibrant Konaseema Palm Green & Water Blue]",
-        "[BG Color: Rustic Clay Brick Red & Straw Gold]",
-        "[BG Color: Tropical Sunset Orange & Twilight Purple]",
-        "[BG Color: Monsoon Cloud Gray & Rich Earthy Brown]"
+        "[BG Color: 1980s Vintage Kodak Film Warm Grain Palette]",
+        "[BG Color: Vibrant Konaseema Palm Green & Canal Water Blue]",
+        "[BG Color: Rustic Clay Tile Red & Thatch Straw Gold]",
+        "[BG Color: Monsoon Cloud Gray & Dark Earthy Brown]"
+      ],
+      atmosphereVolumetricsTag: [
+        "[Atmosphere: 1980s Golden Dust Motes & Kerosene Smoke Haze]",
+        "[Atmosphere: Warm Humid Godavari River Canal Mist]",
+        "[Atmosphere: Tea Stall Woodfire Vapor at Malkipuram Dusk]",
+        "[Atmosphere: Fresh Monsoon Rain Haze on Red Dirt Ground]"
+      ],
+      characterIdAssetRef: [
+        "[CharID: @VillageElder_Ramaraju - Respected 1980s Konaseema village elder, white dhoti & kanduva]",
+        "[CharID: @YoungProtagonist_Suri - Malkipuram 1980s youth in cotton shirt, vintage Hero bicycle]",
+        "[CharID: @RoosterOwner_Sunil - Champion rooster owner in traditional lungi & brass amulets]",
+        "[CharID: @Weaver_Lakshmi - 1980s Konaseema handloom weaver in traditional cotton saree]",
+        "[CharID: @Ferryman_Appanna - Godavari river ferryman with wooden rowing pole]",
+        "[CharID: @RoosterChampion_Bujji - Legendary black rooster champion of Malkipuram]",
+        "[CharID: @RoosterChallenger_Raju - Fierce unbeaten challenger rooster with white cloth wrap]"
+      ],
+      coArtistInteraction: [
+        "[Co-Artist: 1980s village elders gathered under ancient banyan tree for Panchayat discussion]",
+        "[Co-Artist: Cheering crowd of Malkipuram villagers surrounding Sankranti rooster fight ring]",
+        "[Co-Artist: Local youth laughing at 1980s tea stall by Godavari canal edge]",
+        "[Co-Artist: Village women drawing water from stone well in Malkipuram lane]",
+        "[Co-Artist: Fishermen hauling woven nets along Godavari backwaters at dawn]"
+      ],
+      actionEnvContext: [
+        "Lush green 1980s Konaseema coconut orchard with golden sunbeams filtering through palm fronds and red soil dirt path.",
+        "Tranquil Godavari canal in Malkipuram village, wooden ferry boat drifting past banana groves.",
+        "Traditional 1980s East Godavari courtyard house (Panchayati Veedhi) with clay-tile roof, carved teak pillars, and lotus rangoli.",
+        "Sankranti 1980s festival arena in Malkipuram village square packed with cheering crowds and rooster fight rings.",
+        "Bustling 1980s Malkipuram village tea stall at dusk with kerosene lamps and vintage radio playing classic songs."
+      ],
+      characterExpression: [
+        "Warm, authentic 1980s rural Telugu smile with deep nostalgic eyes and wisdom",
+        "Intense fierce focus during Sankranti rooster fight showdown",
+        "Contemplative village gaze looking out over peaceful Godavari backwaters",
+        "Gently laughing with innocent 1980s rural joy amidst village festival celebrations",
+        "Determined earthy expression with sweat glinting under tropical Konaseema sun"
+      ],
+      characterPlacement: [
+        "Foreground left, leaning against vintage Hero bicycle under coconut palm canopy",
+        "Center frame sitting on carved wooden porch bench (Thinnaye) of 1980s courtyard house",
+        "Standing at edge of Godavari canal ferry boat with lush palm backdrop",
+        "Center ring in low-angle hero stance surrounded by cheering Malkipuram villagers"
+      ],
+      characterDialogue: [
+        '"Mana 1980s Konaseema pachani polalu chooste manasuki prasanthatha vasthundi."',
+        '"Malkipuram Sankranti thirunallalo Bujji thoti kodi pandem veyatam ante maamulu vishayam kaadu!"',
+        '"Godavari thalliki mokki polaniki velthunnam thambi."',
+        '"Raju poyina saari thirunallalo gelichadu, ee sari Bujji-Raju pothee choodali!"',
+        '"Ee 1980s Malkipuram oorilo manushula anubandham entha goppado meeku teliyadu."'
+      ],
+      characterMovement: [
+        "Riding vintage Hero bicycle along narrow red dirt path through 1980s Konaseema coconut groves",
+        "Rowing wooden ferry boat smoothly across Godavari canal with steady rhythmic strokes",
+        "Tying razor-sharp brass knifes onto rooster legs with steady expert hands",
+        "Removing white cloth from champion rooster in slow epic reveal motion",
+        "Serving warm tea in small glass to village elders on wooden porch bench"
+      ],
+      characterEyeLooks: [
+        "[Eye Look: Looking out thoughtfully across calm Godavari river backwaters]",
+        "[Eye Look: Direct intense eye contact with opponent rooster across fight arena]",
+        "[Eye Look: Looking up through swaying coconut tree canopy towards 1980s sunlit sky]",
+        "[Eye Look: Focused steady gaze on handloom weaving shuttle movement]"
+      ],
+      shotDurationAndImages: [
+        "Duration: 6s | Image_1: @RoosterChampion_Bujji | Image_2: @RoosterChallenger_Raju | Image_3: @MalkipuramArena",
+        "Duration: 5s | Image_1: @VillageElder_Ramaraju | Image_2: @1980sCourtyardHouse | Image_3: @TeaStall",
+        "Duration: 5s | Image_1: @YoungProtagonist_Suri | Image_2: @VintageBicycle | Image_3: @KonaseemaPalms",
+        "Duration: 7s | Image_1: @RoosterOwner_Sunil | Image_2: @Ferryman_Appanna | Image_3: @GodavariCanal"
       ]
     }
   },
@@ -469,6 +511,7 @@ export function detectScriptGenre(projectTitle = '', shots = []) {
     combinedText.includes('godavari') ||
     combinedText.includes('andhra') ||
     combinedText.includes('east godavari') ||
+    combinedText.includes('1980') ||
     combinedText.includes('multi story') ||
     combinedText.includes('multistory') ||
     combinedText.includes('village') ||
