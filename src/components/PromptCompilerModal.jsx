@@ -785,40 +785,58 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
               {/* RATIO & VIEW CONTROLS */}
               <div className="flex items-center gap-2">
-                {activeCraftKey !== null && (
-                  <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setSplitRatioMode('standard')}
-                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
-                        splitRatioMode === 'standard' ? 'bg-cyan-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
-                      }`}
-                      title="Standard Split: 35% Sidebar List / 65% Editor Focus"
-                    >
-                      📊 35/65
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSplitRatioMode('equal')}
-                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
-                        splitRatioMode === 'equal' ? 'bg-purple-500 text-white font-black shadow' : 'text-zinc-400 hover:text-white'
-                      }`}
-                      title="Equal Split: 50% Sidebar / 50% Editor"
-                    >
-                      ⚖️ 50/50
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSplitRatioMode('inverse')}
-                      className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
-                        splitRatioMode === 'inverse' ? 'bg-amber-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
-                      }`}
-                      title="Inverse Split: 65% Crafts Grid / 35% Editor Focus"
-                    >
-                      🔄 65/35 (Inverse)
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 shrink-0 gap-0.5 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSplitRatioMode('standard')}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      splitRatioMode === 'standard' ? 'bg-cyan-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Standard Split: 35% Sidebar List / 65% Editor Focus"
+                  >
+                    📊 35/65
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSplitRatioMode('equal')}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      splitRatioMode === 'equal' ? 'bg-purple-500 text-white font-black shadow' : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Equal Split: 50% Sidebar / 50% Editor"
+                  >
+                    ⚖️ 50/50
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSplitRatioMode('inverse')}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      splitRatioMode === 'inverse' ? 'bg-amber-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Inverse Split: 65% Crafts Grid / 35% Editor Focus"
+                  >
+                    🔄 65/35
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSplitRatioMode('full_left')}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      splitRatioMode === 'full_left' ? 'bg-emerald-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="100% Full View: Left 25 Crafts List Only"
+                  >
+                    🖥️ 100% Left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSplitRatioMode('full_right')}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      splitRatioMode === 'full_right' ? 'bg-cyan-400 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="100% Full View: Right Active Editor Only"
+                  >
+                    ⚡ 100% Right
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -869,67 +887,74 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                 /* INVERSE DUAL-PANE SPLIT WORKSPACE */
                 <div className="flex-1 flex w-full h-full overflow-hidden">
                   {/* LEFT PANEL: 25 Crafts Sidebar List */}
-                  <div 
-                    className={`border-r border-zinc-800 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950/90 p-3 space-y-2 shrink-0 transition-all ${
-                      splitRatioMode === 'standard' ? 'w-full md:w-[35%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[65%]' : 'w-full md:w-[50%]')
-                    }`}
-                  >
-                    <div className="flex items-center justify-between px-1 pb-1">
-                      <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
-                        25 Crafts List ({SEEDANCE_SLOTS.length}):
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveCraftKey(null)}
-                        className="text-[10.5px] text-cyan-400 hover:text-cyan-300 font-mono underline"
-                      >
-                        Expand All Grid
-                      </button>
-                    </div>
+                  {splitRatioMode !== 'full_right' && (
+                    <div 
+                      className={`border-r border-zinc-800 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950/90 p-3 space-y-2 shrink-0 transition-all ${
+                        splitRatioMode === 'full_left'
+                          ? 'w-full'
+                          : (splitRatioMode === 'standard' ? 'w-full md:w-[35%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[65%]' : 'w-full md:w-[50%]'))
+                      }`}
+                    >
+                      <div className="flex items-center justify-between px-1 pb-1">
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
+                          25 Crafts List ({SEEDANCE_SLOTS.length}):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveCraftKey(null)}
+                          className="text-[10.5px] text-cyan-400 hover:text-cyan-300 font-mono underline"
+                        >
+                          Expand All Grid
+                        </button>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      {SEEDANCE_SLOTS.map((slot, sIdx) => {
-                        const isSelected = activeCraftKey === slot.key;
-                        const currentVal = shots[editingShotIdx]?.[slot.key] || '';
-                        const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
+                      <div className="space-y-1.5">
+                        {SEEDANCE_SLOTS.map((slot, sIdx) => {
+                          const isSelected = activeCraftKey === slot.key;
+                          const currentVal = shots[editingShotIdx]?.[slot.key] || '';
+                          const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
 
-                        return (
-                          <div
-                            key={slot.key}
-                            onClick={() => setActiveCraftKey(slot.key)}
-                            className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all space-y-1 ${
-                              isSelected
-                                ? 'bg-cyan-950/40 border-cyan-400 text-white font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)] scale-[1.01]'
-                                : 'bg-zinc-900/70 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:border-zinc-700'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                                isSelected ? 'bg-cyan-500 text-zinc-950 font-black' : 'bg-zinc-950 text-cyan-400 border border-zinc-800'
-                              }`}>
-                                {numStr}
-                              </span>
-                              <span className="font-sans text-[11.5px] truncate flex-1 ml-1 font-bold">
-                                {slot.label}
-                              </span>
-                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
+                          return (
+                            <div
+                              key={slot.key}
+                              onClick={() => setActiveCraftKey(slot.key)}
+                              className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all space-y-1 ${
+                                isSelected
+                                  ? 'bg-cyan-950/40 border-cyan-400 text-white font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)] scale-[1.01]'
+                                  : 'bg-zinc-900/70 border-zinc-800 text-zinc-300 hover:bg-zinc-900 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                  isSelected ? 'bg-cyan-500 text-zinc-950 font-black' : 'bg-zinc-950 text-cyan-400 border border-zinc-800'
+                                }`}>
+                                  {numStr}
+                                </span>
+                                <span className="font-sans text-[11.5px] truncate flex-1 ml-1 font-bold">
+                                  {slot.label}
+                                </span>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
+                              </div>
+
+                              <p className="text-[10.5px] font-mono text-zinc-400 truncate bg-zinc-950/80 p-1 px-1.5 rounded border border-zinc-800/60">
+                                {currentVal || <span className="text-zinc-600 italic">Empty...</span>}
+                              </p>
                             </div>
-
-                            <p className="text-[10.5px] font-mono text-zinc-400 truncate bg-zinc-950/80 p-1 px-1.5 rounded border border-zinc-800/60">
-                              {currentVal || <span className="text-zinc-600 italic">Empty...</span>}
-                            </p>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* RIGHT PANEL: Embedded Active Craft Editor Workspace */}
-                  <div 
-                    className={`flex-1 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950 p-2 sm:p-3 transition-all ${
-                      splitRatioMode === 'standard' ? 'w-full md:w-[65%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[35%]' : 'w-full md:w-[50%]')
-                    }`}
-                  >
+                  {splitRatioMode !== 'full_left' && (
+                    <div 
+                      className={`flex-1 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950 p-2 sm:p-3 transition-all ${
+                        splitRatioMode === 'full_right'
+                          ? 'w-full'
+                          : (splitRatioMode === 'standard' ? 'w-full md:w-[65%]' : (splitRatioMode === 'inverse' ? 'w-full md:w-[35%]' : 'w-full md:w-[50%]'))
+                      }`}
+                    >
                         {(() => {
                           const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
                           if (!slotConfig) return null;
@@ -1006,7 +1031,8 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                             />
                           );
                         })()}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
