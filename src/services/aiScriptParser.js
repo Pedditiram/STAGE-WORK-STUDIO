@@ -286,19 +286,27 @@ function parseRawScriptFallback(scriptText) {
 
     // Extract Character ID Asset Ref dynamically from text
     let artistId = "[CharID: @MainArtist_Lead]";
-    if (textLower.includes("bujji") && textLower.includes("raju")) {
+    if (textLower.includes("sunil")) {
+      artistId = "[CharID: @Sunil - Owner of Bujji, traditional lungi & brass amulets]";
+    } else if (textLower.includes("samudra")) {
+      artistId = "[CharID: @Samudra - Owner of Raju, proud village leader in white shirt]";
+    } else if (textLower.includes("bujji") && textLower.includes("raju")) {
       artistId = "[CharID: @Bujji_vs_Raju - Champion Rooster Showdown]";
     } else if (textLower.includes("raju")) {
-      artistId = "[CharID: @Raju_Rooster - Unbeatable Champion Rooster]";
+      artistId = "[CharID: @Raju - Unbeatable Challenger Rooster]";
     } else if (textLower.includes("bujji")) {
-      artistId = "[CharID: @Bujji_Rooster - Famous Undefeated Champion]";
+      artistId = "[CharID: @Bujji - Legendary Black Champion Rooster]";
     } else if (textLower.includes("rama")) {
       artistId = "[CharID: @Lord_Rama - Celestial Blue Skin, Saffron Dhoti]";
     }
 
     let coArtist = "[Co-Artist: Surrounding crowd & spectators reacting to scene]";
-    if (textLower.includes("rooster") || textLower.includes("fight")) {
-      coArtist = "[Co-Artist: Excited village crowd cheering around Sankranti fight arena]";
+    if (textLower.includes("samudra")) {
+      coArtist = "[Co-Artist: Samudra holding champion rooster Raju near his body]";
+    } else if (textLower.includes("sunil")) {
+      coArtist = "[Co-Artist: Sunil standing proud with black champion rooster Bujji]";
+    } else if (textLower.includes("rooster") || textLower.includes("fight")) {
+      coArtist = "[Co-Artist: Cheering crowd of Malkipuram villagers around Sankranti fight arena]";
     }
 
     const quoteMatch = block.match(/"([^"]+)"|'([^']+)'/);
@@ -307,29 +315,30 @@ function parseRawScriptFallback(scriptText) {
     let actionContext = block.replace(/\s+/g, ' ').trim();
     if (actionContext.length > 220) actionContext = actionContext.substring(0, 220) + '...';
 
-    // Automatic Character & Element Extraction for 9 Image Inputs
+    // Automatic Character & Element Extraction for Image 1 to Image 7 Bindings
     const extractedChars = [];
-    if (artistId) extractedChars.push(artistId.replace(/\[CharID:\s*/, '').replace(/\]/, '').split('-')[0].trim());
-    if (coArtist && !coArtist.includes("Backing performers")) {
-      extractedChars.push(coArtist.replace(/\[Co-Artist:\s*/, '').replace(/\]/, '').split('reacting')[0].trim());
-    }
+    if (textLower.includes("sunil") || textLower.includes("bujji")) extractedChars.push("@Sunil");
+    if (textLower.includes("bujji")) extractedChars.push("@Bujji");
+    if (textLower.includes("samudra") || textLower.includes("raju")) extractedChars.push("@Samudra");
+    if (textLower.includes("raju")) extractedChars.push("@Raju");
+    if (textLower.includes("crowd") || textLower.includes("village") || textLower.includes("people")) extractedChars.push("@Crowd_Spectators");
+    if (textLower.includes("knife") || textLower.includes("knifes") || textLower.includes("tying") || textLower.includes("blade")) extractedChars.push("@Rooster_Fighting_Knifes");
+    extractedChars.push("@Malkipuram_Arena");
 
+    // Also include any @Tag words found in text
     const words = block.match(/@[A-Z][a-zA-Z0-9_]+/g) || [];
     words.forEach(w => {
       if (!extractedChars.includes(w)) extractedChars.push(w);
     });
 
     const imgBindings = [];
-    for (let imgIdx = 0; imgIdx < 9; imgIdx++) {
+    for (let imgIdx = 0; imgIdx < 7; imgIdx++) {
       if (extractedChars[imgIdx]) {
         imgBindings.push(`Image_${imgIdx + 1}: ${extractedChars[imgIdx]}`);
       }
     }
-    if (imgBindings.length === 0) {
-      imgBindings.push("Image_1: @MainCharacter", "Image_2: @CoArtist", "Image_3: @EnvironmentBackdrop");
-    }
 
-    const durationAndImagesStr = `Duration: 5s | ${imgBindings.join(' | ')}`;
+    const durationAndImagesStr = `Duration: 6s | ${imgBindings.join(' | ')}`;
 
     parsedShots.push({
       sceneShotId: shotId,
