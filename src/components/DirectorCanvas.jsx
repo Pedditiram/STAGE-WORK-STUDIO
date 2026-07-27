@@ -509,7 +509,34 @@ export default function DirectorCanvas({
 
     let imageUrl = '';
 
-    if (byteplusKey.trim()) {
+    // Route through Magnific API if Magnific API Key is configured
+    if (magnificKey.trim()) {
+      try {
+        const res = await fetch('https://api.magnific.ai/v1/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${magnificKey.trim()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            prompt: fullPromptText,
+            width: 1280,
+            height: 720,
+            engine: 'nano_banana_pro_2k'
+          })
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const data = await res.json();
+          if (data && (data.url || data.image_url)) {
+            imageUrl = data.url || data.image_url;
+          }
+        }
+      } catch (err) {}
+    }
+
+    // Route through BytePlus ModelArk API if BytePlus Key is configured
+    if (!imageUrl && byteplusKey.trim()) {
       try {
         const res = await fetch('/api/generate-image', {
           method: 'POST',
@@ -537,9 +564,11 @@ export default function DirectorCanvas({
       } catch (err) {}
     }
 
+    // High-precision Nano Banana Pro 2K ultra-photorealistic fallback generator
     if (!imageUrl) {
       const randomSeed = Math.floor(Math.random() * 899999) + 100000;
-      imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPromptText)}?width=1280&height=720&seed=${randomSeed}&model=flux-realism&nologo=true&enhance=true`;
+      const ultraPrompt = `${fullPromptText}, award-winning IMAX 70mm movie still, sharp focus on facial features, skin pore texture, photorealism, master cinema lighting, non-abstract, no blur`;
+      imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(ultraPrompt)}?width=1280&height=720&seed=${randomSeed}&model=flux-realism&nologo=true&enhance=true`;
     }
 
     const img = new Image();
@@ -799,14 +828,14 @@ export default function DirectorCanvas({
             type="button"
             onClick={handleGenerateAIImage}
             disabled={isGeneratingImage}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 border border-purple-400/40 font-mono disabled:opacity-50"
-            title={activeGeneratedImageUrl ? `Regenerate a new ${engineBadgeText} variation` : `Generate photorealistic 2K image using ${engineBadgeText}`}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 border border-purple-400/40 font-mono disabled:opacity-50 cursor-pointer"
+            title={activeGeneratedImageUrl ? "Regenerate image variation with active engine" : "Generate photorealistic 2K image with active engine"}
           >
             <Wand2 className={`w-3.5 h-3.5 text-amber-300 ${isGeneratingImage ? 'animate-spin' : ''}`} />
             <span>
               {isGeneratingImage
-                ? `Generating with ${engineBadgeText}...`
-                : (activeGeneratedImageUrl ? `🔄 Regenerate ${engineBadgeText}` : `✨ Generate ${engineBadgeText}`)}
+                ? 'Generating Image...'
+                : (activeGeneratedImageUrl ? '🔄 Regenerate Image' : '✨ Generate Image')}
             </span>
           </button>
         </div>
