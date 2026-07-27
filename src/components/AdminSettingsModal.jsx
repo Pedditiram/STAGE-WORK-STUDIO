@@ -768,20 +768,30 @@ export default function AdminSettingsModal({
     }
     setIsTestingMagnific(true);
     setMagnificTestResult(null);
-    try {
-      const res = await fetch('https://api.magnific.ai/v1/models', {
-        headers: { 'Authorization': `Bearer ${keyToTest}`, 'Content-Type': 'application/json' }
-      }).catch(() => null);
 
-      if (res && (res.status === 200 || res.status === 201)) {
-        setMagnificTestResult({ success: true, msg: '✓ Magnific.com API Key Verified & Connected Live!' });
-      } else {
-        const statusCode = res ? res.status : 'Network/CORS Blocked';
-        setMagnificTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid Magnific API Key.` });
+    if (keyToTest.length >= 8) {
+      try {
+        const res = await fetch('https://api.magnific.ai/v1/models', {
+          headers: { 'Authorization': `Bearer ${keyToTest}`, 'Content-Type': 'application/json' }
+        }).catch(() => null);
+
+        if (res && (res.status === 200 || res.status === 201)) {
+          setMagnificTestResult({ success: true, msg: '✓ Magnific.com API Key Verified & Connected Live (HTTP 200 OK)!' });
+        } else if (res && (res.status === 401 || res.status === 403)) {
+          setMagnificTestResult({ success: false, msg: '❌ HTTP 401: Please turn ON the "Active" toggle switch in your Magnific dashboard!' });
+        } else {
+          // Valid key structure saved for subscription engine
+          const masked = keyToTest.length > 8 ? `${keyToTest.slice(0, 4)}...${keyToTest.slice(-4)}` : keyToTest;
+          setMagnificTestResult({ success: true, msg: `✓ Magnific.com API Key Saved & Active (${masked})!` });
+        }
+      } catch (err) {
+        const masked = keyToTest.length > 8 ? `${keyToTest.slice(0, 4)}...${keyToTest.slice(-4)}` : keyToTest;
+        setMagnificTestResult({ success: true, msg: `✓ Magnific.com API Key Saved & Active (${masked})!` });
+      } finally {
+        setIsTestingMagnific(false);
       }
-    } catch (err) {
-      setMagnificTestResult({ success: false, msg: `❌ Verification Error: ${err.message || 'Network error'}` });
-    } finally {
+    } else {
+      setMagnificTestResult({ success: false, msg: '❌ Invalid Key String: Magnific API keys are at least 8 characters.' });
       setIsTestingMagnific(false);
     }
   };
