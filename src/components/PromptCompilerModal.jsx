@@ -85,13 +85,36 @@ ${promptNarrative.trim()}`;
 
     const subjectsMap = new Map();
     const rawMatrixStr = shot.characterIdMatrix || '';
+
+    // Smart shot-specific subject context verification
+    const shotTextContext = `
+      ${shot.characterIdAssetRef || ''}
+      ${shot.coArtistInteraction || ''}
+      ${shot.actionEnvContext || ''}
+      ${shot.characterDialogue || ''}
+      ${shot.characterMovement || ''}
+      ${shot.characterExpression || ''}
+      ${shot.sceneShotId || ''}
+    `.toLowerCase();
+
     if (rawMatrixStr.includes('Image_')) {
       const parts = rawMatrixStr.split('|').map(s => s.trim()).filter(Boolean);
       parts.forEach(p => {
         const m = p.match(/Image_(\d+)\s*=\s*(.*)/i);
         if (m) {
           const num = parseInt(m[1], 10);
-          subjectsMap.set(num, m[2].trim());
+          const val = m[2].trim();
+          if (val && val !== 'Image_') {
+            const cleanVal = val.toLowerCase().replace(/\[|\]|charid:\s*|@/g, '').trim();
+            // Verify if this subject is actually featured in THIS specific shot context
+            const isGenericEnv = num === 5 || num === 6 || cleanVal === 'scene' || cleanVal === 'crowd' || cleanVal === 'environment' || cleanVal === 'forest trail';
+            const isMentionedInShot = shotTextContext.includes(cleanVal) || 
+                                      cleanVal.split(/\s+/).some(token => token.length >= 4 && shotTextContext.includes(token));
+
+            if (isMentionedInShot || isGenericEnv) {
+              subjectsMap.set(num, val);
+            }
+          }
         }
       });
     }
@@ -106,47 +129,22 @@ ${promptNarrative.trim()}`;
           const tag = match[2].replace('@', '').toLowerCase();
           let cleanName = tag.split('_')[0];
           if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
-          subjectsMap.set(imgNum, cleanName);
+          if (shotTextContext.includes(cleanName) || imgNum >= 5) {
+            subjectsMap.set(imgNum, cleanName);
+          }
         }
       }
     }
 
-    // Auto-extract subjects if not mapped in duration field
-    const fullText = `${shot.characterIdAssetRef || ''} ${shot.coArtistInteraction || ''} ${shot.actionEnvContext || ''} ${shot.characterMovement || ''}`.toLowerCase();
-    
-    if (!subjectsMap.has(1)) {
-      if (fullText.includes('raju')) subjectsMap.set(1, 'raju');
-      else if (shot.characterIdAssetRef) subjectsMap.set(1, shot.characterIdAssetRef.replace(/\[|\]|CharID:\s*|@/g, '').split('_')[0].toLowerCase());
-      else subjectsMap.set(1, 'main subject');
+    // Auto-extract primary & secondary subjects if not mapped yet
+    if (!subjectsMap.has(1) && shot.characterIdAssetRef) {
+      const cleanRef = shot.characterIdAssetRef.replace(/\[|\]|CharID:\s*|@/g, '').trim().split('_')[0];
+      if (cleanRef) subjectsMap.set(1, cleanRef);
     }
 
-    if (!subjectsMap.has(2)) {
-      if (fullText.includes('bujji')) subjectsMap.set(2, 'bujji');
-      else if (shot.coArtistInteraction) subjectsMap.set(2, 'co-artist');
-      else subjectsMap.set(2, 'secondary subject');
-    }
-
-    if (!subjectsMap.has(3)) {
-      if (fullText.includes('sunil')) subjectsMap.set(3, 'sunil');
-      else subjectsMap.set(3, 'sunil');
-    }
-
-    if (!subjectsMap.has(4)) {
-      if (fullText.includes('samudra')) subjectsMap.set(4, 'samudra');
-      else subjectsMap.set(4, 'samudra');
-    }
-
-    if (!subjectsMap.has(5)) {
-      if (fullText.includes('crowd') || fullText.includes('spectators') || fullText.includes('arena') || fullText.includes('stadium')) subjectsMap.set(5, 'crowd');
-      else subjectsMap.set(5, 'crowd');
-    }
-
-    if (!subjectsMap.has(6)) {
-      subjectsMap.set(6, 'scene');
-    }
-
-    if (!subjectsMap.has(7)) {
-      subjectsMap.set(7, 'supporting artist');
+    if (!subjectsMap.has(2) && shot.coArtistInteraction) {
+      const cleanCo = shot.coArtistInteraction.replace(/\[|\]|CharID:\s*|@/g, '').trim().split('_')[0];
+      if (cleanCo) subjectsMap.set(2, cleanCo);
     }
 
     const subjectsLines = [];

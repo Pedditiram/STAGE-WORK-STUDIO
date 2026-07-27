@@ -555,6 +555,121 @@ export default function SlotEditor({
             );
           })()}
 
+          {/* DEDICATED COLOR PALETTE & VISUAL SWATCHES ENGINE */}
+          {(activeConfig.key === 'colorPaletteSlot' || activeConfig.key === 'subjectColorTag' || activeConfig.key === 'backgroundColorTag') && (() => {
+            const PALETTE_PRESETS = [
+              { name: 'Kara & Dhushan (Venom-Green & Ash)', colors: ['#1a1a1a', '#2d6b2d', '#555555', '#d4af37'], label: 'Ash, Venom-Green, Smoke, Gold' },
+              { name: 'Konaseema Sunset Festival', colors: ['#d4af37', '#b22222', '#8b4513', '#228b22'], label: 'Temple Gold, Crimson, Clay, Emerald' },
+              { name: 'Celestial Saffron & Royal Blue', colors: ['#ff9933', '#1a365d', '#ffd700', '#8b0000'], label: 'Saffron, Royal Blue, Gold, Crimson' },
+              { name: 'High-Contrast Noir Silver', colors: ['#000000', '#c0c0c0', '#333333', '#e6e6e6'], label: 'Obsidian, Silver, Charcoal, Pearl' },
+              { name: 'Cyberpunk Hot Magenta & Cyan', colors: ['#00ffff', '#ff007f', '#120a2a', '#00ff66'], label: 'Cyan, Hot Pink, Violet, Acid Green' },
+              { name: 'Dark Fantasy Emerald & Bronze', colors: ['#0b3b17', '#1c1c1c', '#cd7f32', '#4a2e12'], label: 'Deep Moss, Charcoal, Bronze, Mahogany' }
+            ];
+
+            const hexMatches = (value || '').match(/#[0-9a-fA-F]{6}\b/g) || ['#1a1a1a', '#2d6b2d', '#555555', '#d4af37'];
+            const sampleImageMatch = (value || '').match(/SampleImage:\s*([^\s\|\]\)]+)/i);
+            const currentSampleImageUrl = sampleImageMatch ? sampleImageMatch[1] : '';
+
+            const handleSelectPalettePreset = (preset) => {
+              const formattedStr = `[Palette: ${preset.name} (${preset.colors.join(' | ')})]`;
+              onChange(formattedStr);
+            };
+
+            const handleColorChange = (idx, newColor) => {
+              const updatedHexes = [...hexMatches];
+              updatedHexes[idx] = newColor;
+              const formattedStr = `[Palette: Custom Swatches (${updatedHexes.join(' | ')})]`;
+              onChange(formattedStr);
+            };
+
+            const handleImageUpload = (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const imgDataUrl = ev.target?.result;
+                if (imgDataUrl) {
+                  const cleanedValue = (value || '').replace(/\s*\|?\s*SampleImage:[^\s\|\]\)]+/i, '');
+                  const updatedVal = `${cleanedValue} | SampleImage:${imgDataUrl}`;
+                  onChange(updatedVal);
+                }
+              };
+              reader.readAsDataURL(file);
+            };
+
+            return (
+              <div className="p-3.5 rounded-xl border border-purple-500/40 bg-zinc-900/90 space-y-3 font-mono shadow-md">
+                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🎨</span>
+                    <h4 className="text-xs font-bold text-white">Visual Color Grading Swatches & Sample Reference Image</h4>
+                  </div>
+                  <span className="text-[10px] text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-500/30 font-bold">Interactive Color Engine</span>
+                </div>
+
+                {/* CURRENT ACTIVE SWATCHES DISPLAY */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-zinc-300 block">Active Swatch Palette:</span>
+                  <div className="flex flex-wrap items-center gap-2 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
+                    {hexMatches.slice(0, 5).map((hex, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded-md border border-zinc-700/80">
+                        <input
+                          type="color"
+                          value={hex}
+                          onChange={(e) => handleColorChange(idx, e.target.value)}
+                          className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
+                        />
+                        <span className="text-[10px] font-bold text-white uppercase">{hex}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* PALETTE PRESET CARDS */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-amber-400 block">Cinematic Palette Presets:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {PALETTE_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectPalettePreset(preset)}
+                        className="p-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-purple-500 text-left transition-all group cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-bold text-zinc-200 group-hover:text-purple-300">{preset.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {preset.colors.map((c, i) => (
+                            <span key={i} className="w-4 h-4 rounded-full border border-black/40 shadow-sm" style={{ backgroundColor: c }} title={c} />
+                          ))}
+                          <span className="text-[9.5px] text-zinc-400 truncate ml-1">{preset.label}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SAMPLE IMAGE OPTION & PREVIEW */}
+                <div className="space-y-1.5 pt-1 border-t border-zinc-800">
+                  <span className="text-[11px] font-bold text-cyan-300 block">🖼️ Sample Color Grading Reference Image Option:</span>
+                  <div className="flex items-center gap-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm">
+                      <span>📁 Attach Sample Image Swatch</span>
+                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    </label>
+                    {currentSampleImageUrl && (
+                      <div className="flex items-center gap-2 bg-zinc-950 p-1 px-2 rounded-lg border border-purple-500/40">
+                        <img src={currentSampleImageUrl} alt="Sample Color Swatch" className="w-8 h-8 rounded object-cover border border-zinc-700" />
+                        <span className="text-[10px] text-emerald-300 font-bold">✓ Sample Image Attached</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Add New Custom Preset Input Box */}
           <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-1.5">
             <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">

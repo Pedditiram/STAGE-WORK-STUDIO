@@ -901,6 +901,23 @@ export const SEEDANCE_SLOTS = [
     ]
   },
   {
+    key: "colorPaletteSlot",
+    label: "🎨 Color Palette & Visual Swatches",
+    icon: "Palette",
+    description: "Cinematic color grading palette, HEX color swatches, sample image references & preset themes.",
+    tipTitle: "Color Grading & Swatch Palette",
+    tip: "Define exact HEX color codes (#1a1a1a Ash, #2d6b2d Venom Green, #d4af37 Saffron Gold) and reference sample color grading presets to lock visual atmosphere consistency across renders.",
+    presets: [
+      "[Palette: Venom Green & Ash Charcoal (#1a1a1a Ash | #2d6b2d Venom Green | #555555 Smoke | #d4af37 Gold)]",
+      "[Palette: Konaseema Festival Gold (#d4af37 Gold | #b22222 Clay Crimson | #8b4513 Earth | #228b22 Lush Emerald)]",
+      "[Palette: Celestial Saffron & Royal Blue (#ff9933 Saffron | #1a365d Royal Blue | #ffd700 Temple Gold | #8b0000 Crimson)]",
+      "[Palette: High-Contrast Noir Silver (#000000 Obsidian | #c0c0c0 Silver | #333333 Ash Charcoal | #e6e6e6 Pearl)]",
+      "[Palette: Cyberpunk Hot Magenta & Cyan (#00ffff Electric Cyan | #ff007f Hot Pink | #120a2a Deep Violet | #00ff66 Acid Green)]",
+      "[Palette: Dark Fantasy Emerald & Bronze (#0b3b17 Deep Forest | #1c1c1c Shadow Charcoal | #cd7f32 Polished Bronze | #4a2e12 Antique Mahogany)]",
+      "[Palette: Warm Terracotta & Sandstone (#d2691e Sandstone | #f4a460 Terracotta | #2f4f4f Slate Gray | #ffebcd Antique Ivory)]"
+    ]
+  },
+  {
     key: "atmosphereVolumetricsTag",
     label: "🌫️ Atmosphere & Volumetric Haze",
     icon: "CloudRain",
