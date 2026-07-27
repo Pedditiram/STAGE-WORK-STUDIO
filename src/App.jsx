@@ -297,6 +297,7 @@ export default function App() {
   ]);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
+  const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   const isInitialMount = React.useRef(true);
   const lastSyncedHash = React.useRef('');
 
@@ -388,7 +389,7 @@ export default function App() {
       };
       saveProjectToVault(activeProj);
     }
-  }, [shots, projectTitle, targetModel, aspectRatio]);
+  }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId]);
 
   useEffect(() => {
     if (appVersionMode !== 'cloud') return;
