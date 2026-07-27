@@ -249,91 +249,68 @@ Return ONLY valid JSON array without markdown code blocks.`;
 function smartSegmentTextIntoShots(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
-  // Step 1. Check if structured by explicit scene/shot markers (e.g. S08-A, S09-A, SC.09, S01, EXT., INT., SHOT)
+  // Split by explicit Scene (SC.09) or Shot (S08-A, S09-A, S01, SHOT 1) markers
   const structuredBlocks = scriptText
-    .split(/(?:\r?\n)+(?=(?:SC\.\s*\d+|SC\s*\d+|S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}|SH\d+|SHOT\s*\d+|ACT\s+[I|V|X]+|EXT\.|INT\.)\b)/i)
+    .split(/(?:\r?\n)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}|SH\d+|SHOT\s*\d+|ACT\s+[I|V|X]+|EXT\.|INT\.)\b)/i)
     .map(b => b.trim())
     .filter(Boolean);
 
   if (structuredBlocks.length > 1) return structuredBlocks;
 
-  // Step 2. Break input into paragraphs
+  // Fallback paragraph split if no explicit shot codes are present
   const paragraphs = scriptText.split(/\n+/).map(p => p.trim()).filter(Boolean);
-  const finalBeats = [];
-
-  paragraphs.forEach(para => {
-    // If paragraph has an explicit shot marker like S01-A, SC.09, or SHOT 1
-    if (/^(?:SC\.\s*\d+|SC\s*\d+|S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}|SHOT|EXT\.|INT\.)/i.test(para)) {
-      finalBeats.push(para);
-      return;
-    }
-
-    // Split paragraph by period, semicolon, OR cinematic transition phrase
-    const splitRegex = /(?:\.\s+|\n+|(?:,\s*|\s+and\s+|\s+but\s+)(?=(?:multiple shots|grand entry|revealing shot|closeup|close-up|close up|next|then|meanwhile|establishing|entry of|holding|tying|brought together|start a fight|sometimes|after a long|stands as|kills|beating|unbeatable|rooster fight)\b))/gi;
-
-    const subBeats = para
-      .split(splitRegex)
-      .map(s => s.replace(/^[\.,;\s]+/, '').trim())
-      .filter(s => s.length > 8);
-
-    if (subBeats.length > 0) {
-      finalBeats.push(...subBeats);
-    } else if (para.length > 0) {
-      finalBeats.push(para);
-    }
-  });
-
-  // Step 3. If still fewer than 5 shots for a rich story, split long sentences by commas:
-  if (finalBeats.length < 5 && scriptText.length > 150) {
-    const fallbackBeats = [];
-    finalBeats.forEach(beat => {
-      if (beat.length > 80) {
-        const commaSplit = beat.split(/(?:,\s*|\.\s+)/).map(s => s.trim()).filter(s => s.length > 10);
-        if (commaSplit.length > 1) {
-          fallbackBeats.push(...commaSplit);
-          return;
-        }
-      }
-      fallbackBeats.push(beat);
-    });
-    if (fallbackBeats.length > finalBeats.length) return fallbackBeats;
-  }
-
-  return finalBeats.length > 0 ? finalBeats : [scriptText];
+  return paragraphs.length > 0 ? paragraphs : [scriptText];
 }
 
 function parseRawScriptFallback(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
-  const blocksToProcess = smartSegmentTextIntoShots(scriptText);
+  const rawBlocks = smartSegmentTextIntoShots(scriptText);
   const parsedShots = [];
 
-  let currentSceneNum = 1;
+  let currentSceneStr = "SC01";
+  let shotIndex = 1;
 
-  blocksToProcess.forEach((block, idx) => {
+  rawBlocks.forEach((block) => {
     const textLower = block.toLowerCase();
 
-    // Check scene marker like SC.09 or SC 09
-    const scMatch = block.match(/SC\.\s*(\d+)|SC\s*(\d+)/i);
-    if (scMatch) {
-      currentSceneNum = parseInt(scMatch[1] || scMatch[2], 10);
+    // 1. Is this block purely a Scene Header line (e.g. "SC.09 1:55-2:00 CODA ETERNAL")?
+    const pureSceneHeaderMatch = block.match(/^(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+))(?::?\s+[^\n]*)?$/i);
+    if (pureSceneHeaderMatch) {
+      const sceneNum = parseInt(pureSceneHeaderMatch[1] || pureSceneHeaderMatch[2] || pureSceneHeaderMatch[3], 10);
+      if (!isNaN(sceneNum)) {
+        currentSceneStr = `SC${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
+      }
+      return; // Do NOT create a dummy shot for a scene title header line!
     }
 
-    const idMatch = block.match(/(S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|SC\.\s*\d+|SC\d+_SH\d+|SHOT\s*\d+|S\d{1,2})/i);
-    let shotId = `SC${currentSceneNum < 10 ? '0' + currentSceneNum : currentSceneNum}_S${(idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1)}`;
-
-    if (idMatch) {
-      const rawId = idMatch[1].toUpperCase().replace(/\s+/g, '_').replace(/\./g, '');
-      if (rawId.startsWith('S') && rawId.includes('-')) {
-        const parts = rawId.split('-');
-        const sNum = parts[0].replace('S', '');
-        shotId = `SC${sNum.padStart(2, '0')}_S${parts[0]}${parts[1]}`;
-      } else if (rawId.startsWith('SC')) {
-        shotId = rawId;
-      } else {
-        shotId = `SC${currentSceneNum.toString().padStart(2, '0')}_${rawId}`;
+    // 2. Check if block contains embedded scene header
+    const embeddedSceneMatch = block.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+))/i);
+    if (embeddedSceneMatch) {
+      const sceneNum = parseInt(embeddedSceneMatch[1] || embeddedSceneMatch[2] || embeddedSceneMatch[3], 10);
+      if (!isNaN(sceneNum)) {
+        currentSceneStr = `SC${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
       }
     }
+
+    // 3. Extract exact Shot Code (e.g. S09-A, S08-A, S08-B, S08-C, S01)
+    const shotCodeMatch = block.match(/(S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}_S\d{1,2}|SH\d{1,2}|SHOT\s*\d+)/i);
+    let shotId = `${currentSceneStr}_S${shotIndex < 10 ? '0' + shotIndex : shotIndex}`;
+
+    if (shotCodeMatch) {
+      const rawCode = shotCodeMatch[1].toUpperCase().replace(/\s+/g, '').replace(/\./g, '');
+      if (rawCode.includes('-')) {
+        const parts = rawCode.split('-');
+        const sNum = parts[0].replace('S', '').padStart(2, '0');
+        shotId = `SC${sNum}_S${parts[0]}${parts[1]}`;
+      } else if (rawCode.startsWith('S')) {
+        shotId = `${currentSceneStr}_${rawCode}`;
+      } else {
+        shotId = `${currentSceneStr}_${rawCode}`;
+      }
+    }
+
+    shotIndex++;
 
     let framing = "Medium Shot (MS)";
     if (textLower.includes("aerial") || textLower.includes("god's-eye") || textLower.includes("ews") || textLower.includes("surrounding villages")) {
