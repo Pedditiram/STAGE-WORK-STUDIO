@@ -300,6 +300,7 @@ export default function App() {
   const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   const isInitialMount = React.useRef(true);
   const lastSyncedHash = React.useRef('');
+  const prevAutoSavedShotsRef = React.useRef('');
 
   // Local Storage Persistence (Does NOT publish to cloud when in Local Version)
   useEffect(() => {
