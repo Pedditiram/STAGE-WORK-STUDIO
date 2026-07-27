@@ -733,12 +733,9 @@ export default function AdminSettingsModal({
 
       if (res && (res.status === 200 || res.status === 201)) {
         setByteplusTestResult({ success: true, msg: `✓ Connected Live to BytePlus Ark (${modelId})!` });
-      } else if (res && (res.status === 401 || res.status === 403)) {
-        setByteplusTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${res.status}): Invalid BytePlus API Key or Unauthorized Access.` });
-      } else if (keyToTest.length >= 16) {
-        setByteplusTestResult({ success: true, msg: `✓ BytePlus Ark API Key Configured for Host (${cleanHost})!` });
       } else {
-        setByteplusTestResult({ success: false, msg: '❌ BytePlus API Key verification failed: Key string is invalid or too short.' });
+        const statusCode = res ? res.status : 'Network/CORS Blocked';
+        setByteplusTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid BytePlus API Key or Unauthorized Endpoint.` });
       }
     } catch (err) {
       setByteplusTestResult({ success: false, msg: `❌ Verification Error: ${err.message || 'Network error'}` });
@@ -762,12 +759,9 @@ export default function AdminSettingsModal({
 
       if (res && (res.status === 200 || res.status === 201)) {
         setMagnificTestResult({ success: true, msg: '✓ Magnific.com API Key Verified & Connected Live!' });
-      } else if (res && (res.status === 401 || res.status === 403)) {
-        setMagnificTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${res.status}): Invalid Magnific API Key (Unauthorized).` });
-      } else if (keyToTest.length >= 20) {
-        setMagnificTestResult({ success: true, msg: '✓ Magnific API Key Format Validated for SeeDream 5.0 2K!' });
       } else {
-        setMagnificTestResult({ success: false, msg: '❌ Magnific API Key verification failed: Invalid key format.' });
+        const statusCode = res ? res.status : 'Network/CORS Blocked';
+        setMagnificTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid Magnific API Key.` });
       }
     } catch (err) {
       setMagnificTestResult({ success: false, msg: `❌ Verification Error: ${err.message || 'Network error'}` });
@@ -785,16 +779,24 @@ export default function AdminSettingsModal({
     setIsTestingVideo(true);
     setVideoTestResult(null);
 
-    if (keyToTest.length >= 10) {
-      setTimeout(() => {
-        setVideoTestResult({ success: true, msg: `✓ ${targetModel} Video Engine API Key Registered & Active!` });
-        setIsTestingVideo(false);
-      }, 600);
-    } else {
-      setTimeout(() => {
-        setVideoTestResult({ success: false, msg: `❌ ${targetModel} API Key Verification Failed: Key string is too short or invalid.` });
-        setIsTestingVideo(false);
-      }, 600);
+    try {
+      let testUrl = 'https://api.openai.com/v1/models';
+      if (targetModel.toLowerCase().includes('luma')) testUrl = 'https://api.lumalabs.ai/v1/generations';
+
+      const res = await fetch(testUrl, {
+        headers: { 'Authorization': `Bearer ${keyToTest}` }
+      }).catch(() => null);
+
+      if (res && (res.status === 200 || res.status === 201)) {
+        setVideoTestResult({ success: true, msg: `✓ ${targetModel} Video Engine API Key Verified Live!` });
+      } else {
+        const statusCode = res ? res.status : 'Network/CORS Blocked';
+        setVideoTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid ${targetModel} API Key or Unauthorized Access.` });
+      }
+    } catch (err) {
+      setVideoTestResult({ success: false, msg: `❌ Verification Error: ${err.message || 'Network error'}` });
+    } finally {
+      setIsTestingVideo(false);
     }
   };
 
@@ -833,7 +835,6 @@ export default function AdminSettingsModal({
           setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${statusCode}): Invalid Google Gemini API Key or Unauthorized Access.` });
         }
       } else if (llmProvider === 'anthropic') {
-        // Test Anthropic API key with messages endpoint ping
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -851,12 +852,9 @@ export default function AdminSettingsModal({
 
         if (res && (res.status === 200 || res.status === 400)) {
           setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
-        } else if (res && (res.status === 401 || res.status === 403)) {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${res.status}): Invalid Anthropic API Key (Authentication Failed).` });
-        } else if (keyToTest.startsWith('sk-ant-') && keyToTest.length > 20) {
-          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Format Validated (sk-ant-...)!` });
         } else {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed: Key must be a valid Anthropic API key starting with 'sk-ant-'.` });
+          const statusCode = res ? res.status : 'CORS / Network Blocked';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid Anthropic API Key.` });
         }
       } else if (llmProvider === 'openai') {
         const res = await fetch('https://api.openai.com/v1/models', {
@@ -865,12 +863,9 @@ export default function AdminSettingsModal({
 
         if (res && res.status === 200) {
           setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
-        } else if (res && (res.status === 401 || res.status === 403)) {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${res.status}): Invalid OpenAI API Key.` });
-        } else if (keyToTest.startsWith('sk-') && keyToTest.length > 20) {
-          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Format Validated (sk-...)!` });
         } else {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed: Key must be a valid OpenAI key starting with 'sk-'.` });
+          const statusCode = res ? res.status : 'CORS / Network Blocked';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid OpenAI API Key.` });
         }
       } else if (llmProvider === 'byteplus') {
         const hostUrl = byteplusEndpointUrl.trim() || localStorage.getItem('sps_byteplus_endpoint_url') || 'https://ark.ap-southeast.bytepluses.com/api/v3';
@@ -880,20 +875,22 @@ export default function AdminSettingsModal({
           body: JSON.stringify({ model: 'ping', input: [] })
         }).catch(() => null);
 
-        if (res && (res.status === 200 || res.status === 201 || res.status === 400)) {
+        if (res && (res.status === 200 || res.status === 201)) {
           setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
-        } else if (res && (res.status === 401 || res.status === 403)) {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${res.status}): Invalid BytePlus API Key or Unauthorized Endpoint.` });
-        } else if (keyToTest.length >= 16) {
-          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Configured & Registered!` });
         } else {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed: Invalid BytePlus API Key format.` });
+          const statusCode = res ? res.status : 'CORS / Network Blocked';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid BytePlus API Key or Unauthorized Endpoint.` });
         }
       } else {
-        if (keyToTest.length >= 15) {
-          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Saved & Active!` });
+        const res = await fetch('https://api.openai.com/v1/models', {
+          headers: { 'Authorization': `Bearer ${keyToTest}` }
+        }).catch(() => null);
+
+        if (res && res.status === 200) {
+          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
         } else {
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed: Key string "${keyToTest}" is too short or invalid.` });
+          const statusCode = res ? res.status : 'CORS / Network Blocked';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid ${label} API Key or Unauthorized Response.` });
         }
       }
     } catch (err) {
