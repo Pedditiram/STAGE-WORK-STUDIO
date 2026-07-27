@@ -376,19 +376,24 @@ export default function App() {
 
   // Auto-Save Active Project to Physical Hard Drive Folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
   useEffect(() => {
-    if (shots && shots.length > 0 && projectTitle) {
-      const activeProj = {
-        id: `proj_${projectTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        title: projectTitle,
-        description: `Cinema Production Studio Project with ${shots.length} shots`,
-        targetModel: targetModel || 'SPS Direct Cinema 2.0',
-        aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-        roomId: effectiveRoomId,
-        lastModified: new Date().toLocaleString(),
-        shots: shots
-      };
-      saveProjectToVault(activeProj);
-    }
+    if (!shots || shots.length === 0 || !projectTitle) return;
+
+    const currentShotsHash = JSON.stringify({ projectTitle, targetModel, aspectRatio, shots });
+    if (currentShotsHash === prevAutoSavedShotsRef.current) return; // Prevent duplicate infinite re-renders!
+    
+    prevAutoSavedShotsRef.current = currentShotsHash;
+
+    const activeProj = {
+      id: `proj_${projectTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      title: projectTitle,
+      description: `Cinema Production Studio Project with ${shots.length} shots`,
+      targetModel: targetModel || 'SPS Direct Cinema 2.0',
+      aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+      roomId: effectiveRoomId,
+      lastModified: new Date().toLocaleString(),
+      shots: shots
+    };
+    saveProjectToVault(activeProj);
   }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId]);
 
   useEffect(() => {
@@ -402,45 +407,20 @@ export default function App() {
           aspectRatio: cloudData.aspectRatio || aspectRatio 
         });
 
-        // Only update local state if cloud data differs from current hash
-        if (cloudHash !== lastSyncedHash.current) {
+        // Only update local state if cloud data differs from current hash and auto-save ref
+        if (cloudHash !== lastSyncedHash.current && cloudHash !== prevAutoSavedShotsRef.current) {
           lastSyncedHash.current = cloudHash;
+          prevAutoSavedShotsRef.current = cloudHash;
           setShots(cloudData.shots);
           if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
           if (cloudData.aspectRatio) setAspectRatio(cloudData.aspectRatio);
 
           localStorage.setItem('sps_current_shots', JSON.stringify(cloudData.shots));
         }
-
-        // Auto-save team contributions to persistent project library
-        try {
-          const savedLibStr = localStorage.getItem('sps_project_library');
-          let library = savedLibStr ? JSON.parse(savedLibStr) : [];
-          if (Array.isArray(library)) {
-            const activeTitle = cloudData.projectTitle || projectTitle;
-            const existingIdx = library.findIndex(p => p.title === activeTitle || p.id === 'proj_default');
-            if (existingIdx !== -1) {
-              library[existingIdx] = {
-                ...library[existingIdx],
-                shots: cloudData.shots || library[existingIdx].shots,
-                targetModel: cloudData.targetModel || library[existingIdx].targetModel,
-                aspectRatio: cloudData.aspectRatio || library[existingIdx].aspectRatio,
-                lastModified: new Date().toLocaleDateString()
-              };
-              localStorage.setItem('sps_project_library', JSON.stringify(library));
-            }
-          }
-        } catch (e) {}
       }
     });
-
-    const unsubLib = subscribeToProjectLibraryUpdates();
-    const unsubCollab = subscribeToCollaboratorUpdates();
-
     return () => {
-      unsubscribe();
-      if (typeof unsubLib === 'function') unsubLib();
-      if (typeof unsubCollab === 'function') unsubCollab();
+      if (unsubscribe) unsubscribe();
     };
   }, [effectiveRoomId, projectTitle, appVersionMode]);
 
