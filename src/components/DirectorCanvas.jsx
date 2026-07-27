@@ -521,7 +521,7 @@ export default function DirectorCanvas({
 
     let imageUrl = '';
 
-    // Route through Magnific API if Magnific API Key is configured
+    // 1. Route through Magnific API if Magnific API Key is configured
     if (magnificKey.trim()) {
       try {
         const res = await fetch('https://api.magnific.ai/v1/generations', {
@@ -547,7 +547,32 @@ export default function DirectorCanvas({
       } catch (err) {}
     }
 
-    // Route through BytePlus ModelArk API if BytePlus Key is configured
+    // 2. Route through Google AI Studio Imagen 3 API if Gemini API Key is configured
+    if (!imageUrl && geminiKey.trim()) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${geminiKey.trim()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: fullPromptText,
+            config: {
+              numberOfImages: 1,
+              aspectRatio: "16:9",
+              outputMimeType: "image/jpeg"
+            }
+          })
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const data = await res.json();
+          if (data?.generatedImages?.[0]?.image?.imageBytes) {
+            imageUrl = `data:image/jpeg;base64,${data.generatedImages[0].image.imageBytes}`;
+          }
+        }
+      } catch (err) {}
+    }
+
+    // 3. Route through BytePlus ModelArk API if BytePlus Key is configured
     if (!imageUrl && byteplusKey.trim()) {
       try {
         const res = await fetch('/api/generate-image', {
