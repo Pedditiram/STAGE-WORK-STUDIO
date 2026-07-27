@@ -77,6 +77,15 @@ export const saveProjectToVault = async (project) => {
     safeLocalStorageSetItem('sps_project_library', JSON.stringify(lib));
   } catch (e) {}
 
+  // Auto-Save directly to physical local disk folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
+  try {
+    fetch('/api/save-project-disk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(project)
+    }).catch(() => null);
+  } catch (e) {}
+
   return true;
 };
 

@@ -17,6 +17,7 @@ import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
+import { saveProjectToVault, loadProjectsFromVault } from './services/projectDiskVault';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { 
   syncProjectLibraryToCloud, 
@@ -372,7 +373,22 @@ export default function App() {
     }).catch(() => {});
   }, [appVersionMode]);
 
-  const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+  // Auto-Save Active Project to Physical Hard Drive Folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
+  useEffect(() => {
+    if (shots && shots.length > 0 && projectTitle) {
+      const activeProj = {
+        id: `proj_${projectTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        title: projectTitle,
+        description: `Cinema Production Studio Project with ${shots.length} shots`,
+        targetModel: targetModel || 'SPS Direct Cinema 2.0',
+        aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+        roomId: effectiveRoomId,
+        lastModified: new Date().toLocaleString(),
+        shots: shots
+      };
+      saveProjectToVault(activeProj);
+    }
+  }, [shots, projectTitle, targetModel, aspectRatio]);
 
   useEffect(() => {
     if (appVersionMode !== 'cloud') return;

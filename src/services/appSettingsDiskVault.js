@@ -94,6 +94,16 @@ export const saveAppSettingToVault = async (key, value) => {
       localStorage.setItem(key, String(value));
     }
   } catch (e) {}
+
+  // Auto-Save directly to physical local disk folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/settings/)
+  try {
+    const fullPkg = getFullAppSettingsPackage();
+    fetch('/api/save-settings-disk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullPkg)
+    }).catch(() => null);
+  } catch (e) {}
 };
 
 // Collect complete app settings object with all API keys, LLM allotments & configurations

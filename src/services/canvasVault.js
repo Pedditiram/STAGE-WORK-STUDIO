@@ -33,6 +33,15 @@ export function saveCanvasVaultImage(key, imageUrl) {
   } catch (e) {
     console.warn("Error saving image to local storage folder vault:", e);
   }
+
+  // Auto-Save directly to physical local disk folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/)
+  try {
+    fetch('/api/save-image-disk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, imageUrl })
+    }).catch(() => null);
+  } catch (e) {}
 }
 
 export function saveAllCanvasVaultImages(imagesMap) {
