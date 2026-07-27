@@ -207,6 +207,37 @@ Return ONLY valid JSON array without markdown code blocks.`;
     }
   }
 
+  // 1B. ROUTE TO NVIDIA BUILD / MINIMAX-M3 ENGINE
+  if ((provider === 'minimax' || provider === 'nvidia_minimax' || provider === 'minimax_m3' || apiKey.trim().startsWith('nvapi-')) && apiKey.trim()) {
+    try {
+      const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'minimaxai/minimax-m3',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 4096
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("NVIDIA MiniMax-M3 breakdown fallback:", e);
+    }
+  }
+
   // 3. ROUTE TO GOOGLE GEMINI / PEDDITI LABS ENGINE
   if (apiKey.trim()) {
     try {
@@ -462,6 +493,43 @@ function parseRawScriptFallback(scriptText) {
 export async function generateScriptFromConcept(conceptPrompt, shotCount = 5) {
   const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'google_gemini') : 'google_gemini';
   const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
+
+  // ROUTE TO NVIDIA BUILD / MINIMAX-M3 ENGINE
+  if ((provider === 'minimax' || provider === 'nvidia_minimax' || provider === 'minimax_m3' || apiKey.trim().startsWith('nvapi-')) && apiKey.trim()) {
+    try {
+      const prompt = `Generate exactly ${shotCount} stage production shots as a JSON array for this creative concept: "${conceptPrompt}".
+Each shot in the JSON array MUST contain these 15 keys:
+"sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks".
+
+Return ONLY valid JSON array without markdown codeblocks.`;
+
+      const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'minimaxai/minimax-m3',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 4096
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("NVIDIA MiniMax-M3 concept generation fallback:", e);
+    }
+  }
 
   if (provider === 'google_gemini' && apiKey.trim()) {
     try {

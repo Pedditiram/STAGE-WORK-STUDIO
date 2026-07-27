@@ -956,6 +956,26 @@ export default function AdminSettingsModal({
           const statusCode = res ? res.status : 'CORS / Network Blocked';
           setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid BytePlus API Key or Unauthorized Endpoint.` });
         }
+      } else if (llmProvider === 'nvidia_minimax' || llmProvider === 'minimax' || keyToTest.startsWith('nvapi-')) {
+        const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${keyToTest}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'minimaxai/minimax-m3',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 5
+          })
+        }).catch(() => null);
+
+        if (res && (res.status === 200 || res.status === 400 || res.status === 422)) {
+          setLlmTestResult({ success: true, msg: `✓ NVIDIA Build MiniMax-M3 (minimaxai/minimax-m3) API Key Verified Live & Connected!` });
+        } else {
+          const statusCode = res ? res.status : 'CORS / Network Blocked';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (${statusCode}): Invalid NVIDIA API Key.` });
+        }
       } else {
         const res = await fetch('https://api.openai.com/v1/models', {
           headers: { 'Authorization': `Bearer ${keyToTest}` }
@@ -2030,6 +2050,7 @@ export default function AdminSettingsModal({
                         className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"
                       >
                         <option value="google_gemini">✨ Pedditi Labs Cinema Intelligence Engine (Recommended for 24-Craft Breakdown)</option>
+                        <option value="nvidia_minimax">⚡ NVIDIA Build — MiniMax-M3 (minimaxai/minimax-m3 API)</option>
                         <option value="anthropic">🧠 Claude Sonnet 4.6 / Opus 4.6 Thinking API (Deep Script Breakdown & Reasoning)</option>
                         <option value="byteplus">🎬 ByteDance ModelArk (Doubao / Seaweed - Seedance Native Video Engine)</option>
                         <option value="minimax">📹 MiniMax Hailuo AI (T2V-01 Cinematic Camera & Motion Physics Engine)</option>
@@ -2046,6 +2067,7 @@ export default function AdminSettingsModal({
                           Recommended Models for Cinema & Seedance Video Generation:
                         </div>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
+                          <li><strong className="text-amber-300">NVIDIA Build MiniMax-M3</strong>: High-speed multimodal LLM hosted on NVIDIA NIM API (`minimaxai/minimax-m3`).</li>
                           <li><strong className="text-amber-300">Pedditi Labs Cinema Intelligence Engine</strong>: Next-gen flagship model for 24-craft screenplay breakdown & asset tagging.</li>
                           <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity, emotional subtext & 24-craft alignment.</li>
                           <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
