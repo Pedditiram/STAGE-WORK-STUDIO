@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Video, Eye, Sun, Sparkles, Layers, Shield, Zap, Film, Play, FastForward, Box, Palette, Image as ImageIcon, Loader2, Download, Wand2, CheckCircle2, RefreshCw, Edit3, Users, Building, Compass, Smile } from 'lucide-react';
+import { Video, Eye, Sun, Sparkles, Layers, Shield, Zap, Film, Play, FastForward, Box, Palette, Image as ImageIcon, Loader2, Download, Wand2, CheckCircle2, RefreshCw, Edit3, Users, Building, Compass, Smile, HardDrive } from 'lucide-react';
+import { getStoredCanvasVaultImages, saveCanvasVaultImage, downloadAllCanvasImagesToDisk } from '../services/canvasVault';
 
 // Safe Cross-Browser Rounded Rectangle helper for Safari / WebKit compatibility
 function drawRoundRect(ctx, x, y, w, h, r = 8) {
@@ -40,16 +41,18 @@ export default function DirectorCanvas({
   // Render Style: '3d_clay_render' | '2d_blueprint' | 'pencil_sketch' | 'generated_ai_image'
   const [renderStyle, setRenderStyle] = useState('3d_clay_render');
 
-  // Image Generation State (Magnific / SeeDream 5.0 2K Engine)
-  const [generatedImages, setGeneratedImages] = useState(() => projectGeneratedImages || {});
+  // Image Generation State (Local Storage Vault + Project Images)
+  const [generatedImages, setGeneratedImages] = useState(() => {
+    const storedVault = getStoredCanvasVaultImages();
+    return { ...storedVault, ...(projectGeneratedImages || {}) };
+  });
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [engineBadgeText, setEngineBadgeText] = useState('SeeDream 5.0 2K Engine');
   const [isEmbeddedToast, setIsEmbeddedToast] = useState(false);
 
   useEffect(() => {
-    if (projectGeneratedImages && Object.keys(projectGeneratedImages).length > 0) {
-      setGeneratedImages(prev => ({ ...prev, ...projectGeneratedImages }));
-    }
+    const storedVault = getStoredCanvasVaultImages();
+    setGeneratedImages(prev => ({ ...storedVault, ...prev, ...(projectGeneratedImages || {}) }));
   }, [projectGeneratedImages]);
 
   useEffect(() => {
@@ -541,7 +544,11 @@ export default function DirectorCanvas({
     const img = new Image();
     img.src = imageUrl;
     const handleSuccess = () => {
-      setGeneratedImages(prev => ({ ...prev, [key]: imageUrl }));
+      setGeneratedImages(prev => {
+        const updated = { ...prev, [key]: imageUrl };
+        saveCanvasVaultImage(key, imageUrl);
+        return updated;
+      });
       setIsGeneratingImage(false);
       if (onEmbedImage) {
         onEmbedImage(key, imageUrl);
@@ -556,6 +563,7 @@ export default function DirectorCanvas({
 
   const handleManualEmbed = () => {
     if (!activeGeneratedImageUrl) return;
+    saveCanvasVaultImage(currentShotKey, activeGeneratedImageUrl);
     if (onEmbedImage) {
       onEmbedImage(currentShotKey, activeGeneratedImageUrl);
     }
@@ -564,15 +572,15 @@ export default function DirectorCanvas({
   };
 
   return (
-    <div className="flex flex-col gap-4 bg-zinc-950 p-5 rounded-2xl border border-zinc-800 shadow-xl w-full">
+    <div className="flex flex-col gap-4 bg-zinc-950 p-5 rounded-2xl border border-zinc-800 shadow-xl w-full font-mono">
       {/* Canvas Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            <Film className="w-4 h-4" />
+          <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <Film className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white flex items-center gap-2 font-mono">
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
               Stage Production Framing & Keyframe Simulator
               <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800 font-mono">
                 {aspectRatio}
@@ -583,6 +591,16 @@ export default function DirectorCanvas({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Export All Canvas Images to Local Computer Folder Button */}
+          <button
+            type="button"
+            onClick={() => downloadAllCanvasImagesToDisk(generatedImages, shot?.sceneShotId || 'Stage_Production_Studio')}
+            className="px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+            title="Export all generated canvas keyframe renders directly to your local computer's folder"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+            <span>💾 Save Canvas Images to Local Folder</span>
+          </button>
           {/* Render Mode Selector Tabs */}
           <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
             <button
