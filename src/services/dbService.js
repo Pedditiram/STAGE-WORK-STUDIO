@@ -32,7 +32,10 @@ let db = null;
 // Initialize Firebase Database Engine dynamically
 export function initDatabase(customConfig = null) {
   try {
-    const config = customConfig || getStoredDbConfig() || DEFAULT_FIREBASE_CONFIG;
+    const config = customConfig || getStoredDbConfig();
+    if (!config || !config.apiKey || config.apiKey.includes('Demo')) {
+      return { success: false, note: 'Local mode active' };
+    }
     if (!getApps().length) {
       app = initializeApp(config);
     } else {

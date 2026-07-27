@@ -19,11 +19,18 @@ let app = null;
 let db = null;
 let broadcastChannel = null;
 
-try {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-} catch (e) {
-  console.warn("Firebase initialized with local fallback real-time channel.");
+// Only initialize Firebase Firestore if custom config is explicitly set in settings
+if (typeof window !== 'undefined') {
+  const customConfigStr = localStorage.getItem('sps_custom_firebase_config');
+  if (customConfigStr) {
+    try {
+      const config = JSON.parse(customConfigStr);
+      if (config && config.apiKey && !config.apiKey.includes('Demo')) {
+        app = initializeApp(config);
+        db = getFirestore(app);
+      }
+    } catch (e) {}
+  }
 }
 
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
