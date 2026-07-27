@@ -398,12 +398,12 @@ export default function DirectorCanvas({
 
   // Dynamic helper to retrieve active LLM & Image Gen Engine configured in Admin Settings
   const getEngineNameFromSettings = () => {
-    if (typeof window === 'undefined') return 'Google Gemini Nano Banna / Imagen 3 Engine';
+    if (typeof window === 'undefined') return 'Google Gemini Nano Banana Pro / Imagen 3 Engine';
     const imageGenEngine = localStorage.getItem('sps_image_gen_engine') || 'google_gemini_nano';
     const llmProvider = localStorage.getItem('sps_llm_provider') || 'google_gemini';
 
     if (imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'google_gemini') {
-      return 'Google Gemini Nano Banna / Imagen 3 Engine';
+      return 'Google Gemini Nano Banana Pro / Imagen 3 Engine';
     }
     if (imageGenEngine === 'byteplus_seedream' || imageGenEngine === 'seedream_5_2k') {
       return 'BytePlus SeeDream 5.0 2K Engine';
@@ -417,7 +417,7 @@ export default function DirectorCanvas({
 
     // Default based on active LLM Provider set in Admin Settings
     if (llmProvider === 'google_gemini') {
-      return 'Google Gemini Nano Banna / Imagen 3 Engine';
+      return 'Google Gemini Nano Banana Pro / Imagen 3 Engine';
     }
     if (llmProvider === 'anthropic') {
       return 'Pedditi Labs Engine (Claude 3.5 Sonnet Vision)';
@@ -429,7 +429,7 @@ export default function DirectorCanvas({
       return 'BytePlus SeeDream 5.0 2K Engine';
     }
 
-    return 'Google Gemini Nano Banna / Imagen 3 Engine';
+    return 'Google Gemini Nano Banana Pro / Imagen 3 Engine';
   };
 
   useEffect(() => {
