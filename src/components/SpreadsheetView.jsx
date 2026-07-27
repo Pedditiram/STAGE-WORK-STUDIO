@@ -448,17 +448,20 @@ export default function SpreadsheetView({
                   {filteredSlots.map((slot) => {
                     const scenesList = (shots || []).reduce((acc, s, idx) => {
                       const rawId = s.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
-                      const match = rawId.match(/^(SC\d+)/i);
-                      const sceneId = match ? match[1].toUpperCase() : `Scene #${idx + 1}`;
+                      const match = rawId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawId.match(/Scene\s*0*(\d+)/i);
+                      const sceneNum = match ? parseInt(match[1], 10) : (Math.floor(idx / 3) + 1);
+                      const sceneId = `SC${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
+                      const sceneLabel = `SCENE ${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
                       if (!acc.some(sc => sc.sceneId === sceneId)) {
-                        acc.push({ sceneId, label: sceneId, firstShotIndex: idx });
+                        acc.push({ sceneId, label: sceneLabel, firstShotIndex: idx });
                       }
                       return acc;
                     }, []);
 
                     const rawCurrId = shot.sceneShotId || `SC01_SH${shotIdx + 1 < 10 ? '0' + (shotIdx + 1) : shotIdx + 1}`;
-                    const matchCurr = rawCurrId.match(/^(SC\d+)/i);
-                    const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${shotIdx + 1}`;
+                    const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
+                    const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(shotIdx / 3) + 1);
+                    const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
                     const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
 
                     return (

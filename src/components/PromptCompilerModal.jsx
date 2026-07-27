@@ -1010,18 +1010,21 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
 
                           const scenesList = (shots || []).reduce((acc, s, idx) => {
                             const rawId = s.sceneShotId || `SC01_SH${idx + 1 < 10 ? '0' + (idx + 1) : idx + 1}`;
-                            const match = rawId.match(/^(SC\d+)/i);
-                            const sceneId = match ? match[1].toUpperCase() : `Scene #${idx + 1}`;
+                            const match = rawId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawId.match(/Scene\s*0*(\d+)/i);
+                            const sceneNum = match ? parseInt(match[1], 10) : (Math.floor(idx / 3) + 1);
+                            const sceneId = `SC${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
+                            const sceneLabel = `SCENE ${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
                             if (!acc.some(sc => sc.sceneId === sceneId)) {
-                              acc.push({ sceneId, label: sceneId, firstShotIndex: idx });
+                              acc.push({ sceneId, label: sceneLabel, firstShotIndex: idx });
                             }
                             return acc;
                           }, []);
 
                           const currShotObj = shots[editingShotIdx];
                           const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${editingShotIdx + 1 < 10 ? '0' + (editingShotIdx + 1) : editingShotIdx + 1}`;
-                          const matchCurr = rawCurrId.match(/^(SC\d+)/i);
-                          const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${editingShotIdx + 1}`;
+                          const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
+                          const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(editingShotIdx / 3) + 1);
+                          const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
 
                           const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
 
@@ -1053,8 +1056,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                                 setEditingShotIdx(prev => {
                                   const currShotObj = shots[prev];
                                   const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
-                                  const matchCurr = rawCurrId.match(/^(SC\d+)/i);
-                                  const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${prev + 1}`;
+                                  const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
+                                  const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(prev / 3) + 1);
+                                  const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
                                   const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
                                   if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
                                     return scenesList[currSceneIdx + 1].firstShotIndex;
@@ -1066,8 +1070,9 @@ masterpiece 8k render, ${framing}, ${artist} executing ${shot.characterMovement 
                                 setEditingShotIdx(prev => {
                                   const currShotObj = shots[prev];
                                   const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
-                                  const matchCurr = rawCurrId.match(/^(SC\d+)/i);
-                                  const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${prev + 1}`;
+                                  const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
+                                  const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(prev / 3) + 1);
+                                  const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
                                   const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
                                   if (currSceneIdx > 0) {
                                     return scenesList[currSceneIdx - 1].firstShotIndex;
