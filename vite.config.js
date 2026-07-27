@@ -138,6 +138,9 @@ export default defineConfig({
   ],
   server: {
     host: true, // Exposes app on local intranet (Wi-Fi / LAN)
-    port: 5173
+    port: 5173,
+    watch: {
+      ignored: ['**/projects/**', '**/settings/**', '**/storage/**']
+    }
   }
 })
