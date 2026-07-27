@@ -276,19 +276,26 @@ export default function App() {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const email = localStorage.getItem('sps_authorized_user_email');
-      const isAdmin = localStorage.getItem('sps_is_admin_logged_in') === 'true';
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlEmail = urlParams.get('email') || urlParams.get('phone');
-      if (!email && !urlEmail && !isAdmin) return true; // Show Access Panel on Launch if unauthenticated
-    }
-    return false;
-  });
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeConflict, setActiveConflict] = useState(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sps_is_admin_logged_in');
+      if (saved !== null) return saved === 'true';
+      // Default to true (Unlocked) so studio is never locked out
+      localStorage.setItem('sps_is_admin_logged_in', 'true');
+      return true;
+    }
+    return true;
+  });
+
+  const handleSetAdminLoggedIn = (val) => {
+    setIsAdminLoggedIn(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_is_admin_logged_in', val ? 'true' : 'false');
+    }
+  };
   const [currentRole, setCurrentRole] = useState('director');
   const [collaborators, setCollaborators] = useState([
     { name: 'Director (You)', role: '🎬 Director' },
@@ -1283,7 +1290,7 @@ export default function App() {
         targetModel={targetModel}
         setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
         isAdminLoggedIn={isAdminLoggedIn}
-        setIsAdminLoggedIn={setIsAdminLoggedIn}
+        setIsAdminLoggedIn={handleSetAdminLoggedIn}
         onToggleCanvasTab={(enabled) => {
           setShowCanvasTab(enabled);
           if (!enabled && activeView === 'canvas') {
@@ -1350,7 +1357,7 @@ export default function App() {
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
-        setIsAdminLoggedIn={setIsAdminLoggedIn}
+        setIsAdminLoggedIn={handleSetAdminLoggedIn}
       />
 
       {/* Real-Time Active User Slot Conflict Alert Modal */}

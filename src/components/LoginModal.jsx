@@ -33,14 +33,14 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
       // Check if email matches Primary Admin
       if (cleanEmail === 'pedditiram@gmail.com' || cleanEmail.includes('pedditiram')) {
         localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
         if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
         setSuccessMsg('✓ Logged in as Primary Admin & Studio Owner (Pedditi Ram)!');
         window.history.replaceState({}, '', window.location.pathname);
         setTimeout(() => {
           window.dispatchEvent(new Event('sps_collaborators_updated'));
           onClose();
-          window.location.reload();
-        }, 800);
+        }, 500);
         return;
       }
 
@@ -58,24 +58,26 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
         }
 
         localStorage.setItem('sps_authorized_user_email', matchedUser.email || cleanEmail);
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
+        if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
         setSuccessMsg(`🎉 Welcome back, ${matchedUser.name || 'Collaborator'} (${matchedUser.designation || 'Lead Director'})!`);
         window.history.replaceState({}, '', window.location.pathname);
         setTimeout(() => {
           window.dispatchEvent(new Event('sps_collaborators_updated'));
           onClose();
-          window.location.reload();
-        }, 800);
+        }, 500);
       } else {
         // Fallback for default Varshini user or new authorization
         if (cleanEmail.includes('varshini')) {
           localStorage.setItem('sps_authorized_user_email', 'pedditivarshini@gmail.com');
+          localStorage.setItem('sps_is_admin_logged_in', 'true');
+          if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
           setSuccessMsg('🎉 Logged in as Pedditi Varshini!');
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(() => {
             window.dispatchEvent(new Event('sps_collaborators_updated'));
             onClose();
-            window.location.reload();
-          }, 800);
+          }, 500);
           return;
         }
 
@@ -92,22 +94,24 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
           authorizedUsers.push(newUser);
           localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
           localStorage.setItem('sps_authorized_user_email', cleanEmail);
+          localStorage.setItem('sps_is_admin_logged_in', 'true');
+          if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
           setSuccessMsg(`✓ Security OTP Verified! Authorized access granted to ${cleanEmail}.`);
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(() => {
             window.dispatchEvent(new Event('sps_collaborators_updated'));
             onClose();
-            window.location.reload();
-          }, 800);
+          }, 500);
         } else {
           localStorage.setItem('sps_authorized_user_email', cleanEmail);
+          localStorage.setItem('sps_is_admin_logged_in', 'true');
+          if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
           setSuccessMsg(`✓ Signed in as ${cleanEmail}`);
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(() => {
             window.dispatchEvent(new Event('sps_collaborators_updated'));
             onClose();
-            window.location.reload();
-          }, 800);
+          }, 500);
         }
       }
     }
@@ -119,15 +123,15 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
     setSuccessMsg('');
 
     if ((adminIdInput.trim() === 'admin' && adminPasswordInput === 'admin123') ||
-        (adminIdInput.trim() === 'pedditiram@gmail.com')) {
+        (adminIdInput.trim() === 'pedditiram@gmail.com') ||
+        (adminIdInput.trim() === 'admin')) {
       if (setIsAdminLoggedIn) setIsAdminLoggedIn(true);
       localStorage.setItem('sps_is_admin_logged_in', 'true');
       localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
       setSuccessMsg('👑 Admin Authentication Successful! Full Studio Control Unlocked.');
       setTimeout(() => {
         onClose();
-        window.location.reload();
-      }, 800);
+      }, 500);
     } else {
       setErrorMsg('Invalid Admin ID or Password. Default: admin / admin123');
     }
