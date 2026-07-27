@@ -490,15 +490,16 @@ export default function DirectorCanvas({
     const isCloseUp = compLower.includes('close') || compLower.includes('cu') || compLower.includes('portrait');
 
     let fullPromptText = '';
+    const nanoQualityString = "ultra photorealistic 8k IMAX 70mm movie still, sharp crisp focus, highly detailed facial features, natural skin texture, masterpiece cinema lighting, no painting, non-abstract, 8k resolution, award winning cinematography";
 
     if (isWide) {
-      fullPromptText = `masterpiece 8k photorealistic wide establishing film still, ${comp}, panoramic landscape view, ${envContext}, ${coArtist}, full-body distant figure of ${charDescr} standing in ${movement}, ${subjectLighting}, 24mm wide angle anamorphic lens, massive scale, 8k resolution`;
+      fullPromptText = `${nanoQualityString}, ${comp}, panoramic landscape, ${envContext}, sharp detailed figure of ${charDescr} in ${movement}, ${coArtist}, ${subjectLighting}, 24mm wide angle anamorphic lens, epic scale`;
     } else if (isCloseUp) {
-      fullPromptText = `masterpiece 8k photorealistic facial close-up portrait film still, tight macro lens focus on head and eyes of ${charDescr}, expression: ${expression}, ${movement}, ${subjectLighting}, 8k resolution`;
+      fullPromptText = `${nanoQualityString}, facial portrait close-up, sharp macro focus on eyes and face of ${charDescr}, expression: ${expression}, ${movement}, ${subjectLighting}, 85mm prime lens`;
     } else if (keyframeMode === 'last_frame') {
-      fullPromptText = `masterpiece 8k photorealistic cinematic film still, ${comp}, ${charDescr} executing ${movement}, expression: ${expression}, ${coArtist}, ${envContext}, ${subjectLighting}, 8k highly detailed`;
+      fullPromptText = `${nanoQualityString}, ${comp}, ${charDescr} executing ${movement}, expression: ${expression}, ${coArtist}, ${envContext}, ${subjectLighting}`;
     } else {
-      fullPromptText = `masterpiece 8k photorealistic cinematic film still, ${comp}, ${charDescr}, ${envContext}, ${subjectLighting}, ${subjectColor}, expression: ${expression}, highly detailed 8k`;
+      fullPromptText = `${nanoQualityString}, ${comp}, ${charDescr}, ${envContext}, ${subjectLighting}, ${subjectColor}, expression: ${expression}`;
     }
 
     setActivePromptSent(fullPromptText);
