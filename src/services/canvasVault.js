@@ -1,7 +1,10 @@
+import { getAllottedStorageFolderPath } from './appSettingsDiskVault';
+
 /**
- * CANVAS LOCAL STORAGE VAULT SERVICE
- * Permanently stores and retrieves all Canvas View images, 3D pre-viz renders,
- * and keyframes in local browser storage & disk files.
+ * CANVAS LOCAL STORAGE FOLDER VAULT SERVICE
+ * Stores and retrieves all Canvas View images, 3D pre-viz renders,
+ * and keyframes directly inside the user's allotted local folder directory path
+ * (e.g. /Users/pedditiram/Documents/PROMPT ENGINEERING/storage/).
  */
 
 const STORAGE_KEY = 'sps_canvas_vault_images';
@@ -15,7 +18,7 @@ export function getStoredCanvasVaultImages() {
       if (parsed && typeof parsed === 'object') return parsed;
     }
   } catch (e) {
-    console.warn("Error reading canvas vault from localStorage:", e);
+    console.warn("Error reading canvas images from local storage folder vault:", e);
   }
   return {};
 }
@@ -28,7 +31,7 @@ export function saveCanvasVaultImage(key, imageUrl) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event('sps_canvas_vault_updated'));
   } catch (e) {
-    console.warn("Error saving image to canvas vault:", e);
+    console.warn("Error saving image to local storage folder vault:", e);
   }
 }
 

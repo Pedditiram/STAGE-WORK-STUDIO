@@ -3,6 +3,7 @@ import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff,
 import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
+  getAllottedStorageFolderPath, setAllottedStorageFolderPath,
   exportAppSettingsToFile, importAppSettingsFromFile 
 } from '../services/appSettingsDiskVault';
 
@@ -220,6 +221,7 @@ export default function AdminSettingsModal({
   // 1. LLM PROVIDER & API KEY STATE
   const settingsFileInputRef = React.useRef(null);
   const [allottedSettingsFolder, setAllottedSettingsFolder] = useState(() => getAllottedSettingsFolderPath());
+  const [allottedStorageFolder, setAllottedStorageFolder] = useState(() => getAllottedStorageFolderPath());
 
   const handleEditAllottedSettingsFolder = () => {
     const current = getAllottedSettingsFolderPath();
@@ -228,6 +230,16 @@ export default function AdminSettingsModal({
       const cleanPath = newPath.trim();
       setAllottedSettingsFolderPath(cleanPath);
       setAllottedSettingsFolder(cleanPath);
+    }
+  };
+
+  const handleEditAllottedStorageFolder = () => {
+    const current = getAllottedStorageFolderPath();
+    const newPath = prompt("Set Allotted Local Folder Directory Path for Images & Asset Renders:", current);
+    if (newPath && newPath.trim()) {
+      const cleanPath = newPath.trim();
+      setAllottedStorageFolderPath(cleanPath);
+      setAllottedStorageFolder(cleanPath);
     }
   };
 
@@ -2622,6 +2634,38 @@ export default function AdminSettingsModal({
                   >
                     <Upload className="w-3.5 h-3.5" />
                     <span>Import Settings</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ALLOTTED LOCAL IMAGE & CANVAS ASSET STORAGE VAULT BANNER */}
+              <div className="mt-2 p-3 rounded-xl border border-cyan-500/40 bg-zinc-950 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-cyan-950/80 text-cyan-300 border border-cyan-800/80 shrink-0">
+                    <ImageIcon className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white font-sans flex items-center gap-2">
+                      <span>🖼️ Allotted Local Image & Canvas Asset Storage Directory Vault</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
+                        📁 Local Folder Storage Active
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-cyan-200/80 font-mono truncate max-w-xl">
+                      {allottedStorageFolder}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleEditAllottedStorageFolder}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Change Allotted Image & Asset Storage Folder Directory Path"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Image Folder Path</span>
                   </button>
                 </div>
               </div>

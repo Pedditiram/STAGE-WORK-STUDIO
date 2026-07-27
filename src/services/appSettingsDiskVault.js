@@ -57,6 +57,21 @@ export const setAllottedSettingsFolderPath = (pathStr) => {
   }
 };
 
+// Default Allotted Image & Asset Storage Directory Path (Local Disk Folder)
+export const getAllottedStorageFolderPath = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('sps_allotted_storage_folder') || '/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/';
+  }
+  return '/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/';
+};
+
+// Set Allotted Image & Asset Storage Directory Path
+export const setAllottedStorageFolderPath = (pathStr) => {
+  if (typeof window !== 'undefined' && pathStr) {
+    localStorage.setItem('sps_allotted_storage_folder', pathStr);
+  }
+};
+
 // Save a setting key-value pair to IndexedDB and localStorage
 export const saveAppSettingToVault = async (key, value) => {
   if (!key) return;
