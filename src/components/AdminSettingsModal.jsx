@@ -1529,27 +1529,11 @@ export default function AdminSettingsModal({
 
                   {/* 1A. BYTEPLUS SEEDREAM 5.0 API KEY CARD */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-emerald-500/50 space-y-3 shadow-md">
-                    <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                    <div className="border-b border-emerald-500/20 pb-2">
                       <label className="text-xs font-bold text-white flex items-center gap-2 font-mono">
                         <Sparkles className="w-4 h-4 text-emerald-400" />
                         BytePlus Official ModelArk / Doubao Seedream 5.0 API Key:
                       </label>
-                      
-                      {imageGenEngine === 'byteplus_seedream' ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-mono text-xs font-bold shadow-sm shadow-emerald-950">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />
-                          <span>✓ Active Default Image Engine</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleImageEngineChange('byteplus_seedream')}
-                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-emerald-600 hover:text-zinc-950 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          ⭐ Use as Default Engine
-                        </button>
-                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -1606,7 +1590,7 @@ export default function AdminSettingsModal({
                         className="w-full py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:brightness-110 text-zinc-950 font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        {isBytePlusSaved ? '✓ BytePlus API Key Saved & Set as Active Default!' : '💾 Save & Set BytePlus Seedream 5.0 as Active Default'}
+                        {isBytePlusSaved || imageGenEngine === 'byteplus_seedream' ? '✓ BytePlus is now active and default' : '💾 Save & Set BytePlus Seedream 5.0 as Active Default'}
                       </button>
 
                       <button
@@ -1643,27 +1627,11 @@ export default function AdminSettingsModal({
 
                   {/* 1B. MAGNIFIC.COM IMAGE GENERATION CARD */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-purple-500/50 space-y-3 shadow-md">
-                    <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                    <div className="border-b border-purple-500/20 pb-2">
                       <label className="text-xs font-bold text-white flex items-center gap-2 font-mono">
                         <Wand2 className="w-4 h-4 text-purple-400" />
                         Magnific.com Official Subscription API Key (Unlimited Nano Banana Pro & SeeDream 5.0):
                       </label>
-
-                      {imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'magnific' ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/50 font-mono text-xs font-bold shadow-sm shadow-purple-950">
-                          <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-400/20" />
-                          <span>✓ Active Default Image Engine</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleImageEngineChange('google_gemini_nano')}
-                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-purple-600 hover:text-white text-purple-300 border border-purple-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
-                        >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          ⭐ Use as Default Engine
-                        </button>
-                      )}
                     </div>
 
                     {/* STEP-BY-STEP API KEY GUIDE */}
@@ -1676,7 +1644,7 @@ export default function AdminSettingsModal({
                         <li>Log into your account at <strong className="text-purple-300">https://magnific.ai</strong> (or <strong className="text-purple-300">https://magnific.com</strong>).</li>
                         <li>Navigate to <strong>Account Settings</strong> → <strong>API Keys & Integrations</strong>.</li>
                         <li>Click <strong>Generate New API Key</strong> and copy your key string (e.g. <code className="bg-zinc-900 text-amber-400 px-1.5 py-0.5 rounded border border-zinc-800">mag_...</code>).</li>
-                        <li>Paste the API key into the field below and click <strong>Save & Set Magnific as Active Engine</strong>!</li>
+                        <li>Paste the API key into the field below and click <strong>Save & Set Magnific as Active Default</strong>!</li>
                       </ol>
                     </div>
 
@@ -1719,10 +1687,14 @@ export default function AdminSettingsModal({
                       <button
                         type="button"
                         onClick={handleSaveMagnific}
-                        className="w-full py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
+                        className="w-full py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        {isMagnificSaved ? '✓ Magnific API Key Saved!' : '💾 Save & Set Magnific as Active Default'}
+                        <span>
+                          {isMagnificSaved || imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'magnific' 
+                            ? '✓ magnific is now active and default' 
+                            : '💾 Save & Set Magnific as Active Default'}
+                        </span>
                       </button>
 
                       <button
