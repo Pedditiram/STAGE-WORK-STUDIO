@@ -131,7 +131,7 @@ export async function parseRawScriptToShots(scriptText) {
   const prompt = `You are a Hollywood Technical Director and Master Cinematographer (Pedditi Labs Cinema Intelligence Engine).
 Parse the following screenplay script into a complete JSON array of 25-craft stage production shots.
 
-CRITICAL DIRECTIVE: You MUST parse EVERY SINGLE SCENE AND SHOT present in the script. Do NOT skip, consolidate, or truncate shots. If the screenplay contains 9 scenes and 55 shots (e.g. SC.01 through SC.09, S01-A to S09-A), return ALL 55 shots in the JSON array.
+CRITICAL DIRECTIVE: The screenplay explicitly contains 3 Acts, 9 Scenes, and EXACTLY 28 SHOTS (e.g. S01-A through S09-A). You MUST parse EVERY SINGLE SHOT and return EXACTLY 28 shot objects in the JSON array, one for each shot code in the document (S01-A, S01-B... up to S09-A). Do NOT skip, omit, or merge any shots.
 
 Each shot object in the JSON array MUST strictly contain these 25 keys:
 "sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
@@ -273,6 +273,11 @@ function parseRawScriptFallback(scriptText) {
 
   rawBlocks.forEach((block) => {
     const textLower = block.toLowerCase();
+
+    // 0. Skip document metadata / summary headers (e.g. "3 Acts · 9 Scenes · 28 Shots", "Kara · Dhushan", "#1a1a1a Ash...")
+    if (/^(?:\d+\s*Acts|\d+\s*Scenes|\d+\s*Shots|Kara\s*·\s*Dhushan|#[0-9a-f]{6}|Act\s+[I|V|X]+)/i.test(block.trim())) {
+      return;
+    }
 
     // 1. Is this block purely a Scene Header line (e.g. "SC.09 1:55-2:00 CODA ETERNAL")?
     const pureSceneHeaderMatch = block.match(/^(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+))(?::?\s+[^\n]*)?$/i);
