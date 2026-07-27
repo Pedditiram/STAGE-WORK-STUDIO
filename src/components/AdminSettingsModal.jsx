@@ -1666,10 +1666,10 @@ export default function AdminSettingsModal({
                     <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
                       <label className="text-xs font-bold text-white flex items-center gap-2 font-mono">
                         <Wand2 className="w-4 h-4 text-purple-400" />
-                        Magnific.com Image Enhancement & 2K Upscaler API Key:
+                        Magnific.com Official Subscription API Key (Unlimited Nano Banana Pro & SeeDream 5.0):
                       </label>
 
-                      {imageGenEngine !== 'byteplus_seedream' ? (
+                      {imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'magnific' ? (
                         <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/50 font-mono text-xs font-bold shadow-sm shadow-purple-950">
                           <CheckCircle2 className="w-4 h-4 text-purple-400 fill-purple-400/20" />
                           <span>✓ Active Default Image Engine</span>
@@ -1677,26 +1677,40 @@ export default function AdminSettingsModal({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => handleImageEngineChange('seedream_5_2k')}
-                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-purple-600 hover:text-white text-purple-300 border border-purple-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow"
+                          onClick={() => handleImageEngineChange('google_gemini_nano')}
+                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-purple-600 hover:text-white text-purple-300 border border-purple-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
                         >
                           <Wand2 className="w-3.5 h-3.5" />
-                          ⭐ Use as Default Engine
+                          ⭐ Use Magnific Subscription Engine
                         </button>
                       )}
                     </div>
 
+                    {/* STEP-BY-STEP API KEY GUIDE */}
+                    <div className="p-3 rounded-lg bg-zinc-950/90 border border-purple-500/30 text-xs font-mono space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                        <Key className="w-3.5 h-3.5 text-amber-400" />
+                        <span>How to get your Magnific.com Subscription API Key:</span>
+                      </div>
+                      <ol className="list-decimal list-inside text-zinc-300 space-y-1 pl-1 text-[11px] leading-relaxed">
+                        <li>Log into your account at <strong className="text-purple-300">https://magnific.ai</strong> (or <strong className="text-purple-300">https://magnific.com</strong>).</li>
+                        <li>Navigate to <strong>Account Settings</strong> → <strong>API Keys & Integrations</strong>.</li>
+                        <li>Click <strong>Generate New API Key</strong> and copy your key string (e.g. <code className="bg-zinc-900 text-amber-400 px-1.5 py-0.5 rounded border border-zinc-800">mag_...</code>).</li>
+                        <li>Paste the API key into the field below and click <strong>Save & Set Magnific as Active Engine</strong>!</li>
+                      </ol>
+                    </div>
+
                     <div>
-                      <label className="text-[11px] font-mono text-zinc-400 block mb-1">Select Image Enhancement Engine:</label>
+                      <label className="text-[11px] font-mono text-zinc-400 block mb-1">Select Active Subscription Engine Allotment:</label>
                       <select
                         value={imageGenEngine}
                         onChange={(e) => handleImageEngineChange(e.target.value)}
-                        className="w-full bg-zinc-950 text-purple-300 border border-purple-500/40 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-purple-500"
+                        className="w-full bg-zinc-950 text-purple-300 border border-purple-500/40 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-purple-500 font-bold"
                       >
-                        <option value="byteplus_seedream">BytePlus Official Seedream 5.0 Engine</option>
-                        <option value="seedream_5_2k">SeeDream 5.0 2K High-Res Engine</option>
-                        <option value="nano_banan_pro_2k">Nano Banan Pro 2K Engine</option>
-                        <option value="gpt2_upscaler">GPT2 Photorealistic Upscaler Engine</option>
+                        <option value="google_gemini_nano">✨ Magnific Google Gemini Nano Banana Pro 2K (Unlimited Offer)</option>
+                        <option value="byteplus_seedream">✨ Magnific BytePlus SeeDream 5.0 2K (Unlimited Offer)</option>
+                        <option value="seedream_5_2k">✨ SeeDream 5.0 High-Res Realism Engine</option>
+                        <option value="magnific">✨ Magnific.com 2K Photorealistic Upscaler Engine</option>
                       </select>
                     </div>
 
