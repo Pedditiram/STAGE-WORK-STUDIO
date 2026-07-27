@@ -393,29 +393,64 @@ export default function DirectorCanvas({
     ctx.stroke();
   }
 
+  // Dynamic helper to retrieve active LLM & Image Gen Engine configured in Admin Settings
+  const getEngineNameFromSettings = () => {
+    if (typeof window === 'undefined') return 'Pedditi Labs Cinema Intelligence Engine';
+    const imageGenEngine = localStorage.getItem('sps_image_gen_engine') || '';
+    const llmProvider = localStorage.getItem('sps_llm_provider') || 'google_gemini';
+
+    if (imageGenEngine === 'byteplus_seedream' || imageGenEngine === 'seedream_5_2k') {
+      return 'BytePlus SeeDream 5.0 2K Engine';
+    }
+    if (imageGenEngine === 'magnific') {
+      return 'Magnific.com 2K Upscaler Engine';
+    }
+    if (imageGenEngine === 'openai_dalle3') {
+      return 'OpenAI DALL-E 3 / Sora Engine';
+    }
+    if (imageGenEngine === 'google_gemini') {
+      return 'Pedditi Labs Cinema Engine (Gemini Imagen 3)';
+    }
+
+    // Default based on active LLM Provider set in Admin Settings
+    if (llmProvider === 'google_gemini') {
+      return 'Pedditi Labs Cinema Engine (Gemini Imagen 3)';
+    }
+    if (llmProvider === 'anthropic') {
+      return 'Pedditi Labs Engine (Claude 3.5 Sonnet Vision)';
+    }
+    if (llmProvider === 'openai') {
+      return 'OpenAI DALL-E 3 / Sora Engine';
+    }
+    if (llmProvider === 'byteplus') {
+      return 'BytePlus SeeDream 5.0 2K Engine';
+    }
+
+    return 'Pedditi Labs Cinema Intelligence Engine';
+  };
+
+  useEffect(() => {
+    setEngineBadgeText(getEngineNameFromSettings());
+  }, [shot]);
+
   // -------------------------------------------------------------
   // AI IMAGE GENERATION / REGENERATION TRIGGER
   // -------------------------------------------------------------
   const [activePromptSent, setActivePromptSent] = useState('');
 
   // -------------------------------------------------------------
-  // AI IMAGE GENERATION / REGENERATION TRIGGER (BytePlus Seedream 5.0 API & Rich 15-Slot Prompting)
+  // AI IMAGE GENERATION / REGENERATION TRIGGER (Multi-Engine & Rich 25-Slot Prompting)
   // -------------------------------------------------------------
   const handleGenerateAIImage = async () => {
     setIsGeneratingImage(true);
     setRenderStyle('generated_ai_image');
 
+    const activeEngineName = getEngineNameFromSettings();
+    setEngineBadgeText(activeEngineName);
+
     const byteplusKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_byteplus_api_key') || '') : '';
     const magnificKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_magnific_api_key') || '') : '';
-    const selectedModel = typeof window !== 'undefined' ? (localStorage.getItem('sps_image_gen_engine') || 'byteplus_seedream') : 'byteplus_seedream';
-
-    let modelNameLabel = byteplusKey ? 'BytePlus Seedream 5.0 (Live API Key)' : 'SeeDream 5.0 2K Engine';
-
-    if (magnificKey && !byteplusKey) {
-      modelNameLabel = `Magnific API (SeeDream 5.0)`;
-    }
-
-    setEngineBadgeText(modelNameLabel);
+    const geminiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
 
     const shotId = shot?.sceneShotId || `SH_${activeShotIndex + 1}`;
     const key = `${shotId}_${keyframeMode}`;
@@ -748,14 +783,12 @@ export default function DirectorCanvas({
             className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 border border-purple-400/40 font-mono disabled:opacity-50"
             title={activeGeneratedImageUrl ? `Regenerate a new ${engineBadgeText} variation` : `Generate photorealistic 2K image using ${engineBadgeText}`}
           >
-            {isGeneratingImage ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : activeGeneratedImageUrl ? (
-              <RefreshCw className="w-3.5 h-3.5 text-amber-300" />
-            ) : (
-              <Wand2 className="w-3.5 h-3.5 text-amber-300" />
-            )}
-            {isGeneratingImage ? 'Rendering 2K...' : activeGeneratedImageUrl ? '🔄 Regenerate 2K Image' : `✨ Generate ${engineBadgeText}`}
+            <Wand2 className={`w-3.5 h-3.5 text-amber-300 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+            <span>
+              {isGeneratingImage
+                ? `Generating with ${engineBadgeText}...`
+                : (activeGeneratedImageUrl ? `🔄 Regenerate ${engineBadgeText}` : `✨ Generate ${engineBadgeText}`)}
+            </span>
           </button>
         </div>
 
