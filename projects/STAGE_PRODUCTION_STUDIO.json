@@ -1,0 +1,45 @@
+{
+  "id": "proj_stage_production_studio",
+  "title": "STAGE PRODUCTION STUDIO",
+  "description": "Cinema Production Studio Project with 2 shots",
+  "targetModel": "SPS Direct Cinema",
+  "aspectRatio": "2.39:1 Anamorphic",
+  "roomId": "SPS-CLOUD-8821_stage_production_studio",
+  "lastModified": "7/27/2026, 1:50:02 PM",
+  "shots": [
+    {
+      "sceneShotId": "SC01_SH01",
+      "shotComposition": "Extreme Close-Up (ECU)",
+      "cameraMotionTag": "[Camera: Push In / Slow Dolly Zoom]",
+      "subjectLightingTag": "[Lighting: Cyberpunk Neon Blue & Pink Dual Glow]",
+      "subjectColorTag": "[Subject Color: High-Saturation Neo-Noir]",
+      "backgroundLightingTag": "[BG Lighting: Strobing Neon City Reflections]",
+      "backgroundColorTag": "[BG Color: Deep Midnight Blue & Indigo]",
+      "characterIdAssetRef": "[CharID: @LeadSinger_Aria - Vocalist, leather jacket]",
+      "coArtistInteraction": "[Co-Artist: Backing musicians swaying to rhythm, gazing at lead artist]",
+      "actionEnvContext": "Rain-slicked futuristic concert stage under towering neon city lights, wet reflections, smoke machine haze.",
+      "characterExpression": "Passionate singing, eyes closed in deep emotion, veins visible on neck",
+      "characterPlacement": "Foreground center stage, co-artists positioned in midground left & right",
+      "characterDialogue": "\"The grid is failing... turn up the amps!\"",
+      "characterMovement": "Grasping microphone stand with both hands and leaning forward with intense energy",
+      "characterEyeLooks": "[Eye Look: Direct Eye Contact with Camera Lens]"
+    },
+    {
+      "sceneShotId": "SC01_SH02",
+      "shotComposition": "Medium Shot (MS)",
+      "cameraMotionTag": "[Camera: Tracking Shot / Steadicam Follow]",
+      "subjectLightingTag": "[Lighting: High-Contrast Chiaroscuro Noir]",
+      "subjectColorTag": "[Subject Color: Teal & Orange Cinema Palette]",
+      "backgroundLightingTag": "[BG Lighting: Cold Industrial Fluorescent Strip]",
+      "backgroundColorTag": "[BG Color: Muted Concrete Industrial Gray]",
+      "characterIdAssetRef": "[CharID: @Guitarist_Leo - Lead guitarist, cyber visor]",
+      "coArtistInteraction": "[Co-Artist: Co-singer stepping up to microphone for harmonized duet reaction]",
+      "actionEnvContext": "Underground cybernetics music venue, flickering blue neon lights, packed energetic crowd.",
+      "characterExpression": "Exuberant smile, laughing mid-performance while making eye contact",
+      "characterPlacement": "Midground center frame rule of thirds, co-performers surrounding in semi-circle",
+      "characterDialogue": "\"We only get one chance at this!\"",
+      "characterMovement": "Striking a powerful guitar bend pose, body angled 45 degrees",
+      "characterEyeLooks": "[Eye Look: Looking at Co-Artist with intense stage chemistry]"
+    }
+  ]
+}

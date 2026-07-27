@@ -4,7 +4,8 @@ import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToC
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
   getAllottedStorageFolderPath, setAllottedStorageFolderPath,
-  exportAppSettingsToFile, importAppSettingsFromFile 
+  exportAppSettingsToFile, importAppSettingsFromFile,
+  saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
 
 export default function AdminSettingsModal({ 
