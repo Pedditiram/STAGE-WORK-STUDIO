@@ -1527,36 +1527,6 @@ export default function AdminSettingsModal({
                     SECTION 1: IMAGE GENERATION ENGINES (GEMINI NANO BANNA, SEEDREAM 5.0 & MAGNIFIC 2K)
                   </div>
 
-                  {/* 1A. GOOGLE GEMINI NANO BANNA / IMAGEN 3 ENGINE CARD */}
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-zinc-900 via-amber-950/30 to-zinc-900 border border-amber-500/50 space-y-3 shadow-md">
-                    <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
-                      <label className="text-xs font-bold text-white flex items-center gap-2 font-mono">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        ✨ Google Gemini Nano Banna / Imagen 3 Cinema Engine:
-                      </label>
-                      
-                      {imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'google_gemini' || !imageGenEngine ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/50 font-mono text-xs font-bold shadow-sm shadow-amber-950">
-                          <CheckCircle2 className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-                          <span>✓ Active Default Engine (Gemini Nano Banna)</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleImageEngineChange('google_gemini_nano')}
-                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-amber-400 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          ⭐ Use Google Gemini Nano Banna
-                        </button>
-                      )}
-                    </div>
-
-                    <p className="text-[11.5px] text-zinc-300 font-mono leading-relaxed">
-                      High-fidelity 2K cinematic image generation engine powered by Google Gemini Nano Banna / Imagen 3 with native 25-craft prompt integration.
-                    </p>
-                  </div>
-
                   {/* 1A. BYTEPLUS SEEDREAM 5.0 API KEY CARD */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-emerald-500/50 space-y-3 shadow-md">
                     <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
@@ -1574,7 +1544,7 @@ export default function AdminSettingsModal({
                         <button
                           type="button"
                           onClick={() => handleImageEngineChange('byteplus_seedream')}
-                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-emerald-600 hover:text-zinc-950 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow"
+                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-emerald-600 hover:text-zinc-950 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
                           ⭐ Use as Default Engine
@@ -1691,7 +1661,7 @@ export default function AdminSettingsModal({
                           className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-purple-600 hover:text-white text-purple-300 border border-purple-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
                         >
                           <Wand2 className="w-3.5 h-3.5" />
-                          ⭐ Use Magnific Subscription Engine
+                          ⭐ Use as Default Engine
                         </button>
                       )}
                     </div>
@@ -1752,7 +1722,7 @@ export default function AdminSettingsModal({
                         className="w-full py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-110 text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all font-mono"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        {isMagnificSaved ? '✓ Magnific API Key Saved!' : '💾 Save Magnific API Key'}
+                        {isMagnificSaved ? '✓ Magnific API Key Saved!' : '💾 Save & Set Magnific as Active Default'}
                       </button>
 
                       <button
