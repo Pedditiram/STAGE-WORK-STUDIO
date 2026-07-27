@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
