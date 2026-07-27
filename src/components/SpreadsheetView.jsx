@@ -166,6 +166,53 @@ export default function SpreadsheetView({
     }
   };
 
+  // -------------------------------------------------------------
+  // SCENE GROUPING ENGINE
+  // -------------------------------------------------------------
+  const [collapsedScenes, setCollapsedScenes] = useState({});
+
+  const toggleSceneCollapse = (sceneTag) => {
+    setCollapsedScenes(prev => ({ ...prev, [sceneTag]: !prev[sceneTag] }));
+  };
+
+  const getSceneInfo = (shot, idx) => {
+    const rawId = shot?.sceneShotId || `SC01_SH${idx + 1}`;
+    const match = rawId.match(/(?:SC|S)\.?\s*0*(\d+)/i) || rawId.match(/Scene\s*0*(\d+)/i);
+    const sceneNum = match ? parseInt(match[1], 10) : (Math.floor(idx / 3) + 1);
+    const sceneTag = `SCENE ${sceneNum < 10 ? '0' + sceneNum : sceneNum}`;
+
+    let heading = 'CINEMATIC LOCATION & ENVIRONMENT';
+    if (shot?.sceneHeading) {
+      heading = shot.sceneHeading;
+    } else if (shot?.actionEnvContext) {
+      let clean = shot.actionEnvContext.replace(/\[|\]/g, '').trim();
+      if (clean.includes(';')) clean = clean.split(';')[0];
+      if (clean.includes('.')) clean = clean.split('.')[0];
+      heading = clean.toUpperCase();
+    }
+    return { sceneTag, sceneNum, heading };
+  };
+
+  const sceneGroups = React.useMemo(() => {
+    const groups = [];
+    let currentGroup = null;
+
+    filteredShots.forEach((shot, originalIdx) => {
+      const { sceneTag, heading } = getSceneInfo(shot, originalIdx);
+      if (!currentGroup || currentGroup.sceneTag !== sceneTag) {
+        currentGroup = {
+          sceneTag,
+          heading,
+          items: []
+        };
+        groups.push(currentGroup);
+      }
+      currentGroup.items.push({ shot, originalIdx });
+    });
+
+    return groups;
+  }, [filteredShots]);
+
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl font-mono">
       {/* Category Tab Bar Header */}
@@ -193,6 +240,10 @@ export default function SpreadsheetView({
             );
           })}
         </div>
+
+        <span className="text-[10.5px] font-mono text-cyan-300 font-bold bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+          🎬 {sceneGroups.length} Scenes · {filteredShots.length} Shots
+        </span>
       </div>
 
       {/* Main High-Density Spreadsheet Table */}
@@ -215,11 +266,51 @@ export default function SpreadsheetView({
           </thead>
 
           <tbody className="divide-y divide-zinc-800/80 bg-zinc-950 font-sans">
-            {filteredShots.map((shot, shotIdx) => {
-              const isActive = shotIdx === activeShotIndex;
-              const isMuted = !!shot.isMuted;
-              const isBeingDragged = draggedShotIdx === shotIdx;
-              const isTargetDrop = dragOverShotIdx === shotIdx;
+            {sceneGroups.map((group) => {
+              const isCollapsed = Boolean(collapsedScenes[group.sceneTag]);
+              const firstShot = group.items[0]?.shot;
+              const lastShot = group.items[group.items.length - 1]?.shot;
+              const rangeTag = `${firstShot?.sceneShotId || `S${group.items[0].originalIdx + 1}`} to ${lastShot?.sceneShotId || `S${group.items[group.items.length - 1].originalIdx + 1}`}`;
+
+              return (
+                <React.Fragment key={group.sceneTag}>
+                  {/* CINEMATIC SCENE GROUP HEADING BANNER ROW */}
+                  <tr className="bg-gradient-to-r from-cyan-950/90 via-zinc-900 to-purple-950/90 border-y-2 border-cyan-500/50 backdrop-blur-md sticky top-[33px] z-20 shadow-md select-none">
+                    <td colSpan={filteredSlots.length + 2} className="p-2 px-3">
+                      <div className="flex items-center justify-between">
+                        <div 
+                          className="flex items-center gap-2.5 cursor-pointer"
+                          onClick={() => toggleSceneCollapse(group.sceneTag)}
+                        >
+                          <button 
+                            type="button" 
+                            className="w-5 h-5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 font-bold flex items-center justify-center text-xs border border-cyan-500/40"
+                          >
+                            {isCollapsed ? '+' : '−'}
+                          </button>
+                          <span className="px-2.5 py-0.5 rounded-lg bg-cyan-500 text-zinc-950 font-black text-xs font-mono shadow">
+                            🎬 {group.sceneTag}
+                          </span>
+                          <h3 className="text-xs font-bold text-white font-mono tracking-wide uppercase truncate max-w-xl">
+                            {group.heading}
+                          </h3>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10.5px] font-mono text-cyan-300 font-bold bg-zinc-950/80 px-2.5 py-0.5 rounded-md border border-cyan-500/30">
+                            {group.items.length} {group.items.length === 1 ? 'Shot' : 'Shots'} ({rangeTag})
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* SHOT ROWS IN THIS SCENE */}
+                  {!isCollapsed && group.items.map(({ shot, originalIdx: shotIdx }) => {
+                    const isActive = shotIdx === activeShotIndex;
+                    const isMuted = !!shot.isMuted;
+                    const isBeingDragged = draggedShotIdx === shotIdx;
+                    const isTargetDrop = dragOverShotIdx === shotIdx;
 
               // MINIMIZED MUTED ROW
               if (isMuted) {
@@ -428,7 +519,10 @@ export default function SpreadsheetView({
                 </tr>
               );
             })}
-          </tbody>
+          </React.Fragment>
+        );
+      })}
+    </tbody>
         </table>
       </div>
 
