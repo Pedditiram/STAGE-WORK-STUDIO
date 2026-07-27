@@ -163,11 +163,24 @@ ${promptNarrative.trim()}`;
       return cleaned.trim();
     };
 
+    const SUBJECT_ROLE_LABELS = [
+      "Lead Subject",
+      "Co-Artist",
+      "Action Ref / Prop",
+      "Supporting Ref",
+      "Crowd / Army",
+      "Scene Environment",
+      "Ambience / Haze",
+      "Style & Color Ref",
+      "VFX & Special FX"
+    ];
+
     const subjectsLines = [];
     for (let i = 1; i <= 9; i++) {
       const rawVal = subjectsMap.get(i) || '';
       const cleanVal = sanitizeSubjectNameTag(rawVal);
-      subjectsLines.push(`Image_${i} = ${cleanVal}`);
+      const role = SUBJECT_ROLE_LABELS[i - 1];
+      subjectsLines.push(`Image_${i} (${role}) = ${cleanVal}`);
     }
 
     // Extract duration (default 4s)

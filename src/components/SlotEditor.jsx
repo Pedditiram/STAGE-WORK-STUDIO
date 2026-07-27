@@ -478,11 +478,24 @@ export default function SlotEditor({
                 <div className="space-y-1.5">
                   <span className="text-[10.5px] font-bold text-cyan-300 font-mono block">🖼️ Image Reference Slots (image_1 to image_9):</span>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                    {[
+                      { num: 1, label: 'Lead Subject' },
+                      { num: 2, label: 'Co-Artist' },
+                      { num: 3, label: 'Action Ref / Prop' },
+                      { num: 4, label: 'Supporting Ref' },
+                      { num: 5, label: 'Crowd / Army' },
+                      { num: 6, label: 'Scene Environment' },
+                      { num: 7, label: 'Ambience / Haze' },
+                      { num: 8, label: 'Style & Color Ref' },
+                      { num: 9, label: 'VFX & Special FX' }
+                    ].map(({ num, label }) => {
                       const k = `image_${num}`;
                       return (
-                        <div key={k} className="flex items-center gap-1 bg-zinc-950 p-1 px-1.5 rounded-lg border border-zinc-800 focus-within:border-cyan-500">
-                          <span className="text-[11px] font-bold text-amber-400 font-mono w-14 shrink-0 text-right">image_{num}</span>
+                        <div key={k} className="flex flex-col gap-0.5 bg-zinc-950 p-1.5 rounded-lg border border-zinc-800 focus-within:border-cyan-500">
+                          <div className="flex items-center justify-between text-[10px] font-mono">
+                            <span className="font-bold text-amber-400">image_{num}</span>
+                            <span className="text-zinc-400 text-[9px] font-semibold">{label}</span>
+                          </div>
                           <input
                             type="text"
                             value={currentMap[k] || ''}
@@ -490,8 +503,8 @@ export default function SlotEditor({
                               const updated = { ...currentMap, [k]: e.target.value };
                               onChange(buildMatrixStr(updated));
                             }}
-                            placeholder={`Subject ${num}`}
-                            className="w-full bg-zinc-900 text-white border border-zinc-700/80 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-amber-400"
+                            placeholder={label}
+                            className="w-full bg-zinc-900 text-white border border-zinc-700/80 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-amber-400 font-bold"
                           />
                         </div>
                       );
