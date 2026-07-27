@@ -279,7 +279,7 @@ export default function AdminSettingsModal({
     return localStorage.getItem('sps_byteplus_model_id') || 'seed-2-0-pro-260328';
   });
   const [imageGenEngine, setImageGenEngine] = useState(() => {
-    return localStorage.getItem('sps_image_gen_engine') || 'byteplus_seedream';
+    return localStorage.getItem('sps_image_gen_engine') || 'google_gemini_nano';
   });
 
   // 3. VIDEO GENERATION ENGINE API KEY
@@ -1514,7 +1514,37 @@ export default function AdminSettingsModal({
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-xs font-bold font-mono text-emerald-400 border-b border-emerald-500/20 pb-1">
                     <ImageIcon className="w-4 h-4 text-emerald-400" />
-                    SECTION 1: IMAGE GENERATION API KEYS (SEEDREAM 5.0 & MAGNIFIC 2K)
+                    SECTION 1: IMAGE GENERATION ENGINES (GEMINI NANO BANNA, SEEDREAM 5.0 & MAGNIFIC 2K)
+                  </div>
+
+                  {/* 1A. GOOGLE GEMINI NANO BANNA / IMAGEN 3 ENGINE CARD */}
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-zinc-900 via-amber-950/30 to-zinc-900 border border-amber-500/50 space-y-3 shadow-md">
+                    <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                      <label className="text-xs font-bold text-white flex items-center gap-2 font-mono">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        ✨ Google Gemini Nano Banna / Imagen 3 Cinema Engine:
+                      </label>
+                      
+                      {imageGenEngine === 'google_gemini_nano' || imageGenEngine === 'google_gemini' || !imageGenEngine ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/50 font-mono text-xs font-bold shadow-sm shadow-amber-950">
+                          <CheckCircle2 className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+                          <span>✓ Active Default Engine (Gemini Nano Banna)</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleImageEngineChange('google_gemini_nano')}
+                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-amber-400 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          ⭐ Use Google Gemini Nano Banna
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[11.5px] text-zinc-300 font-mono leading-relaxed">
+                      High-fidelity 2K cinematic image generation engine powered by Google Gemini Nano Banna / Imagen 3 with native 25-craft prompt integration.
+                    </p>
                   </div>
 
                   {/* 1A. BYTEPLUS SEEDREAM 5.0 API KEY CARD */}
