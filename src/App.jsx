@@ -3,6 +3,7 @@ import Header from './components/Header';
 import SpreadsheetView from './components/SpreadsheetView';
 import StudioFormView from './components/StudioFormView';
 import DirectorCanvas from './components/DirectorCanvas';
+import ScreenplayEditor from './components/ScreenplayEditor';
 import TemplateSelector from './components/TemplateSelector';
 import PromptCompilerModal from './components/PromptCompilerModal';
 import AdminSettingsModal from './components/AdminSettingsModal';
@@ -1124,6 +1125,18 @@ export default function App() {
                 </div>
 
               </div>
+            </div>
+          )}
+
+          {/* TAB 0: 📝 SCREENPLAY WRITER STUDIO */}
+          {activeView === 'screenplay' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <ScreenplayEditor
+                shots={shots}
+                onUpdateShotsFromScript={setShots}
+                onNavigateToView={setActiveView}
+                projectTitle={projectTitle}
+              />
             </div>
           )}
 

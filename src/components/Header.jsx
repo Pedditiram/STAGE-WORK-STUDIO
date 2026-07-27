@@ -206,6 +206,20 @@ export default function Header({
 
         {/* CENTER: Studio View Navigation Tabs */}
         <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveView("screenplay")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+              activeView === "screenplay"
+                ? "bg-amber-400 text-zinc-950 font-black shadow-md"
+                : "text-zinc-400 hover:text-amber-300 hover:bg-zinc-800"
+            }`}
+            title="Screenplay Writer Studio (Direct Screenplay Editing & Live Auto-Sync)"
+          >
+            <Scroll className="w-4 h-4 text-amber-950" />
+            <span>Screenplay Writer</span>
+          </button>
+
           {showCanvasTab && (
             <button
               type="button"
