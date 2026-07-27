@@ -4,15 +4,15 @@
   "description": "Cinema Production Studio Project with 27 shots",
   "targetModel": "Seedance 2.0",
   "aspectRatio": "2.39:1 Anamorphic",
-  "roomId": "SPS-CLOUD-8821_kara_dushan_kara_dushan",
-  "lastModified": "7/27/2026, 1:50:31 PM",
+  "roomId": "SPS-CLOUD-8821_kara_dushan",
+  "lastModified": "7/27/2026, 2:09:02 PM",
   "shots": [
     {
       "sceneShotId": "S01-A",
       "shotComposition": "Extreme Wide Aerial Shot",
       "cameraMotionTag": "Slow Forward Crane Tracking",
       "subjectLightingTag": "Harsh Crimson Sunlight Cut By Dust",
-      "subjectColorTag": "Dark Iron Armour, Blood Red Banners",
+      "subjectColorTag": "[Palette: Dark Fantasy Emerald & Bronze (#0b3b17 | #1c1c1c | #cd7f32 | #4a2e12)]",
       "backgroundLightingTag": "Backlit Sunset Haze",
       "backgroundColorTag": "Deep Amber and Burnt Ochre",
       "atmosphereVolumetricsTag": "Heavy Dust Plumes and Rising Heat Haze",

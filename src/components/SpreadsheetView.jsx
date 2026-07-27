@@ -254,14 +254,24 @@ export default function SpreadsheetView({
               <th className="p-1.5 w-[36px] min-w-[36px] text-center border-r-2 border-zinc-800 bg-zinc-900 sticky left-0 z-40 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                 #
               </th>
-              <th className="p-1.5 w-[80px] min-w-[80px] text-center border-r border-zinc-800 bg-zinc-900">
+              <th className="p-1.5 w-[80px] min-w-[80px] text-center border-r-2 border-zinc-800 bg-zinc-900 sticky left-[36px] z-40 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                 Actions
               </th>
-              {filteredSlots.map((slot) => (
-                <th key={slot.key} className="p-1.5 px-2.5 border-r border-zinc-800 min-w-[145px] max-w-[210px] font-mono text-cyan-300">
-                  {slot.label}
-                </th>
-              ))}
+              {filteredSlots.map((slot) => {
+                const isStickySlot = slot.key === 'sceneShotId';
+                return (
+                  <th 
+                    key={slot.key} 
+                    className={`p-1.5 px-2.5 font-mono text-cyan-300 ${
+                      isStickySlot 
+                        ? 'w-[140px] min-w-[140px] sticky left-[116px] z-40 bg-zinc-900 border-r-2 border-zinc-700 shadow-[4px_0_10px_rgba(0,0,0,0.5)]' 
+                        : 'border-r border-zinc-800 min-w-[145px] max-w-[210px]'
+                    }`}
+                  >
+                    {slot.label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
 
@@ -275,9 +285,9 @@ export default function SpreadsheetView({
               return (
                 <React.Fragment key={group.sceneTag}>
                   {/* CINEMATIC SCENE GROUP HEADING BANNER ROW */}
-                  <tr className="bg-gradient-to-r from-cyan-950/90 via-zinc-900 to-purple-950/90 border-y-2 border-cyan-500/50 backdrop-blur-md sticky top-[33px] z-20 shadow-md select-none">
+                  <tr className="bg-gradient-to-r from-cyan-950/90 via-zinc-900 to-purple-950/90 border-y-2 border-cyan-500/50 backdrop-blur-md sticky top-[31px] z-20 shadow-md select-none">
                     <td colSpan={filteredSlots.length + 2} className="p-2 px-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between sticky left-2 z-20 max-w-fit gap-4">
                         <div 
                           className="flex items-center gap-2.5 cursor-pointer"
                           onClick={() => toggleSceneCollapse(group.sceneTag)}
@@ -340,7 +350,7 @@ export default function SpreadsheetView({
                         <span className="text-red-300 font-bold text-xs">{shotIdx + 1}</span>
                       </div>
                     </td>
-                    <td className="p-1 border-r border-red-500/40 text-center bg-red-950/90">
+                    <td className="p-1 border-r border-red-500/40 text-center bg-red-950/90 sticky left-[36px] z-20 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                       <button
                         type="button"
                         onClick={(e) => { 
@@ -355,7 +365,7 @@ export default function SpreadsheetView({
                       </button>
                     </td>
                     <td colSpan={filteredSlots.length} className="px-3 py-1 text-red-200 font-mono text-xs">
-                      <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center justify-between gap-4 sticky left-[116px] z-20 max-w-fit">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                           <span className="text-red-400 font-bold tracking-wide">MUTED SHOT #{shotIdx + 1}</span>
@@ -401,7 +411,7 @@ export default function SpreadsheetView({
                     </div>
                   </td>
 
-                  <td className="p-1 border-r border-zinc-800 bg-zinc-950 group-hover:bg-zinc-900">
+                  <td className="p-1 border-r-2 border-zinc-800 bg-zinc-950 group-hover:bg-zinc-900 sticky left-[36px] z-20 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                     <div className="flex items-center justify-center gap-1">
                       <button
                         type="button"
@@ -460,9 +470,17 @@ export default function SpreadsheetView({
                     const matchCurr = rawCurrId.match(/^(SC\d+)/i);
                     const currentSceneId = matchCurr ? matchCurr[1].toUpperCase() : `Scene #${shotIdx + 1}`;
                     const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+                    const isStickySlot = slot.key === 'sceneShotId';
 
                     return (
-                      <td key={slot.key} className="p-2 border-r border-zinc-800/80 align-top">
+                      <td 
+                        key={slot.key} 
+                        className={`p-2 align-top ${
+                          isStickySlot 
+                            ? 'w-[140px] min-w-[140px] sticky left-[116px] z-20 bg-zinc-950 group-hover:bg-zinc-900 border-r-2 border-zinc-800 shadow-[4px_0_10px_rgba(0,0,0,0.5)]' 
+                            : 'border-r border-zinc-800/80 min-w-[145px] max-w-[210px]'
+                        }`}
+                      >
                         <SlotEditor
                           slotConfig={slot}
                           value={shot[slot.key] || ''}
