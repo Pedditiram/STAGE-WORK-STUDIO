@@ -180,6 +180,64 @@ export default function App() {
   // Director Canvas Keyframe Mode Sync ('first_frame' | 'last_frame' | 'transition')
   const [canvasKeyframeMode, setCanvasKeyframeMode] = useState('transition');
 
+  // =========================================================================
+  // UNIVERSAL UNDO / REDO HISTORY ENGINE STATE & HANDLERS
+  // =========================================================================
+  const [historyStack, setHistoryStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+
+  const updateShotsWithHistory = (newShots) => {
+    setHistoryStack(prev => [...prev.slice(-50), shots]);
+    setRedoStack([]);
+    setShots(newShots);
+  };
+
+  const handleUndo = () => {
+    if (historyStack.length === 0) return;
+    const previousShots = historyStack[historyStack.length - 1];
+    const newHistory = historyStack.slice(0, historyStack.length - 1);
+    
+    setRedoStack(prev => [shots, ...prev]);
+    setHistoryStack(newHistory);
+    setShots(previousShots);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const nextShots = redoStack[0];
+    const newRedo = redoStack.slice(1);
+    
+    setHistoryStack(prev => [...prev, shots]);
+    setRedoStack(newRedo);
+    setShots(nextShots);
+  };
+
+  // Keyboard shortcut listener for Cmd+Z / Ctrl+Z (Undo) and Cmd+Shift+Z / Ctrl+Y (Redo)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const targetTag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      if ((targetTag === 'input' || targetTag === 'textarea') && !e.ctrlKey && !e.metaKey) {
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyStack, redoStack, shots]);
+
   // Cloud & Admin & AI State
   const [roomId, setRoomId] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -645,7 +703,7 @@ export default function App() {
     } else {
       newShots[index] = updatedShotOrKey;
     }
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     syncToCloud({ shots: newShots });
   };
 
@@ -669,7 +727,7 @@ export default function App() {
       characterEyeLooks: "[Eye Look: Direct Eye Contact with Camera Lens]"
     };
     const newShots = [...shots, newShot];
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     setActiveShotIndex(shots.length);
     syncToCloud({ shots: newShots });
   };
@@ -691,7 +749,7 @@ export default function App() {
       archivedAt: new Date().toLocaleTimeString() + ' - ' + new Date().toLocaleDateString()
     };
 
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     syncToCloud({ shots: newShots });
   };
 
@@ -700,7 +758,7 @@ export default function App() {
     if (newShots[index]) {
       const { isArchived, archivedAt, ...rest } = newShots[index];
       newShots[index] = rest;
-      setShots(newShots);
+      updateShotsWithHistory(newShots);
       syncToCloud({ shots: newShots });
     }
   };
@@ -712,7 +770,7 @@ export default function App() {
         ...newShots[index],
         isMuted: !newShots[index].isMuted
       };
-      setShots(newShots);
+      updateShotsWithHistory(newShots);
       syncToCloud({ shots: newShots });
     }
   };
@@ -723,7 +781,7 @@ export default function App() {
     const cloned = { ...shots[index] };
     const newShots = [...shots];
     newShots.splice(index + 1, 0, cloned);
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     setActiveShotIndex(index + 1);
     syncToCloud({ shots: newShots });
   };
@@ -737,7 +795,7 @@ export default function App() {
     const temp = newShots[index];
     newShots[index] = newShots[targetIdx];
     newShots[targetIdx] = temp;
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     setActiveShotIndex(targetIdx);
     syncToCloud({ shots: newShots });
   };
@@ -747,7 +805,7 @@ export default function App() {
     const newShots = [...shots];
     const [movedShot] = newShots.splice(fromIndex, 1);
     newShots.splice(toIndex, 0, movedShot);
-    setShots(newShots);
+    updateShotsWithHistory(newShots);
     setActiveShotIndex(toIndex);
     syncToCloud({ shots: newShots });
   };
@@ -989,6 +1047,12 @@ export default function App() {
         onChangeColorTheme={handleSetColorTheme}
         presetProfile={presetProfile}
         onChangePresetProfile={handleSetPresetProfile}
+        canUndo={historyStack.length > 0}
+        canRedo={redoStack.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        undoCount={historyStack.length}
+        redoCount={redoStack.length}
       />
 
       {/* Main Studio Body View */}

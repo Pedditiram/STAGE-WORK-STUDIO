@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Film, Folder, Wand2, Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown, RefreshCw
+  Film, Folder, Wand2, Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, Save, FolderKanban, Zap, CheckCircle2, Video, Download, Upload, Check, Edit3, Moon, Sun, Scroll, HelpCircle, ChevronDown, RefreshCw, RotateCcw, RotateCw
 } from 'lucide-react';
 
 export default function Header({ 
@@ -33,7 +33,13 @@ export default function Header({
   colorTheme = 'dark',
   onChangeColorTheme,
   presetProfile = 'mythological',
-  onChangePresetProfile
+  onChangePresetProfile,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  undoCount = 0,
+  redoCount = 0
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
@@ -291,6 +297,49 @@ export default function Header({
             )}
           </button>
           
+          {/* UNDO & REDO UNIVERSAL ACTION BUTTONS */}
+          <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo}
+              className={`p-1.5 px-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                canUndo
+                  ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm active:scale-95"
+                  : "bg-zinc-950 text-zinc-600 border border-zinc-900 cursor-not-allowed opacity-50"
+              }`}
+              title="Undo last edit (Cmd+Z / Ctrl+Z)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Undo</span>
+              {canUndo && (
+                <span className="text-[9px] bg-amber-400 text-zinc-950 px-1 rounded-full font-black">
+                  {undoCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className={`p-1.5 px-2.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                canRedo
+                  ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm active:scale-95"
+                  : "bg-zinc-950 text-zinc-600 border border-zinc-900 cursor-not-allowed opacity-50"
+              }`}
+              title="Redo last undone edit (Cmd+Shift+Z / Ctrl+Y)"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Redo</span>
+              {canRedo && (
+                <span className="text-[9px] bg-cyan-400 text-zinc-950 px-1 rounded-full font-black">
+                  {redoCount}
+                </span>
+              )}
+            </button>
+          </div>
+
           {/* Sync All Projects & Data to Cloud Database Button */}
           <button
             type="button"

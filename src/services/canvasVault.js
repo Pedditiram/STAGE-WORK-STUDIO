@@ -50,7 +50,7 @@ export function downloadAllCanvasImagesToDisk(imagesMap, projectTitle = "Stage_P
     return;
   }
 
-  const cleanTitle = (projectTitle || 'Stage_Production_Studio').replace(/[^a-[A-Z0-9_]/gi, '_');
+  const cleanTitle = (projectTitle || 'Stage_Production_Studio').replace(/[^a-zA-Z0-9_]/g, '_');
   const entries = Object.entries(imagesMap);
   let savedCount = 0;
 
