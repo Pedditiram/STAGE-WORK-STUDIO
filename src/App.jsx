@@ -14,6 +14,7 @@ import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
 import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
+import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
