@@ -490,16 +490,16 @@ export default function DirectorCanvas({
     const isCloseUp = compLower.includes('close') || compLower.includes('cu') || compLower.includes('portrait');
 
     let fullPromptText = '';
-    const nanoQualityString = "ultra photorealistic 8k IMAX 70mm movie still, sharp crisp focus, highly detailed facial features, natural skin texture, masterpiece cinema lighting, no painting, non-abstract, 8k resolution, award winning cinematography";
+    const nanoQualityString = "cinematic 35mm film photograph, award-winning IMAX 70mm movie still, sharp focus on facial features, skin pore texture, natural lighting, photorealism, 8k resolution, hyperrealistic, non-abstract, no art, no illustration, no painting";
 
     if (isWide) {
-      fullPromptText = `${nanoQualityString}, ${comp}, panoramic landscape, ${envContext}, sharp detailed figure of ${charDescr} in ${movement}, ${coArtist}, ${subjectLighting}, 24mm wide angle anamorphic lens, epic scale`;
+      fullPromptText = `${nanoQualityString}, ${comp}, panoramic landscape photo, ${envContext}, sharp detailed figure of ${charDescr} in ${movement}, ${coArtist}, ${subjectLighting}, 24mm wide angle anamorphic lens, epic scale`;
     } else if (isCloseUp) {
-      fullPromptText = `${nanoQualityString}, facial portrait close-up, sharp macro focus on eyes and face of ${charDescr}, expression: ${expression}, ${movement}, ${subjectLighting}, 85mm prime lens`;
+      fullPromptText = `${nanoQualityString}, facial portrait photograph, sharp macro focus on eyes and face of ${charDescr}, expression: ${expression}, ${movement}, ${subjectLighting}, 85mm prime lens`;
     } else if (keyframeMode === 'last_frame') {
-      fullPromptText = `${nanoQualityString}, ${comp}, ${charDescr} executing ${movement}, expression: ${expression}, ${coArtist}, ${envContext}, ${subjectLighting}`;
+      fullPromptText = `${nanoQualityString}, ${comp}, photo of ${charDescr} executing ${movement}, expression: ${expression}, ${coArtist}, ${envContext}, ${subjectLighting}`;
     } else {
-      fullPromptText = `${nanoQualityString}, ${comp}, ${charDescr}, ${envContext}, ${subjectLighting}, ${subjectColor}, expression: ${expression}`;
+      fullPromptText = `${nanoQualityString}, ${comp}, photo of ${charDescr}, ${envContext}, ${subjectLighting}, ${subjectColor}, expression: ${expression}`;
     }
 
     setActivePromptSent(fullPromptText);
@@ -764,11 +764,21 @@ export default function DirectorCanvas({
                 </span>
               </div>
             ) : activeGeneratedImageUrl ? (
-              <img
-                src={activeGeneratedImageUrl}
-                alt="AI Generated Storyboard Render"
-                className="w-full h-full object-cover"
-              />
+              <div className="relative w-full h-full">
+                <img
+                  src={activeGeneratedImageUrl}
+                  alt="AI Generated Storyboard Render"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950/85 backdrop-blur-md border border-purple-500/40 text-[10px] font-mono text-purple-300 font-bold shadow-lg pointer-events-none">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>
+                    {activeGeneratedImageUrl.includes('pollinations') 
+                      ? '⚡ Nano Banana Pro (High-Res 2K Realism Fallback)'
+                      : `✨ ${engineBadgeText}`}
+                  </span>
+                </div>
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-3 text-zinc-400 p-6 text-center">
                 <Wand2 className="w-10 h-10 text-purple-400" />
