@@ -291,7 +291,7 @@ export default function SpreadsheetView({
                           <span className="px-2.5 py-0.5 rounded-lg bg-cyan-500 text-zinc-950 font-black text-xs font-mono shadow">
                             🎬 {group.sceneTag}
                           </span>
-                          <h3 className="text-xs font-bold text-white font-mono tracking-wide uppercase truncate max-w-xl">
+                          <h3 className="text-xs font-black text-[#e5a900] font-mono tracking-wide uppercase truncate max-w-xl drop-shadow-sm">
                             {group.heading}
                           </h3>
                         </div>
