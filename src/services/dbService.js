@@ -144,6 +144,9 @@ export async function fetchCollaboratorsFromCloud() {
 
 // 3. Real-time Live Listener for Collaborator Access Updates
 export function subscribeToCollaboratorUpdates(onUsersReceived) {
+  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
+  if (!isCloudMode) return () => {};
+
   let unsubscribe = () => {};
   
   const interval = setInterval(async () => {
@@ -154,7 +157,7 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
         onUsersReceived(users);
       }
     } catch (e) {}
-  }, 25000);
+  }, 60000);
 
   if (db) {
     try {
@@ -418,8 +421,11 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
   }
 }
 
-// 8. Subscribe to Active Editing Slots in Real Time (3.5s fast polling for conflict detection)
+// 8. Subscribe to Active Editing Slots in Real Time (Conflict detection in cloud mode)
 export function subscribeToActiveEditingSlots(currentEmail, callback) {
+  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
+  if (!isCloudMode) return () => {};
+
   const checkPresence = async () => {
     if (typeof document !== 'undefined' && document.hidden) return;
     try {
@@ -463,7 +469,7 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
   };
 
   checkPresence();
-  const interval = setInterval(checkPresence, 3500);
+  const interval = setInterval(checkPresence, 15000);
 
   return () => clearInterval(interval);
 }
