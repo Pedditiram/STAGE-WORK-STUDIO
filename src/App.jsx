@@ -1092,7 +1092,7 @@ export default function App() {
                   projectGeneratedImages={projectGeneratedImages}
                   onEmbedImage={handleEmbedImageToProject}
                   onOpenAdminSettings={(tab) => {
-                    setAdminCategoryTab(tab || 'image');
+                    setAdminModalTab(tab || 'image');
                     setIsAdminModalOpen(true);
                   }}
                 />

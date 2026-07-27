@@ -1,0 +1,15 @@
+{
+  "sps_app_version": "2.5",
+  "savedAt": "2026-07-27T11:55:00Z",
+  "allotted_settings_folder": "/Users/pedditiram/Documents/PROMPT ENGINEERING/settings/",
+  "allotted_storage_folder": "/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/",
+  "settings": {
+    "sps_llm_provider": "google_gemini",
+    "sps_image_gen_engine": "google_gemini_nano",
+    "sps_color_theme": "noir",
+    "sps_enable_canvas_tab": true,
+    "sps_app_version_mode": "cloud",
+    "sps_magnific_email": "pedditiramreddy999@gmail.com",
+    "sps_authorized_user_email": "pedditiram@gmail.com"
+  }
+}
