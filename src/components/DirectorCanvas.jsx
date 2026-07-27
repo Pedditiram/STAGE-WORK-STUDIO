@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Video, Eye, Sun, Sparkles, Layers, Shield, Zap, Film, Play, FastForward, Box, Palette, Image as ImageIcon, Loader2, Download, Wand2, CheckCircle2, RefreshCw, Edit3, Users, Building, Compass, Smile, HardDrive } from 'lucide-react';
+import { Video, Eye, Sun, Sparkles, Layers, Shield, Zap, Film, Play, FastForward, Box, Palette, Image as ImageIcon, Loader2, Download, Wand2, CheckCircle2, RefreshCw, Edit3, Users, Building, Compass, Smile, HardDrive, AlertCircle, Settings } from 'lucide-react';
 import { getStoredCanvasVaultImages, saveCanvasVaultImage, downloadAllCanvasImagesToDisk } from '../services/canvasVault';
 
 // Safe Cross-Browser Rounded Rectangle helper for Safari / WebKit compatibility
@@ -29,7 +29,8 @@ export default function DirectorCanvas({
   keyframeMode: externalKeyframeMode,
   setKeyframeMode: externalSetKeyframeMode,
   projectGeneratedImages = {},
-  onEmbedImage
+  onEmbedImage,
+  onOpenAdminSettings
 }) {
   const canvasRef = useRef(null);
   
@@ -441,6 +442,11 @@ export default function DirectorCanvas({
   // -------------------------------------------------------------
   const [activePromptSent, setActivePromptSent] = useState('');
   const [genProgress, setGenProgress] = useState(0);
+  const [engineErrorModal, setEngineErrorModal] = useState({
+    isOpen: false,
+    engineName: '',
+    errorMsg: ''
+  });
 
   // -------------------------------------------------------------
   // AI IMAGE GENERATION / REGENERATION TRIGGER (Multi-Engine & Rich 25-Slot Prompting)
@@ -570,11 +576,18 @@ export default function DirectorCanvas({
       } catch (err) {}
     }
 
-    // High-precision Nano Banana Pro 2K ultra-photorealistic fallback generator
+    // STRICT DIRECTIVE: DO NOT SILENTLY FALLBACK! SHOW ERROR POPUP IF MODEL IS UNAVAILABLE
     if (!imageUrl) {
-      const randomSeed = Math.floor(Math.random() * 899999) + 100000;
-      const ultraPrompt = `${fullPromptText}, award-winning IMAX 70mm movie still, sharp focus on facial features, skin pore texture, photorealism, master cinema lighting, non-abstract, no blur`;
-      imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(ultraPrompt)}?width=1280&height=720&seed=${randomSeed}&model=flux-realism&nologo=true&enhance=true`;
+      clearInterval(progressTimer);
+      setIsGeneratingImage(false);
+      setGenProgress(0);
+
+      setEngineErrorModal({
+        isOpen: true,
+        engineName: activeEngineName,
+        errorMsg: `The active image generation engine (${activeEngineName}) could not be reached or returned an authorization/CORS error. Fallback generation is strictly disabled. Please configure your official API key or endpoint in Admin Settings.`
+      });
+      return;
     }
 
     const img = new Image();
@@ -896,6 +909,56 @@ export default function DirectorCanvas({
           {activePromptSent || `masterpiece 8k photorealistic cinematic film still, ${shot?.shotComposition || 'Wide Establishing Shot'}, Lord Rama, ancient Indian prince warrior with Kodanda bow and quiver on shoulder in golden silk dhoti, ${shot?.actionEnvContext || 'Dense jungle clearing at Panchavati with swirling dust storm'}, ${shot?.subjectLightingTag || 'Divine Golden Key Light'}, 8k highly detailed`}
         </p>
       </div>
+
+      {/* STRICT ENGINE UNAVAILABLE ERROR POPUP MODAL */}
+      {engineErrorModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-red-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-3 text-red-400 border-b border-red-500/20 pb-3">
+              <div className="p-2.5 bg-red-950/80 border border-red-500/40 rounded-xl">
+                <AlertCircle className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-mono font-bold text-sm text-white">Image Generation Engine Unavailable</h3>
+                <p className="text-[11px] font-mono text-red-300">Strict Fallback Prevention Active</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs font-mono text-zinc-300 leading-relaxed bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
+              <p className="text-amber-300 font-bold">⚠️ Could not generate image using:</p>
+              <p className="text-purple-300 font-bold pl-2 border-l-2 border-purple-500">
+                {engineErrorModal.engineName}
+              </p>
+              <p className="text-zinc-400 text-[11px] pt-1">
+                {engineErrorModal.errorMsg}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              {onOpenAdminSettings && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEngineErrorModal({ isOpen: false, engineName: '', errorMsg: '' });
+                    onOpenAdminSettings('image');
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs shadow flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <Settings className="w-4 h-4 text-purple-200" />
+                  ⚙️ Open Admin Settings
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setEngineErrorModal({ isOpen: false, engineName: '', errorMsg: '' })}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono font-bold text-xs transition-colors cursor-pointer"
+              >
+                ✖ Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1091,6 +1091,10 @@ export default function App() {
                   setKeyframeMode={setCanvasKeyframeMode}
                   projectGeneratedImages={projectGeneratedImages}
                   onEmbedImage={handleEmbedImageToProject}
+                  onOpenAdminSettings={(tab) => {
+                    setAdminCategoryTab(tab || 'image');
+                    setIsAdminModalOpen(true);
+                  }}
                 />
               </div>
 
