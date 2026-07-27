@@ -148,9 +148,13 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     } catch (e) {}
   };
 
-  // Poll immediately on mount
-  pollCloudDatabase();
-  const pollInterval = setInterval(pollCloudDatabase, 1500);
+  // Poll only if app is in Cloud Mode
+  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
+  let pollInterval = null;
+  if (isCloudMode) {
+    pollCloudDatabase();
+    pollInterval = setInterval(pollCloudDatabase, 15000);
+  }
 
   let unsubscribeFirestore = () => {};
   if (db) {
@@ -165,7 +169,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   }
 
   return () => {
-    clearInterval(pollInterval);
+    if (pollInterval) clearInterval(pollInterval);
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorageChange);
     }

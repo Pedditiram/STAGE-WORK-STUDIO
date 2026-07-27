@@ -237,6 +237,9 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
 
 // 5. Subscribe to Real-Time Project Library Updates from Cloud
 export function subscribeToProjectLibraryUpdates(callback) {
+  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
+  if (!isCloudMode) return () => {};
+
   initDatabase();
 
   const checkUpdates = async () => {
@@ -249,7 +252,7 @@ export function subscribeToProjectLibraryUpdates(callback) {
   };
 
   checkUpdates();
-  const interval = setInterval(checkUpdates, 3000);
+  const interval = setInterval(checkUpdates, 15000);
 
   let unsubscribe = () => {};
   if (db && typeof window !== 'undefined') {
