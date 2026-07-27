@@ -440,6 +440,7 @@ export default function DirectorCanvas({
   // AI IMAGE GENERATION / REGENERATION TRIGGER
   // -------------------------------------------------------------
   const [activePromptSent, setActivePromptSent] = useState('');
+  const [genProgress, setGenProgress] = useState(0);
 
   // -------------------------------------------------------------
   // AI IMAGE GENERATION / REGENERATION TRIGGER (Multi-Engine & Rich 25-Slot Prompting)
@@ -447,6 +448,11 @@ export default function DirectorCanvas({
   const handleGenerateAIImage = async () => {
     setIsGeneratingImage(true);
     setRenderStyle('generated_ai_image');
+    setGenProgress(12);
+
+    const progressTimer = setInterval(() => {
+      setGenProgress(prev => (prev < 90 ? prev + Math.floor(Math.random() * 10) + 6 : 94));
+    }, 250);
 
     const activeEngineName = getEngineNameFromSettings();
     setEngineBadgeText(activeEngineName);
@@ -574,12 +580,16 @@ export default function DirectorCanvas({
     const img = new Image();
     img.src = imageUrl;
     const handleSuccess = () => {
+      clearInterval(progressTimer);
+      setGenProgress(100);
       setGeneratedImages(prev => {
         const updated = { ...prev, [key]: imageUrl };
         saveCanvasVaultImage(key, imageUrl);
         return updated;
       });
-      setIsGeneratingImage(false);
+      setTimeout(() => {
+        setIsGeneratingImage(false);
+      }, 300);
       if (onEmbedImage) {
         onEmbedImage(key, imageUrl);
       }
@@ -598,7 +608,7 @@ export default function DirectorCanvas({
       onEmbedImage(currentShotKey, activeGeneratedImageUrl);
     }
     setIsEmbeddedToast(true);
-    setTimeout(() => setIsEmbeddedToast(false), 2500);
+    setTimeout(() => setIsEmbeddedToast(false), 2000);
   };
 
   return (
@@ -757,11 +767,22 @@ export default function DirectorCanvas({
         {renderStyle === 'generated_ai_image' ? (
           <div className="w-full h-full relative flex items-center justify-center bg-zinc-950">
             {isGeneratingImage ? (
-              <div className="flex flex-col items-center gap-3 text-purple-400">
-                <Loader2 className="w-8 h-8 animate-spin" />
-                <span className="text-xs font-mono font-bold animate-pulse">
-                  Generating {engineBadgeText} Image...
-                </span>
+              <div className="flex flex-col items-center gap-3.5 text-purple-300 w-80 p-5 rounded-2xl bg-zinc-900/90 border border-purple-500/40 shadow-2xl backdrop-blur-md">
+                <div className="flex items-center justify-between w-full text-xs font-mono font-bold">
+                  <span className="flex items-center gap-2 text-purple-200">
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                    <span>Generating Image...</span>
+                  </span>
+                  <span className="text-amber-300 text-sm font-extrabold font-mono">{genProgress}%</span>
+                </div>
+
+                <div className="w-full h-3 bg-zinc-950 rounded-full overflow-hidden border border-purple-500/40 p-0.5 shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-600 via-pink-500 to-amber-400 rounded-full transition-all duration-300 shadow-md"
+                    style={{ width: `${genProgress}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-mono text-zinc-400">Rendering 2K Storyboard Keyframe</span>
               </div>
             ) : activeGeneratedImageUrl ? (
               <div className="relative w-full h-full">
@@ -788,7 +809,7 @@ export default function DirectorCanvas({
                 <button
                   type="button"
                   onClick={handleGenerateAIImage}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs shadow flex items-center gap-2 hover:brightness-110 transition-all font-mono"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs shadow flex items-center gap-2 hover:brightness-110 transition-all font-mono cursor-pointer"
                 >
                   <Wand2 className="w-4 h-4 text-amber-300" />
                   ✨ Generate {engineBadgeText}
@@ -815,17 +836,26 @@ export default function DirectorCanvas({
             {keyframeMode === 'first_frame' ? 'FRAME 0' : (keyframeMode === 'last_frame' ? 'FRAME N' : 'INTERPOLATION')}
           </span>
         </div>
+      </div>
 
-        {/* TOP RIGHT GENERATE / EMBED IMAGE BUTTONS ON THE CORNER OF CANVAS */}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+      {/* CONTROL TOOLBAR DIRECTLY UNDER THE IMAGE CANVAS */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 shadow">
+        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+          <span className="font-bold text-cyan-400 flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5" />
+            {shot?.sceneShotId || 'SC01_SH01'} Control Bar
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
           {activeGeneratedImageUrl && (
             <button
               type="button"
               onClick={handleManualEmbed}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs shadow-xl flex items-center gap-1.5 transition-all font-mono border ${
+              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs shadow flex items-center gap-1.5 transition-all font-mono border cursor-pointer ${
                 isEmbeddedToast
                   ? 'bg-emerald-500 text-zinc-950 border-emerald-400 font-black scale-105'
-                  : 'bg-zinc-900/90 hover:bg-emerald-600 hover:text-zinc-950 text-emerald-300 border-emerald-500/50 backdrop-blur-md'
+                  : 'bg-zinc-950 hover:bg-emerald-600 hover:text-zinc-950 text-emerald-300 border-emerald-500/50'
               }`}
               title="Permanently embed this 2K image into the project JSON file and cloud workspace"
             >
@@ -838,45 +868,16 @@ export default function DirectorCanvas({
             type="button"
             onClick={handleGenerateAIImage}
             disabled={isGeneratingImage}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 border border-purple-400/40 font-mono disabled:opacity-50 cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs shadow-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 border border-purple-400/40 font-mono disabled:opacity-50 cursor-pointer"
             title={activeGeneratedImageUrl ? "Regenerate image variation with active engine" : "Generate photorealistic 2K image with active engine"}
           >
             <Wand2 className={`w-3.5 h-3.5 text-amber-300 ${isGeneratingImage ? 'animate-spin' : ''}`} />
             <span>
               {isGeneratingImage
-                ? 'Generating Image...'
+                ? `Generating Image... (${genProgress}%)`
                 : (activeGeneratedImageUrl ? '🔄 Regenerate Image' : '✨ Generate Image')}
             </span>
           </button>
-        </div>
-
-        {/* BOTTOM TECHNICAL DIRECTOR OVERLAY STRIP WITH ALL SHOT METADATA */}
-        <div className="absolute bottom-2 left-3 right-3 pointer-events-none flex flex-wrap items-center justify-between gap-2 p-2 px-3 rounded-xl bg-zinc-950/90 backdrop-blur-md border border-zinc-800/80 text-[11px] font-mono text-zinc-300 shadow-xl">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex items-center gap-1 text-cyan-400 font-bold">
-              <Compass className="w-3.5 h-3.5" />
-              Cam: {shot?.cameraMotionTag?.replace(/\[|\]/g, '') || 'Static Anchor'}
-            </span>
-            <span className="flex items-center gap-1 text-amber-400">
-              <Eye className="w-3.5 h-3.5" />
-              Eye: {shot?.eyeDirectionLook || 'Direct Target Focus'}
-            </span>
-            <span className="flex items-center gap-1 text-pink-400">
-              <Smile className="w-3.5 h-3.5" />
-              Expr: {shot?.actorFacialExpression || 'Divine Calm'}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Building className="w-3.5 h-3.5" />
-              Env/Arch: {shot?.actionEnvContext?.slice(0, 25) || 'Vedic Pillars & Battlefield'}
-            </span>
-            <span className="flex items-center gap-1 text-purple-400">
-              <Users className="w-3.5 h-3.5" />
-              Crowd/Support: {shot?.coArtistInteraction?.slice(0, 25) || 'Asura Army Battalions'}
-            </span>
-          </div>
         </div>
       </div>
 
