@@ -147,10 +147,27 @@ ${promptNarrative.trim()}`;
       if (cleanCo) subjectsMap.set(2, cleanCo);
     }
 
+    const sanitizeSubjectNameTag = (str) => {
+      if (!str) return '';
+      let cleaned = str.replace(/\[|\]|CharID:\s*|@/gi, '').trim();
+      // Cut at punctuation break (;, ., |)
+      if (cleaned.includes(';')) cleaned = cleaned.split(';')[0].trim();
+      if (cleaned.includes('|')) cleaned = cleaned.split('|')[0].trim();
+      // Remove long action verbs and narrative descriptions
+      cleaned = cleaned.replace(/\s+(?:standing|riding|whipping|brandishing|fleeing|surviving|looking|moving|walking|running|fighting|holding|seated|watching|overlooking|defeating)\b.*$/i, '');
+      
+      const words = cleaned.split(/\s+/);
+      if (words.length > 4) {
+        cleaned = words.slice(0, 4).join(' ');
+      }
+      return cleaned.trim();
+    };
+
     const subjectsLines = [];
     for (let i = 1; i <= 9; i++) {
-      const val = subjectsMap.get(i) || '';
-      subjectsLines.push(`Image_${i} = ${val}`);
+      const rawVal = subjectsMap.get(i) || '';
+      const cleanVal = sanitizeSubjectNameTag(rawVal);
+      subjectsLines.push(`Image_${i} = ${cleanVal}`);
     }
 
     // Extract duration (default 4s)

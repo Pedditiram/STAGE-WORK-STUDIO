@@ -137,7 +137,9 @@ Each shot object in the JSON array MUST strictly contain these 25 keys:
 "sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
 
 In "characterIdMatrix", specify the ComfyUI Seedance 2.0 multi-modal reference slots formatted as:
-"Image_1 = [char/subject 1] | Image_2 = [char/subject 2] | Image_3 = [char/subject 3] | Image_4 = [char 4] | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = "
+"Image_1 = [char/subject 1] | Image_2 = [char/subject 2] | Image_3 = [char/subject 3] | Image_4 = [char 4] | Image_5 = crowd | Image_6 = scene | Image_7 = | Image_8 = | Image_9 = "
+
+CRITICAL REQUIREMENT FOR 'characterIdMatrix': Use ONLY short, concise 1-to-3 word Character/Asset Names (e.g. 'Lord Rama', 'Dushana', 'Rakshasa Host', 'Janasthana Battlefield'). Do NOT put long action descriptions, story sentences, or verbs inside 'characterIdMatrix'. Only include characters actually present in this specific shot.
 
 Screenplay text to break down:
 ${fullTextToProcess}
