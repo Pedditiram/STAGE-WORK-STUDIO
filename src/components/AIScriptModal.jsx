@@ -210,13 +210,18 @@ export default function AIScriptModal({ isOpen, onClose, onApplyShots, setProjec
     }
   };
 
-  const handleLoadSample = (sample) => {
+  const handleLoadSample = async (sample) => {
     setUploadedFileName('');
     setCustomProjectTitle(sample.title.toUpperCase());
     setRawScriptText(sample.script);
-    const shots = parseRawScriptToShots(sample.script);
-    setParsedPreview(shots);
-    setIsGenerated(true);
+    setIsLoadingFile(true);
+    try {
+      const shots = await parseRawScriptToShots(sample.script);
+      setParsedPreview(shots);
+      setIsGenerated(true);
+    } finally {
+      setIsLoadingFile(false);
+    }
   };
 
   return (

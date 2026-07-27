@@ -107,27 +107,97 @@ function parsePdfBinaryAdvanced(arrayBuffer) {
 }
 
 /**
+/**
  * PARSE RAW SCRIPT TO 24 PRODUCTION SLOTS
- * Uses Pedditi Labs Cinema Intelligence Engine when provider & key configured in Settings, else fast heuristic fallback.
+ * Powered by active LLM provider set in Admin Settings (Pedditi Labs / Gemini, Anthropic Claude, OpenAI), or fast heuristic fallback.
  */
 export async function parseRawScriptToShots(scriptText) {
+  if (!scriptText || typeof scriptText !== 'string') return [];
+
   const provider = typeof window !== 'undefined' ? (localStorage.getItem('sps_llm_provider') || 'google_gemini') : 'google_gemini';
   const apiKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_api_key') || '') : '';
+  const fullTextToProcess = scriptText.slice(0, 32000); // 32KB buffer covers 100+ shots
 
-  if (provider === 'google_gemini' && apiKey.trim()) {
-    try {
-      const prompt = `You are a Hollywood Technical Director and Master Cinematographer. Parse the following screenplay script into a JSON array of 25-craft stage production shots.
-Each shot in the JSON array MUST strictly contain these 25 keys:
+  const prompt = `You are a Hollywood Technical Director and Master Cinematographer (Pedditi Labs Cinema Intelligence Engine).
+Parse the following screenplay script into a complete JSON array of 25-craft stage production shots.
+
+CRITICAL DIRECTIVE: You MUST parse EVERY SINGLE SCENE AND SHOT present in the script. Do NOT skip, consolidate, or truncate shots. If the screenplay contains 9 scenes and 55 shots (e.g. SC.01 through SC.09, S01-A to S09-A), return ALL 55 shots in the JSON array.
+
+Each shot object in the JSON array MUST strictly contain these 25 keys:
 "sceneShotId", "shotComposition", "cameraMotionTag", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
 
 In "characterIdMatrix", specify the ComfyUI Seedance 2.0 multi-modal reference slots formatted as:
 "Image_1 = [char/subject 1] | Image_2 = [char/subject 2] | Image_3 = [char/subject 3] | Image_4 = [char 4] | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = "
 
-Script to breakdown:
-${scriptText.slice(0, 4000)}
+Screenplay text to break down:
+${fullTextToProcess}
 
-Return ONLY valid JSON array without markdown formatting.`;
+Return ONLY valid JSON array without markdown code blocks.`;
 
+  // 1. ROUTE TO ANTHROPIC CLAUDE LLM ENGINE
+  if (provider === 'anthropic' && apiKey.trim()) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey.trim(),
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'dangerously-allow-browser': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 8192,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.content?.[0]?.text || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Anthropic Claude LLM breakdown fallback:", e);
+    }
+  }
+
+  // 2. ROUTE TO OPENAI LLM ENGINE
+  if (provider === 'openai' && apiKey.trim()) {
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("OpenAI LLM breakdown fallback:", e);
+    }
+  }
+
+  // 3. ROUTE TO GOOGLE GEMINI / PEDDITI LABS ENGINE
+  if (apiKey.trim()) {
+    try {
       let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey.trim()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,16 +205,6 @@ Return ONLY valid JSON array without markdown formatting.`;
           contents: [{ parts: [{ text: prompt }] }]
         })
       });
-
-      if (!response.ok) {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey.trim()}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        });
-      }
 
       if (!response.ok) {
         response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`, {
@@ -172,16 +232,16 @@ Return ONLY valid JSON array without markdown formatting.`;
     }
   }
 
-  // Fallback / Built-In Rule Parser
+  // Fallback / Built-In Fast Heuristic Rule Parser
   return parseRawScriptFallback(scriptText);
 }
 
 function smartSegmentTextIntoShots(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
-  // Step 1. Check if structured by explicit scene/shot markers (S01, EXT., INT., SHOT)
+  // Step 1. Check if structured by explicit scene/shot markers (e.g. S08-A, S09-A, SC.09, S01, EXT., INT., SHOT)
   const structuredBlocks = scriptText
-    .split(/\n(?=(?:S\d+|SC\.\d+|SC\d+_SH\d+|SHOT\s+\d+|ACT\s+[I|V|X]+|EXT\.|INT\.))/i)
+    .split(/(?:\r?\n)+(?=(?:SC\.\s*\d+|SC\s*\d+|S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}|SH\d+|SHOT\s*\d+|ACT\s+[I|V|X]+|EXT\.|INT\.)\b)/i)
     .map(b => b.trim())
     .filter(Boolean);
 
@@ -192,14 +252,13 @@ function smartSegmentTextIntoShots(scriptText) {
   const finalBeats = [];
 
   paragraphs.forEach(para => {
-    // If paragraph has an explicit shot marker like S01 or SHOT 1
-    if (/^(?:S\d+|SC\d+|SHOT|EXT\.|INT\.)/i.test(para)) {
+    // If paragraph has an explicit shot marker like S01-A, SC.09, or SHOT 1
+    if (/^(?:SC\.\s*\d+|SC\s*\d+|S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|S\d{1,2}|SHOT|EXT\.|INT\.)/i.test(para)) {
       finalBeats.push(para);
       return;
     }
 
     // Split paragraph by period, semicolon, OR cinematic transition phrase
-    // transition triggers: "multiple shots", "grand entry", "revealing shot", "closeup", "close up", "close-up", "next", "then", "sometimes", "after a long", "stands as", "holding", "tying", "brought together", "failed to win", "kills", "beating", "rooster fight", "unbeatable"
     const splitRegex = /(?:\.\s+|\n+|(?:,\s*|\s+and\s+|\s+but\s+)(?=(?:multiple shots|grand entry|revealing shot|closeup|close-up|close up|next|then|meanwhile|establishing|entry of|holding|tying|brought together|start a fight|sometimes|after a long|stands as|kills|beating|unbeatable|rooster fight)\b))/gi;
 
     const subBeats = para
@@ -239,11 +298,32 @@ function parseRawScriptFallback(scriptText) {
   const blocksToProcess = smartSegmentTextIntoShots(scriptText);
   const parsedShots = [];
 
+  let currentSceneNum = 1;
+
   blocksToProcess.forEach((block, idx) => {
     const textLower = block.toLowerCase();
 
-    const idMatch = block.match(/(S\d{2}-[A-Z]|SC\.\d+|SC\d+_SH\d+|SHOT\s+\d+)/i);
-    const shotId = idMatch ? idMatch[1].toUpperCase().replace(/\s+/g, '_') : `SC01_SH${(idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1)}`;
+    // Check scene marker like SC.09 or SC 09
+    const scMatch = block.match(/SC\.\s*(\d+)|SC\s*(\d+)/i);
+    if (scMatch) {
+      currentSceneNum = parseInt(scMatch[1] || scMatch[2], 10);
+    }
+
+    const idMatch = block.match(/(S\d{1,2}(?:-[A-Z0-9]+|[A-Z])|SC\.\s*\d+|SC\d+_SH\d+|SHOT\s*\d+|S\d{1,2})/i);
+    let shotId = `SC${currentSceneNum < 10 ? '0' + currentSceneNum : currentSceneNum}_S${(idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1)}`;
+
+    if (idMatch) {
+      const rawId = idMatch[1].toUpperCase().replace(/\s+/g, '_').replace(/\./g, '');
+      if (rawId.startsWith('S') && rawId.includes('-')) {
+        const parts = rawId.split('-');
+        const sNum = parts[0].replace('S', '');
+        shotId = `SC${sNum.padStart(2, '0')}_S${parts[0]}${parts[1]}`;
+      } else if (rawId.startsWith('SC')) {
+        shotId = rawId;
+      } else {
+        shotId = `SC${currentSceneNum.toString().padStart(2, '0')}_${rawId}`;
+      }
+    }
 
     let framing = "Medium Shot (MS)";
     if (textLower.includes("aerial") || textLower.includes("god's-eye") || textLower.includes("ews") || textLower.includes("surrounding villages")) {
