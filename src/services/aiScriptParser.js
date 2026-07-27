@@ -4,8 +4,12 @@ export async function extractTextFromPDF(file) {
 
   try {
     const pdfjsLib = await import('pdfjs-dist');
-    const pdfWorkerModule = await import('pdfjs-dist/build/pdf.worker.mjs?url');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerModule.default || pdfWorkerModule;
+    try {
+      const pdfWorkerModule = await import('pdfjs-dist/build/pdf.worker.mjs?url');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerModule.default || pdfWorkerModule;
+    } catch (workerErr) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    }
 
     // Enable cMaps for full Indic/Telugu/Unicode font decoding support
     const loadingTask = pdfjsLib.getDocument({
@@ -22,10 +26,15 @@ export async function extractTextFromPDF(file) {
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-      const pageItems = textContent.items.map(item => item.str);
-      const pageText = pageItems.join(' ');
       
-      // Clean PDF metadata residual headers
+      // Preserve line breaks (hasEOL) from PDF text items
+      const pageText = textContent.items
+        .map(item => {
+          const str = item.str || '';
+          return item.hasEOL ? str + '\n' : str;
+        })
+        .join(' ');
+      
       const cleanPageText = sanitizePdfExtractedText(pageText);
       if (cleanPageText.trim()) {
         extractedPagesText.push(cleanPageText);
@@ -36,7 +45,7 @@ export async function extractTextFromPDF(file) {
       return extractedPagesText.join('\n\n');
     }
   } catch (err) {
-    console.warn("PDF.js worker extraction fallback:", err);
+    console.warn("PDF.js worker extraction fallback to binary parser:", err);
   }
 
   return parsePdfBinaryAdvanced(originalArrayBuffer);
@@ -58,7 +67,8 @@ function sanitizePdfExtractedText(text) {
     .replace(/\/Filter\s*\/[A-Za-z0-9]+/gi, '')
     .replace(/ca\s+\d+|CA\s+\d+|LC\s+\d+|LJ\s+\d+|LW\s+[\d\.]+|ML\s+\d+/g, '')
     .replace(/[\uFFFD]+/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+/g, ' ') // Preserve newlines \n!
+    .replace(/\n\s*\n+/g, '\n') // Clean up redundant consecutive newlines
     .trim();
 }
 
