@@ -547,10 +547,11 @@ export default function DirectorCanvas({
       } catch (err) {}
     }
 
-    // 2. Route through Google AI Studio Imagen 3 API if Gemini API Key is configured
+    // 2. Route through Google AI Studio Imagen 3 / Gemini API if Gemini API Key is configured
     if (!imageUrl && geminiKey.trim()) {
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${geminiKey.trim()}`, {
+        const googleModel = typeof window !== 'undefined' ? (localStorage.getItem('sps_google_image_model') || 'imagen-3.0-generate-002') : 'imagen-3.0-generate-002';
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${googleModel}:generateImages?key=${geminiKey.trim()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
