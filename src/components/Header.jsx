@@ -157,7 +157,7 @@ export default function Header({
   const userColorGradient = getUserGradient(userName);
 
   return (
-    <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-3 sm:px-4 py-2 shrink-0 w-full font-mono text-xs">
+    <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/90 shadow-xl px-2 sm:px-3 py-1.5 shrink-0 w-full font-mono text-xs overflow-x-auto overflow-y-hidden scrollbar-none">
       {/* Click outside backdrop when profile dropdown is open */}
       {isProfileOpen && (
         <div 
@@ -166,15 +166,15 @@ export default function Header({
         />
       )}
 
-      <div className="w-full flex items-center justify-between gap-3 relative">
+      <div className="w-full flex items-center justify-between gap-1.5 relative min-w-max">
         
         {/* LEFT: App Brand + Active Project Editable Title */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white shadow flex items-center justify-center shrink-0">
-              <Film className="w-4 h-4" />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <div className="p-1 rounded-lg bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 text-white shadow flex items-center justify-center shrink-0">
+              <Film className="w-3.5 h-3.5" />
             </div>
-            <h1 className="text-sm font-black text-white tracking-wide font-sans hidden xl:block shrink-0">
+            <h1 className="text-xs font-black text-white tracking-wide font-sans hidden 2xl:block shrink-0">
               STAGE PRODUCTION STUDIO
             </h1>
           </div>
@@ -182,8 +182,8 @@ export default function Header({
           <div className="h-4 w-px bg-zinc-800 hidden sm:block shrink-0" />
 
           {/* Active Project Title Inline Editor */}
-          <div className="flex items-center gap-1.5 bg-zinc-900/90 border border-zinc-800/90 px-2.5 py-1 rounded-lg shrink-0">
-            <FolderKanban className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800/90 px-2 py-0.5 rounded-lg shrink-0">
+            <FolderKanban className="w-3 h-3 text-amber-400 shrink-0" />
             {isEditingTitle ? (
               <input
                 type="text"
@@ -192,84 +192,84 @@ export default function Header({
                 onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
                 onBlur={handleTitleSubmit}
                 autoFocus
-                className="bg-zinc-950 border border-amber-500 rounded px-1.5 py-0.5 text-xs text-amber-300 font-bold focus:outline-none max-w-[180px]"
+                className="bg-zinc-950 border border-amber-500 rounded px-1 py-0.5 text-xs text-amber-300 font-bold focus:outline-none max-w-[140px]"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => { setTempTitleInput(projectTitle); setIsEditingTitle(true); }}
-                className="text-amber-300 font-bold hover:underline max-w-[140px] sm:max-w-[200px] truncate text-left"
+                className="text-amber-300 font-bold hover:underline max-w-[120px] sm:max-w-[160px] truncate text-left text-xs"
                 title="Click to edit project title"
               >
                 {projectTitle}
               </button>
             )}
-            <span className="text-[10px] text-cyan-300 font-mono font-bold bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/80 shrink-0">
+            <span className="text-[9.5px] text-cyan-300 font-mono font-bold bg-cyan-950 px-1 py-0.2 rounded border border-cyan-800/80 shrink-0">
               {shotCount} Shots
             </span>
           </div>
         </div>
 
         {/* CENTER: Studio View Navigation Tabs */}
-        <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0">
+        <div className="flex items-center gap-1 bg-zinc-900/90 p-0.5 rounded-xl border border-zinc-800 shrink-0">
           <button
             type="button"
             onClick={() => setActiveView("screenplay")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+            className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1 shrink-0 ${
               activeView === "screenplay"
                 ? "bg-amber-400 text-zinc-950 font-black shadow-md"
                 : "text-zinc-400 hover:text-amber-300 hover:bg-zinc-800"
             }`}
             title="Screenplay Writer Studio (Direct Screenplay Editing & Live Auto-Sync)"
           >
-            <Scroll className="w-4 h-4 text-amber-950" />
-            <span>Screenplay Writer</span>
+            <Scroll className="w-3.5 h-3.5 text-amber-950" />
+            <span className="hidden sm:inline">Screenplay Writer</span>
           </button>
 
           {showCanvasTab && (
             <button
               type="button"
               onClick={() => setActiveView("canvas")}
-              className={`p-1.5 rounded-lg transition-all shrink-0 ${
+              className={`p-1 rounded-lg transition-all shrink-0 ${
                 activeView === "canvas"
                   ? "bg-cyan-500 text-zinc-950 shadow"
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Canvas View"
             >
-              <Video className="w-4 h-4" />
+              <Video className="w-3.5 h-3.5" />
             </button>
           )}
 
           <button
             type="button"
             onClick={() => setActiveView("spreadsheet")}
-            className={`p-1.5 rounded-lg transition-all shrink-0 ${
+            className={`p-1 rounded-lg transition-all shrink-0 ${
               activeView === "spreadsheet"
                 ? "bg-cyan-500 text-zinc-950 shadow"
                 : "text-zinc-400 hover:text-white"
             }`}
             title="25-Craft Cinema Matrix View"
           >
-            <LayoutGrid className="w-4 h-4" />
+            <LayoutGrid className="w-3.5 h-3.5" />
           </button>
 
           <button
             type="button"
             onClick={() => setActiveView("form")}
-            className={`p-1.5 rounded-lg transition-all shrink-0 ${
+            className={`p-1 rounded-lg transition-all shrink-0 ${
               activeView === "form"
                 ? "bg-cyan-500 text-zinc-950 shadow"
                 : "text-zinc-400 hover:text-white"
             }`}
             title="Form View"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* RIGHT: Quick Action Tools + EXTREME TOP RIGHT User Profile Dropdown */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
 
           {/* App Version Mode Badge Button (Local Version vs Cloud Version) */}
           <button

@@ -9,11 +9,11 @@ import { enhanceEntireShotWithLLM } from '../services/aiScriptParser';
 
 const CATEGORIES = [
   { id: 'all', label: 'All 25 Crafts', keys: [] },
-  { id: 'camera', label: '🎥 Camera & Rigging (1-3)', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag'] },
-  { id: 'lighting', label: '💡 Lighting & Color (4-7)', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag'] },
-  { id: 'vfx', label: '✨ Volumetrics & FX (#8, #21)', keys: ['atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
-  { id: 'character', label: '👥 Acting & Characters (9-16, #23, #25)', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'characterIdMatrix'] },
-  { id: 'audio_optics', label: '🎵 Audio, Optics & Edit (17-20, #22, #24)', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood', 'lensAndFocalLength', 'stuntAndSafetyNotes', 'editTransitionCut'] }
+  { id: 'camera', label: '🎥 Camera (1-3)', keys: ['sceneShotId', 'shotComposition', 'cameraMotionTag'] },
+  { id: 'lighting', label: '💡 Lighting (4-7)', keys: ['subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag'] },
+  { id: 'vfx', label: '✨ Volumetrics (#8, #21)', keys: ['atmosphereVolumetricsTag', 'vfxCgiBreakdown'] },
+  { id: 'character', label: '👥 Acting & Character (9-16, #23, #25)', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'characterIdMatrix'] },
+  { id: 'audio_optics', label: '🎵 Audio & Edit (17-24)', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood', 'lensAndFocalLength', 'stuntAndSafetyNotes', 'editTransitionCut'] }
 ];
 
 export default function SpreadsheetView({ 
@@ -216,9 +216,9 @@ export default function SpreadsheetView({
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl font-mono">
       {/* Category Tab Bar Header */}
-      <div className="p-2 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0 backdrop-blur-md">
-        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
-          <span className="text-[11px] text-zinc-400 font-bold shrink-0 flex items-center gap-1">
+      <div className="p-1.5 px-2 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between gap-1.5 shrink-0 backdrop-blur-md overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 min-w-max">
+          <span className="text-[10px] text-zinc-400 font-bold shrink-0 flex items-center gap-0.5">
             <Filter className="w-3 h-3 text-cyan-400" /> Focus:
           </span>
 
@@ -229,10 +229,10 @@ export default function SpreadsheetView({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer border ${
+                className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold transition-all whitespace-nowrap flex items-center gap-0.5 cursor-pointer border ${
                   isSelected
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.4)] scale-105'
-                    : 'bg-zinc-800 text-zinc-100 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-extrabold shadow-sm'
+                    : 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700 hover:text-white'
                 }`}
               >
                 <span>{cat.label}</span>
@@ -241,7 +241,7 @@ export default function SpreadsheetView({
           })}
         </div>
 
-        <span className="text-[10.5px] font-mono text-cyan-300 font-bold bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+        <span className="text-[10px] font-mono text-cyan-300 font-bold bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 shrink-0">
           🎬 {sceneGroups.length} Scenes · {filteredShots.length} Shots
         </span>
       </div>
@@ -251,14 +251,14 @@ export default function SpreadsheetView({
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-zinc-900 text-zinc-300 font-semibold border-b border-zinc-800 sticky top-0 z-30 backdrop-blur-md">
-              <th className="p-2 w-[42px] min-w-[42px] text-center border-r-2 border-zinc-800 bg-zinc-900 sticky left-0 z-40 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
+              <th className="p-1.5 w-[36px] min-w-[36px] text-center border-r-2 border-zinc-800 bg-zinc-900 sticky left-0 z-40 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                 #
               </th>
-              <th className="p-2 w-[90px] min-w-[90px] text-center border-r border-zinc-800 bg-zinc-900">
+              <th className="p-1.5 w-[80px] min-w-[80px] text-center border-r border-zinc-800 bg-zinc-900">
                 Actions
               </th>
               {filteredSlots.map((slot) => (
-                <th key={slot.key} className="p-2 px-3 border-r border-zinc-800 min-w-[180px] font-mono text-cyan-300">
+                <th key={slot.key} className="p-1.5 px-2.5 border-r border-zinc-800 min-w-[145px] max-w-[210px] font-mono text-cyan-300">
                   {slot.label}
                 </th>
               ))}

@@ -1068,7 +1068,7 @@ export default function App() {
       />
 
       {/* Main Studio Body View */}
-      <main className="flex-1 w-full p-2.5 sm:p-4 flex flex-col gap-3 overflow-hidden min-h-0">
+      <main className="flex-1 w-full p-1 sm:p-2 flex flex-col gap-1.5 overflow-hidden min-h-0">
         
         {/* DYNAMICALLY SEGREGATED WORKSPACE VIEW CONTAINER */}
         <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
