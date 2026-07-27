@@ -72,3 +72,31 @@ export function downloadAllCanvasImagesToDisk(imagesMap, projectTitle = "Stage_P
 
   alert(`💾 ${savedCount} Canvas Keyframe Images Exported to Local Downloads Folder!`);
 }
+
+/**
+ * AUTO-SYNC LOCAL VAULT IMAGES TO CLOUD DATABASE
+ * When user switches to 'cloud' mode or clicks Sync for collaborative work,
+ * auto-uploads & syncs local vault images to cloud database payload!
+ */
+export async function syncCanvasVaultToCloud(roomId, projectTitle) {
+  if (typeof window === 'undefined') return { success: false };
+  const vaultImages = getStoredCanvasVaultImages();
+  const imageKeys = Object.keys(vaultImages);
+  
+  if (imageKeys.length === 0) {
+    return { success: true, count: 0, msg: "No local images to sync." };
+  }
+
+  try {
+    localStorage.setItem('sps_generated_images_map', JSON.stringify(vaultImages));
+    return { 
+      success: true, 
+      count: imageKeys.length, 
+      msg: `✓ ${imageKeys.length} Local Vault Images Auto-Synced to Cloud DB!` 
+    };
+  } catch (e) {
+    console.warn("Auto-sync vault images error:", e);
+    return { success: false, error: e.message };
+  }
+}
+

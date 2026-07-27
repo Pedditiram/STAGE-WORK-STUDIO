@@ -14,8 +14,8 @@ import HelpUserGuideModal from './components/HelpUserGuideModal';
 import LoginModal from './components/LoginModal';
 import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
-import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
+import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
 import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
 import { 
   syncProjectLibraryToCloud, 
@@ -255,10 +255,16 @@ export default function App() {
   });
   const [isAppVersionModalOpen, setIsAppVersionModalOpen] = useState(false);
 
-  const handleSelectAppVersionMode = (mode) => {
+  const handleSelectAppVersionMode = async (mode) => {
     setAppVersionMode(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_app_version_mode', mode);
+      if (mode === 'cloud') {
+        // Auto-upload & sync local vault images to cloud database payload
+        await syncCanvasVaultToCloud(roomId, projectTitle);
+        const vault = getStoredCanvasVaultImages();
+        syncToCloud({ shots, projectGeneratedImages: vault });
+      }
     }
   };
 
@@ -590,6 +596,13 @@ export default function App() {
   const handleSaveProjectToApp = async () => {
     try {
       setIsCloudSyncing(true);
+      
+      // Auto-bundle local vault images for cloud database sync
+      await syncCanvasVaultToCloud(roomId, projectTitle);
+      const vaultImages = getStoredCanvasVaultImages();
+      const mergedImages = { ...projectGeneratedImages, ...vaultImages };
+      setProjectGeneratedImages(mergedImages);
+
       const savedLibStr = localStorage.getItem('sps_project_library');
       let library = savedLibStr ? JSON.parse(savedLibStr) : [];
       if (!Array.isArray(library)) library = [];
@@ -606,7 +619,7 @@ export default function App() {
         roomId: roomId,
         lastModified: nowStr,
         shots: shots,
-        projectGeneratedImages: projectGeneratedImages
+        projectGeneratedImages: mergedImages
       };
 
       if (existingIdx !== -1) {
