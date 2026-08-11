@@ -186,12 +186,19 @@ export default function CloudCollabModal({
     setOtpSent(true);
     setOtpError('');
     setOtpSuccessMsg(`✓ Unique Security OTP ${newCode} generated for ${collaboratorName.trim()} (${phoneNumber.trim()})!`);
+    try {
+      const roomKey = roomId || 'SPS-CLOUD-8821';
+      const issued = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
+      issued[roomKey] = newCode;
+      if (email.trim()) issued[email.trim().toLowerCase()] = newCode;
+      localStorage.setItem('sps_issued_invite_otps', JSON.stringify(issued));
+    } catch (e) {}
   };
 
   // 2. VERIFY OTP AND GRANT ACCESS
   const handleVerifyOtp = (e) => {
     e.preventDefault();
-    if (inputOtp.trim() === generatedOtp || inputOtp.trim() === '123456') {
+    if (inputOtp.trim() === generatedOtp) {
       setOtpVerified(true);
       setOtpError('');
       
@@ -669,7 +676,7 @@ export default function CloudCollabModal({
                       <button
                         type="button"
                         onClick={() => handleToggleAccessStatus(user.phone)}
-                        className={`text-[10.5px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1 font-bold shadow-xs transition-all ${
+                        className={`text-[10.5px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1 font-bold shadow-sm transition-all ${
                           isSuspended
                             ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-300 dark:border-red-800 hover:bg-red-200'
                             : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200'
@@ -749,7 +756,7 @@ export default function CloudCollabModal({
                 Object.entries(groupedLogs).map(([dateLabel, logs]) => (
                   <div key={dateLabel} className="space-y-1.5">
                     {/* Date Sticky Banner Header */}
-                    <div className="sticky top-0 z-10 bg-slate-200/90 dark:bg-zinc-800/90 backdrop-blur-sm text-slate-800 dark:text-zinc-200 px-2.5 py-1 rounded-md text-[10.5px] font-bold font-mono border border-slate-300 dark:border-zinc-700 flex items-center justify-between shadow-xs">
+                    <div className="sticky top-0 z-10 bg-slate-200/90 dark:bg-zinc-800/90 backdrop-blur-sm text-slate-800 dark:text-zinc-200 px-2.5 py-1 rounded-md text-[10.5px] font-bold font-mono border border-slate-300 dark:border-zinc-700 flex items-center justify-between shadow-sm">
                       <span className="flex items-center gap-1.5">
                         <Clock className="w-3 h-3 text-amber-500" />
                         {dateLabel}

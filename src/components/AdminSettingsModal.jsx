@@ -681,7 +681,7 @@ export default function AdminSettingsModal({
 
   const handleVerifyOtp = (e) => {
     e.preventDefault();
-    if (inputOtp.trim() === generatedOtp || inputOtp.trim() === '123456') {
+    if (inputOtp.trim() === generatedOtp) {
       setCollabOtpError('');
       
       const now = new Date();

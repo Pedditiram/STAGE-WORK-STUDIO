@@ -55,13 +55,12 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
       issuedOtps = {};
     }
     const roomKey = invitedRoom || currentRoomId || 'SPS-CLOUD-8821';
-    const issuedForRoom = issuedOtps[roomKey] || issuedOtps[userMail] || '';
+    const issuedForRoom = issuedOtps[roomKey] || issuedOtps[userMail] || issuedOtps[userMail.toLowerCase()] || '';
     const otpOk =
       (expectedOtp && cleanInput === expectedOtp) ||
-      (issuedForRoom && cleanInput === String(issuedForRoom)) ||
-      cleanInput === '123456';
+      (issuedForRoom && cleanInput === String(issuedForRoom));
 
-    if (otpOk && cleanInput.length === 6) {
+    if (otpOk && /^\d{6}$/.test(cleanInput)) {
       setIsSuccess(true);
       setOtpError('');
 

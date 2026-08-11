@@ -1,15 +1,93 @@
 {
-  "name": "prompt-engineering",
+  "name": "stage-production-studio",
+  "productName": "Stage Production Studio",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Pedditi Labs — Cinema 24-Craft AI Production Studio",
+  "author": {
+    "name": "Pedditi Ram",
+    "email": "pedditiram@gmail.com"
+  },
+  "homepage": "./",
+  "main": "electron-main.js",
   "scripts": {
     "dev": "vite",
     "dev:host": "vite --host",
     "tunnel": "npx localtunnel --port 5173",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"cross-env NODE_ENV=development vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_RUN_AS_NODE= electron .\"",
+    "electron:build": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac",
+    "electron:build:dir": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac --dir",
+    "electron:pack": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac dmg",
+    "deploy:web": "vercel --prod"
+  },
+  "build": {
+    "appId": "com.pedditilabs.stageproductionstudio",
+    "productName": "Stage Production Studio",
+    "copyright": "Copyright © 2026 Pedditi Labs",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icons/icon.icns",
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "title": "Stage Production Studio",
+      "background": null,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "files": [
+      "dist/**/*",
+      "electron-main.js",
+      "electron-preload.js",
+      "!**/.DS_Store",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*"
+    ],
+    "directories": {
+      "buildResources": "public",
+      "output": "release"
+    }
   },
   "dependencies": {
     "firebase": "^12.16.0",
@@ -23,8 +101,13 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^9.2.4",
+    "cross-env": "^7.0.3",
+    "electron": "^36.9.5",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "wait-on": "^8.0.5"
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, Sparkles, User, UserCheck, Film, Zap, Shield } from 'lucide-react';
+import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, Sparkles, User, UserCheck, Film, Zap, Shield } from 'lucide-react';
 
 export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
   const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin'
@@ -29,6 +29,9 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
       if (savedUsersStr) {
         try { authorizedUsers = JSON.parse(savedUsersStr); } catch (err) {}
       }
+
+      // Clear manual logout flag on login
+      localStorage.removeItem('sps_user_manually_logged_out');
 
       // Check if email matches Primary Admin
       if (cleanEmail === 'pedditiram@gmail.com' || cleanEmail.includes('pedditiram')) {
@@ -81,8 +84,15 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
           return;
         }
 
-        // If OTP provided, accept 123456 or 6-digit OTP
-        if (otpInput.trim() === '123456' || otpInput.trim().length === 6) {
+        // If OTP provided, require invite URL OTP or admin-issued OTP
+        const urlOtp = new URLSearchParams(window.location.search).get('otp') || '';
+        let issuedOtps = {};
+        try {
+          issuedOtps = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
+        } catch (e) {}
+        const issued = issuedOtps[cleanEmail] || issuedOtps[localStorage.getItem('sps_cloud_room_id') || ''] || '';
+        const otpVal = otpInput.trim();
+        if (otpVal && /^\d{6}$/.test(otpVal) && (otpVal === urlOtp || otpVal === String(issued))) {
           const newUser = {
             name: cleanEmail.split('@')[0].toUpperCase(),
             designation: 'Lead Director',
@@ -161,7 +171,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                 <h3 className="text-base font-black text-white font-sans tracking-tight flex items-center gap-2">
                   STAGE PRODUCTION STUDIO
                 </h3>
-                <span className="text-[11px] text-cyan-300 font-bold block flex items-center gap-1.5 pt-0.5">
+                <span className="text-[11px] text-cyan-300 font-bold flex items-center gap-1.5 pt-0.5">
                   <Film className="w-3 h-3 text-amber-400" /> Director & Collaborator Portal
                 </span>
               </div>
@@ -269,7 +279,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                   maxLength={6}
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
-                  placeholder="Enter 6-Digit OTP (Default: 123456)"
+                  placeholder="Enter 6-Digit invite OTP"
                   className="w-full bg-slate-900/90 border border-slate-700/80 text-cyan-300 font-mono tracking-widest text-center rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 font-bold transition-all"
                 />
               </div>
