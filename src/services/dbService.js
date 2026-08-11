@@ -24,7 +24,8 @@ const NATIVE_SYNC_URL = "/api/sync";
 const SPS_PROJECTS_BLOB_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
 const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
 const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a9a0-7028-9dd5-9567daaf7158";
-const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd";
+// Dedicated presence blob (must NOT share the rooms hub URL or presence wipes collab rooms)
+const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ad01-7c20-9ee1-presence0sps01";
 
 let app = null;
 let db = null;
@@ -84,6 +85,14 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
     window.dispatchEvent(new Event('sps_collaborators_updated'));
   }
 
+  try {
+    await fetch(`${NATIVE_SYNC_URL}?type=collaborators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {}
+
   // Push to Production REST Cloud Database
   try {
     await fetch(SPS_COLLABORATORS_BLOB_URL, {
@@ -103,6 +112,22 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
 
 // 2. Fetch All Collaborators from Cloud Database
 export async function fetchCollaboratorsFromCloud() {
+  try {
+    const res = await fetch(`${NATIVE_SYNC_URL}?type=collaborators&t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        const newStr = JSON.stringify(data.users);
+        const oldStr = localStorage.getItem('sps_authorized_phone_users');
+        if (newStr !== oldStr) {
+          localStorage.setItem('sps_authorized_phone_users', newStr);
+          window.dispatchEvent(new Event('sps_collaborators_updated'));
+        }
+        return data.users;
+      }
+    }
+  } catch (e) {}
+
   try {
     const res = await fetch(SPS_COLLABORATORS_BLOB_URL, { cache: 'no-store' });
     if (res.ok) {
@@ -397,14 +422,19 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
     });
   } catch (e) {}
 
+  // Dedicated presence blob only (never overwrite the rooms hub)
   try {
-    const res = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
+    const res = await fetch(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
     let data = { activeSlots: {} };
     if (res.ok) {
-      try { data = await res.json(); } catch (e) {}
+      try {
+        const parsed = await res.json();
+        data = parsed?.activeSlots ? parsed : { activeSlots: parsed || {} };
+        if (!data.activeSlots) data.activeSlots = {};
+      } catch (e) {}
     }
-    if (!data.activeSlots) data.activeSlots = {};
     data.activeSlots[presenceId] = payload;
+    data.updatedAt = new Date().toISOString();
 
     await fetch(SPS_PRESENCE_BLOB_URL, {
       method: 'PUT',
@@ -469,7 +499,7 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
   };
 
   checkPresence();
-  const interval = setInterval(checkPresence, 15000);
+  const interval = setInterval(checkPresence, 5000);
 
   return () => clearInterval(interval);
 }

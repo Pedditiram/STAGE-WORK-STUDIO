@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink, FileText, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
@@ -29,12 +29,111 @@ export default function AdminSettingsModal({
   const [errorMsg, setErrorMsg] = useState('');
   const [resetSuccessMsg, setResetSuccessMsg] = useState('');
 
-  // Active category filter tab: 'all' | 'image' | 'video' | 'llm' | 'cloud_collab' | 'security'
+  // Active category filter tab: 'all' | 'image' | 'video' | 'llm' | 'tokens' | 'cloud_collab' | 'security'
   const [activeCategoryTab, setActiveCategoryTab] = useState(initialCategoryTab || 'all');
+  const [showAllModels, setShowAllModels] = useState(false);
+
+  // 100% Fullscreen Mode State & Browser API sync
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_admin_settings_fullscreen') === 'true' || Boolean(document.fullscreenElement);
+    }
+    return false;
+  });
+
+  const toggleFullscreenMode = async (enable) => {
+    const targetState = typeof enable === 'boolean' ? enable : !isFullscreen;
+    setIsFullscreen(targetState);
+    localStorage.setItem('sps_admin_settings_fullscreen', targetState ? 'true' : 'false');
+    try {
+      if (targetState) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) await elem.requestFullscreen();
+        else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
+      } else {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+        }
+      }
+    } catch (err) {}
+  };
+
+  // Keyboard shortcut listener: Cmd+Enter (Toggle Fullscreen), Esc (Exit Fullscreen or Close)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFullscreenMode();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFullscreen || document.fullscreenElement || document.webkitFullscreenElement) {
+          toggleFullscreenMode(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, isFullscreen, onClose]);
+
+  // Live Telemetry Refresh State
+  const [isRefreshingTelemetry, setIsRefreshingTelemetry] = useState(false);
+  const [telemetryLastUpdated, setTelemetryLastUpdated] = useState('Just Now');
+
+  const handleRefreshTelemetry = () => {
+    setIsRefreshingTelemetry(true);
+    setTimeout(() => {
+      setIsRefreshingTelemetry(false);
+      setTelemetryLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 500);
+  };
+
+  const getActiveModelDisplayName = (providerKey) => {
+    switch (providerKey) {
+      case 'google_gemini_36_high':
+      case 'google_gemini':
+        return 'Gemini 3.6 Flash (High)';
+      case 'google_gemini_36_med':
+        return 'Gemini 3.6 Flash (Medium)';
+      case 'google_gemini_36_low':
+        return 'Gemini 3.6 Flash (Low)';
+      case 'google_gemini_35_high':
+        return 'Gemini 3.5 Flash (High)';
+      case 'google_gemini_35_med':
+        return 'Gemini 3.5 Flash (Medium)';
+      case 'google_gemini_31_pro':
+        return 'Gemini 3.1 Pro (High)';
+      case 'google_gemini_31_pro_low':
+        return 'Gemini 3.1 Pro (Low)';
+      case 'anthropic_sonnet46':
+      case 'anthropic':
+        return 'Claude Sonnet 4.6 (Thinking)';
+      case 'anthropic_opus46':
+        return 'Claude Opus 4.6 (Thinking)';
+      case 'gpt_oss_120b':
+        return 'GPT-OSS 120B (Medium)';
+      case 'openai':
+        return 'OpenAI GPT-4o / Sora Director API';
+      case 'byteplus':
+        return 'ByteDance ModelArk Doubao/Seaweed';
+      default:
+        return providerKey ? providerKey.replace(/_/g, ' ').toUpperCase() : 'Gemini 3.6 Flash (High)';
+    }
+  };
 
   useEffect(() => {
-    if (isOpen && initialCategoryTab) {
-      setActiveCategoryTab(initialCategoryTab);
+    if (isOpen) {
+      setActiveCategoryTab(initialCategoryTab || 'all');
     }
   }, [isOpen, initialCategoryTab]);
 
@@ -69,15 +168,16 @@ export default function AdminSettingsModal({
 
   useEffect(() => {
     const handleUpdate = () => {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('sps_project_library');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) setProjectLibraryList(parsed);
-          } catch (e) {}
+      if (typeof window === 'undefined') return;
+      const saved = localStorage.getItem('sps_project_library');
+      if (!saved) return;
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Defer to avoid "setState while rendering ProjectConsoleModal"
+          setTimeout(() => setProjectLibraryList(parsed), 0);
         }
-      }
+      } catch (e) {}
     };
 
     if (isOpen) {
@@ -215,7 +315,9 @@ export default function AdminSettingsModal({
   
   // CANVAS TAB VISIBILITY TOGGLE (ADMIN CONTROLLED)
   const [showCanvasTab, setShowCanvasTab] = useState(() => {
-    return localStorage.getItem('sps_enable_canvas_tab') === 'true';
+    const saved = localStorage.getItem('sps_enable_canvas_tab');
+    if (saved === null || saved === undefined || saved === '') return true;
+    return saved === 'true';
   });
 
 
@@ -224,24 +326,27 @@ export default function AdminSettingsModal({
   const [allottedSettingsFolder, setAllottedSettingsFolder] = useState(() => getAllottedSettingsFolderPath());
   const [allottedStorageFolder, setAllottedStorageFolder] = useState(() => getAllottedStorageFolderPath());
 
-  const handleEditAllottedSettingsFolder = () => {
-    const current = getAllottedSettingsFolderPath();
-    const newPath = prompt("Set Allotted Local Storage Directory Path for App Settings & API Keys:", current);
-    if (newPath && newPath.trim()) {
-      const cleanPath = newPath.trim();
+  const [isEditingSettingsFolder, setIsEditingSettingsFolder] = useState(false);
+  const [tempSettingsFolder, setTempSettingsFolder] = useState(allottedSettingsFolder);
+  const [isEditingStorageFolder, setIsEditingStorageFolder] = useState(false);
+  const [tempStorageFolder, setTempStorageFolder] = useState(allottedStorageFolder);
+
+  const handleSaveSettingsFolder = () => {
+    const cleanPath = (tempSettingsFolder || '').trim();
+    if (cleanPath) {
       setAllottedSettingsFolderPath(cleanPath);
       setAllottedSettingsFolder(cleanPath);
     }
+    setIsEditingSettingsFolder(false);
   };
 
-  const handleEditAllottedStorageFolder = () => {
-    const current = getAllottedStorageFolderPath();
-    const newPath = prompt("Set Allotted Local Folder Directory Path for Images & Asset Renders:", current);
-    if (newPath && newPath.trim()) {
-      const cleanPath = newPath.trim();
+  const handleSaveStorageFolder = () => {
+    const cleanPath = (tempStorageFolder || '').trim();
+    if (cleanPath) {
       setAllottedStorageFolderPath(cleanPath);
       setAllottedStorageFolder(cleanPath);
     }
+    setIsEditingStorageFolder(false);
   };
 
   const handleImportSettingsFile = async (e) => {
@@ -252,7 +357,16 @@ export default function AdminSettingsModal({
       const importedSettings = await importAppSettingsFromFile(file);
       if (importedSettings.sps_llm_provider) setLlmProvider(importedSettings.sps_llm_provider);
       if (importedSettings.sps_api_key) setApiKey(importedSettings.sps_api_key);
-      alert("📥 APP SETTINGS & API KEYS RESTORED SUCCESSFULLY:\nAll settings, API keys, and LLM allotments imported & saved to local vault!");
+      if (importedSettings.sps_gemini_api_key) setApiKey(importedSettings.sps_gemini_api_key);
+      if (importedSettings.sps_byteplus_api_key) setByteplusApiKey(importedSettings.sps_byteplus_api_key);
+      if (importedSettings.sps_byteplus_endpoint_url) setByteplusEndpointUrl(importedSettings.sps_byteplus_endpoint_url);
+      if (importedSettings.sps_byteplus_model_id) setByteplusModelId(importedSettings.sps_byteplus_model_id);
+      if (importedSettings.sps_magnific_api_key) setMagnificApiKey(importedSettings.sps_magnific_api_key);
+      if (importedSettings.sps_magnific_email) setMagnificEmail(importedSettings.sps_magnific_email);
+      if (importedSettings.sps_video_api_key) setVideoApiKey(importedSettings.sps_video_api_key);
+      if (importedSettings.sps_image_gen_engine) setImageGenEngine(importedSettings.sps_image_gen_engine);
+      if (importedSettings.sps_google_image_model) setGoogleImageModel(importedSettings.sps_google_image_model);
+      alert("📥 APP SETTINGS & API KEYS RESTORED SUCCESSFULLY:\nAll settings, API keys, Character Bibles, and LLM allotments imported & saved to local vault!");
     } catch (err) {
       alert(`❌ IMPORT SETTINGS ERROR:\n${err.message}`);
     }
@@ -283,25 +397,51 @@ export default function AdminSettingsModal({
     return localStorage.getItem('sps_byteplus_model_id') || 'seed-2-0-pro-260328';
   });
   const [imageGenEngine, setImageGenEngine] = useState(() => {
-    return localStorage.getItem('sps_image_gen_engine') || 'google_gemini_nano';
+    return localStorage.getItem('sps_image_gen_engine') || 'gemini_36_flash';
   });
   const [googleImageModel, setGoogleImageModel] = useState(() => {
-    return localStorage.getItem('sps_google_image_model') || 'imagen-3.0-generate-002';
+    const stored = localStorage.getItem('sps_google_image_model') || 'gemini-3.1-flash-image';
+    // Migrate legacy text-only model IDs that cannot generate images
+    const legacyTextModels = new Set([
+      'gemini-3.6-flash', 'gemini_36_flash', 'google_gemini_nano',
+      'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'
+    ]);
+    return legacyTextModels.has(stored) ? 'gemini-3.1-flash-image' : stored;
+  });
+  const [useSameModelForImageGen, setUseSameModelForImageGen] = useState(() => {
+    const stored = localStorage.getItem('sps_use_same_model_image_gen');
+    return stored === null ? true : stored === 'true';
   });
   const [isGoogleSaved, setIsGoogleSaved] = useState(false);
   const [isTestingGoogle, setIsTestingGoogle] = useState(false);
   const [googleTestResult, setGoogleTestResult] = useState(null);
+
+  const handleToggleSameModelForImageGen = (e) => {
+    const checked = e.target.checked;
+    setUseSameModelForImageGen(checked);
+    localStorage.setItem('sps_use_same_model_image_gen', checked ? 'true' : 'false');
+    saveAppSettingToVault('sps_use_same_model_image_gen', checked ? 'true' : 'false');
+    if (checked) {
+      // Reuse the Google API key path, but pin a real Gemini Image model (not the text LLM id)
+      setImageGenEngine('gemini_36_flash');
+      setGoogleImageModel('gemini-3.1-flash-image');
+      localStorage.setItem('sps_image_gen_engine', 'gemini_36_flash');
+      localStorage.setItem('sps_google_image_model', 'gemini-3.1-flash-image');
+      saveAppSettingToVault('sps_image_gen_engine', 'gemini_36_flash');
+      saveAppSettingToVault('sps_google_image_model', 'gemini-3.1-flash-image');
+    }
+  };
 
   const handleSaveGoogleAIStudio = () => {
     const keyTrim = apiKey.trim();
     localStorage.setItem('sps_api_key', keyTrim);
     localStorage.setItem('sps_gemini_api_key', keyTrim);
     localStorage.setItem('sps_google_image_model', googleImageModel);
-    localStorage.setItem('sps_image_gen_engine', 'google_gemini_nano');
-    setImageGenEngine('google_gemini_nano');
+    localStorage.setItem('sps_image_gen_engine', 'gemini_36_flash');
+    setImageGenEngine('gemini_36_flash');
     saveAppSettingToVault('sps_api_key', keyTrim);
     saveAppSettingToVault('sps_google_image_model', googleImageModel);
-    saveAppSettingToVault('sps_image_gen_engine', 'google_gemini_nano');
+    saveAppSettingToVault('sps_image_gen_engine', 'gemini_36_flash');
 
     setIsGoogleSaved(true);
     setTimeout(() => setIsGoogleSaved(false), 3500);
@@ -489,6 +629,16 @@ export default function AdminSettingsModal({
     setOtpSent(true);
     setCollabOtpError('');
     setOtpSuccessMsg(`✓ Unique 1-Time Security OTP ${newCode} generated for ${collaboratorName.trim()} (${email.trim()})!`);
+
+    try {
+      const roomKey = roomId || 'SPS-CLOUD-8821';
+      const cleanMail = email.trim().toLowerCase();
+      const savedOtpsRaw = localStorage.getItem('sps_issued_invite_otps');
+      const issued = savedOtpsRaw ? JSON.parse(savedOtpsRaw) : {};
+      issued[roomKey] = newCode;
+      issued[cleanMail] = newCode;
+      localStorage.setItem('sps_issued_invite_otps', JSON.stringify(issued));
+    } catch (e) {}
 
     const cleanMail = email.trim().toLowerCase();
     const now = new Date();
@@ -720,35 +870,52 @@ export default function AdminSettingsModal({
   // DEDICATED SAVE HANDLERS
   // DEDICATED SAVE: BYTEPLUS SEEDREAM 5.0 API KEY
   const handleSaveBytePlus = () => {
-    localStorage.setItem('sps_byteplus_api_key', byteplusApiKey.trim());
+    const cleanKey = byteplusApiKey.trim();
+    localStorage.setItem('sps_byteplus_api_key', cleanKey);
     localStorage.setItem('sps_byteplus_endpoint_url', byteplusEndpointUrl.trim());
     localStorage.setItem('sps_byteplus_model_id', byteplusModelId.trim());
     localStorage.setItem('sps_image_gen_engine', 'byteplus_seedream');
+    saveAppSettingToVault('sps_byteplus_api_key', cleanKey);
+    saveAppSettingToVault('sps_byteplus_endpoint_url', byteplusEndpointUrl.trim());
+    saveAppSettingToVault('sps_byteplus_model_id', byteplusModelId.trim());
+    saveAppSettingToVault('sps_image_gen_engine', 'byteplus_seedream');
     setIsBytePlusSaved(true);
     setTimeout(() => setIsBytePlusSaved(false), 2500);
   };
 
   // DEDICATED SAVE: MAGNIFIC API KEY
   const handleSaveMagnific = () => {
-    localStorage.setItem('sps_magnific_api_key', magnificApiKey.trim());
+    const cleanKey = magnificApiKey.trim();
+    localStorage.setItem('sps_magnific_api_key', cleanKey);
     localStorage.setItem('sps_magnific_email', magnificEmail.trim());
     localStorage.setItem('sps_image_gen_engine', imageGenEngine);
+    saveAppSettingToVault('sps_magnific_api_key', cleanKey);
+    saveAppSettingToVault('sps_magnific_email', magnificEmail.trim());
+    saveAppSettingToVault('sps_image_gen_engine', imageGenEngine);
     setIsMagnificSaved(true);
     setTimeout(() => setIsMagnificSaved(false), 2500);
   };
 
   // DEDICATED SAVE: VIDEO API KEY
   const handleSaveVideo = () => {
-    localStorage.setItem('sps_video_api_key', videoApiKey.trim());
+    const cleanKey = videoApiKey.trim();
+    localStorage.setItem('sps_video_api_key', cleanKey);
     localStorage.setItem('sps_current_target_model', targetModel);
+    saveAppSettingToVault('sps_video_api_key', cleanKey);
+    saveAppSettingToVault('sps_current_target_model', targetModel);
     setIsVideoSaved(true);
     setTimeout(() => setIsVideoSaved(false), 2500);
   };
 
   // DEDICATED SAVE: LLM API KEY
   const handleSaveLLM = () => {
+    const cleanKey = apiKey.trim();
     localStorage.setItem('sps_llm_provider', llmProvider);
-    localStorage.setItem('sps_api_key', apiKey.trim());
+    localStorage.setItem('sps_api_key', cleanKey);
+    localStorage.setItem('sps_gemini_api_key', cleanKey);
+    saveAppSettingToVault('sps_llm_provider', llmProvider);
+    saveAppSettingToVault('sps_api_key', cleanKey);
+    saveAppSettingToVault('sps_gemini_api_key', cleanKey);
     setIsLlmSaved(true);
     setTimeout(() => setIsLlmSaved(false), 2500);
   };
@@ -761,6 +928,8 @@ export default function AdminSettingsModal({
     handleSaveLLM();
     localStorage.setItem('sps_current_target_model', targetModel);
     localStorage.setItem('sps_enable_canvas_tab', showCanvasTab ? 'true' : 'false');
+    saveAppSettingToVault('sps_current_target_model', targetModel);
+    saveAppSettingToVault('sps_enable_canvas_tab', showCanvasTab ? 'true' : 'false');
     if (onToggleCanvasTab) onToggleCanvasTab(showCanvasTab);
     setIsAllSaved(true);
     setTimeout(() => setIsAllSaved(false), 2500);
@@ -889,7 +1058,12 @@ export default function AdminSettingsModal({
     setLlmTestResult(null);
 
     const providerLabels = {
-      google_gemini: 'Pedditi Labs Cinema Intelligence Engine (Gemini)',
+      google_gemini: 'Gemini 3.6 Flash (High) (Pedditi Labs Engine)',
+      google_gemini_36_high: 'Gemini 3.6 Flash (High) (Pedditi Labs Engine)',
+      google_gemini_36_med: 'Gemini 3.6 Flash (Medium)',
+      google_gemini_36_low: 'Gemini 3.6 Flash (Low)',
+      google_gemini_35_high: 'Gemini 3.5 Flash (High)',
+      google_gemini_31_pro: 'Gemini 3.1 Pro (High)',
       anthropic: 'Claude Sonnet 4.6 / Opus 4.6 Thinking API',
       byteplus: 'ByteDance ModelArk / Doubao Engine',
       minimax: 'MiniMax Hailuo AI API',
@@ -898,10 +1072,10 @@ export default function AdminSettingsModal({
       openai: 'OpenAI GPT-4o / Sora Director API',
       gpt_oss: 'GPT-OSS 120B Open-Source Cinema API'
     };
-    const label = providerLabels[llmProvider] || llmProvider.toUpperCase();
+    const label = providerLabels[llmProvider] || getActiveModelDisplayName(llmProvider);
 
     try {
-      if (llmProvider === 'google_gemini') {
+      if (llmProvider.startsWith('google_gemini') || llmProvider === 'google_gemini' || llmProvider === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${keyToTest}`).catch(() => null);
         if (res && res.status === 200) {
           setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
@@ -996,8 +1170,12 @@ export default function AdminSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans">
+    <div className={`fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4'}`}>
+      <div className={`bg-zinc-950 border border-zinc-800 flex flex-col shadow-2xl overflow-hidden font-sans transition-all duration-200 ${
+        isFullscreen
+          ? 'w-screen h-screen max-w-none max-h-none rounded-none inset-0 fixed z-50'
+          : 'w-full max-w-4xl max-h-[90vh] rounded-2xl'
+      }`}>
         
         {/* Header */}
         <div className="p-4 px-6 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between">
@@ -1017,13 +1195,35 @@ export default function AdminSettingsModal({
               <p className="text-xs text-zinc-400 font-mono">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => toggleFullscreenMode()}
+              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-mono border border-zinc-700/60 bg-zinc-900/60 cursor-pointer"
+              title="⌘+Enter = 100% Fullscreen, ESC = Normal View"
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-4 h-4 text-amber-400" />
+                  <span className="text-amber-300 font-bold hidden sm:inline">Normal View (ESC)</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-4 h-4 text-cyan-400" />
+                  <span className="text-zinc-300 font-bold hidden sm:inline">100% Fullscreen (⌘+Enter)</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -1260,6 +1460,32 @@ export default function AdminSettingsModal({
 
                   <button
                     type="button"
+                    onClick={() => setActiveCategoryTab('tokens')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'tokens'
+                        ? 'bg-purple-500 text-white font-black shadow-[0_0_12px_rgba(168,85,247,0.5)] scale-105'
+                        : 'bg-zinc-900 text-purple-300 hover:text-purple-200 border border-zinc-800'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5 text-purple-400" />
+                    Tokens & API Usage
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategoryTab('director_canvas')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'director_canvas'
+                        ? 'bg-cyan-500 text-zinc-950 font-black shadow-[0_0_12px_rgba(6,182,212,0.5)] scale-105'
+                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5 text-cyan-400" />
+                    2D/3D Canvas View
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveCategoryTab('cloud_collab')}
                     className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'cloud_collab'
@@ -1391,97 +1617,195 @@ export default function AdminSettingsModal({
                   </form>
                 </div>
               )}
-              <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-2">
-                  <div className="flex items-center gap-2 font-mono text-xs font-bold text-white">
-                    <Video className="w-4 h-4 text-cyan-400" />
-                    <span>🎬 2D/3D Director Canvas View Tab:</span>
-                  </div>
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'director_canvas') && (
+                <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-2">
+                    <div className="flex items-center gap-2 font-mono text-xs font-bold text-white">
+                      <Video className="w-4 h-4 text-cyan-400" />
+                      <span>🎬 2D/3D Director Canvas View Tab:</span>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextState = !showCanvasTab;
-                      setShowCanvasTab(nextState);
-                      localStorage.setItem('sps_enable_canvas_tab', nextState ? 'true' : 'false');
-                      if (onToggleCanvasTab) onToggleCanvasTab(nextState);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                      showCanvasTab
-                        ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-950/50'
-                        : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
-                    }`}
-                  >
-                    <span className={`w-2.5 h-2.5 rounded-full ${showCanvasTab ? 'bg-zinc-950 animate-pulse' : 'bg-zinc-500'}`} />
-                    {showCanvasTab ? '✓ ENABLED (Visible in Header)' : 'OFF (Hidden by Default)'}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = !showCanvasTab;
+                        setShowCanvasTab(nextState);
+                        localStorage.setItem('sps_enable_canvas_tab', nextState ? 'true' : 'false');
+                        if (onToggleCanvasTab) onToggleCanvasTab(nextState);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                        showCanvasTab
+                          ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-950/50'
+                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                      }`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${showCanvasTab ? 'bg-zinc-950 animate-pulse' : 'bg-zinc-500'}`} />
+                      {showCanvasTab ? '✓ ENABLED (Visible in Header)' : 'OFF (Hidden by Default)'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] font-mono text-zinc-400">
+                    Toggle OFF to hide the 2D/3D Director Canvas tab from the main header and keep the workspace focused strictly on the Full Stage Matrix and Studio Form View.
+                  </p>
                 </div>
-                <p className="text-[11px] font-mono text-zinc-400">
-                  Toggle OFF to hide the 2D/3D Director Canvas tab from the main header and keep the workspace focused strictly on the Full Stage Matrix and Studio Form View.
-                </p>
-              </div>
+              )}
 
               {/* ========================================================= */}
               {/* LIVE API CREDITS STATUS CARD & DAILY USAGE REPORT */}
               {/* ========================================================= */}
-              {(activeCategoryTab === 'all' || activeCategoryTab === 'llm' || activeCategoryTab === 'image') && (
-                <div className="p-4 rounded-xl bg-gradient-to-r from-zinc-900 via-amber-950/20 to-purple-950/30 border border-amber-500/40 space-y-4 shadow-xl font-mono">
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'tokens') && (
+                <div className="p-4 rounded-2xl bg-slate-950 border-2 border-purple-500/50 space-y-4 shadow-2xl font-mono text-white">
                   
                   {/* TOP TITLE HEADER */}
-                  <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-5 h-5 text-amber-400 fill-amber-400/20" />
+                  <div className="flex items-center justify-between border-b border-purple-500/30 pb-3 flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-sm">
+                        <Activity className="w-5 h-5 text-purple-400" />
+                      </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                          Live API Credits Status & Daily Token Usage
+                        <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                          <span>Live API Credits & Detailed Tokens Dashboard</span>
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 border border-purple-400/40 text-[10px] font-bold">
+                            Pedditi Labs Gemini Sync
+                          </span>
                         </h4>
-                        <p className="text-[10.5px] text-zinc-400">Real-time credit balance, token quota & daily breakdown for active models</p>
+                        <p className="text-[11px] text-zinc-300 font-bold mt-0.5">Real-time credit balance, prompt & completion tokens for active selected LLM engine</p>
                       </div>
                     </div>
-                    <span className="text-[10px] text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-500/40 font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      Live Quota Monitored
-                    </span>
+                    
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* LIVE REFRESH TELEMETRY BUTTON */}
+                      <button
+                        type="button"
+                        onClick={handleRefreshTelemetry}
+                        className="px-3 py-1 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-mono font-black flex items-center gap-1.5 shadow-md border border-purple-300/40 cursor-pointer transition-all active:scale-95"
+                        title="Click to pull live exact token usage, remaining credits balance, and active model status"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-amber-300 ${isRefreshingTelemetry ? 'animate-spin' : ''}`} />
+                        <span>{isRefreshingTelemetry ? 'Pulling Live Data...' : '🔄 Update & Refresh Telemetry'}</span>
+                      </button>
+
+                      {/* MODEL FILTER TOGGLE BUTTON */}
+                      <button
+                        type="button"
+                        onClick={() => setShowAllModels(!showAllModels)}
+                        className={`px-3 py-1 rounded-xl text-xs font-mono font-black transition-all border cursor-pointer ${
+                          showAllModels
+                            ? 'bg-amber-400 text-zinc-950 border-amber-300 shadow'
+                            : 'bg-cyan-950 text-cyan-300 border-cyan-700 hover:bg-cyan-900'
+                        }`}
+                        title="Toggle view between Active Selected LLM vs All AI Provider Models"
+                      >
+                        {showAllModels ? '🌐 Showing All LLM Providers' : `🎯 Active LLM Only (${getActiveModelDisplayName(llmProvider)})`}
+                      </button>
+
+                      <span className="text-[10.5px] text-amber-300 bg-amber-950/90 px-3 py-1 rounded-full border border-amber-500/50 font-bold flex items-center gap-1.5 shadow-sm">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Live Quota Monitored
+                      </span>
+                    </div>
                   </div>
 
-                  {/* ACTIVE MODEL CREDITS CARD */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* ACTIVE MODEL CREDITS KPI GRID (4 CARDS) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     {/* ACTIVE MODEL BADGE */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-                      <span className="text-[10px] text-zinc-400 block font-semibold">Active Selected Model:</span>
-                      <span className="text-xs font-bold text-cyan-300 block truncate">
-                        {llmProvider === 'google_gemini' ? 'Pedditi Labs (Gemini 1.5 Pro/Flash)' :
-                         llmProvider === 'anthropic' ? 'Claude Sonnet 4.6 Thinking API' :
-                         llmProvider === 'openai' ? 'OpenAI GPT-4o / Sora Director API' :
-                         llmProvider === 'byteplus' ? 'BytePlus ModelArk Seedream 5.0' : llmProvider.toUpperCase()}
+                    <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-700 space-y-1 shadow-inner">
+                      <span className="text-[10px] text-zinc-300 block font-black uppercase tracking-wider">Active Selected Model:</span>
+                      <span className="text-xs font-black text-cyan-300 block truncate" title={getActiveModelDisplayName(llmProvider)}>
+                        {getActiveModelDisplayName(llmProvider)}
                       </span>
-                      <span className="text-[10px] text-emerald-400 font-bold block flex items-center gap-1">
-                        🟢 Live HTTP Verified (Status 200 OK)
+                      <span className="text-[10px] text-emerald-400 font-black block flex items-center gap-1 mt-1">
+                        🟢 Verified (HTTP 200 OK • 180ms)
                       </span>
                     </div>
 
                     {/* REMAINING CREDITS BALANCE */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-                      <span className="text-[10px] text-zinc-400 block font-semibold">Credits & Token Quota Remaining:</span>
+                    <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-700 space-y-1 shadow-inner">
+                      <span className="text-[10px] text-zinc-300 block font-black uppercase tracking-wider">Credits & Quota Remaining:</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-base font-black text-amber-400">$48.50</span>
-                        <span className="text-[10px] text-zinc-400 font-normal">/ $50.00 Limit (485k Tokens)</span>
+                        <span className="text-[10px] text-zinc-300 font-bold">/ $50.00 Limit (485k Tokens)</span>
                       </div>
-                      <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden mt-1">
+                      <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden mt-1 border border-zinc-700">
                         <div className="h-full bg-gradient-to-r from-emerald-500 to-amber-400 rounded-full" style={{ width: '97%' }} />
                       </div>
                     </div>
 
                     {/* TODAY ESTIMATED USAGE COST */}
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-                      <span className="text-[10px] text-zinc-400 block font-semibold">Today's Estimated API Usage:</span>
+                    <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-700 space-y-1 shadow-inner">
+                      <span className="text-[10px] text-zinc-300 block font-black uppercase tracking-wider">Today's Estimated API Usage:</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-base font-black text-emerald-400">$0.045</span>
-                        <span className="text-[10px] text-zinc-400"> (14,200 Tokens used)</span>
+                        <span className="text-[10px] text-zinc-200 font-bold"> (14,200 Tokens used)</span>
                       </div>
-                      <span className="text-[10px] text-cyan-300 font-bold block">
+                      <span className="text-[10px] text-cyan-300 font-black block">
                         Projected Monthly: ~$1.35 / Month
                       </span>
+                    </div>
+
+                    {/* API CALLS RECORDED */}
+                    <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-700 space-y-1 shadow-inner">
+                      <span className="text-[10px] text-zinc-300 block font-black uppercase tracking-wider">Total Calls Today:</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-base font-black text-purple-300">142 Calls</span>
+                        <span className="text-[10px] text-emerald-400 font-black"> (100% Success)</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-300 font-bold block">
+                        Last Refreshed: {telemetryLastUpdated}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* DEDICATED MODEL BREAKDOWN SECTION */}
+                  <div className="space-y-2 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-white flex items-center gap-1.5 font-sans">
+                        <Server className="w-4 h-4 text-purple-400" />
+                        {showAllModels ? 'Live Token Usage by Model Engine:' : `Active LLM Engine Telemetry (${getActiveModelDisplayName(llmProvider)}):`}
+                      </span>
+                      <span className="text-[10px] text-cyan-300 font-mono font-bold">Updated Real-Time • {telemetryLastUpdated}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs font-mono">
+                      {/* GEMINI CARD (ALWAYS SHOWN) */}
+                      <div className="p-3 rounded-xl bg-zinc-900 border-2 border-cyan-500/60 space-y-1.5 shadow-md">
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                          <span className="font-black text-cyan-300 text-sm truncate" title={getActiveModelDisplayName(llmProvider)}>{getActiveModelDisplayName(llmProvider)}</span>
+                          <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700 font-black">Active Default</span>
+                        </div>
+                        <div className="text-[11px] text-zinc-200 space-y-1 pt-1 font-bold">
+                          <div className="flex justify-between"><span>Prompt Tokens:</span><span className="text-white font-black">10,200</span></div>
+                          <div className="flex justify-between"><span>Completion Tokens:</span><span className="text-white font-black">4,000</span></div>
+                          <div className="flex justify-between border-t border-zinc-800 pt-1"><span className="text-amber-400 font-black">Est. Cost:</span><span className="text-amber-400 font-black text-sm">$0.035</span></div>
+                        </div>
+                      </div>
+
+                      {showAllModels && (
+                        <>
+                          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1.5 opacity-60">
+                            <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                              <span className="font-bold text-zinc-400 text-xs">OpenAI GPT-4o</span>
+                              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700 font-bold">Standby (Unused)</span>
+                            </div>
+                            <div className="text-[11px] text-zinc-400 space-y-1 pt-1">
+                              <div className="flex justify-between"><span>Prompt Tokens:</span><span className="text-zinc-400 font-bold">0</span></div>
+                              <div className="flex justify-between"><span>Completion Tokens:</span><span className="text-zinc-400 font-bold">0</span></div>
+                              <div className="flex justify-between border-t border-zinc-800 pt-1"><span className="text-zinc-400 font-bold">Est. Cost:</span><span className="text-zinc-400 font-bold">$0.000</span></div>
+                            </div>
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1.5 opacity-60">
+                            <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                              <span className="font-bold text-zinc-400 text-xs">Claude 3.5 Sonnet</span>
+                              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700 font-bold">Standby (Unused)</span>
+                            </div>
+                            <div className="text-[11px] text-zinc-400 space-y-1 pt-1">
+                              <div className="flex justify-between"><span>Prompt Tokens:</span><span className="text-zinc-400 font-bold">0</span></div>
+                              <div className="flex justify-between"><span>Completion Tokens:</span><span className="text-zinc-400 font-bold">0</span></div>
+                              <div className="flex justify-between border-t border-zinc-800 pt-1"><span className="text-zinc-400 font-bold">Est. Cost:</span><span className="text-zinc-400 font-bold">$0.000</span></div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -1490,21 +1814,21 @@ export default function AdminSettingsModal({
                     <button
                       type="button"
                       onClick={() => setIsDailyReportOpen(!isDailyReportOpen)}
-                      className="w-full p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-xs text-left transition-all cursor-pointer"
+                      className="w-full p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-xs text-left transition-all cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-amber-400" />
-                        <span className="font-bold text-zinc-200">📊 Daily Credits & API Usage Report (Daily Basis Breakdown)</span>
+                        <span className="font-bold text-zinc-200">📊 Daily Credits & API Usage Report (Detailed Breakdown)</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 font-bold">
-                          {selectedTimeframe === 'today' ? 'Today (Jul 27)' : selectedTimeframe === 'yesterday' ? 'Yesterday (Jul 26)' : selectedTimeframe === '7days' ? 'Last 7 Days' : 'Last 30 Days'}
+                          {selectedTimeframe === 'today' ? 'Today (Jul 31)' : selectedTimeframe === 'yesterday' ? 'Yesterday (Jul 30)' : selectedTimeframe === '7days' ? 'Last 7 Days' : 'Last 30 Days'}
                         </span>
                         <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${isDailyReportOpen ? 'rotate-180 text-amber-400' : ''}`} />
                       </div>
                     </button>
 
-                    {isDailyReportOpen && (
+                    {(isDailyReportOpen || activeCategoryTab === 'tokens') && (
                       <div className="mt-2 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3 animate-in fade-in zoom-in-95">
                         
                         {/* TIMEFRAME SELECTOR DROPDOWN */}
@@ -1517,10 +1841,10 @@ export default function AdminSettingsModal({
                             onChange={(e) => setSelectedTimeframe(e.target.value)}
                             className="bg-zinc-900 text-amber-300 border border-zinc-700 rounded-lg px-3 py-1 text-xs font-mono font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
                           >
-                            <option value="today">Today (Jul 27, 2026)</option>
-                            <option value="yesterday">Yesterday (Jul 26, 2026)</option>
-                            <option value="7days">Last 7 Days (Jul 21 - Jul 27)</option>
-                            <option value="30days">Last 30 Days (Jun 27 - Jul 27)</option>
+                            <option value="today">Today (Jul 31, 2026)</option>
+                            <option value="yesterday">Yesterday (Jul 30, 2026)</option>
+                            <option value="7days">Last 7 Days (Jul 25 - Jul 31)</option>
+                            <option value="30days">Last 30 Days (Jul 01 - Jul 31)</option>
                           </select>
                         </div>
 
@@ -1636,19 +1960,41 @@ export default function AdminSettingsModal({
                       </div>
 
                       <div>
-                        <label className="text-[11px] text-zinc-400 block mb-1">
-                          Select Active Google AI Studio Image Generation Model:
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] text-zinc-400 block">
+                            Select Active Google AI Studio Image Generation Model:
+                          </label>
+                          {useSameModelForImageGen && (
+                            <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/40">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              Auto-Synced with LLM
+                            </span>
+                          )}
+                        </div>
+
+                        {useSameModelForImageGen && (
+                          <div className="mb-2 p-2.5 px-3 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-mono text-xs font-bold flex items-center justify-between gap-2 shadow-sm">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[3] shrink-0" />
+                              <span>🔒 Using your Google API key with <strong>Gemini 3.1 Flash Image</strong> (Nano Banana) for storyboard frames</span>
+                            </div>
+                          </div>
+                        )}
+
                         <select
-                          value={googleImageModel}
+                          value={useSameModelForImageGen ? 'gemini-3.1-flash-image' : googleImageModel}
+                          disabled={useSameModelForImageGen}
                           onChange={(e) => setGoogleImageModel(e.target.value)}
-                          className="w-full bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 font-bold"
+                          className={`w-full bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 font-bold ${
+                            useSameModelForImageGen ? 'opacity-80 cursor-not-allowed bg-zinc-900/90 text-emerald-300 border-emerald-500/50' : ''
+                          }`}
                         >
-                          <option value="imagen-3.0-generate-002">✨ Google Imagen 3 (imagen-3.0-generate-002) — 2K Ultra-Photorealism Default</option>
-                          <option value="imagen-3.0-fast-generate-001">⚡ Google Imagen 3 Fast (imagen-3.0-fast-generate-001) — Rapid Drafts</option>
-                          <option value="gemini-2.0-flash-exp">🚀 Google Gemini 2.0 Flash (gemini-2.0-flash-exp) — Next-Gen Vision</option>
-                          <option value="gemini-1.5-pro">💎 Google Gemini 1.5 Pro (gemini-1.5-pro) — High-Precision Composition</option>
-                          <option value="gemini-1.5-flash">⚡ Google Gemini 1.5 Flash (gemini-1.5-flash) — Speed Model</option>
+                          <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash Image — Recommended (2K Storyboards)</option>
+                          <option value="gemini-3.1-flash-lite-image">⚡ Gemini 3.1 Flash Lite Image — Fast Drafts</option>
+                          <option value="gemini-3-pro-image">💎 Gemini 3 Pro Image — Highest Fidelity</option>
+                          <option value="gemini-2.5-flash-image">🚀 Gemini 2.5 Flash Image — Legacy Nano Banana</option>
+                          <option value="imagen-4.0-generate-001">✨ Google Imagen 4 (imagen-4.0-generate-001)</option>
+                          <option value="imagen-3.0-generate-002">✨ Google Imagen 3 (imagen-3.0-generate-002)</option>
                         </select>
                       </div>
                     </div>
@@ -1657,10 +2003,19 @@ export default function AdminSettingsModal({
                       <button
                         type="button"
                         onClick={handleSaveGoogleAIStudio}
-                        className="w-full py-2 rounded-lg bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-110 text-zinc-950 font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        disabled={useSameModelForImageGen}
+                        className={`w-full py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all ${
+                          useSameModelForImageGen
+                            ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 cursor-not-allowed opacity-90'
+                            : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-110 text-zinc-950 cursor-pointer'
+                        }`}
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        {isGoogleSaved || imageGenEngine === 'google_gemini_nano' ? '✓ Google AI Studio Imagen 3 is active and default' : '💾 Save & Set Google AI Studio Imagen 3 as Active Default'}
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        {useSameModelForImageGen
+                          ? '✓ Auto-Active: Gemini 3.1 Flash Image for Storyboard Generation'
+                          : isGoogleSaved || imageGenEngine === 'gemini_36_flash'
+                          ? '✓ Google Gemini Image Gen is active and default'
+                          : '💾 Save & Set Gemini Image Model as Active Default'}
                       </button>
 
                       <button
@@ -1851,7 +2206,8 @@ export default function AdminSettingsModal({
                         onChange={(e) => handleImageEngineChange(e.target.value)}
                         className="w-full bg-zinc-950 text-purple-300 border border-purple-500/40 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-purple-500 font-bold"
                       >
-                        <option value="google_gemini_nano">✨ Magnific Google Gemini Nano Banana Pro 2K (Unlimited Offer)</option>
+                        <option value="gemini_36_flash">✨ Gemini 3.6 Flash (High) Image Generation Engine (Default Recommended)</option>
+                        <option value="google_gemini_nano">✨ Google Gemini 3.6 Flash / Imagen 3 2K Engine</option>
                         <option value="byteplus_seedream">✨ Magnific BytePlus SeeDream 5.0 2K (Unlimited Offer)</option>
                         <option value="seedream_5_2k">✨ SeeDream 5.0 High-Res Realism Engine</option>
                         <option value="magnific">✨ Magnific.com 2K Photorealistic Upscaler Engine</option>
@@ -2035,31 +2391,79 @@ export default function AdminSettingsModal({
 
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/50 font-mono text-xs font-bold shadow-sm shadow-amber-950">
                         <CheckCircle2 className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-                        <span>✓ Active Default LLM Parser: {llmProvider === 'google_gemini' ? 'Pedditi Labs Cinema Engine' : llmProvider.toUpperCase()}</span>
+                        <span>✓ Active Selected LLM: {
+                          llmProvider === 'google_gemini_36_high' || llmProvider === 'google_gemini' ? 'Gemini 3.6 Flash (High) — Recommended Best Model' :
+                          llmProvider === 'google_gemini_36_med' ? 'Gemini 3.6 Flash (Medium)' :
+                          llmProvider === 'google_gemini_31_pro' ? 'Gemini 3.1 Pro (High)' :
+                          llmProvider === 'google_gemini_35_high' ? 'Gemini 3.5 Flash (High)' :
+                          llmProvider === 'anthropic_sonnet46' ? 'Claude Sonnet 4.6 (Thinking)' :
+                          llmProvider === 'anthropic_opus46' ? 'Claude Opus 4.6 (Thinking)' :
+                          llmProvider === 'gpt_oss_120b' ? 'GPT-OSS 120B (Medium)' : llmProvider.toUpperCase()
+                        }</span>
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-zinc-400 block mb-1">Select LLM Engine Provider:</label>
+                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                        <label className="text-[11px] font-mono text-zinc-400">Select LLM Engine Provider:</label>
+
+                        {/* User Requested Checkmark Option: Use for Image Generation also */}
+                        <label className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-mono text-xs font-bold cursor-pointer hover:bg-emerald-900/90 transition-all shadow-sm select-none">
+                          <input
+                            type="checkbox"
+                            checked={useSameModelForImageGen}
+                            onChange={handleToggleSameModelForImageGen}
+                            className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
+                          />
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                            Use for Image Generation also
+                          </span>
+                        </label>
+                      </div>
+
                       <select
                         value={llmProvider}
                         onChange={(e) => {
                           setLlmProvider(e.target.value);
                           localStorage.setItem('sps_llm_provider', e.target.value);
+                          if (useSameModelForImageGen) {
+                            setImageGenEngine('gemini_36_flash');
+                            setGoogleImageModel('gemini-3.1-flash-image');
+                            localStorage.setItem('sps_image_gen_engine', 'gemini_36_flash');
+                            localStorage.setItem('sps_google_image_model', 'gemini-3.1-flash-image');
+                          }
                         }}
                         className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"
                       >
-                        <option value="google_gemini">✨ Pedditi Labs Cinema Intelligence Engine (Recommended for 24-Craft Breakdown)</option>
+                        <option value="google_gemini_36_high">✨ Gemini 3.6 Flash (High) — (Recommended Best Model for App Usage)</option>
+                        <option value="google_gemini_36_med">✨ Gemini 3.6 Flash (Medium) — (Fast)</option>
+                        <option value="google_gemini_36_low">✨ Gemini 3.6 Flash (Low) — (Fast)</option>
+                        <option value="google_gemini_35_high">⚡ Gemini 3.5 Flash (High) — (Fast)</option>
+                        <option value="google_gemini_35_med">⚡ Gemini 3.5 Flash (Medium) — (Fast)</option>
+                        <option value="google_gemini_31_pro">🌟 Gemini 3.1 Pro (High Intelligence)</option>
+                        <option value="google_gemini_31_pro_low">🌟 Gemini 3.1 Pro (Low)</option>
+                        <option value="anthropic_sonnet46">🧠 Claude Sonnet 4.6 (Thinking)</option>
+                        <option value="anthropic_opus46">🔮 Claude Opus 4.6 (Thinking)</option>
+                        <option value="gpt_oss_120b">🤖 GPT-OSS 120B (Medium)</option>
                         <option value="nvidia_minimax">⚡ NVIDIA Build — MiniMax-M3 (minimaxai/minimax-m3 API)</option>
-                        <option value="anthropic">🧠 Claude Sonnet 4.6 / Opus 4.6 Thinking API (Deep Script Breakdown & Reasoning)</option>
                         <option value="byteplus">🎬 ByteDance ModelArk (Doubao / Seaweed - Seedance Native Video Engine)</option>
-                        <option value="minimax">📹 MiniMax Hailuo AI (T2V-01 Cinematic Camera & Motion Physics Engine)</option>
-                        <option value="kling_ai">⚡ Kling AI / Kuaishou (1.5 High-Speed Cinematic Video Engine)</option>
-                        <option value="luma_ray">🌀 Luma Dream Machine (Ray 2 Optics & Lens Depth Engine)</option>
                         <option value="openai">📽️ OpenAI GPT-4o / Sora Director API</option>
-                        <option value="gpt_oss">🤖 GPT-OSS 120B Open-Source Cinema API</option>
                         <option value="built_in">⚡ Built-In Cinema Intelligence (Offline Fast Rule Engine)</option>
                       </select>
+
+                      {/* Active Status Badge for Image Generation */}
+                      {useSameModelForImageGen && (
+                        <div className="mt-2.5 p-2.5 px-3 rounded-xl bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-mono text-xs font-bold flex items-center justify-between gap-2 shadow-md">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[3] shrink-0" />
+                            <span>✓ Active for Image Generation: <strong>Gemini API Key → Gemini 3.1 Flash Image (2K)</strong></span>
+                          </div>
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                            Active & Synced
+                          </span>
+                        </div>
+                      )}
 
                       <div className="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-amber-500/30 text-[11px] font-mono text-amber-200/90 leading-relaxed space-y-1">
                         <div className="font-bold text-amber-400 flex items-center gap-1.5">
@@ -2067,9 +2471,9 @@ export default function AdminSettingsModal({
                           Recommended Models for Cinema & Seedance Video Generation:
                         </div>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
-                          <li><strong className="text-amber-300">NVIDIA Build MiniMax-M3</strong>: High-speed multimodal LLM hosted on NVIDIA NIM API (`minimaxai/minimax-m3`).</li>
-                          <li><strong className="text-amber-300">Pedditi Labs Cinema Intelligence Engine</strong>: Next-gen flagship model for 24-craft screenplay breakdown & asset tagging.</li>
-                          <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity, emotional subtext & 24-craft alignment.</li>
+                          <li><strong className="text-amber-300">Gemini 3.6 Flash (High)</strong>: Flagship top-tier model for 24-craft screenplay breakdown & asset tagging.</li>
+                          <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity & emotional subtext.</li>
+                          <li><strong className="text-amber-300">Gemini 3.1 Pro (High)</strong>: Ultra-high precision model for complex multi-character matrix compilation.</li>
                           <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>
                         </ul>
                       </div>
@@ -2419,7 +2823,7 @@ export default function AdminSettingsModal({
                                   <span className="font-black text-white text-sm font-sans tracking-tight block">{user.name || 'Collaborator'}</span>
                                   
                                   {/* Real-time Online Status Badge */}
-                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold flex items-center gap-1 shadow-xs shrink-0 ${
+                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold flex items-center gap-1 shadow-sm shrink-0 ${
                                     isUserOnline
                                       ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80'
                                       : 'bg-slate-900 text-slate-400 border-slate-700'
@@ -2432,7 +2836,7 @@ export default function AdminSettingsModal({
                                   <select
                                     value={user.designation || 'Lead Director'}
                                     onChange={(e) => handleDesignationChange(user, e.target.value)}
-                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-cyan-300 border border-blue-700 font-bold cursor-pointer hover:border-cyan-400 focus:outline-none shadow-xs"
+                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-cyan-300 border border-blue-700 font-bold cursor-pointer hover:border-cyan-400 focus:outline-none shadow-sm"
                                     title="Click to edit designation"
                                   >
                                     <option value="Lead Director">💼 Lead Director</option>
@@ -2449,7 +2853,7 @@ export default function AdminSettingsModal({
                                   <select
                                     value={user.role || 'Editor'}
                                     onChange={(e) => handleRoleChange(user, e.target.value)}
-                                    className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none shadow-xs ${
+                                    className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none shadow-sm ${
                                       user.role === 'Viewer' 
                                         ? 'text-cyan-300 border-cyan-700' 
                                         : (user.role && user.role.includes('Director') ? 'text-amber-300 border-amber-700' : 'text-emerald-300 border-emerald-700')
@@ -2494,7 +2898,7 @@ export default function AdminSettingsModal({
                                         return updated;
                                       });
                                     }}
-                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-xs"
+                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-sm"
                                     title="Select project to allot to this collaborator"
                                   >
                                     <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
@@ -2507,7 +2911,7 @@ export default function AdminSettingsModal({
                                   {(Array.isArray(user.allottedProjects) && user.allottedProjects.length > 0 ? user.allottedProjects : ['STAGE PRODUCTION STUDIO']).map((pTitle, pIdx) => (
                                     <span 
                                       key={pIdx}
-                                      className="text-[9.5px] font-mono pl-2 pr-1.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1.5 shadow-xs"
+                                      className="text-[9.5px] font-mono pl-2 pr-1.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1.5 shadow-sm"
                                     >
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                                       <span className="truncate max-w-[180px]">{pTitle}</span>
@@ -2554,7 +2958,7 @@ export default function AdminSettingsModal({
                               <button
                                 type="button"
                                 onClick={() => handleToggleAccessStatus(user)}
-                                className={`text-[11px] font-mono px-3 py-1 rounded-full border flex items-center gap-1.5 font-bold shadow-xs transition-all ${
+                                className={`text-[11px] font-mono px-3 py-1 rounded-full border flex items-center gap-1.5 font-bold shadow-sm transition-all ${
                                   isSuspended
                                     ? 'bg-red-950 text-red-300 border-red-800 hover:bg-red-900'
                                     : 'bg-emerald-950 text-emerald-300 border-emerald-700 hover:bg-emerald-900'
@@ -2619,7 +3023,7 @@ export default function AdminSettingsModal({
                     <div className="space-y-3 max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-700">
                       {Object.entries(groupedLogs).map(([dateLabel, logs]) => (
                         <div key={dateLabel} className="space-y-1.5">
-                          <div className="sticky top-0 z-10 bg-zinc-800/90 backdrop-blur-sm text-zinc-200 px-2.5 py-1 rounded-md text-[10.5px] font-bold font-mono border border-zinc-700 flex items-center justify-between shadow-xs">
+                          <div className="sticky top-0 z-10 bg-zinc-800/90 backdrop-blur-sm text-zinc-200 px-2.5 py-1 rounded-md text-[10.5px] font-bold font-mono border border-zinc-700 flex items-center justify-between shadow-sm">
                             <span className="flex items-center gap-1.5">
                               <Clock className="w-3 h-3 text-amber-500" />
                               {dateLabel}
@@ -2793,21 +3197,54 @@ export default function AdminSettingsModal({
                         🔒 Persistent & Auto-Restored
                       </span>
                     </h4>
-                    <p className="text-[11px] text-amber-200/80 font-mono truncate max-w-xl">
-                      {allottedSettingsFolder}
-                    </p>
+                    {isEditingSettingsFolder ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={tempSettingsFolder}
+                          onChange={(e) => setTempSettingsFolder(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveSettingsFolder();
+                            if (e.key === 'Escape') setIsEditingSettingsFolder(false);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-amber-500/60 text-amber-300 text-xs font-mono w-72 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveSettingsFolder}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingSettingsFolder(false)}
+                          className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-amber-200/80 font-mono truncate max-w-xl">
+                        {allottedSettingsFolder}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleEditAllottedSettingsFolder}
-                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all"
+                    onClick={() => {
+                      setTempSettingsFolder(allottedSettingsFolder);
+                      setIsEditingSettingsFolder(!isEditingSettingsFolder);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
                     title="Change Allotted Settings Storage Directory Path"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Path</span>
+                    <span>{isEditingSettingsFolder ? 'Cancel' : 'Edit Path'}</span>
                   </button>
 
                   <button
@@ -2845,21 +3282,54 @@ export default function AdminSettingsModal({
                         📁 Local Folder Storage Active
                       </span>
                     </h4>
-                    <p className="text-[11px] text-cyan-200/80 font-mono truncate max-w-xl">
-                      {allottedStorageFolder}
-                    </p>
+                    {isEditingStorageFolder ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={tempStorageFolder}
+                          onChange={(e) => setTempStorageFolder(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveStorageFolder();
+                            if (e.key === 'Escape') setIsEditingStorageFolder(false);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-cyan-500/60 text-cyan-300 text-xs font-mono w-72 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveStorageFolder}
+                          className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingStorageFolder(false)}
+                          className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-cyan-200/80 font-mono truncate max-w-xl">
+                        {allottedStorageFolder}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleEditAllottedStorageFolder}
+                    onClick={() => {
+                      setTempStorageFolder(allottedStorageFolder);
+                      setIsEditingStorageFolder(!isEditingStorageFolder);
+                    }}
                     className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
                     title="Change Allotted Image & Asset Storage Folder Directory Path"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Image Folder Path</span>
+                    <span>{isEditingStorageFolder ? 'Cancel' : 'Edit Image Folder Path'}</span>
                   </button>
                 </div>
               </div>

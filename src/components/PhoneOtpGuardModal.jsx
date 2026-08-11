@@ -47,9 +47,30 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
     }
 
     const cleanInput = inputOtp.trim();
-    if (cleanInput === expectedOtp || cleanInput === '123456' || cleanInput.length === 6) {
+    const savedOtpsRaw = localStorage.getItem('sps_issued_invite_otps');
+    let issuedOtps = {};
+    try {
+      issuedOtps = savedOtpsRaw ? JSON.parse(savedOtpsRaw) : {};
+    } catch (e) {
+      issuedOtps = {};
+    }
+    const roomKey = invitedRoom || currentRoomId || 'SPS-CLOUD-8821';
+    const issuedForRoom = issuedOtps[roomKey] || issuedOtps[userMail] || '';
+    const otpOk =
+      (expectedOtp && cleanInput === expectedOtp) ||
+      (issuedForRoom && cleanInput === String(issuedForRoom)) ||
+      cleanInput === '123456';
+
+    if (otpOk && cleanInput.length === 6) {
       setIsSuccess(true);
       setOtpError('');
+
+      // Join cloud collaboration room on invite unlock
+      try {
+        localStorage.setItem('sps_app_version_mode', 'cloud');
+        if (roomKey) localStorage.setItem('sps_cloud_room_id', roomKey);
+        window.dispatchEvent(new CustomEvent('sps_app_version_mode_changed', { detail: 'cloud' }));
+      } catch (e) {}
 
       // Save authorized email session
       try {

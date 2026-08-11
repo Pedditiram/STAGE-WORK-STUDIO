@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SplashScreen from './components/SplashScreen';
 import Header from './components/Header';
 import SpreadsheetView from './components/SpreadsheetView';
 import StudioFormView from './components/StudioFormView';
@@ -16,9 +17,13 @@ import InvestorDeckModal from './components/InvestorDeckModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
+import CharacterBibleModal, { saveStoredCharacterProfiles } from './components/CharacterBibleModal';
+import ScriptSynopsisModal from './components/ScriptSynopsisModal';
+import { extractProjectCharactersWithLLM } from './services/aiScriptParser';
 import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
 import { saveProjectToVault, loadProjectsFromVault } from './services/projectDiskVault';
-import { subscribeToCloudRoom, publishToCloudRoom } from './services/cloudSync';
+import { autoRestoreAppSettingsFromVault } from './services/appSettingsDiskVault';
+import { subscribeToCloudRoom, publishToCloudRoom, enableCloudCollaborationMode } from './services/cloudSync';
 import { 
   syncProjectLibraryToCloud, 
   syncCollaboratorsToCloud, 
@@ -31,13 +36,15 @@ import {
 } from './services/dbService';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
 import { safeLocalStorageSetItem } from './utils/safeStorage';
-import { Download, Upload, Edit3, Check, Copy, Sparkles, Image as ImageIcon, Code, Film, Play, FastForward, RefreshCw } from 'lucide-react';
+import { Check, Copy, RefreshCw, Play, FastForward, Code, Image as ImageIcon } from 'lucide-react';
 
 const INITIAL_SHOTS = [
   {
     sceneShotId: "SC01_SH01",
     shotComposition: "Extreme Close-Up (ECU)",
     cameraMotionTag: "[Camera: Push In / Slow Dolly Zoom]",
+    timeAndLightingEnv: "[Weather: Rainy Monsoon] • [Timing: Cyberpunk Night] • [Env: Outdoor Stage]",
+    directionalLightingAndHighlight: "[Angle: 45° Side Key] • [Shadow: Wet Shadow Depth] • [Highlight: Eye Catchlight & Razor Rim]",
     subjectLightingTag: "[Lighting: Cyberpunk Neon Blue & Pink Dual Glow]",
     subjectColorTag: "[Subject Color: High-Saturation Neo-Noir]",
     backgroundLightingTag: "[BG Lighting: Strobing Neon City Reflections]",
@@ -46,6 +53,8 @@ const INITIAL_SHOTS = [
     coArtistInteraction: "[Co-Artist: Backing musicians swaying to rhythm, gazing at lead artist]",
     actionEnvContext: "Rain-slicked futuristic concert stage under towering neon city lights, wet reflections, smoke machine haze.",
     characterExpression: "Passionate singing, eyes closed in deep emotion, veins visible on neck",
+    characterPsychologyState: "[Mindstate: Vulnerable Emotional Breakdown & High Adrenaline]",
+    characterMannerismAndPosture: "[Mannerism: Nervous Fidgeting & Adjusting Collar under Pressure]",
     characterPlacement: "Foreground center stage, co-artists positioned in midground left & right",
     characterDialogue: '"The grid is failing... turn up the amps!"',
     characterMovement: "Grasping microphone stand with both hands and leaning forward with intense energy",
@@ -55,6 +64,8 @@ const INITIAL_SHOTS = [
     sceneShotId: "SC01_SH02",
     shotComposition: "Medium Shot (MS)",
     cameraMotionTag: "[Camera: Tracking Shot / Steadicam Follow]",
+    timeAndLightingEnv: "[Weather: Clear Interior Night] • [Timing: Midnight] • [Env: Indoor Venue]",
+    directionalLightingAndHighlight: "[Angle: 180° Direct Backlight] • [Shadow: Controlled Studio Shadow] • [Highlight: White Bounce Fill]",
     subjectLightingTag: "[Lighting: High-Contrast Chiaroscuro Noir]",
     subjectColorTag: "[Subject Color: Teal & Orange Cinema Palette]",
     backgroundLightingTag: "[BG Lighting: Cold Industrial Fluorescent Strip]",
@@ -63,6 +74,8 @@ const INITIAL_SHOTS = [
     coArtistInteraction: "[Co-Artist: Co-singer stepping up to microphone for harmonized duet reaction]",
     actionEnvContext: "Underground cybernetics music venue, flickering blue neon lights, packed energetic crowd.",
     characterExpression: "Exuberant smile, laughing mid-performance while making eye contact",
+    characterPsychologyState: "[Mindstate: Heroic Euphoria & Unwavering Stage Chemistry]",
+    characterMannerismAndPosture: "[Mannerism: Military Straight Spine & Hand Resting on Hilt]",
     characterPlacement: "Midground center frame rule of thirds, co-performers surrounding in semi-circle",
     characterDialogue: '"We only get one chance at this!"',
     characterMovement: "Striking a powerful guitar bend pose, body angled 45 degrees",
@@ -71,14 +84,15 @@ const INITIAL_SHOTS = [
 ];
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   const [projectTitle, setProjectTitle] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sps_current_project_title') || "STAGE PRODUCTION STUDIO";
     }
     return "STAGE PRODUCTION STUDIO";
   });
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
+
   const [targetModel, setTargetModel] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sps_current_target_model') || "SPS Direct Cinema";
@@ -94,9 +108,15 @@ export default function App() {
 
   const [showCanvasTab, setShowCanvasTab] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_enable_canvas_tab') === 'true';
+      const saved = localStorage.getItem('sps_enable_canvas_tab');
+      // Default ON so Director Visual Canvas is available unless explicitly disabled
+      if (saved === null || saved === undefined || saved === '') {
+        localStorage.setItem('sps_enable_canvas_tab', 'true');
+        return true;
+      }
+      return saved === 'true';
     }
-    return false;
+    return true;
   });
 
   const [colorTheme, setColorTheme] = useState(() => {
@@ -117,19 +137,33 @@ export default function App() {
     }
   };
 
-  // Persistent shots state from localStorage
+  // Persistent shots state from localStorage with safety bounds check (max 200 shots)
   const [shots, setShots] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sps_current_shots');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.length > 150 ? parsed.slice(0, 150) : parsed;
+          }
         } catch (e) {}
       }
     }
     return INITIAL_SHOTS;
   });
+
+  // Safety guard: sanitize oversized shots array (e.g. 7000+ PDF binary stream items) to max 150
+  useEffect(() => {
+    if (shots && shots.length > 150) {
+      console.warn("Sanitizing oversized shots array:", shots.length);
+      const sanitized = shots.slice(0, 150);
+      setShots(sanitized);
+      if (typeof window !== 'undefined') {
+        safeLocalStorageSetItem('sps_current_shots', JSON.stringify(sanitized));
+      }
+    }
+  }, [shots]);
 
   // Dynamic Script-Aware Preset Engine State
   const [presetProfile, setPresetProfile] = useState(() => {
@@ -143,8 +177,24 @@ export default function App() {
   // Auto-detect script profile when project title or shots update
   useEffect(() => {
     const detected = detectScriptGenre(projectTitle, shots);
-    setPresetProfile(detected);
+    setPresetProfile(prev => (prev === detected ? prev : detected));
   }, [projectTitle, shots]);
+
+  // Auto-extract Character Bibles ONCE on app mount if vault is empty
+  useEffect(() => {
+    if (typeof window !== 'undefined' && shots && shots.length > 0) {
+      try {
+        const stored = localStorage.getItem('sps_character_bible_vault');
+        if (!stored || JSON.parse(stored).length === 0) {
+          extractProjectCharactersWithLLM(shots, projectTitle).then(extracted => {
+            if (Array.isArray(extracted) && extracted.length > 0) {
+              saveStoredCharacterProfiles(extracted);
+            }
+          }).catch(() => {});
+        }
+      } catch (e) {}
+    }
+  }, []);
 
   const handleSetPresetProfile = (profileKey) => {
     setPresetProfile(profileKey);
@@ -158,29 +208,89 @@ export default function App() {
   // Default active view tab: 'canvas' | 'spreadsheet' | 'form'
   const [activeView, setActiveView] = useState(() => {
     if (typeof window !== 'undefined') {
-      const canShowCanvas = localStorage.getItem('sps_enable_canvas_tab') === 'true';
-      return canShowCanvas ? "canvas" : "spreadsheet";
+      const savedCanvas = localStorage.getItem('sps_enable_canvas_tab');
+      const canShowCanvas = savedCanvas !== 'false';
+      const saved = localStorage.getItem('sps_active_view');
+      if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || (saved === 'canvas' && canShowCanvas))) {
+        return saved;
+      }
+      return canShowCanvas ? 'canvas' : 'spreadsheet';
     }
-    return "spreadsheet";
+    return 'spreadsheet';
   });
 
-  // Enforce canvas tab hiding when showCanvasTab is OFF (false)
+  // Track if full expanded craft editor view is active (to hide top header bar)
+  const [isFullEditorOpen, setIsFullEditorOpen] = useState(false);
+
+  // Enforce canvas tab redirection if disabled
   useEffect(() => {
     if (!showCanvasTab && activeView === 'canvas') {
       setActiveView('spreadsheet');
     }
   }, [showCanvasTab, activeView]);
 
-  const [activeShotIndex, setActiveShotIndex] = useState(0);
+  const [activeShotIndex, setActiveShotIndex] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sps_active_shot_index');
+      const idx = parseInt(saved, 10);
+      return !isNaN(idx) && idx >= 0 ? idx : 0;
+    }
+    return 0;
+  });
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
-  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
+  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(true);
+  const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedSeeDream, setCopiedSeeDream] = useState(false);
   const [copiedFirstFrame, setCopiedFirstFrame] = useState(false);
   const [copiedLastFrame, setCopiedLastFrame] = useState(false);
 
+  // App-Wide 100% Native Fullscreen State
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Native Browser Fullscreen Bypass to hide Safari URL bar & tabs completely
+  const toggleFullscreenMode = async (enable) => {
+    const targetState = typeof enable === 'boolean' ? enable : !isFullscreen;
+    setIsFullscreen(targetState);
+
+    try {
+      if (targetState) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          await elem.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            await document.webkitExitFullscreen();
+          }
+        }
+      }
+    } catch (e) {}
+  };
+
+  // Sync native fullscreen exit
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNativeFull = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      if (!isNativeFull && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [isFullscreen]);
+
   // Director Canvas Keyframe Mode Sync ('first_frame' | 'last_frame' | 'transition')
-  const [canvasKeyframeMode, setCanvasKeyframeMode] = useState('transition');
+  const [canvasKeyframeMode, setCanvasKeyframeMode] = useState('first_frame');
 
   // =========================================================================
   // UNIVERSAL UNDO / REDO HISTORY ENGINE STATE & HANDLERS
@@ -214,9 +324,43 @@ export default function App() {
     setShots(nextShots);
   };
 
-  // Keyboard shortcut listener for Cmd+Z / Ctrl+Z (Undo) and Cmd+Shift+Z / Ctrl+Y (Redo)
+  // Keyboard shortcut listener for Cmd+Z (Undo), Cmd+Shift+Z (Redo), Cmd+O (Open Projects), Cmd+Enter (Fullscreen), Esc (Normal View)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Cmd+O / Ctrl+O -> Open Projects Library Console
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        setIsProjectConsoleOpen(true);
+        return;
+      }
+
+      // Cmd+Enter -> Full Screen View
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        toggleFullscreenMode();
+        return;
+      }
+
+      // Esc -> Normal View
+      if (e.key === 'Escape') {
+        if (isFullscreen) {
+          e.preventDefault();
+          toggleFullscreenMode(false);
+          return;
+        }
+      }
+
+      // Cmd+Down Arrow -> Next Shot | Cmd+Up Arrow -> Previous Shot
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        setActiveShotIndex(prev => Math.min(prev + 1, shots.length - 1));
+        return;
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        setActiveShotIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+
       const targetTag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
       if ((targetTag === 'input' || targetTag === 'textarea') && !e.ctrlKey && !e.metaKey) {
         return;
@@ -238,7 +382,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyStack, redoStack, shots]);
+  }, [historyStack, redoStack, shots, isFullscreen]);
 
   // Cloud & Admin & AI State
   const [roomId, setRoomId] = useState(() => {
@@ -248,19 +392,35 @@ export default function App() {
     }
     return 'SPS-CLOUD-8821';
   });
-  // App Version Mode: 'local' (Default 100% offline & local) vs 'cloud' (Firebase real-time sync)
+  // App Version Mode: 'local' (offline) vs 'cloud' (multi-user web sync). Invite ?room= auto-enables cloud.
   const [appVersionMode, setAppVersionMode] = useState(() => {
     if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('room')) {
+        localStorage.setItem('sps_app_version_mode', 'cloud');
+        return 'cloud';
+      }
       return localStorage.getItem('sps_app_version_mode') || 'local';
     }
     return 'local';
   });
   const [isAppVersionModalOpen, setIsAppVersionModalOpen] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onModeChanged = (e) => {
+      const mode = e?.detail || localStorage.getItem('sps_app_version_mode') || 'local';
+      setAppVersionMode(mode);
+    };
+    window.addEventListener('sps_app_version_mode_changed', onModeChanged);
+    return () => window.removeEventListener('sps_app_version_mode_changed', onModeChanged);
+  }, []);
+
   const handleSelectAppVersionMode = async (mode) => {
     setAppVersionMode(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_app_version_mode', mode);
+      window.dispatchEvent(new CustomEvent('sps_app_version_mode_changed', { detail: mode }));
       if (mode === 'cloud') {
         // Auto-upload & sync local vault images to cloud database payload
         await syncCanvasVaultToCloud(roomId, projectTitle);
@@ -270,7 +430,18 @@ export default function App() {
     }
   };
 
-  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [isCharacterBibleOpen, setIsCharacterBibleOpen] = useState(false);
+  const [characterBibleTab, setCharacterBibleTab] = useState('roster'); // 'roster' | 'script_story'
+  const [isScriptSynopsisModalOpen, setIsScriptSynopsisModalOpen] = useState(false);
+
+  const handleOpenCharactersModal = () => {
+    setCharacterBibleTab('roster');
+    setIsCharacterBibleOpen(true);
+  };
+
+  const handleOpenStoryModal = () => {
+    setIsScriptSynopsisModalOpen(true);
+  };
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -304,19 +475,150 @@ export default function App() {
   ]);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
-  const effectiveRoomId = `${roomId}_${(projectTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+  // Local vault may keep a project-scoped key; cloud collab always uses invite roomId only.
+  const effectiveRoomId = roomId || 'SPS-CLOUD-8821';
   const isInitialMount = React.useRef(true);
   const lastSyncedHash = React.useRef('');
   const prevAutoSavedShotsRef = React.useRef('');
+  const isReceivingCloudUpdate = React.useRef(false);
+  const electronMenuRef = React.useRef({});
 
-  // Local Storage Persistence (Does NOT publish to cloud when in Local Version)
+  // Electron native menu event listeners (macOS Menu Bar integration)
+  useEffect(() => {
+    const handlers = {
+      'sps_save_project': () => electronMenuRef.current.saveProject?.(),
+      'sps_export_project': () => electronMenuRef.current.exportProject?.(),
+      'sps_import_project': () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => electronMenuRef.current.importProject?.(e);
+        input.click();
+      },
+      'sps_new_project': () => electronMenuRef.current.openNewProject?.(),
+      'sps_open_help': () => setIsHelpModalOpen(true),
+      'sps_set_view': (e) => {
+        const view = e.detail;
+        if (view && typeof view === 'string') setActiveView(view);
+      },
+    };
+
+    Object.entries(handlers).forEach(([evt, fn]) => window.addEventListener(evt, fn));
+    return () => {
+      Object.entries(handlers).forEach(([evt, fn]) => window.removeEventListener(evt, fn));
+    };
+  }, []);
+
+  // Automatic Vault & Projects Restoration on App Mount (Local & Cloud Modes)
+  useEffect(() => {
+    const autoRestoreAppVault = async () => {
+      // 1. Auto-Restore App Settings & API Keys from persistent IndexedDB vault
+      await autoRestoreAppSettingsFromVault();
+
+      // 2. Check if current shots or projects are missing/default, and restore from Vault
+      const vaultProjects = await loadProjectsFromVault();
+      if (Array.isArray(vaultProjects) && vaultProjects.length > 0) {
+        const savedLib = localStorage.getItem('sps_project_library');
+        let currentLib = [];
+        try {
+          currentLib = savedLib ? JSON.parse(savedLib) : [];
+        } catch (e) {}
+
+        // Ensure project library in localStorage has all vault projects
+        const mergedProjects = [...currentLib];
+        let hasNewVaultProject = false;
+
+        vaultProjects.forEach(vProj => {
+          if (vProj && vProj.id) {
+            const idx = mergedProjects.findIndex(p => p.id === vProj.id || p.title === vProj.title);
+            if (idx === -1) {
+              mergedProjects.push(vProj);
+              hasNewVaultProject = true;
+            } else if (Array.isArray(vProj.shots) && vProj.shots.length > (mergedProjects[idx].shots?.length || 0)) {
+              mergedProjects[idx] = vProj;
+              hasNewVaultProject = true;
+            }
+          }
+        });
+
+        if (hasNewVaultProject || currentLib.length === 0) {
+          safeLocalStorageSetItem('sps_project_library', JSON.stringify(mergedProjects));
+          window.dispatchEvent(new Event('sps_projects_updated'));
+        }
+
+        // Auto-load most recently saved project if current shots are empty or default
+        const activeProj = mergedProjects[0] || vaultProjects[0];
+        const savedShotsStr = localStorage.getItem('sps_current_shots');
+        let localShots = [];
+        if (savedShotsStr) {
+          try { localShots = JSON.parse(savedShotsStr); } catch (e) {}
+        }
+
+        if ((!localShots || localShots.length === 0) && activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
+          setShots(activeProj.shots);
+          setProjectTitle(activeProj.title || 'STAGE PRODUCTION STUDIO');
+          if (activeProj.targetModel) setTargetModel(activeProj.targetModel);
+          if (activeProj.aspectRatio) setAspectRatio(activeProj.aspectRatio);
+          safeLocalStorageSetItem('sps_current_shots', JSON.stringify(activeProj.shots));
+          safeLocalStorageSetItem('sps_current_project_title', activeProj.title || 'STAGE PRODUCTION STUDIO');
+        }
+      }
+
+      // 3. Auto-Login & Remember Last Logged-In User
+      const isManualLogout = localStorage.getItem('sps_user_manually_logged_out') === 'true';
+      if (isManualLogout) {
+        setIsLoginModalOpen(true);
+      } else {
+        if (!localStorage.getItem('sps_authorized_user_email')) {
+          localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        }
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
+        setIsAdminLoggedIn(true);
+        setIsLoginModalOpen(false);
+      }
+    };
+
+    autoRestoreAppVault();
+  }, []);
+
+  // Local Storage & Library Persistence (Guarantees sps_project_library is always in sync with active project)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
     safeLocalStorageSetItem('sps_current_project_title', projectTitle);
     safeLocalStorageSetItem('sps_current_target_model', targetModel);
     safeLocalStorageSetItem('sps_current_aspect_ratio', aspectRatio);
-  }, [shots, projectTitle, targetModel, aspectRatio]);
+    safeLocalStorageSetItem('sps_active_view', activeView);
+    safeLocalStorageSetItem('sps_active_shot_index', String(activeShotIndex));
+
+    if (projectTitle && Array.isArray(shots) && shots.length > 0) {
+      try {
+        const savedLibStr = localStorage.getItem('sps_project_library');
+        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        if (!Array.isArray(library)) library = [];
+
+        const existingIdx = library.findIndex(p => p.title === projectTitle);
+        const updatedProjectData = {
+          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+          title: projectTitle,
+          description: `Cinema Production Studio Project with ${shots.length} shots`,
+          targetModel: targetModel || 'SPS Direct Cinema 2.0',
+          aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+          roomId: effectiveRoomId || 'SPS-CLOUD-8821',
+          lastModified: new Date().toLocaleDateString(),
+          shots: shots
+        };
+
+        if (existingIdx !== -1) {
+          library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
+        } else {
+          library.unshift(updatedProjectData);
+        }
+
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+      } catch (e) {}
+    }
+  }, [shots, projectTitle, targetModel, aspectRatio, activeView, activeShotIndex, effectiveRoomId]);
 
   // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount (Cloud Mode Only)
   useEffect(() => {
@@ -324,11 +626,11 @@ export default function App() {
 
     fetchProjectLibraryFromCloud().then(projs => {
       let updatedProjs = Array.isArray(projs) 
-        ? projs.filter(p => p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') 
+        ? projs.filter(p => p && p.title && String(p.title).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') 
         : [];
       
       // Self-healing guard: ensure active loaded project is NEVER missing from Projects Library
-      const activeTitle = (projectTitle && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO') ? projectTitle : '001';
+      const activeTitle = (projectTitle && typeof projectTitle === 'string' && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO') ? projectTitle : '001';
       const exists = updatedProjs.some(p => p.title === activeTitle);
       if (!exists && shots && shots.length > 0) {
         updatedProjs.unshift({
@@ -391,8 +693,9 @@ export default function App() {
     
     prevAutoSavedShotsRef.current = currentShotsHash;
 
+    const safeTitle = (projectTitle == null ? '' : String(projectTitle));
     const activeProj = {
-      id: `proj_${projectTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
       title: projectTitle,
       description: `Cinema Production Studio Project with ${shots.length} shots`,
       targetModel: targetModel || 'SPS Direct Cinema 2.0',
@@ -408,33 +711,53 @@ export default function App() {
     if (appVersionMode !== 'cloud') return;
     const unsubscribe = subscribeToCloudRoom(effectiveRoomId, (cloudData) => {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
+        const nextTitle = cloudData.projectTitle || projectTitle;
         const cloudHash = JSON.stringify({ 
           shots: cloudData.shots, 
-          projectTitle: cloudData.projectTitle || projectTitle, 
+          projectTitle: nextTitle, 
           targetModel: cloudData.targetModel || targetModel, 
           aspectRatio: cloudData.aspectRatio || aspectRatio 
         });
 
-        // Only update local state if cloud data differs from current hash and auto-save ref
-        if (cloudHash !== lastSyncedHash.current && cloudHash !== prevAutoSavedShotsRef.current) {
+        // Only update local state if cloud data differs from what we last applied/published
+        if (cloudHash !== lastSyncedHash.current) {
+          isReceivingCloudUpdate.current = true;
           lastSyncedHash.current = cloudHash;
           prevAutoSavedShotsRef.current = cloudHash;
           setShots(cloudData.shots);
+          if (cloudData.projectTitle) {
+            setProjectTitle(cloudData.projectTitle);
+            localStorage.setItem('sps_current_project_title', cloudData.projectTitle);
+          }
           if (cloudData.targetModel) setTargetModel(cloudData.targetModel);
           if (cloudData.aspectRatio) setAspectRatio(cloudData.aspectRatio);
-
+          if (cloudData.projectGeneratedImages && typeof cloudData.projectGeneratedImages === 'object') {
+            safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(cloudData.projectGeneratedImages));
+            window.dispatchEvent(new CustomEvent('sps_cloud_images_updated', { detail: cloudData.projectGeneratedImages }));
+          }
           localStorage.setItem('sps_current_shots', JSON.stringify(cloudData.shots));
+          setTimeout(() => { isReceivingCloudUpdate.current = false; }, 500);
         }
       }
     });
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [effectiveRoomId, projectTitle, appVersionMode]);
+  }, [effectiveRoomId, appVersionMode]);
 
   // -------------------------------------------------------------
   // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
   // -------------------------------------------------------------
+  const shotsRef = React.useRef(shots);
+  const activeShotIndexRef = React.useRef(activeShotIndex);
+  const projectTitleRef = React.useRef(projectTitle);
+
+  useEffect(() => {
+    shotsRef.current = shots;
+    activeShotIndexRef.current = activeShotIndex;
+    projectTitleRef.current = projectTitle;
+  });
+
   useEffect(() => {
     if (typeof window === 'undefined' || appVersionMode !== 'cloud') return;
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email');
@@ -444,16 +767,16 @@ export default function App() {
       // Passive presence: isEditing = false by default
       broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId, false);
     }
-  }, [activeShotIndex, shots, projectTitle]);
+  }, [activeShotIndex, appVersionMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'unauthenticated';
     const unsubPresence = subscribeToActiveEditingSlots(currentUserEmail, (otherActiveUsers) => {
-      const activeShot = shots[activeShotIndex];
+      const activeShot = shotsRef.current[activeShotIndexRef.current];
       if (activeShot && activeShot.sceneShotId) {
         // ONLY trigger popup if collaborator is actively typing/editing a field (isEditing === true)
-        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitle && u.isEditing === true);
+        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitleRef.current && u.isEditing === true);
         if (matchingConflict) {
           setActiveConflict(matchingConflict);
           setIsConflictModalOpen(true);
@@ -463,7 +786,7 @@ export default function App() {
     return () => {
       if (typeof unsubPresence === 'function') unsubPresence();
     };
-  }, [activeShotIndex, shots, projectTitle]);
+  }, []);
 
   // -------------------------------------------------------------
   // AUTOMATIC 30-MINUTE PROJECT BACKUP & VERSION SNAPSHOT ENGINE
@@ -478,7 +801,12 @@ export default function App() {
         const backupName = `Auto-Backup 30m - ${timeStr} - ${dateStr}`;
 
         const savedLibStr = localStorage.getItem('sps_project_library');
-        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        let library = [];
+        try {
+          library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        } catch (_) {
+          library = [];
+        }
         if (!Array.isArray(library) || library.length === 0) return;
 
         const currentTitle = localStorage.getItem('sps_current_project_title') || projectTitle;
@@ -525,12 +853,11 @@ export default function App() {
       }
     };
 
-    create30MinAutoBackup();
     const THIRTY_MINUTES_MS = 30 * 60 * 1000;
     const backupInterval = setInterval(create30MinAutoBackup, THIRTY_MINUTES_MS);
 
     return () => clearInterval(backupInterval);
-  }, [projectTitle, shots]);
+  }, [projectTitle]);
 
   const [projectGeneratedImages, setProjectGeneratedImages] = useState(() => {
     try {
@@ -541,12 +868,24 @@ export default function App() {
     }
   });
 
+  useEffect(() => {
+    const onCloudImages = (e) => {
+      if (e?.detail && typeof e.detail === 'object') {
+        setProjectGeneratedImages(e.detail);
+      }
+    };
+    window.addEventListener('sps_cloud_images_updated', onCloudImages);
+    return () => window.removeEventListener('sps_cloud_images_updated', onCloudImages);
+  }, []);
+
   const syncToCloud = (updatedState = {}) => {
-    setIsCloudSyncing(true);
+    if (isReceivingCloudUpdate.current) return;
+
     const newShots = updatedState?.shots || shots;
     const newTitle = updatedState?.projectTitle || projectTitle;
     const newModel = updatedState?.targetModel || targetModel;
     const newRatio = updatedState?.aspectRatio || aspectRatio;
+    const newImages = updatedState?.projectGeneratedImages || projectGeneratedImages;
 
     const newHash = JSON.stringify({ shots: newShots, projectTitle: newTitle, targetModel: newModel, aspectRatio: newRatio });
     lastSyncedHash.current = newHash;
@@ -570,7 +909,7 @@ export default function App() {
           roomId: roomId,
           lastModified: new Date().toLocaleDateString(),
           shots: newShots,
-          projectGeneratedImages: projectGeneratedImages
+          projectGeneratedImages: newImages
         };
 
         if (existingIdx !== -1) {
@@ -580,18 +919,23 @@ export default function App() {
         }
 
         safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
-        syncProjectLibraryToCloud(library);
+        if (appVersionMode === 'cloud') {
+          syncProjectLibraryToCloud(library);
+        }
       } catch (e) {}
     }
 
-    const targetRoom = `${roomId}_${(newTitle || 'default').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    // Publish only in cloud mode — invite roomId must match host + remote browsers
+    if (appVersionMode !== 'cloud') return;
 
-    publishToCloudRoom(targetRoom, {
+    setIsCloudSyncing(true);
+    publishToCloudRoom(roomId || 'SPS-CLOUD-8821', {
       projectTitle: newTitle,
       targetModel: newModel,
       aspectRatio: newRatio,
       shots: newShots,
-      projectGeneratedImages,
+      projectGeneratedImages: newImages,
+      lastUpdated: new Date().toISOString(),
       ...updatedState
     });
     setTimeout(() => setIsCloudSyncing(false), 400);
@@ -610,7 +954,12 @@ export default function App() {
       setProjectGeneratedImages(mergedImages);
 
       const savedLibStr = localStorage.getItem('sps_project_library');
-      let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+      let library = [];
+      try {
+        library = savedLibStr ? JSON.parse(savedLibStr) : [];
+      } catch (_) {
+        library = [];
+      }
       if (!Array.isArray(library)) library = [];
 
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString();
@@ -684,8 +1033,25 @@ export default function App() {
         localStorage.setItem('sps_generated_images_map', JSON.stringify(updated));
       } catch (e) {}
 
-      const [shotId, keyframeMode] = shotKey.split('_');
-      const shotIndex = shots.findIndex(s => (s.sceneShotId === shotId) || (`SH_${shots.indexOf(s) + 1}` === shotId));
+      // Keys are `${sceneShotId}_${keyframeMode}` and sceneShotId itself contains underscores
+      // e.g. "SC01_SH01_first_frame" — parse mode from the known suffixes, not split('_')[0]
+      const KEYFRAME_MODES = ['first_frame', 'last_frame', 'transition'];
+      let keyframeMode = 'first_frame';
+      let shotId = shotKey || '';
+      for (const mode of KEYFRAME_MODES) {
+        const suffix = `_${mode}`;
+        if (shotKey && shotKey.endsWith(suffix)) {
+          keyframeMode = mode;
+          shotId = shotKey.slice(0, -suffix.length);
+          break;
+        }
+      }
+
+      const shotIndex = shots.findIndex((s, idx) =>
+        (s.sceneShotId && s.sceneShotId === shotId) ||
+        (`SH_${idx + 1}` === shotId) ||
+        (`SH_${idx + 1}` === shotId.replace(/^SH_/, 'SH_'))
+      );
       
       let updatedShots = shots;
       if (shotIndex !== -1) {
@@ -694,11 +1060,13 @@ export default function App() {
           ...updatedShots[shotIndex],
           embeddedImages: {
             ...(updatedShots[shotIndex].embeddedImages || {}),
-            [keyframeMode || 'first_frame']: imageUrl
+            [keyframeMode]: imageUrl
           }
         };
         setShots(updatedShots);
-        localStorage.setItem('sps_current_shots', JSON.stringify(updatedShots));
+        try {
+          localStorage.setItem('sps_current_shots', JSON.stringify(updatedShots));
+        } catch (e) {}
       }
       
       syncToCloud({ shots: updatedShots, projectGeneratedImages: updated });
@@ -706,14 +1074,7 @@ export default function App() {
     });
   };
 
-  const handleTitleSubmit = () => {
-    if (tempTitleInput.trim()) {
-      const formatted = tempTitleInput.trim().toUpperCase();
-      setProjectTitle(formatted);
-      syncToCloud({ projectTitle: formatted });
-    }
-    setIsEditingTitle(false);
-  };
+
 
   const handleUpdateShot = (index, updatedShotOrKey, value) => {
     const newShots = [...shots];
@@ -794,7 +1155,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteShot = handleToggleMuteShot;
+  const handleDeleteShot = handleArchiveShot;
 
   const handleCloneShot = (index) => {
     const cloned = { ...shots[index] };
@@ -839,7 +1200,7 @@ export default function App() {
     existingShots: []
   });
 
-  const executeApplyAIShots = (aiShots, titleToApply, mode, baseShots = []) => {
+  const executeApplyAIShots = (aiShots, titleToApply, mode, baseShots = [], extraElements = null) => {
     let finalShots = aiShots;
     if (mode === 'merge' && baseShots.length > 0) {
       const startNum = baseShots.length + 1;
@@ -853,7 +1214,7 @@ export default function App() {
     setShots(finalShots);
     setProjectTitle(titleToApply);
     setActiveShotIndex(0);
-    setActiveView("canvas");
+    setActiveView("spreadsheet");
 
     if (typeof window !== 'undefined') {
       try {
@@ -862,7 +1223,10 @@ export default function App() {
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === titleToApply);
+        const existingProj = existingIdx !== -1 ? library[existingIdx] : {};
+
         const newProj = {
+          ...existingProj,
           id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
           title: titleToApply,
           description: `Cinema Production Studio Project with ${finalShots.length} shots`,
@@ -870,7 +1234,12 @@ export default function App() {
           aspectRatio: aspectRatio || '2.39:1 Anamorphic',
           roomId: roomId || 'SPS-CLOUD-8821',
           lastModified: new Date().toLocaleDateString(),
-          shots: finalShots
+          shots: finalShots,
+          directorPsychology: extraElements?.directorPsychology || existingProj.directorPsychology,
+          dopVision: extraElements?.dopVision || existingProj.dopVision,
+          soundVision: extraElements?.soundVision || existingProj.soundVision,
+          characterProfiles: extraElements?.characters || existingProj.characterProfiles,
+          scriptGenre: extraElements?.detectedGenre || existingProj.scriptGenre
         };
 
         if (existingIdx !== -1) {
@@ -888,8 +1257,16 @@ export default function App() {
     syncToCloud({ shots: finalShots, projectTitle: titleToApply });
   };
 
-  const handleApplyAIShots = (aiShots, newTitle) => {
+  const handleApplyAIShots = (aiShots, newTitle, extraElements = null) => {
     const titleToApply = newTitle || projectTitle;
+
+    // Detect if current shots are just default sample demo shots
+    const isSampleDemoShots = (arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) return true;
+      if (arr.length <= 2 && arr[0]?.sceneShotId === 'SC01_SH01') return true;
+      return false;
+    };
+
     let targetExistingShots = (shots && shots.length > 0) ? shots : [];
 
     if (typeof window !== 'undefined') {
@@ -903,7 +1280,8 @@ export default function App() {
       } catch (e) {}
     }
 
-    if (targetExistingShots.length > 0) {
+    // Only prompt for merge if existing shots are real custom user shots (not sample demo shots)
+    if (targetExistingShots.length > 0 && !isSampleDemoShots(targetExistingShots)) {
       setMergePromptState({
         isOpen: true,
         projectTitle: titleToApply,
@@ -916,7 +1294,7 @@ export default function App() {
       return;
     }
 
-    executeApplyAIShots(aiShots, titleToApply, 'overwrite', []);
+    executeApplyAIShots(aiShots, titleToApply, 'overwrite', [], extraElements);
   };
 
   const handleLoadTemplate = (template) => {
@@ -924,7 +1302,7 @@ export default function App() {
     setProjectTitle(template.title.toUpperCase());
     setAspectRatio(template.aspectRatio);
     setActiveShotIndex(0);
-    setActiveView("canvas");
+    setActiveView("spreadsheet");
     syncToCloud({
       shots: template.shots,
       projectTitle: template.title.toUpperCase(),
@@ -958,7 +1336,7 @@ export default function App() {
       try {
         const json = JSON.parse(event.target.result);
         if (json.shots && Array.isArray(json.shots)) {
-          setShots(json.shots);
+          updateShotsWithHistory(json.shots);
           if (json.projectTitle) setProjectTitle(json.projectTitle);
           if (json.targetModel) setTargetModel(json.targetModel);
           if (json.aspectRatio) setAspectRatio(json.aspectRatio);
@@ -1000,92 +1378,113 @@ export default function App() {
   const activeShotSeeDreamText = `masterpiece 8k render, ${currentShotObj.shotComposition || 'Medium Shot'}, ${safeStr(currentShotObj.characterIdAssetRef)}, ${currentShotObj.actionEnvContext || ''}, ${safeStr(currentShotObj.subjectLightingTag)}, ${safeStr(currentShotObj.subjectColorTag)}, expression: ${currentShotObj.characterExpression || 'focused'}, highly detailed 8k`;
 
   const copyActivePrompt = () => {
-    navigator.clipboard.writeText(activeShotPromptText);
+    navigator.clipboard.writeText(activeShotPromptText).catch(() => {});
     setCanvasKeyframeMode('transition');
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 2000);
   };
 
   const copyFirstFrame = () => {
-    navigator.clipboard.writeText(firstFrameText);
+    navigator.clipboard.writeText(firstFrameText).catch(() => {});
     setCanvasKeyframeMode('first_frame');
     setCopiedFirstFrame(true);
     setTimeout(() => setCopiedFirstFrame(false), 2000);
   };
 
   const copyLastFrame = () => {
-    navigator.clipboard.writeText(lastFrameText);
+    navigator.clipboard.writeText(lastFrameText).catch(() => {});
     setCanvasKeyframeMode('last_frame');
     setCopiedLastFrame(true);
     setTimeout(() => setCopiedLastFrame(false), 2000);
   };
 
   const copyActiveSeeDreamPrompt = () => {
-    navigator.clipboard.writeText(activeShotSeeDreamText);
+    navigator.clipboard.writeText(activeShotSeeDreamText).catch(() => {});
     setCopiedSeeDream(true);
     setTimeout(() => setCopiedSeeDream(false), 2000);
   };
 
+  electronMenuRef.current = {
+    saveProject: handleSaveProjectToApp,
+    exportProject: exportJSONProject,
+    importProject: importJSONProject,
+    openNewProject: () => setIsProjectConsoleOpen(true),
+  };
+
   return (
-    <div className={`h-screen w-full flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden transition-colors duration-300 ${
+    <div className={`h-screen w-full flex flex-col font-sans selection:bg-cyan-400/40 selection:text-white overflow-hidden transition-colors duration-300 ${
       colorTheme === 'paper' 
-        ? 'bg-[#F8FAFC] text-[#0F172A] theme-paper' 
-        : 'bg-zinc-950 text-zinc-100 theme-dark'
+        ? 'bg-[#F4F7FB] text-[#0F172A] theme-paper' 
+        : 'bg-transparent text-zinc-100 theme-dark'
     }`}>
-      {/* Top Header */}
-      <Header
-        projectTitle={projectTitle}
-        setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
-        targetModel={targetModel}
-        setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
-        aspectRatio={aspectRatio}
-        setAspectRatio={(val) => { setAspectRatio(val); syncToCloud({ aspectRatio: val }); }}
-        activeView={activeView}
-        setActiveView={setActiveView}
-        onExportProject={exportJSONProject}
-        onImportProject={importJSONProject}
-        onOpenCompiler={() => setIsCompilerOpen(true)}
-        onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
-        onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
-        onOpenAIModal={() => setIsAIModalOpen(true)}
-        onOpenProjectConsole={() => setIsProjectConsoleOpen(true)}
-        onOpenHelpModal={() => setIsHelpModalOpen(true)}
-        onOpenLoginModal={() => setIsLoginModalOpen(true)}
-        onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
-        appVersionMode={appVersionMode}
-        onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
-        roomId={roomId}
-        collaboratorCount={collaborators.length}
-        isAdminLoggedIn={isAdminLoggedIn}
-        showCanvasTab={showCanvasTab}
-        onSaveProject={handleSaveProjectToApp}
-        isProjectSavedToast={isProjectSavedToast}
-        isCloudSyncing={isCloudSyncing}
-        shotCount={shots.length}
-        colorTheme={colorTheme}
-        onChangeColorTheme={handleSetColorTheme}
-        presetProfile={presetProfile}
-        onChangePresetProfile={handleSetPresetProfile}
-        canUndo={historyStack.length > 0}
-        canRedo={redoStack.length > 0}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        undoCount={historyStack.length}
-        redoCount={redoStack.length}
-      />
+      {/* Cinematic Studio Splash Launch Screen */}
+      {showSplash && (
+        <SplashScreen onFinish={() => { setShowSplash(false); setIsProjectConsoleOpen(true); }} />
+      )}
+      {/* Top Header Bar (Always visible in normal view, hidden only in native OS full screen) */}
+      {!isFullscreen && (
+        <Header
+          projectTitle={projectTitle}
+          setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
+          targetModel={targetModel}
+          setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
+          aspectRatio={aspectRatio}
+          setAspectRatio={(val) => { setAspectRatio(val); syncToCloud({ aspectRatio: val }); }}
+          activeView={activeView}
+          setActiveView={setActiveView}
+          onExportProject={exportJSONProject}
+          onImportProject={importJSONProject}
+          onOpenCompiler={() => setIsCompilerOpen(true)}
+          onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
+          onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
+          onOpenAIModal={() => setIsAIModalOpen(true)}
+          onOpenProjectConsole={() => { setProjectConsoleInitialTab('library'); setIsProjectConsoleOpen(true); }}
+          onOpenDirectorPsychology={() => { setProjectConsoleInitialTab('director_psychology'); setIsProjectConsoleOpen(true); }}
+          onOpenCharacterBible={handleOpenCharactersModal}
+          onOpenStory={handleOpenStoryModal}
+          onOpenScriptSynopsisModal={() => setIsScriptSynopsisModalOpen(true)}
+          onOpenHelpModal={() => setIsHelpModalOpen(true)}
+          onOpenLoginModal={() => setIsLoginModalOpen(true)}
+          onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
+          appVersionMode={appVersionMode}
+          onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
+          roomId={roomId}
+          collaboratorCount={collaborators.length}
+          isAdminLoggedIn={isAdminLoggedIn}
+          showCanvasTab={showCanvasTab}
+          onSaveProject={handleSaveProjectToApp}
+          isProjectSavedToast={isProjectSavedToast}
+          isCloudSyncing={isCloudSyncing}
+          shotCount={shots.length}
+          colorTheme={colorTheme}
+          onChangeColorTheme={handleSetColorTheme}
+          presetProfile={presetProfile}
+          onChangePresetProfile={handleSetPresetProfile}
+          canUndo={historyStack.length > 0}
+          canRedo={redoStack.length > 0}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          undoCount={historyStack.length}
+          redoCount={redoStack.length}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => toggleFullscreenMode()}
+        />
+      )}
+
+
 
       {/* Main Studio Body View */}
-      <main className="flex-1 w-full p-1 sm:p-2 flex flex-col gap-1.5 overflow-hidden min-h-0">
+      <main className="flex-1 w-full p-2 sm:p-3 flex flex-col gap-2 overflow-hidden min-h-0">
         
         {/* DYNAMICALLY SEGREGATED WORKSPACE VIEW CONTAINER */}
-        <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
+        <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col sps-view-enter">
           
-          {/* TAB 1: 🎬 2D/3D DIRECTOR CANVAS VIEW (Full 100% Screen Space for Canvas & Live Prompts) */}
+          {/* TAB 1: DIRECTOR CANVAS VIEW */}
           {showCanvasTab && activeView === 'canvas' && (
-            <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-4 h-full overflow-hidden">
+            <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-3 h-full overflow-hidden">
               
-              {/* LEFT 7 COLUMNS: Interactive 2D/3D Director Canvas */}
-              <div className="lg:col-span-7 flex flex-col gap-4 overflow-y-auto pr-1 h-full">
+              {/* LEFT 7 COLUMNS: Interactive Director Canvas */}
+              <div className="lg:col-span-7 flex flex-col gap-3 overflow-y-auto pr-1 h-full">
                 <DirectorCanvas 
                   shot={currentShotObj} 
                   aspectRatio={aspectRatio}
@@ -1095,9 +1494,10 @@ export default function App() {
                   keyframeMode={canvasKeyframeMode}
                   setKeyframeMode={setCanvasKeyframeMode}
                   projectGeneratedImages={projectGeneratedImages}
+                  projectTitle={projectTitle}
                   onEmbedImage={handleEmbedImageToProject}
                   onOpenAdminSettings={(tab) => {
-                    setAdminModalTab(tab || 'image');
+                    setAdminModalTab('all');
                     setIsAdminModalOpen(true);
                   }}
                 />
@@ -1109,27 +1509,33 @@ export default function App() {
                 {/* FIRST FRAME PROMPT CARD */}
                 <div 
                   onClick={() => setCanvasKeyframeMode('first_frame')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     canvasKeyframeMode === 'first_frame'
-                      ? 'bg-cyan-950/40 border-cyan-500/80 shadow-lg shadow-cyan-950/50'
-                      : 'bg-zinc-950/80 border-zinc-800 hover:border-zinc-700'
+                      ? 'bg-cyan-500/10 border-cyan-400/50 shadow-lg shadow-cyan-950/20'
+                      : colorTheme === 'paper'
+                        ? 'bg-white border-slate-200 hover:border-slate-300'
+                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-bold font-mono text-cyan-300 flex items-center gap-1.5">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
                       <Play className="w-3.5 h-3.5 text-cyan-400" />
-                      First Frame Prompt (Frame 0)
+                      First Frame · Frame 0
                     </span>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); copyFirstFrame(); }}
-                      className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 hover:bg-amber-400 font-bold text-[11px] font-mono flex items-center gap-1 shadow"
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
                     >
                       {copiedFirstFrame ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedFirstFrame ? 'Copied!' : 'Copy'}
+                      {copiedFirstFrame ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-300 font-mono leading-relaxed p-2.5 bg-zinc-900/90 rounded-lg border border-zinc-800 select-all">
+                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all ${
+                    colorTheme === 'paper'
+                      ? 'text-slate-700 bg-slate-50 border-slate-200'
+                      : 'text-zinc-300 bg-black/30 border-white/5'
+                  }`}>
                     {firstFrameText}
                   </p>
                 </div>
@@ -1137,27 +1543,33 @@ export default function App() {
                 {/* LAST FRAME PROMPT CARD */}
                 <div 
                   onClick={() => setCanvasKeyframeMode('last_frame')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     canvasKeyframeMode === 'last_frame'
-                      ? 'bg-amber-950/40 border-amber-500/80 shadow-lg shadow-amber-950/50'
-                      : 'bg-zinc-950/80 border-zinc-800 hover:border-zinc-700'
+                      ? 'bg-amber-500/10 border-amber-400/50 shadow-lg shadow-amber-950/20'
+                      : colorTheme === 'paper'
+                        ? 'bg-white border-slate-200 hover:border-slate-300'
+                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-bold font-mono text-amber-300 flex items-center gap-1.5">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
                       <FastForward className="w-3.5 h-3.5 text-amber-400" />
-                      Last Frame Prompt (Frame N)
+                      Last Frame · Frame N
                     </span>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); copyLastFrame(); }}
-                      className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 hover:bg-amber-400 font-bold text-[11px] font-mono flex items-center gap-1 shadow"
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
                     >
                       {copiedLastFrame ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedLastFrame ? 'Copied!' : 'Copy'}
+                      {copiedLastFrame ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-300 font-mono leading-relaxed p-2.5 bg-zinc-900/90 rounded-lg border border-zinc-800 select-all">
+                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all ${
+                    colorTheme === 'paper'
+                      ? 'text-slate-700 bg-slate-50 border-slate-200'
+                      : 'text-zinc-300 bg-black/30 border-white/5'
+                  }`}>
                     {lastFrameText}
                   </p>
                 </div>
@@ -1165,48 +1577,62 @@ export default function App() {
                 {/* STAGE PRODUCTION VIDEO PROMPT CARD */}
                 <div 
                   onClick={() => setCanvasKeyframeMode('transition')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     canvasKeyframeMode === 'transition'
-                      ? 'bg-pink-950/40 border-pink-500/80 shadow-lg shadow-pink-950/50'
-                      : 'bg-zinc-950/80 border-zinc-800 hover:border-zinc-700'
+                      ? 'bg-pink-500/10 border-pink-400/50 shadow-lg shadow-pink-950/20'
+                      : colorTheme === 'paper'
+                        ? 'bg-white border-slate-200 hover:border-slate-300'
+                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-bold font-mono text-cyan-300 flex items-center gap-1.5">
-                      <Code className="w-3.5 h-3.5 text-cyan-400" />
-                      Stage Production Video Prompt
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-semibold text-pink-300 flex items-center gap-1.5">
+                      <Code className="w-3.5 h-3.5 text-pink-400" />
+                      Video prompt · Vector
                     </span>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); copyActivePrompt(); }}
-                      className="px-2 py-0.5 rounded bg-cyan-500 text-zinc-950 hover:bg-cyan-400 font-bold text-[11px] font-mono flex items-center gap-1 shadow"
+                      className="px-2.5 py-1 rounded-lg bg-cyan-400 text-zinc-950 hover:bg-cyan-300 font-semibold text-[11px] flex items-center gap-1 shadow"
                     >
                       {copiedPrompt ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedPrompt ? 'Copied!' : 'Copy'}
+                      {copiedPrompt ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-300 font-mono leading-relaxed p-2.5 bg-zinc-900/90 rounded-lg border border-zinc-800 select-all max-h-28 overflow-y-auto">
+                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all max-h-28 overflow-y-auto ${
+                    colorTheme === 'paper'
+                      ? 'text-slate-700 bg-slate-50 border-slate-200'
+                      : 'text-zinc-300 bg-black/30 border-white/5'
+                  }`}>
                     {activeShotPromptText}
                   </p>
                 </div>
 
-                {/* SEEDREAM 5.0 IMAGE PROMPT CARD */}
-                <div className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 transition-all">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-xs font-bold font-mono text-amber-300 flex items-center gap-1.5">
+                {/* IMAGE PROMPT CARD */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  colorTheme === 'paper'
+                    ? 'bg-white border-slate-200'
+                    : 'bg-white/[0.03] border-white/10'
+                }`}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                      Image Generation Prompt
+                      Image generation prompt
                     </span>
                     <button
                       type="button"
                       onClick={copyActiveSeeDreamPrompt}
-                      className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 hover:bg-amber-400 font-bold text-[11px] font-mono flex items-center gap-1 shadow"
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
                     >
                       {copiedSeeDream ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedSeeDream ? 'Copied!' : 'Copy'}
+                      {copiedSeeDream ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <p className="text-xs text-zinc-300 font-mono leading-relaxed p-2.5 bg-zinc-900/90 rounded-lg border border-zinc-800 select-all max-h-28 overflow-y-auto">
+                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all max-h-28 overflow-y-auto ${
+                    colorTheme === 'paper'
+                      ? 'text-slate-700 bg-slate-50 border-slate-200'
+                      : 'text-zinc-300 bg-black/30 border-white/5'
+                  }`}>
                     {activeShotSeeDreamText}
                   </p>
                 </div>
@@ -1220,7 +1646,7 @@ export default function App() {
             <div className="flex-1 w-full h-full overflow-hidden">
               <ScreenplayEditor
                 shots={shots}
-                onUpdateShotsFromScript={setShots}
+                onUpdateShotsFromScript={updateShotsWithHistory}
                 onNavigateToView={setActiveView}
                 projectTitle={projectTitle}
               />
@@ -1243,20 +1669,23 @@ export default function App() {
                 onMoveShot={handleMoveShot}
                 onReorderShots={handleReorderShots}
                 onCompilePrompt={() => setIsCompilerOpen(true)}
+                colorTheme={colorTheme}
               />
             </div>
           )}
 
-          {/* TAB 3: 📝 STUDIO FORM VIEW (Full 100% Height for Form Editor) */}
+          {/* TAB 3: 📝 STUDIO FORM VIEW (24-Craft Production Form Editor) */}
           {activeView === 'form' && (
             <div className="flex-1 w-full h-full overflow-hidden">
               <StudioFormView
-                slots={activeSlots}
                 shots={shots}
                 activeShotIndex={activeShotIndex}
-                setActiveShotIndex={setActiveShotIndex}
+                onSelectShot={setActiveShotIndex}
                 onUpdateShot={handleUpdateShot}
-                onCompilePrompt={() => setIsCompilerOpen(true)}
+                onAddShot={handleAddShot}
+                allShotsList={shots}
+                colorTheme={colorTheme}
+                onFullEditorOpenChange={setIsFullEditorOpen}
               />
             </div>
           )}
@@ -1279,9 +1708,8 @@ export default function App() {
         onUpdateShot={handleUpdateShot}
         activeTargetModel={targetModel}
         projectTitle={projectTitle}
+        colorTheme={colorTheme}
       />
-
-
 
       {/* Admin Settings Modal */}
       <AdminSettingsModal
@@ -1304,6 +1732,7 @@ export default function App() {
         collaborators={collaborators}
         isCloudSyncing={isCloudSyncing}
         initialCategoryTab={adminModalTab}
+        colorTheme={colorTheme}
       />
 
       {/* AI Script Breakdown Modal */}
@@ -1313,16 +1742,18 @@ export default function App() {
         onApplyShots={handleApplyAIShots}
         setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
         currentProjectTitle={projectTitle}
+        colorTheme={colorTheme}
       />
 
       {/* Project Console Modal */}
       <ProjectConsoleModal
         isOpen={isProjectConsoleOpen}
         onClose={() => setIsProjectConsoleOpen(false)}
+        initialTab={projectConsoleInitialTab}
         currentProjectTitle={projectTitle}
         setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
         shots={shots}
-        setShots={(val) => { setShots(val); syncToCloud({ shots: val }); }}
+        setShots={(val) => { updateShotsWithHistory(val); syncToCloud({ shots: val }); }}
         targetModel={targetModel}
         setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
         aspectRatio={aspectRatio}
@@ -1335,6 +1766,7 @@ export default function App() {
         onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onApplyShots={handleApplyAIShots}
+        colorTheme={colorTheme}
       />
 
       {/* Investor Pitch Showcase & Slide Presentation Modal */}
@@ -1345,7 +1777,18 @@ export default function App() {
       />
 
       {/* 2-Factor Phone & OTP Security Guard for Shared Invite Links */}
-      <PhoneOtpGuardModal currentRoomId={roomId} />
+      <PhoneOtpGuardModal
+        currentRoomId={roomId}
+        onUnlock={() => {
+          enableCloudCollaborationMode();
+          setAppVersionMode('cloud');
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+            if (roomParam) setRoomId(roomParam);
+          }
+        }}
+      />
 
       {/* Official Help & User Guide Modal */}
       <HelpUserGuideModal
@@ -1409,6 +1852,21 @@ export default function App() {
         onClose={() => setIsAppVersionModalOpen(false)}
         currentMode={appVersionMode}
         onSelectMode={handleSelectAppVersionMode}
+      />
+
+      {/* Master Character Bible & Behavior Engine Modal */}
+      <CharacterBibleModal
+        isOpen={isCharacterBibleOpen}
+        onClose={() => setIsCharacterBibleOpen(false)}
+        shots={shots}
+        projectTitle={projectTitle}
+        initialTab={characterBibleTab || 'roster'}
+      />
+
+      {/* Master Script Synopsis Modal */}
+      <ScriptSynopsisModal
+        isOpen={isScriptSynopsisModalOpen}
+        onClose={() => setIsScriptSynopsisModalOpen(false)}
       />
 
       {/* Live Bi-Directional Sync Confirmation Toast Banner */}

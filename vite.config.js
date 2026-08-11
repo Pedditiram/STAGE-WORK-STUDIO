@@ -4,23 +4,191 @@ import tailwindcss from '@tailwindcss/vite'
 import fs from 'fs'
 import path from 'path'
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(JSON.stringify(payload));
+}
+
+function safeRoomFileName(roomId) {
+  return String(roomId || 'SPS-CLOUD-8821').replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
+}
+
+function mergeShots(existingShots, incomingShots) {
+  if (!Array.isArray(incomingShots)) return existingShots;
+  if (!Array.isArray(existingShots) || existingShots.length === 0) return incomingShots;
+  const existingMap = new Map();
+  existingShots.forEach((s) => {
+    if (s?.sceneShotId) existingMap.set(s.sceneShotId, s);
+  });
+  return incomingShots.map((s) => {
+    if (!s?.sceneShotId) return s;
+    const prev = existingMap.get(s.sceneShotId);
+    return prev ? { ...prev, ...s } : s;
+  });
+}
+
 function localDiskVaultPlugin() {
-  const baseDir = '/Users/pedditiram/Documents/PROMPT ENGINEERING';
+  const baseDir = path.resolve(__dirname);
   const projectsDir = path.join(baseDir, 'projects');
   const settingsDir = path.join(baseDir, 'settings');
   const storageDir = path.join(baseDir, 'storage');
+  const cloudDir = path.join(storageDir, 'cloud');
+  const cloudRoomsDir = path.join(cloudDir, 'rooms');
 
   // Ensure directories exist on server start
-  [projectsDir, settingsDir, storageDir].forEach(d => {
+  [projectsDir, settingsDir, storageDir, cloudDir, cloudRoomsDir].forEach(d => {
     if (!fs.existsSync(d)) {
       fs.mkdirSync(d, { recursive: true });
     }
   });
 
+  const presencePath = path.join(cloudDir, 'presence.json');
+  const collaboratorsPath = path.join(cloudDir, 'collaborators.json');
+  const cloudProjectsPath = path.join(cloudDir, 'projects.json');
+
+  function readJsonFile(filePath, fallback) {
+    try {
+      if (fs.existsSync(filePath)) {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      }
+    } catch (e) {}
+    return fallback;
+  }
+
+  function writeJsonFile(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  }
+
   return {
     name: 'sps-local-disk-vault',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        // --- Multi-user cloud sync (durable on disk for local + LAN browser collab) ---
+        if (req.url && req.url.startsWith('/api/sync')) {
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 200;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.end();
+            return;
+          }
+
+          try {
+            const url = new URL(req.url, 'http://localhost');
+            const type = url.searchParams.get('type') || 'room';
+            const roomId = url.searchParams.get('roomId') || 'SPS-CLOUD-8821';
+
+            if (req.method === 'GET') {
+              if (type === 'projects') {
+                const data = readJsonFile(cloudProjectsPath, { projects: [] });
+                return sendJson(res, 200, { success: true, projects: data.projects || [] });
+              }
+              if (type === 'collaborators') {
+                const data = readJsonFile(collaboratorsPath, { users: [] });
+                return sendJson(res, 200, { success: true, users: data.users || [] });
+              }
+              if (type === 'presence') {
+                const data = readJsonFile(presencePath, {});
+                const now = Date.now();
+                const activeSlots = {};
+                Object.entries(data).forEach(([key, val]) => {
+                  if (val && now - (val.timestamp || 0) < 120000) activeSlots[key] = val;
+                });
+                return sendJson(res, 200, { success: true, activeSlots });
+              }
+
+              const roomPath = path.join(cloudRoomsDir, safeRoomFileName(roomId));
+              const roomData = readJsonFile(roomPath, null);
+              return sendJson(res, 200, { success: true, data: roomData });
+            }
+
+            if (req.method === 'POST' || req.method === 'PUT') {
+              const body = await readJsonBody(req);
+
+              if (type === 'projects') {
+                const incoming = Array.isArray(body.projects) ? body.projects : (Array.isArray(body) ? body : []);
+                const existing = readJsonFile(cloudProjectsPath, { projects: [] });
+                const projMap = new Map();
+                (existing.projects || []).forEach((p) => {
+                  if (p?.title) projMap.set(p.title, p);
+                });
+                incoming.forEach((p) => {
+                  if (p?.title) {
+                    const prev = projMap.get(p.title);
+                    projMap.set(p.title, prev ? { ...prev, ...p } : p);
+                  }
+                });
+                const projects = Array.from(projMap.values());
+                writeJsonFile(cloudProjectsPath, { projects, updatedAt: new Date().toISOString() });
+                return sendJson(res, 200, { success: true, projects });
+              }
+
+              if (type === 'collaborators') {
+                const users = Array.isArray(body.users) ? body.users : (Array.isArray(body) ? body : []);
+                writeJsonFile(collaboratorsPath, { users, updatedAt: new Date().toISOString() });
+                return sendJson(res, 200, { success: true });
+              }
+
+              if (type === 'presence') {
+                const presenceId =
+                  body.presenceId ||
+                  (body.userEmail ? String(body.userEmail).replace(/[^a-zA-Z0-9]/g, '_') : 'anon');
+                const existing = readJsonFile(presencePath, {});
+                existing[presenceId] = { ...body, timestamp: Date.now() };
+                writeJsonFile(presencePath, existing);
+                return sendJson(res, 200, { success: true });
+              }
+
+              const payload = body.data || body;
+              const roomPath = path.join(cloudRoomsDir, safeRoomFileName(roomId));
+              const existingRoom = readJsonFile(roomPath, {});
+              const stamped = {
+                ...payload,
+                revision: typeof payload.revision === 'number' ? payload.revision : Date.now(),
+                lastUpdated: new Date().toISOString()
+              };
+              const existingRev = typeof existingRoom?.revision === 'number' ? existingRoom.revision : 0;
+              if (existingRev && stamped.revision < existingRev) {
+                return sendJson(res, 200, { success: true, data: existingRoom, skipped: 'stale' });
+              }
+
+              const merged = {
+                ...existingRoom,
+                ...stamped,
+                roomId,
+                shots: mergeShots(existingRoom?.shots, stamped?.shots),
+                lastUpdated: stamped.lastUpdated,
+                revision: stamped.revision
+              };
+              writeJsonFile(roomPath, merged);
+              return sendJson(res, 200, { success: true, data: merged });
+            }
+
+            return sendJson(res, 405, { error: 'Method not allowed' });
+          } catch (err) {
+            return sendJson(res, 500, { error: err.message || 'Sync failed' });
+          }
+        }
+
         // 1. SAVE PROJECT TO PHYSICAL DISK: POST /api/save-project-disk
         if (req.url === '/api/save-project-disk' && req.method === 'POST') {
           let body = '';
@@ -66,6 +234,29 @@ function localDiskVaultPlugin() {
               res.end(JSON.stringify({ error: err.message }));
             }
           });
+          return;
+        }
+
+        // LOAD SETTINGS FROM PHYSICAL DISK: GET /api/load-settings-disk
+        if (req.url === '/api/load-settings-disk' && req.method === 'GET') {
+          try {
+            const filePath = path.join(settingsDir, 'master_app_settings.json');
+            if (fs.existsSync(filePath)) {
+              const content = fs.readFileSync(filePath, 'utf8');
+              const parsed = JSON.parse(content);
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ settings: parsed.settings || parsed }));
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ settings: {} }));
+          } catch (err) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message }));
+          }
           return;
         }
 
@@ -130,7 +321,11 @@ function localDiskVaultPlugin() {
 }
 
 // https://vite.dev/config/
+const isElectronBuild = process.env.ELECTRON_BUILD === 'true';
+
 export default defineConfig({
+  // Use './' base for Electron (file:// protocol) or '/' for web server
+  base: isElectronBuild ? './' : '/',
   plugins: [
     react(),
     tailwindcss(),
@@ -140,7 +335,7 @@ export default defineConfig({
     host: true, // Exposes app on local intranet (Wi-Fi / LAN)
     port: 5173,
     watch: {
-      ignored: ['**/projects/**', '**/settings/**', '**/storage/**']
+      ignored: ['**/projects/**', '**/settings/**', '**/storage/**', '**/storage/cloud/**']
     }
   }
 })
