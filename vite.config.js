@@ -334,6 +334,8 @@ export default defineConfig({
   server: {
     host: true, // Exposes app on local intranet (Wi-Fi / LAN)
     port: 5173,
+    // Allow Cloudflare quick tunnels + LAN hostnames for remote browser collab
+    allowedHosts: true,
     watch: {
       ignored: ['**/projects/**', '**/settings/**', '**/storage/**', '**/storage/cloud/**']
     }
