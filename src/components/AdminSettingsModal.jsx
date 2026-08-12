@@ -7,6 +7,21 @@ import {
   exportAppSettingsToFile, importAppSettingsFromFile,
   saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
+import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary } from '../utils/projectPermissions';
+import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
+
+/** Persist collaborators to localStorage synchronously, then notify other UI (not this modal). */
+function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
+  // ensurePrimaryAdminUser + sanitize: Owner keeps isStudioAdmin; Editor/Viewer clear it
+  const secured = ensurePrimaryAdminUser(sanitizeAuthorizedUsers(users));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sps_authorized_phone_users', JSON.stringify(secured));
+    if (notify) {
+      window.dispatchEvent(new Event('sps_collaborators_updated'));
+    }
+  }
+  return secured;
+}
 
 export default function AdminSettingsModal({ 
   isOpen, 
@@ -133,24 +148,49 @@ export default function AdminSettingsModal({
 
   useEffect(() => {
     if (isOpen) {
+      // Deep-links pass a specific tab (e.g. 'image'); settings gear defaults to 'all'
       setActiveCategoryTab(initialCategoryTab || 'all');
+    } else {
+      // Reset so a prior cloud/room tab never sticks for the next open
+      setActiveCategoryTab('all');
     }
   }, [isOpen, initialCategoryTab]);
 
-  // Custom Admin Credentials State
+  // Custom Admin Credentials State — empty until a strong password is set (no weak defaults)
   const [customAdminId, setCustomAdminId] = useState(() => {
-    return localStorage.getItem('sps_custom_admin_id') || 'admin';
+    return localStorage.getItem('sps_custom_admin_id') || '';
   });
   const [customAdminPassword, setCustomAdminPassword] = useState(() => {
-    return localStorage.getItem('sps_custom_admin_password') || 'admin123';
+    return localStorage.getItem('sps_custom_admin_password') || '';
   });
 
   // Password Change Form Inputs
-  const [newAdminId, setNewAdminId] = useState(customAdminId);
+  const [newAdminId, setNewAdminId] = useState(customAdminId || '');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passChangeSuccess, setPassChangeSuccess] = useState('');
   const [passChangeError, setPassChangeError] = useState('');
+
+  const WEAK_ADMIN_PASSWORDS = new Set([
+    'admin', 'admin123', 'password', 'password123', 'sps2026', 'studio2026', '1234567890', 'qwerty1234'
+  ]);
+
+  const isStrongAdminPassword = (pass) => {
+    const p = String(pass || '');
+    if (p.length < 10) return false;
+    return !WEAK_ADMIN_PASSWORDS.has(p.toLowerCase());
+  };
+
+  const ownerEmailSessionActive = () => {
+    try {
+      const email = String(localStorage.getItem('sps_authorized_user_email') || '')
+        .trim()
+        .toLowerCase();
+      return email === 'pedditiram@gmail.com';
+    } catch (e) {
+      return false;
+    }
+  };
 
   // Dynamic Studio Projects List for Collaborator Allotment
   const [projectLibraryList, setProjectLibraryList] = useState(() => {
@@ -174,7 +214,6 @@ export default function AdminSettingsModal({
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          // Defer to avoid "setState while rendering ProjectConsoleModal"
           setTimeout(() => setProjectLibraryList(parsed), 0);
         }
       } catch (e) {}
@@ -214,23 +253,63 @@ export default function AdminSettingsModal({
     const idInput = adminIdInput.trim();
     const passInput = adminPasswordInput.trim();
 
-    const storedId = localStorage.getItem('sps_custom_admin_id') || 'admin';
-    const storedPass = localStorage.getItem('sps_custom_admin_password') || 'admin123';
+    const storedId = localStorage.getItem('sps_custom_admin_id') || '';
+    const storedPass = localStorage.getItem('sps_custom_admin_password') || '';
+    const customConfigured = Boolean(storedId && storedPass && isStrongAdminPassword(storedPass));
 
-    if (
-      (idInput.toLowerCase() === storedId.toLowerCase() && passInput === storedPass) ||
-      (idInput.toLowerCase() === 'admin' && (passInput === 'admin' || passInput === 'admin123' || passInput === 'sps2026')) ||
-      (idInput === 'spsadmin' && passInput === 'studio2026')
-    ) {
+    // Path A: Owner email session already active (Gmail login as pedditiram@gmail.com)
+    if (ownerEmailSessionActive() && !idInput && !passInput) {
+      try {
+        localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+      } catch (err) {}
       setIsAdminLoggedIn(true);
       setErrorMsg('');
       setResetSuccessMsg('');
-    } else {
-      setErrorMsg('Invalid Admin ID or Password. Access denied.');
+      return;
     }
+
+    // Path B: Strong custom Admin ID + password only (weak defaults / hardcoded bypasses removed)
+    if (
+      customConfigured &&
+      idInput.toLowerCase() === storedId.toLowerCase() &&
+      passInput === storedPass
+    ) {
+      try {
+        localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+      } catch (err) {}
+      setIsAdminLoggedIn(true);
+      setErrorMsg('');
+      setResetSuccessMsg('');
+      return;
+    }
+
+    // Owner with active email session may unlock Settings without the password fields
+    if (ownerEmailSessionActive()) {
+      try {
+        localStorage.setItem('sps_is_admin_logged_in', 'true');
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+      } catch (err) {}
+      setIsAdminLoggedIn(true);
+      setErrorMsg('');
+      setResetSuccessMsg('Unlocked via Owner email session (pedditiram@gmail.com). Set a strong Admin password below.');
+      return;
+    }
+
+    if (!customConfigured) {
+      setErrorMsg(
+        'No strong Admin password configured. Sign in as pedditiram@gmail.com (Owner) via the main Login, then reopen Admin Settings.'
+      );
+      return;
+    }
+
+    setErrorMsg('Invalid Admin ID or Password. Access denied.');
   };
 
-  const handleSendEmailOtp = (e) => {
+  const handleSendEmailOtp = async (e) => {
     e.preventDefault();
     setOtpError('');
     const inputClean = recoveryEmailInput.trim().toLowerCase();
@@ -241,10 +320,32 @@ export default function AdminSettingsModal({
       return;
     }
 
-    // Generate 6-digit security code
+    // Generate 6-digit security code — always keep in-UI so Owner is never locked out
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtpCode(code);
     setOtpSentSuccess(true);
+
+    // Best-effort Resend delivery when SPS_RESEND_API_KEY is configured on Vercel
+    try {
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inputClean || targetClean,
+          otp: code,
+          purpose: 'recovery',
+          authorizedEmail: targetClean
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.emailed) {
+        setOtpError('');
+      } else if (data?.fallback) {
+        // In-UI OTP remains visible — no error; optional hint only
+      }
+    } catch (err) {
+      // Swallow — in-UI OTP is the authoritative fallback
+    }
   };
 
   const handleVerifyOtpAndResetPass = (e) => {
@@ -255,31 +356,41 @@ export default function AdminSettingsModal({
       return;
     }
 
-    const newPassToSet = newPassAfterOtp.trim() || 'admin123';
-    localStorage.setItem('sps_custom_admin_id', 'admin');
+    const newPassToSet = newPassAfterOtp.trim();
+    if (!isStrongAdminPassword(newPassToSet)) {
+      setOtpError('New password must be at least 10 characters and not a common weak default (admin123, etc.).');
+      return;
+    }
+
+    localStorage.setItem('sps_custom_admin_id', 'studio-owner');
     localStorage.setItem('sps_custom_admin_password', newPassToSet);
-    setCustomAdminId('admin');
+    setCustomAdminId('studio-owner');
     setCustomAdminPassword(newPassToSet);
-    setAdminIdInput('admin');
-    setAdminPasswordInput(newPassToSet);
+    setAdminIdInput('studio-owner');
+    setAdminPasswordInput('');
+    setNewAdminId('studio-owner');
 
     setIsForgotPassOpen(false);
     setOtpSentSuccess(false);
     setOtpVerificationInput('');
     setGeneratedOtpCode('');
     setNewPassAfterOtp('');
-    setResetSuccessMsg(`✓ Password verified & updated for ${authorizedEmail}! ID: admin | Password: ${newPassToSet}`);
+    setResetSuccessMsg(`✓ Password updated for ${authorizedEmail}. New Admin ID: studio-owner`);
   };
 
-  const handleResetPasswordToDefault = () => {
-    localStorage.setItem('sps_custom_admin_id', 'admin');
-    localStorage.setItem('sps_custom_admin_password', 'admin123');
-    setCustomAdminId('admin');
-    setCustomAdminPassword('admin123');
-    setAdminIdInput('admin');
-    setAdminPasswordInput('admin123');
+  const handleClearWeakAdminDefaults = () => {
+    // Remove legacy weak credentials — Owner email session remains the unlock path
+    localStorage.removeItem('sps_custom_admin_id');
+    localStorage.removeItem('sps_custom_admin_password');
+    setCustomAdminId('');
+    setCustomAdminPassword('');
+    setAdminIdInput('');
+    setAdminPasswordInput('');
+    setNewAdminId('');
     setErrorMsg('');
-    setResetSuccessMsg('✓ Credentials reset to default! ID: admin | Password: admin123');
+    setResetSuccessMsg(
+      '✓ Weak defaults cleared. Sign in as pedditiram@gmail.com (Owner), then set a strong Admin password.'
+    );
   };
 
   const handleUpdateAdminCredentials = (e) => {
@@ -293,6 +404,10 @@ export default function AdminSettingsModal({
     }
     if (!newAdminPassword) {
       setPassChangeError('New password cannot be empty.');
+      return;
+    }
+    if (!isStrongAdminPassword(newAdminPassword)) {
+      setPassChangeError('Password must be at least 10 characters and not a weak default (admin123, sps2026, etc.).');
       return;
     }
     if (newAdminPassword !== confirmPassword) {
@@ -309,14 +424,17 @@ export default function AdminSettingsModal({
     setCustomAdminPassword(cleanPass);
     setNewAdminPassword('');
     setConfirmPassword('');
-    setPassChangeSuccess('✓ Admin ID & Password Updated Successfully!');
+    setPassChangeSuccess('✓ Strong Admin ID & Password Updated Successfully!');
     setTimeout(() => setPassChangeSuccess(''), 3000);
   };
   
-  // CANVAS TAB VISIBILITY TOGGLE (ADMIN CONTROLLED)
+  // CANVAS TAB VISIBILITY TOGGLE (ADMIN CONTROLLED) — off by default for all users
   const [showCanvasTab, setShowCanvasTab] = useState(() => {
     const saved = localStorage.getItem('sps_enable_canvas_tab');
-    if (saved === null || saved === undefined || saved === '') return true;
+    if (saved === null || saved === undefined || saved === '') {
+      localStorage.setItem('sps_enable_canvas_tab', 'false');
+      return false;
+    }
     return saved === 'true';
   });
 
@@ -507,7 +625,7 @@ export default function AdminSettingsModal({
 
   // 4. CLOUD COLLABORATION & USER ACCESS STATE
   const [collaboratorName, setCollaboratorName] = useState('');
-  const [designation, setDesignation] = useState('Lead Director');
+  const [designation, setDesignation] = useState('Lead Editor');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedRole, setSelectedRole] = useState('Editor');
@@ -555,61 +673,83 @@ export default function AdminSettingsModal({
       if (saved !== null) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return ensurePrimaryAdminUser(parsed);
+          }
         } catch (e) {}
       }
     }
-    return [
-      { 
-        name: 'Pedditi Ram', 
-        designation: 'Lead Director', 
-        email: 'pedditiram@gmail.com', 
-        role: 'Director & Owner', 
-        status: 'Active', 
-        allottedProjects: ['PROJECT RAM', '002', 'JAI SRI RAM', '2', 'All Studio Projects'],
-        verifiedAt: 'Today, 09:00 AM' 
-      },
+    return ensurePrimaryAdminUser([
+      getPrimaryAdminProfile(),
       { 
         name: 'Pedditi Varshini', 
-        designation: 'Lead Director', 
+        designation: 'Lead Editor', 
         email: 'pedditivarshini@gmail.com', 
-        role: 'Director & Owner', 
+        role: 'Editor', 
         status: 'Active', 
-        allottedProjects: ['002', 'PROJECT RAM'],
+        allottedProjects: ['PROJECT RAM'],
         verifiedAt: 'Today, 10:15 AM' 
       }
-    ];
+    ]);
   });
+
+  // Drop deleted project titles from allotment badges whenever the live library changes
+  useEffect(() => {
+    if (!isOpen || !Array.isArray(projectLibraryList)) return;
+    const realTitles = projectLibraryList.filter((p) => {
+      const t = String(p?.title || '').trim().toUpperCase();
+      return t && t !== 'STAGE PRODUCTION STUDIO';
+    });
+    if (realTitles.length === 0) return;
+    setAuthorizedUsers((prev) => {
+      const pruned = pruneAllottedProjectsToLibrary(prev, projectLibraryList);
+      if (JSON.stringify(pruned) === JSON.stringify(prev)) return prev;
+      return persistAuthorizedUsersAndNotify(pruned);
+    });
+  }, [isOpen, projectLibraryList]);
+
+  // Always keep pedditiram@gmail.com as Owner/Admin in Settings
+  useEffect(() => {
+    setAuthorizedUsers((prev) => {
+      const next = ensurePrimaryAdminUser(prev);
+      const same =
+        Array.isArray(prev) &&
+        prev.length === next.length &&
+        prev[0]?.email === next[0]?.email &&
+        prev[0]?.role === 'Owner' &&
+        prev[0]?.isStudioAdmin === true;
+      return same ? prev : next;
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_collaboration_activity_log', JSON.stringify(activityLog));
-      localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
-      syncCollaboratorsToCloud(authorizedUsers);
+      const secured = ensurePrimaryAdminUser(authorizedUsers);
+      localStorage.setItem('sps_authorized_phone_users', JSON.stringify(secured));
+      syncCollaboratorsToCloud(secured);
     }
   }, [activityLog, authorizedUsers]);
 
-  // Real-time automatic listener for collaborator updates & cross-tab sync
+  // Cross-tab only: do NOT reload on sps_collaborators_updated (same-tab self-echo
+  // would overwrite in-flight role/designation/status changes from stale localStorage).
   useEffect(() => {
-    const syncUsers = () => {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('sps_authorized_phone_users');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setAuthorizedUsers(parsed);
-            }
-          } catch (e) {}
+    const syncUsersFromOtherTab = (e) => {
+      if (e?.key && e.key !== 'sps_authorized_phone_users') return;
+      if (typeof window === 'undefined') return;
+      const saved = localStorage.getItem('sps_authorized_phone_users');
+      if (!saved) return;
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAuthorizedUsers(ensurePrimaryAdminUser(parsed));
         }
-      }
+      } catch (err) {}
     };
 
-    window.addEventListener('storage', syncUsers);
-    window.addEventListener('sps_collaborators_updated', syncUsers);
+    window.addEventListener('storage', syncUsersFromOtherTab);
     return () => {
-      window.removeEventListener('storage', syncUsers);
-      window.removeEventListener('sps_collaborators_updated', syncUsers);
+      window.removeEventListener('storage', syncUsersFromOtherTab);
     };
   }, []);
 
@@ -640,6 +780,28 @@ export default function AdminSettingsModal({
       localStorage.setItem('sps_issued_invite_otps', JSON.stringify(issued));
     } catch (e) {}
 
+    // Best-effort Resend when configured; in-UI OTP + mailto/share remain the fallback
+    fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: email.trim().toLowerCase(),
+        otp: newCode,
+        purpose: 'invite',
+        name: collaboratorName.trim(),
+        roomId: roomId || 'SPS-CLOUD-8821'
+      })
+    })
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => {
+        if (data?.emailed) {
+          setOtpSuccessMsg(
+            `✓ OTP ${newCode} generated and emailed to ${email.trim()} for ${collaboratorName.trim()}!`
+          );
+        }
+      })
+      .catch(() => {});
+
     const cleanMail = email.trim().toLowerCase();
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -649,22 +811,22 @@ export default function AdminSettingsModal({
     // Automatically add/update authorized collaborators list immediately
     setAuthorizedUsers(prev => {
       const filtered = prev.filter(u => !u.email || u.email.toLowerCase() !== cleanMail);
+      const accessLevel = normalizeAccessLevel(selectedRole);
+      const isOwnerInvite = accessLevel === 'Owner';
       const updatedUser = {
         name: collaboratorName.trim(),
-        designation: designation || 'Lead Director',
+        designation: designation || 'Lead Editor',
         email: cleanMail,
-        role: selectedRole || 'Editor',
-        allottedProjects: [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
+        role: accessLevel,
+        isStudioAdmin: isOwnerInvite,
+        allottedProjects: isOwnerInvite
+          ? ['All Studio Projects (Full Access)']
+          : [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
         currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
       };
-      const updated = [updatedUser, ...filtered];
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
-        window.dispatchEvent(new Event('sps_collaborators_updated'));
-      }
-      return updated;
+      return persistAuthorizedUsersAndNotify([updatedUser, ...filtered]);
     });
 
     const newActivity = {
@@ -693,19 +855,24 @@ export default function AdminSettingsModal({
       const userName = collaboratorName.trim() || 'Collaborator';
       const userDesig = designation.trim() || 'Production Staff';
       const userMail = email.trim() || `${userName.toLowerCase().replace(/\s+/g, '')}@studio.com`;
+      const accessLevel = normalizeAccessLevel(selectedRole);
+      const isOwnerInvite = accessLevel === 'Owner';
 
       const newUser = {
         name: userName,
         designation: userDesig,
         email: userMail,
         phone: userPhone,
-        role: selectedRole,
-        allottedProjects: [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
+        role: accessLevel,
+        isStudioAdmin: isOwnerInvite,
+        allottedProjects: isOwnerInvite
+          ? ['All Studio Projects (Full Access)']
+          : [selectedProjectToAllot || 'STAGE PRODUCTION STUDIO'],
         currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
       };
-      setAuthorizedUsers(prev => [newUser, ...prev]);
+      setAuthorizedUsers(prev => persistAuthorizedUsersAndNotify([newUser, ...prev]));
 
       const newActivity = {
         id: `act_${Date.now()}`,
@@ -734,7 +901,15 @@ export default function AdminSettingsModal({
   };
 
   const handleRemoveCollaborator = (userToRemove) => {
-    setAuthorizedUsers(prev => prev.filter(u => u !== userToRemove && u.email !== userToRemove.email && u.phone !== userToRemove.phone));
+    if (String(userToRemove?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com') {
+      alert('🔒 Cannot remove the primary admin (pedditiram@gmail.com).');
+      return;
+    }
+    setAuthorizedUsers(prev =>
+      persistAuthorizedUsersAndNotify(
+        prev.filter(u => u !== userToRemove && u.email !== userToRemove.email && u.phone !== userToRemove.phone)
+      )
+    );
 
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -754,10 +929,30 @@ export default function AdminSettingsModal({
   };
 
   const handleRoleChange = (targetUser, newRole) => {
-    setAuthorizedUsers(prev => prev.map(u => {
-      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
-      return match ? { ...u, role: newRole } : u;
-    }));
+    if (String(targetUser?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com') {
+      alert('🔒 pedditiram@gmail.com is the default Admin/Owner and cannot be demoted.');
+      setAuthorizedUsers((prev) => persistAuthorizedUsersAndNotify(prev, { notify: false }));
+      return;
+    }
+    const accessLevel = normalizeAccessLevel(newRole);
+    const isOwnerRole = accessLevel === 'Owner';
+    setAuthorizedUsers(prev =>
+      persistAuthorizedUsersAndNotify(
+        prev.map(u => {
+          const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+          if (!match) return u;
+          return {
+            ...u,
+            role: accessLevel,
+            // Keep job title as-is; access level alone controls create/delete
+            isStudioAdmin: isOwnerRole,
+            allottedProjects: isOwnerRole
+              ? ['All Studio Projects (Full Access)']
+              : (Array.isArray(u.allottedProjects) ? u.allottedProjects.filter((t) => !String(t).toLowerCase().startsWith('all studio projects')) : u.allottedProjects)
+          };
+        })
+      )
+    );
     
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -770,17 +965,27 @@ export default function AdminSettingsModal({
       dateFormatted: todayFormatted,
       time: nowStr,
       user: 'Admin Owner',
-      action: `Changed access role for ${targetUser?.name || 'User'} to ${newRole}`,
+      action: `Changed access level for ${targetUser?.name || 'User'} to ${accessLevel}${isOwnerRole ? ' (create/delete enabled)' : ' (no create/delete)'}`,
       status: 'system'
     };
     setActivityLog(prev => [newActivity, ...prev]);
   };
 
   const handleDesignationChange = (targetUser, newDesignation) => {
-    setAuthorizedUsers(prev => prev.map(u => {
-      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
-      return match ? { ...u, designation: newDesignation } : u;
-    }));
+    // Job title only — never grants or revokes Owner create/delete rights
+    setAuthorizedUsers(prev =>
+      persistAuthorizedUsersAndNotify(
+        prev.map(u => {
+          const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+          if (!match) return u;
+          return {
+            ...u,
+            designation: newDesignation,
+            role: normalizeAccessLevel(u.role),
+          };
+        })
+      )
+    );
 
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -793,7 +998,7 @@ export default function AdminSettingsModal({
       dateFormatted: todayFormatted,
       time: nowStr,
       user: 'Admin Owner',
-      action: `Updated designation for ${targetUser?.name || 'User'} to ${newDesignation}`,
+      action: `Updated designation for ${targetUser?.name || 'User'} to ${newDesignation} (job title only — access level unchanged)`,
       status: 'system'
     };
     setActivityLog(prev => [newActivity, ...prev]);
@@ -801,14 +1006,18 @@ export default function AdminSettingsModal({
 
   const handleToggleAccessStatus = (targetUser) => {
     let newStatus = 'Active';
-    setAuthorizedUsers(prev => prev.map(u => {
-      const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
-      if (match) {
-        newStatus = u.status === 'Active' ? 'Suspended' : 'Active';
-        return { ...u, status: newStatus };
-      }
-      return u;
-    }));
+    setAuthorizedUsers(prev =>
+      persistAuthorizedUsersAndNotify(
+        prev.map(u => {
+          const match = (u.email && u.email === targetUser.email) || (u.phone && u.phone === targetUser.phone) || (u.name === targetUser.name);
+          if (match) {
+            newStatus = u.status === 'Active' ? 'Suspended' : 'Active';
+            return { ...u, status: newStatus };
+          }
+          return u;
+        })
+      )
+    );
 
     const now = new Date();
     const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1076,14 +1285,33 @@ export default function AdminSettingsModal({
 
     try {
       if (llmProvider.startsWith('google_gemini') || llmProvider === 'google_gemini' || llmProvider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${keyToTest}`).catch(() => null);
-        if (res && res.status === 200) {
-          setLlmTestResult({ success: true, msg: `✓ ${label} API Key Verified Live & Connected!` });
-        } else {
-          const statusCode = res ? res.status : 'Network Error';
-          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed (HTTP ${statusCode}): Invalid Google Gemini API Key or Unauthorized Access.` });
+        const geminiCfg = resolveGeminiLlmConfig(llmProvider);
+        const modelChain = getGeminiModelChain(llmProvider);
+        try {
+          const res = await fetchGeminiContent(
+            keyToTest,
+            'Reply with exactly the word OK.',
+            { maxOutputTokens: 256 },
+            { provider: llmProvider, retries: 0, timeoutMs: 25000 }
+          );
+          const data = await res.json();
+          const text = extractGeminiResponseText(data).trim();
+          if (text) {
+            setLlmTestResult({
+              success: true,
+              msg: `✓ ${label} connected via ${geminiCfg.modelId} (thinking: ${geminiCfg.thinkingLevel}). Same model chain as Script Parse: ${modelChain.join(' → ')}`
+            });
+          } else {
+            setLlmTestResult({
+              success: false,
+              msg: `❌ ${label} reachable but returned empty text from ${geminiCfg.modelId}.`
+            });
+          }
+        } catch (geminiErr) {
+          const detail = geminiErr?.message || 'Gemini generateContent failed';
+          setLlmTestResult({ success: false, msg: `❌ Live Verification Failed: ${detail}` });
         }
-      } else if (llmProvider === 'anthropic') {
+      } else if (llmProvider === 'anthropic' || llmProvider.startsWith('anthropic')) {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -1170,29 +1398,29 @@ export default function AdminSettingsModal({
   };
 
   return (
-    <div className={`fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4'}`}>
-      <div className={`bg-zinc-950 border border-zinc-800 flex flex-col shadow-2xl overflow-hidden font-sans transition-all duration-200 ${
+    <div className={`sps-modal-enter fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center ${isFullscreen ? 'p-0' : 'sps-modal-overlay p-4 max-md:p-0'}`}>
+      <div className={`sps-glass-shell border border-white/10 flex flex-col overflow-hidden transition-all duration-200 sps-modal-shell ${
         isFullscreen
           ? 'w-screen h-screen max-w-none max-h-none rounded-none inset-0 fixed z-50'
-          : 'w-full max-w-4xl max-h-[90vh] rounded-2xl'
-      }`}>
+          : 'w-full max-w-4xl max-h-[90vh] rounded-2xl max-md:h-[100dvh] max-md:max-h-[100dvh]'
+      }`} style={{ fontFamily: 'var(--sps-font)' }}>
         
         {/* Header */}
-        <div className="p-4 px-6 bg-zinc-900/80 border-b border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+        <div className="p-3 sm:p-4 px-4 sm:px-6 bg-gradient-to-r from-zinc-900/80 via-zinc-900/60 to-zinc-950/40 border-b border-white/[0.08] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2 font-mono">
-                Stage Production Studio Settings
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                <span className="truncate">Studio Settings</span>
                 {isAdminLoggedIn && (
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md shrink-0">
                     Admin Active
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-zinc-400 font-mono">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
+              <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden sm:block">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
             </div>
           </div>
 
@@ -1200,7 +1428,7 @@ export default function AdminSettingsModal({
             <button
               type="button"
               onClick={() => toggleFullscreenMode()}
-              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-mono border border-zinc-700/60 bg-zinc-900/60 cursor-pointer"
+              className="sps-chrome-btn p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center gap-1.5 text-xs border border-zinc-700/60 bg-zinc-900/60 cursor-pointer"
               title="⌘+Enter = 100% Fullscreen, ESC = Normal View"
             >
               {isFullscreen ? (
@@ -1219,7 +1447,7 @@ export default function AdminSettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="sps-chrome-btn p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1227,7 +1455,7 @@ export default function AdminSettingsModal({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="sps-admin-body p-6 overflow-y-auto space-y-6 flex-1 min-w-0">
           
           {!isAdminLoggedIn ? (
             /* Login Form */
@@ -1237,7 +1465,10 @@ export default function AdminSettingsModal({
                   <Lock className="w-6 h-6" />
                 </div>
                 <h4 className="text-base font-bold text-white">Admin Authentication Required</h4>
-                <p className="text-xs text-zinc-400">Enter Admin Credentials to unlock API keys and engine parameters.</p>
+                <p className="text-xs text-zinc-400">
+                  Unlock with a strong custom Admin password, or sign in as Owner
+                  (<span className="text-cyan-300">pedditiram@gmail.com</span>) via main Login first — weak defaults are disabled.
+                </p>
               </div>
 
               {errorMsg && (
@@ -1263,10 +1494,10 @@ export default function AdminSettingsModal({
 
                     <button
                       type="button"
-                      onClick={handleResetPasswordToDefault}
+                      onClick={handleClearWeakAdminDefaults}
                       className="w-full py-1 px-2 rounded text-zinc-400 hover:text-zinc-200 text-[11px] font-mono underline"
                     >
-                      Quick Reset to Default (admin / admin123)
+                      Clear weak legacy defaults (require Owner email + strong password)
                     </button>
                   </div>
                 </div>
@@ -1320,6 +1551,9 @@ export default function AdminSettingsModal({
                     <form onSubmit={handleVerifyOtpAndResetPass} className="space-y-2.5">
                       <div className="p-2.5 rounded bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs space-y-1">
                         <p className="font-bold">✓ Security Verification Code generated for {authorizedEmail}!</p>
+                        <p className="text-[10px] text-zinc-400">
+                          If Resend is configured on Vercel, the code was also emailed. In-UI OTP always works (Owner unlock path).
+                        </p>
                         <p className="font-mono bg-zinc-950 p-1 rounded text-center text-amber-300 text-sm tracking-widest font-bold">
                           OTP: {generatedOtpCode}
                         </p>
@@ -1341,14 +1575,15 @@ export default function AdminSettingsModal({
 
                       <div>
                         <label className="text-[11px] text-zinc-400 block mb-1">
-                          Set New Password (or leave blank for admin123):
+                          Set New Password (min 10 chars, not a weak default):
                         </label>
                         <input
                           type="password"
                           value={newPassAfterOtp}
                           onChange={(e) => setNewPassAfterOtp(e.target.value)}
-                          placeholder="New password..."
+                          placeholder="Strong new password (required)"
                           className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                          required
                         />
                       </div>
 
@@ -1376,7 +1611,7 @@ export default function AdminSettingsModal({
                   type="text"
                   value={adminIdInput}
                   onChange={(e) => setAdminIdInput(e.target.value)}
-                  placeholder="Enter admin ID..."
+                  placeholder="Custom Admin ID (optional if Owner session active)"
                   className="w-full bg-zinc-900 text-white border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1387,7 +1622,7 @@ export default function AdminSettingsModal({
                   type="password"
                   value={adminPasswordInput}
                   onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  placeholder="Enter password..."
+                  placeholder="Strong custom password (optional if Owner session)"
                   className="w-full bg-zinc-900 text-white border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1399,6 +1634,9 @@ export default function AdminSettingsModal({
                 <Key className="w-4 h-4" />
                 Authenticate & Unlock Settings
               </button>
+              <p className="text-[10px] text-zinc-500 text-center leading-relaxed">
+                Owner path: Login as pedditiram@gmail.com → open Settings → Authenticate (password optional while Owner session is active).
+              </p>
             </form>
           ) : (
             /* Admin Authenticated Panel */
@@ -2639,20 +2877,21 @@ export default function AdminSettingsModal({
                             </div>
 
                             <div>
-                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Designation / Role Title:</label>
+                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Designation (Job Title):</label>
                               <select
                                 value={designation}
                                 onChange={(e) => setDesignation(e.target.value)}
                                 className="w-full bg-zinc-950 border border-zinc-700 text-cyan-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-bold"
                               >
-                                <option value="Lead Director">💼 Lead Director</option>
-                                <option value="Executive Producer">💼 Executive Producer</option>
-                                <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
-                                <option value="Lighting Specialist">💼 Lighting Specialist</option>
-                                <option value="Sound Engineer">💼 Sound Engineer</option>
-                                <option value="Lead Editor">💼 Lead Editor</option>
-                                <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
+                                {STUDIO_DESIGNATIONS.map((d) => (
+                                  <option key={d} value={d}>
+                                    💼 {d}
+                                  </option>
+                                ))}
                               </select>
+                              <p className="text-[10px] text-zinc-500 mt-1">
+                                Job title only — does not grant create/delete rights.
+                              </p>
                             </div>
                           </div>
 
@@ -2684,16 +2923,29 @@ export default function AdminSettingsModal({
                             </div>
 
                             <div>
-                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Studio Access Role:</label>
-                              <select
-                                value={selectedRole}
-                                onChange={(e) => setSelectedRole(e.target.value)}
-                                className="w-full bg-zinc-950 border border-zinc-700 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-bold"
-                              >
-                                <option value="Editor">✏️ Editor (Full Access)</option>
-                                <option value="Viewer">👁️ Viewer (Read-Only)</option>
-                                <option value="Director & Owner">👑 Director & Owner</option>
-                              </select>
+                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">Access Level:</label>
+                              <div className="flex flex-col gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-2">
+                                {ACCESS_LEVELS.map((level) => (
+                                  <label key={level} className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-zinc-200">
+                                    <input
+                                      type="radio"
+                                      name="sps_access_level_invite"
+                                      value={level}
+                                      checked={selectedRole === level}
+                                      onChange={() => setSelectedRole(level)}
+                                      className="accent-amber-500"
+                                    />
+                                    <span>
+                                      {level === 'Owner' && '👑 Owner — create / delete / full library'}
+                                      {level === 'Editor' && '✏️ Editor — edit allotted projects only'}
+                                      {level === 'Viewer' && '👁️ Viewer — read-only allotted projects'}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                              <p className="text-[10px] text-zinc-500 mt-1">
+                                Only <strong className="text-amber-300">Owner</strong> can create or delete projects.
+                              </p>
                             </div>
                           </div>
 
@@ -2804,7 +3056,7 @@ export default function AdminSettingsModal({
                         return (
                           <div 
                             key={idx} 
-                            className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md transition-all ${
+                            className={`sps-admin-collab-row p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md transition-all min-w-0 ${
                               isSuspended
                                 ? 'bg-red-950/30 border-red-900/60 opacity-80'
                                 : 'bg-slate-950 border-slate-800'
@@ -2818,7 +3070,7 @@ export default function AdminSettingsModal({
                               </div>
 
                               <div className="min-w-0 flex-1 space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="sps-admin-collab-controls">
                                   {/* Full Name - Explicit High Contrast White Text */}
                                   <span className="font-black text-white text-sm font-sans tracking-tight block">{user.name || 'Collaborator'}</span>
                                   
@@ -2832,38 +3084,49 @@ export default function AdminSettingsModal({
                                     {isUserOnline ? '🟢 Online Now' : '⚪ Offline'}
                                   </span>
 
-                                  {/* Editable Designation Dropdown */}
+                                  {/* Editable Designation Dropdown (job title only) */}
                                   <select
-                                    value={user.designation || 'Lead Director'}
+                                    value={STUDIO_DESIGNATIONS.includes(user.designation) ? user.designation : (user.designation || 'Lead Editor')}
                                     onChange={(e) => handleDesignationChange(user, e.target.value)}
-                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-blue-950/90 text-cyan-300 border border-blue-700 font-bold cursor-pointer hover:border-cyan-400 focus:outline-none shadow-sm"
-                                    title="Click to edit designation"
+                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-full border font-bold cursor-pointer focus:outline-none shadow-sm bg-blue-950/90 text-cyan-300 border-blue-700 hover:border-cyan-400"
+                                    title="Job title only — does not grant create/delete. Use Access Level for that."
                                   >
-                                    <option value="Lead Director">💼 Lead Director</option>
-                                    <option value="Executive Producer">💼 Executive Producer</option>
-                                    <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
-                                    <option value="Lighting Specialist">💼 Lighting Specialist</option>
-                                    <option value="Sound Engineer">💼 Sound Engineer</option>
-                                    <option value="Lead Editor">💼 Lead Editor</option>
-                                    <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
-                                    <option value="Production Assistant">💼 Production Assistant</option>
+                                    {!STUDIO_DESIGNATIONS.includes(user.designation) && user.designation ? (
+                                      <option value={user.designation}>💼 {user.designation}</option>
+                                    ) : null}
+                                    {STUDIO_DESIGNATIONS.map((d) => (
+                                      <option key={d} value={d}>
+                                        💼 {d}
+                                      </option>
+                                    ))}
                                   </select>
 
-                                  {/* Editable Access Role Dropdown */}
-                                  <select
-                                    value={user.role || 'Editor'}
-                                    onChange={(e) => handleRoleChange(user, e.target.value)}
-                                    className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none shadow-sm ${
-                                      user.role === 'Viewer' 
-                                        ? 'text-cyan-300 border-cyan-700' 
-                                        : (user.role && user.role.includes('Director') ? 'text-amber-300 border-amber-700' : 'text-emerald-300 border-emerald-700')
-                                    }`}
-                                    title="Click to edit access role"
-                                  >
-                                    <option value="Editor">✏️ Editor (Full Access)</option>
-                                    <option value="Viewer">👁️ Viewer (Read-Only)</option>
-                                    <option value="Director & Owner">👑 Director & Owner</option>
-                                  </select>
+                                  {/* Access Level — pedditiram@gmail.com locked as Owner/Admin */}
+                                  {String(user.email || '').toLowerCase() === 'pedditiram@gmail.com' ? (
+                                    <span
+                                      className="text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold bg-amber-950 text-amber-300 border-amber-600 shadow-sm"
+                                      title="Default studio Admin / Owner — cannot be demoted"
+                                    >
+                                      👑 Admin / Owner (Default)
+                                    </span>
+                                  ) : (
+                                    <select
+                                      value={normalizeAccessLevel(user.role)}
+                                      onChange={(e) => handleRoleChange(user, e.target.value)}
+                                      className={`text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none shadow-sm ${
+                                        normalizeAccessLevel(user.role) === 'Viewer'
+                                          ? 'text-cyan-300 border-cyan-700'
+                                          : normalizeAccessLevel(user.role) === 'Owner'
+                                            ? 'text-amber-300 border-amber-700'
+                                            : 'text-emerald-300 border-emerald-700'
+                                      }`}
+                                      title="Owner = create/delete; Editor = edit allotted; Viewer = read-only"
+                                    >
+                                      <option value="Owner">👑 Owner (Create / Delete)</option>
+                                      <option value="Editor">✏️ Editor (Allotted Only)</option>
+                                      <option value="Viewer">👁️ Viewer (Read-Only)</option>
+                                    </select>
+                                  )}
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
@@ -2871,8 +3134,8 @@ export default function AdminSettingsModal({
                                 </div>
 
                                 {/* Visible Project Allotment Control & Live Allotted Badges */}
-                                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-900/80 mt-1">
-                                  <span className="text-[10.5px] font-bold text-amber-400 font-sans flex items-center gap-1">
+                                <div className="sps-admin-allot-row pt-1 border-t border-slate-900/80 mt-1">
+                                  <span className="text-[10.5px] font-bold text-amber-400 font-sans flex items-center gap-1 shrink-0">
                                     📁 Allot Project:
                                   </span>
 
@@ -2881,24 +3144,21 @@ export default function AdminSettingsModal({
                                     value={user.allottedProjects?.[0] || 'STAGE PRODUCTION STUDIO'}
                                     onChange={(e) => {
                                       const selectedProj = e.target.value;
-                                      setAuthorizedUsers(prev => {
-                                        const updated = prev.map(u => {
-                                          const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
-                                          if (match) {
-                                            const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
-                                            const newList = currentList.includes(selectedProj) ? currentList : [selectedProj, ...currentList];
-                                            return { ...u, allottedProjects: newList, currentProject: selectedProj };
-                                          }
-                                          return u;
-                                        });
-                                        if (typeof window !== 'undefined') {
-                                          localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
-                                          window.dispatchEvent(new Event('sps_collaborators_updated'));
-                                        }
-                                        return updated;
-                                      });
+                                      setAuthorizedUsers(prev =>
+                                        persistAuthorizedUsersAndNotify(
+                                          prev.map(u => {
+                                            const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                            if (match) {
+                                              const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
+                                              const newList = currentList.includes(selectedProj) ? currentList : [selectedProj, ...currentList];
+                                              return { ...u, allottedProjects: newList, currentProject: selectedProj };
+                                            }
+                                            return u;
+                                          })
+                                        )
+                                      );
                                     }}
-                                    className="text-[10.5px] font-mono px-2 py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-sm"
+                                    className="text-[10.5px] font-mono px-2 py-1.5 sm:py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-sm min-w-0 max-w-full"
                                     title="Select project to allot to this collaborator"
                                   >
                                     <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
@@ -2908,41 +3168,41 @@ export default function AdminSettingsModal({
                                   </select>
 
                                   {/* Live Allotted Project Badges with 1-Click Revoke / Remove Button */}
-                                  {(Array.isArray(user.allottedProjects) && user.allottedProjects.length > 0 ? user.allottedProjects : ['STAGE PRODUCTION STUDIO']).map((pTitle, pIdx) => (
+                                  {(Array.isArray(user.allottedProjects) && user.allottedProjects.length > 0
+                                    ? filterAllottedTitlesToLiveLibrary(user.allottedProjects, projectLibraryList)
+                                    : []
+                                  ).map((pTitle, pIdx) => (
                                     <span 
                                       key={pIdx}
-                                      className="text-[9.5px] font-mono pl-2 pr-1.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1.5 shadow-sm"
+                                      className="sps-allot-badge text-[9.5px] font-mono pl-2 pr-1.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-600/80 font-bold flex items-center gap-1.5 shadow-sm shrink-0"
                                     >
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                                      <span className="truncate max-w-[180px]">{pTitle}</span>
+                                      <span className="truncate max-w-[140px] sm:max-w-[180px]">{pTitle}</span>
                                       
                                       {/* Remove / Revoke Project Access Button */}
                                       <button
                                         type="button"
                                         onClick={() => {
                                           if (window.confirm(`Revoke access to project "${pTitle}" for ${user.name || 'collaborator'}?`)) {
-                                            setAuthorizedUsers(prev => {
-                                              const updated = prev.map(u => {
-                                                const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
-                                                if (match) {
-                                                  const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
-                                                  const filteredList = currentList.filter(p => p !== pTitle);
-                                                  return { 
-                                                    ...u, 
-                                                    allottedProjects: filteredList.length > 0 ? filteredList : ['STAGE PRODUCTION STUDIO'] 
-                                                  };
-                                                }
-                                                return u;
-                                              });
-                                              if (typeof window !== 'undefined') {
-                                                localStorage.setItem('sps_authorized_phone_users', JSON.stringify(updated));
-                                                window.dispatchEvent(new Event('sps_collaborators_updated'));
-                                              }
-                                              return updated;
-                                            });
+                                            setAuthorizedUsers(prev =>
+                                              persistAuthorizedUsersAndNotify(
+                                                prev.map(u => {
+                                                  const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                                  if (match) {
+                                                    const currentList = Array.isArray(u.allottedProjects) ? u.allottedProjects : ['STAGE PRODUCTION STUDIO'];
+                                                    const filteredList = currentList.filter(p => p !== pTitle);
+                                                    return {
+                                                      ...u,
+                                                      allottedProjects: filteredList.length > 0 ? filteredList : ['STAGE PRODUCTION STUDIO']
+                                                    };
+                                                  }
+                                                  return u;
+                                                })
+                                              )
+                                            );
                                           }
                                         }}
-                                        className="hover:bg-red-900/80 hover:text-red-200 text-emerald-400/80 rounded-full p-0.5 transition-all cursor-pointer ml-0.5"
+                                        className="hover:bg-red-900/80 hover:text-red-200 text-emerald-400/80 rounded-full p-1 sm:p-0.5 transition-all cursor-pointer ml-0.5 min-w-[1.75rem] min-h-[1.75rem] inline-flex items-center justify-center"
                                         title={`Remove access to project "${pTitle}"`}
                                       >
                                         <X className="w-3 h-3" />
@@ -2954,11 +3214,11 @@ export default function AdminSettingsModal({
                             </div>
 
                             {/* Right: Access Status & Remove Action */}
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <div className="flex items-center gap-2 shrink-0 self-stretch sm:self-center w-full sm:w-auto justify-end">
                               <button
                                 type="button"
                                 onClick={() => handleToggleAccessStatus(user)}
-                                className={`text-[11px] font-mono px-3 py-1 rounded-full border flex items-center gap-1.5 font-bold shadow-sm transition-all ${
+                                className={`text-[11px] font-mono px-3 py-2 sm:py-1 rounded-full border flex items-center gap-1.5 font-bold shadow-sm transition-all min-h-[2.25rem] ${
                                   isSuspended
                                     ? 'bg-red-950 text-red-300 border-red-800 hover:bg-red-900'
                                     : 'bg-emerald-950 text-emerald-300 border-emerald-700 hover:bg-emerald-900'
@@ -2968,6 +3228,7 @@ export default function AdminSettingsModal({
                                 {isSuspended ? '🔴 Access Suspended' : '🟢 Active Access'}
                               </button>
 
+                              {String(user.email || '').toLowerCase() !== 'pedditiram@gmail.com' && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2975,11 +3236,12 @@ export default function AdminSettingsModal({
                                     handleRemoveCollaborator(user);
                                   }
                                 }}
-                                className="p-2 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                                className="p-2.5 sm:p-2 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all flex items-center justify-center shrink-0 cursor-pointer min-w-[2.25rem] min-h-[2.25rem]"
                                 title="Delete / Remove Collaborator"
                               >
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -3111,14 +3373,14 @@ export default function AdminSettingsModal({
                             } catch (e) {}
                           }
 
-                          // 2. PULL LATEST REMOTE DATA FROM CLOUD
+                          // 2. PULL LATEST REMOTE DATA FROM CLOUD (force bypasses local write guard)
                           const cloudLib = await fetchProjectLibraryFromCloud();
                           const cloudUsers = await fetchCollaboratorsFromCloud();
                           if (Array.isArray(cloudLib) && cloudLib.length > 0) {
                             setProjectLibraryList(cloudLib);
                           }
                           if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
-                            setAuthorizedUsers(cloudUsers);
+                            setAuthorizedUsers(ensurePrimaryAdminUser(sanitizeAuthorizedUsers(cloudUsers)));
                           }
 
                           setDbSyncMsg('✓ Bi-Directional Push & Pull Complete with Cloud Database!');

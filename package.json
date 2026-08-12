@@ -14,14 +14,18 @@
     "dev": "vite",
     "dev:host": "vite --host",
     "tunnel": "npx localtunnel --port 5173",
+    "sync:pdfjs": "node scripts/sync-pdfjs-assets.mjs",
+    "postinstall": "node scripts/sync-pdfjs-assets.mjs",
+    "prebuild": "node scripts/sync-pdfjs-assets.mjs",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test:pdf-extract": "node scripts/test-pdf-extract.mjs",
     "electron:dev": "concurrently -k \"cross-env NODE_ENV=development vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_RUN_AS_NODE= electron .\"",
-    "electron:build": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac",
-    "electron:build:dir": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac --dir",
-    "electron:pack": "cross-env ELECTRON_BUILD=true vite build && cross-env ELECTRON_RUN_AS_NODE= electron-builder --mac dmg",
-    "deploy:web": "vercel --prod"
+    "electron:build": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js",
+    "electron:build:dir": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js --dir",
+    "electron:pack": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js --dmg",
+    "deploy:web": "node scripts/sync-pdfjs-assets.mjs && vercel --prod"
   },
   "build": {
     "appId": "com.pedditilabs.stageproductionstudio",

@@ -89,37 +89,63 @@ export const saveProjectToVault = async (project) => {
   return true;
 };
 
-// Load all projects from IndexedDB vault (used for recovery if localStorage is cleared)
+// Load all projects from IndexedDB vault and physical disk folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
 export const loadProjectsFromVault = async () => {
+  let projectsMap = new Map();
+
+  // 1. Read IndexedDB vault
   try {
     const db = await initDiskVaultDB();
     if (db) {
-      return new Promise((resolve) => {
+      const indexedProjects = await new Promise((resolve) => {
         const tx = db.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
         const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      });
 
-        request.onsuccess = () => {
-          resolve(request.result || []);
-        };
-
-        request.onerror = () => {
-          resolve([]);
-        };
+      indexedProjects.forEach(p => {
+        if (p && (p.id || p.title)) {
+          const key = p.id || p.title;
+          projectsMap.set(key, p);
+        }
       });
     }
   } catch (e) {
     console.warn('Error reading IndexedDB Vault:', e);
   }
-  return [];
+
+  // 2. Read Physical Disk Server Endpoint (/api/list-projects-disk)
+  try {
+    const res = await fetch('/api/list-projects-disk').catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json();
+      const diskProjects = data.projects || [];
+      diskProjects.forEach(dp => {
+        if (dp) {
+          const projObj = dp.project || dp;
+          if (projObj && (projObj.id || projObj.title)) {
+            const key = projObj.id || projObj.title;
+            // Physical disk project takes priority
+            projectsMap.set(key, projObj);
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Error fetching physical disk projects:', e);
+  }
+
+  return Array.from(projectsMap.values());
 };
 
 // Get Allotted Storage Folder Path
 export const getAllottedFolderPath = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('sps_allotted_storage_folder') || '/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/';
+    return localStorage.getItem('sps_allotted_storage_folder') || './projects/';
   }
-  return '/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/';
+  return './projects/';
 };
 
 // Set Allotted Storage Folder Path
@@ -152,7 +178,8 @@ export const exportProjectPackageToFile = (project) => {
       roomId: project.roomId || 'SPS-CLOUD-8821',
       lastModified: new Date().toLocaleString(),
       shots: project.shots || [],
-      versions: project.versions || []
+      versions: project.versions || [],
+      directorPsychology: project.directorPsychology || null
     }
   };
 
@@ -186,6 +213,12 @@ export const importProjectPackageFromFile = (file) => {
         if (!projectData || !Array.isArray(projectData.shots)) {
           reject(new Error('Invalid SPS project file format. Missing shots data.'));
           return;
+        }
+
+        if (projectData.directorPsychology && projectData.title) {
+          try {
+            localStorage.setItem('sps_director_psychology_' + projectData.title, JSON.stringify(projectData.directorPsychology));
+          } catch (e) {}
         }
 
         // Save to IndexedDB & localStorage vault

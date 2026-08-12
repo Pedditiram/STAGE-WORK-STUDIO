@@ -8,6 +8,8 @@ import {
   collection, 
   getDocs 
 } from 'firebase/firestore';
+import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary } from '../utils/projectPermissions';
+import { getNativeSyncUrl } from './cloudSync';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -19,13 +21,96 @@ const DEFAULT_FIREBASE_CONFIG = {
   appId: "1:98127391273:web:stageproductionstudio"
 };
 
+/** Normalize + keep primary Owner; clears stale isStudioAdmin on Editor/Viewer. */
+function secureCollaboratorList(users) {
+  return ensurePrimaryAdminUser(sanitizeAuthorizedUsers(Array.isArray(users) ? users : []));
+}
+
+/** Strip allotted titles that no longer exist in the live project library; persist if changed. */
+function pruneAndPersistCollaboratorAllotments(projectLibrary) {
+  if (typeof window === 'undefined') return;
+  const live = Array.isArray(projectLibrary) ? projectLibrary : [];
+  // Only prune against a hydrated non-empty library (prevents wiping allotments on empty cold start)
+  const realTitles = live.filter((p) => {
+    const t = String(p?.title || '').trim().toUpperCase();
+    return t && t !== 'STAGE PRODUCTION STUDIO';
+  });
+  if (realTitles.length === 0) return;
+
+  let users = [];
+  try {
+    users = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
+  } catch (e) {
+    return;
+  }
+  if (!Array.isArray(users) || users.length === 0) return;
+  const pruned = secureCollaboratorList(pruneAllottedProjectsToLibrary(users, live));
+  if (JSON.stringify(pruned) === JSON.stringify(users)) return;
+  localStorage.setItem('sps_authorized_phone_users', JSON.stringify(pruned));
+  window.dispatchEvent(new Event('sps_collaborators_updated'));
+  // Fire-and-forget cloud heal so profile menus on other devices drop dead titles (002, etc.)
+  syncCollaboratorsToCloud(pruned);
+}
+
+/**
+ * Cloud is source of truth — always apply sanitized cloud collaborators to localStorage.
+ * Local UI may push edits up; on pull/reload Vercel/cloud wins.
+ */
+function applyCloudCollaborators(users) {
+  if (typeof window === 'undefined') return null;
+  if (!Array.isArray(users) || users.length === 0) return null;
+  let library = [];
+  try {
+    library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+  } catch (e) {}
+  const live = Array.isArray(library) ? library : [];
+  // Prune only when we have a real hydrated library; otherwise keep cloud allotments intact
+  const realTitles = live.filter((p) => {
+    const t = String(p?.title || '').trim().toUpperCase();
+    return t && t !== 'STAGE PRODUCTION STUDIO';
+  });
+  const secured = secureCollaboratorList(
+    realTitles.length > 0 ? pruneAllottedProjectsToLibrary(users, live) : users
+  );
+  const newStr = JSON.stringify(secured);
+  const oldStr = localStorage.getItem('sps_authorized_phone_users');
+  if (newStr !== oldStr) {
+    localStorage.setItem('sps_authorized_phone_users', newStr);
+    try {
+      localStorage.setItem('sps_collaborators_cloud_synced_at', new Date().toISOString());
+    } catch (e) {}
+    window.dispatchEvent(new Event('sps_collaborators_updated'));
+  }
+  return secured;
+}
+
+function syncApiUrl() {
+  return getNativeSyncUrl();
+}
+
 // Permanent Production REST Cloud Database Endpoints (Zero-Config, 100% Active Globally across Firefox, Safari, Chrome)
-const NATIVE_SYNC_URL = "/api/sync";
 const SPS_PROJECTS_BLOB_URL = "https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555";
-const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a7fd-7d7b-ac0c-2a2c457fe616";
-const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-a9a0-7028-9dd5-9567daaf7158";
+const JSONBLOB_PROJECTS_URL = "https://jsonblob.com/api/jsonBlob/019ff13d-4075-73fe-8c17-d9e6ccf0f922";
+const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019ff13d-79e0-75d9-9312-53b71c76be18";
 // Dedicated presence blob (must NOT share the rooms hub URL or presence wipes collab rooms)
-const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019f9748-ad01-7c20-9ee1-presence0sps01";
+const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019ff13d-7ff2-7974-93c5-6c3abaa2cf10";
+
+const LIBRARY_POLL_MS_ACTIVE = 3000;
+const LIBRARY_POLL_MS_HIDDEN = 20000;
+const COLLAB_POLL_MS_ACTIVE = 5000;
+const COLLAB_POLL_MS_HIDDEN = 30000;
+const FETCH_TIMEOUT_MS = 12000;
+
+async function fetchJsonTimed(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 let app = null;
 let db = null;
@@ -72,30 +157,35 @@ export function saveStoredDbConfig(configObj) {
 // 1. Sync Collaborator User Access Data to Cloud Database
 export async function syncCollaboratorsToCloud(authorizedUsers) {
   if (typeof window === 'undefined') return;
+  const secured = secureCollaboratorList(authorizedUsers);
+  // Never push an empty collaborator list — would wipe Owner + allotments
+  if (!secured.length) return;
+
   const payload = {
-    users: authorizedUsers,
+    users: secured,
     lastSynced: new Date().toISOString(),
-    totalCollaborators: authorizedUsers.length
+    totalCollaborators: secured.length
   };
 
-  const newStr = JSON.stringify(authorizedUsers);
+  const newStr = JSON.stringify(secured);
   const oldStr = localStorage.getItem('sps_authorized_phone_users');
   if (newStr !== oldStr) {
     localStorage.setItem('sps_authorized_phone_users', newStr);
     window.dispatchEvent(new Event('sps_collaborators_updated'));
   }
 
+  const base = syncApiUrl();
   try {
-    await fetch(`${NATIVE_SYNC_URL}?type=collaborators`, {
+    await fetchJsonTimed(`${base}?type=collaborators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
   } catch (e) {}
 
-  // Push to Production REST Cloud Database
+  // Direct blob backup only when non-empty (native API is SoT; avoid wipe races)
   try {
-    await fetch(SPS_COLLABORATORS_BLOB_URL, {
+    await fetchJsonTimed(SPS_COLLABORATORS_BLOB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -110,36 +200,44 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
   }
 }
 
-// 2. Fetch All Collaborators from Cloud Database
+// 2. Fetch All Collaborators from Cloud Database (cloud wins → local)
 export async function fetchCollaboratorsFromCloud() {
+  const base = syncApiUrl();
   try {
-    const res = await fetch(`${NATIVE_SYNC_URL}?type=collaborators&t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${base}?type=collaborators&t=${Date.now()}`);
+    if (res.status === 503) {
+      // Durable unreachable — keep local, do not wipe
+      const saved = localStorage.getItem('sps_authorized_phone_users');
+      try {
+        return secureCollaboratorList(saved ? JSON.parse(saved) : []);
+      } catch (e) {
+        return [];
+      }
+    }
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.users) && data.users.length > 0) {
-        const newStr = JSON.stringify(data.users);
-        const oldStr = localStorage.getItem('sps_authorized_phone_users');
-        if (newStr !== oldStr) {
-          localStorage.setItem('sps_authorized_phone_users', newStr);
-          window.dispatchEvent(new Event('sps_collaborators_updated'));
+      if (data?.durableFailed) {
+        const saved = localStorage.getItem('sps_authorized_phone_users');
+        try {
+          return secureCollaboratorList(saved ? JSON.parse(saved) : []);
+        } catch (e) {
+          return [];
         }
-        return data.users;
+      }
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        const applied = applyCloudCollaborators(data.users);
+        if (applied) return applied;
       }
     }
   } catch (e) {}
 
   try {
-    const res = await fetch(SPS_COLLABORATORS_BLOB_URL, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${SPS_COLLABORATORS_BLOB_URL}?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users) && data.users.length > 0) {
-        const newStr = JSON.stringify(data.users);
-        const oldStr = localStorage.getItem('sps_authorized_phone_users');
-        if (newStr !== oldStr) {
-          localStorage.setItem('sps_authorized_phone_users', newStr);
-          window.dispatchEvent(new Event('sps_collaborators_updated'));
-        }
-        return data.users;
+        const applied = applyCloudCollaborators(data.users);
+        if (applied) return applied;
       }
     }
   } catch (e) {}
@@ -151,38 +249,64 @@ export async function fetchCollaboratorsFromCloud() {
       if (snap.exists()) {
         const data = snap.data();
         if (Array.isArray(data.users)) {
-          const newStr = JSON.stringify(data.users);
-          const oldStr = localStorage.getItem('sps_authorized_phone_users');
-          if (newStr !== oldStr) {
-            localStorage.setItem('sps_authorized_phone_users', newStr);
-            window.dispatchEvent(new Event('sps_collaborators_updated'));
-          }
-          return data.users;
+          const applied = applyCloudCollaborators(data.users);
+          if (applied) return applied;
         }
       }
     } catch (e) {}
   }
 
   const saved = localStorage.getItem('sps_authorized_phone_users');
-  return saved ? JSON.parse(saved) : [];
+  try {
+    return secureCollaboratorList(saved ? JSON.parse(saved) : []);
+  } catch (e) {
+    return [];
+  }
 }
 
 // 3. Real-time Live Listener for Collaborator Access Updates
 export function subscribeToCollaboratorUpdates(onUsersReceived) {
-  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
-  if (!isCloudMode) return () => {};
+  if (typeof window === 'undefined') return () => {};
 
   let unsubscribe = () => {};
-  
-  const interval = setInterval(async () => {
-    if (typeof document !== 'undefined' && document.hidden) return;
+  let pollTimer = null;
+  let cancelled = false;
+
+  const pull = async () => {
+    if (cancelled) return;
     try {
       const users = await fetchCollaboratorsFromCloud();
       if (Array.isArray(users) && typeof onUsersReceived === 'function') {
         onUsersReceived(users);
       }
     } catch (e) {}
-  }, 60000);
+  };
+
+  const schedule = () => {
+    if (pollTimer) clearInterval(pollTimer);
+    const ms =
+      typeof document !== 'undefined' && document.hidden
+        ? COLLAB_POLL_MS_HIDDEN
+        : COLLAB_POLL_MS_ACTIVE;
+    pollTimer = setInterval(pull, ms);
+  };
+
+  const onVis = () => {
+    if (cancelled) return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      schedule();
+      return;
+    }
+    pull();
+    schedule();
+  };
+
+  pull();
+  schedule();
+  if (typeof window !== 'undefined') {
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onVis);
+  }
 
   if (db) {
     try {
@@ -191,14 +315,9 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
         if (snap.exists()) {
           const data = snap.data();
           if (Array.isArray(data.users)) {
-            const newStr = JSON.stringify(data.users);
-            const oldStr = localStorage.getItem('sps_authorized_phone_users');
-            if (newStr !== oldStr) {
-              localStorage.setItem('sps_authorized_phone_users', newStr);
-              window.dispatchEvent(new Event('sps_collaborators_updated'));
-            }
+            const applied = applyCloudCollaborators(data.users);
             if (typeof onUsersReceived === 'function') {
-              onUsersReceived(data.users);
+              onUsersReceived(applied || secureCollaboratorList(data.users));
             }
           }
         }
@@ -207,7 +326,12 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
   }
 
   return () => {
-    clearInterval(interval);
+    cancelled = true;
+    if (pollTimer) clearInterval(pollTimer);
+    if (typeof window !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onVis);
+    }
     unsubscribe();
   };
 }
@@ -215,40 +339,47 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
 // 4. Sync Whole Studio Project Library to Cloud Database
 export async function syncProjectLibraryToCloud(projectLibrary) {
   if (typeof window === 'undefined') return;
+  const list = Array.isArray(projectLibrary) ? projectLibrary : [];
+  // Never push empty library to cloud — empty overwrite guard on server is backup only
+  if (list.length === 0) return;
+
+  const deletedTitles = Array.from(readDeletedTitleKeys());
   const payload = {
-    projects: projectLibrary,
+    projects: list,
+    deletedTitles,
     updatedAt: new Date().toISOString(),
-    totalProjects: projectLibrary.length
+    totalProjects: list.length
   };
 
-  const newStr = JSON.stringify(projectLibrary);
+  const newStr = JSON.stringify(list);
   const oldStr = localStorage.getItem('sps_project_library');
   if (newStr !== oldStr) {
     localStorage.setItem('sps_project_library', newStr);
     window.dispatchEvent(new Event('sps_projects_updated'));
   }
 
-  // Push to Native Vercel Serverless Sync Engine (/api/sync)
+  pruneAndPersistCollaboratorAllotments(list);
+
+  // Push to Native Vercel Serverless Sync Engine (/api/sync) — authoritative
   try {
-    await fetch(`${NATIVE_SYNC_URL}?type=projects`, {
+    await fetchJsonTimed(`${syncApiUrl()}?type=projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projects: projectLibrary, updatedAt: new Date().toISOString() })
+      body: JSON.stringify(payload)
     });
   } catch (e) {}
 
-  // Push to Primary RESTful Cloud DB
+  // Best-effort backups — never PUT empty; skip if rate-limited
   try {
-    await fetch(SPS_PROJECTS_BLOB_URL, {
+    await fetchJsonTimed(SPS_PROJECTS_BLOB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: "Stage Production Studio Projects", data: payload })
+      body: JSON.stringify({ name: 'Stage Production Studio Projects', data: payload })
     });
   } catch (e) {}
 
-  // Push to Backup JSONBlob DB
   try {
-    await fetch(JSONBLOB_PROJECTS_URL, {
+    await fetchJsonTimed(JSONBLOB_PROJECTS_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -265,12 +396,15 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
 
 // 5. Subscribe to Real-Time Project Library Updates from Cloud
 export function subscribeToProjectLibraryUpdates(callback) {
-  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
-  if (!isCloudMode) return () => {};
+  if (typeof window === 'undefined') return () => {};
 
   initDatabase();
 
+  let pollTimer = null;
+  let cancelled = false;
+
   const checkUpdates = async () => {
+    if (cancelled) return;
     try {
       const projects = await fetchProjectLibraryFromCloud();
       if (Array.isArray(projects) && typeof callback === 'function') {
@@ -279,8 +413,32 @@ export function subscribeToProjectLibraryUpdates(callback) {
     } catch (e) {}
   };
 
+  const schedule = () => {
+    if (pollTimer) clearInterval(pollTimer);
+    const ms =
+      typeof document !== 'undefined' && document.hidden
+        ? LIBRARY_POLL_MS_HIDDEN
+        : LIBRARY_POLL_MS_ACTIVE;
+    pollTimer = setInterval(checkUpdates, ms);
+  };
+
+  const onVis = () => {
+    if (cancelled) return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      schedule();
+      return;
+    }
+    checkUpdates();
+    schedule();
+  };
+
   checkUpdates();
-  const interval = setInterval(checkUpdates, 15000);
+  schedule();
+  if (typeof window !== 'undefined') {
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onVis);
+    window.addEventListener('pageshow', onVis);
+  }
 
   let unsubscribe = () => {};
   if (db && typeof window !== 'undefined') {
@@ -290,13 +448,8 @@ export function subscribeToProjectLibraryUpdates(callback) {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data && Array.isArray(data.projects)) {
-            const newStr = JSON.stringify(data.projects);
-            const oldStr = localStorage.getItem('sps_project_library');
-            if (newStr !== oldStr) {
-              localStorage.setItem('sps_project_library', newStr);
-              window.dispatchEvent(new Event('sps_projects_updated'));
-              if (typeof callback === 'function') callback(data.projects);
-            }
+            const applied = processAndStoreProjects(data.projects);
+            if (typeof callback === 'function') callback(applied);
           }
         }
       }, (err) => {});
@@ -304,30 +457,133 @@ export function subscribeToProjectLibraryUpdates(callback) {
   }
 
   return () => {
-    clearInterval(interval);
+    cancelled = true;
+    if (pollTimer) clearInterval(pollTimer);
+    if (typeof window !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onVis);
+      window.removeEventListener('pageshow', onVis);
+    }
     unsubscribe();
   };
 }
 
-function mergeProjectArrays(cloudProjs, localProjs) {
+function projectKey(p) {
+  return String(p?.title || '').trim().toUpperCase();
+}
+
+const DELETED_TITLES_KEY = 'sps_deleted_project_titles';
+
+function readDeletedTitleKeys() {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = JSON.parse(localStorage.getItem(DELETED_TITLES_KEY) || '[]');
+    return new Set(
+      (Array.isArray(raw) ? raw : [])
+        .map((t) => String(t || '').trim().toUpperCase())
+        .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO')
+    );
+  } catch (e) {
+    return new Set();
+  }
+}
+
+/** Record deleted titles so cloud hydrates cannot resurrect them. */
+export function markProjectTitlesDeleted(titles) {
+  if (typeof window === 'undefined') return;
+  const list = Array.isArray(titles) ? titles : [titles];
+  const set = readDeletedTitleKeys();
+  list.forEach((t) => {
+    const key = String(t || '').trim().toUpperCase();
+    if (key && key !== 'STAGE PRODUCTION STUDIO') set.add(key);
+  });
+  localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+}
+
+function clearDeletedTitleKeys(titles) {
+  if (typeof window === 'undefined') return;
+  const list = Array.isArray(titles) ? titles : [titles];
+  if (!list.length) return;
+  const set = readDeletedTitleKeys();
+  let changed = false;
+  list.forEach((t) => {
+    const key = String(t || '').trim().toUpperCase();
+    if (set.delete(key)) changed = true;
+  });
+  if (changed) localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+}
+
+/** Allow recreating a previously deleted title. */
+export function clearDeletedProjectTitles(titles) {
+  clearDeletedTitleKeys(titles);
+}
+
+export function filterOutDeletedProjects(projects) {
+  const deleted = readDeletedTitleKeys();
+  if (!deleted.size) return Array.isArray(projects) ? projects : [];
+  return (Array.isArray(projects) ? projects : []).filter((p) => {
+    const key = projectKey(p);
+    return key && key !== 'STAGE PRODUCTION STUDIO' && !deleted.has(key);
+  });
+}
+
+function projectRecency(p) {
+  if (!p || typeof p !== 'object') return 0;
+  const candidates = [p.updatedAt, p.lastUpdated, p.lastModified, p.revision];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+    const t = Date.parse(String(c || ''));
+    if (!Number.isNaN(t)) return t;
+  }
+  return Array.isArray(p.shots) ? p.shots.length : 0;
+}
+
+/**
+ * Cloud is source of truth for membership. Shared titles merge fields (cloud preferred).
+ * Local-only drafts are NOT kept after a successful cloud fetch — otherwise deleted
+ * titles (e.g. 002) linger on Owner devices and reappear in allotment UI.
+ */
+function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true } = {}) {
+  const deleted = readDeletedTitleKeys();
   const map = new Map();
-  (localProjs || []).forEach(p => {
-    if (p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
-      map.set(p.title.trim().toUpperCase(), p);
+  const localByKey = new Map();
+
+  (localProjs || []).forEach((p) => {
+    const key = projectKey(p);
+    if (!key || key === 'STAGE PRODUCTION STUDIO' || deleted.has(key)) return;
+    localByKey.set(key, p);
+  });
+
+  (cloudProjs || []).forEach((p) => {
+    const key = projectKey(p);
+    if (!key || key === 'STAGE PRODUCTION STUDIO' || deleted.has(key)) return;
+    const local = localByKey.get(key);
+    if (!local) {
+      map.set(key, p);
+      return;
+    }
+    const cloudScore = projectRecency(p);
+    const localScore = projectRecency(local);
+    if (cloudScore >= localScore || (Array.isArray(p.shots) && p.shots.length > 0)) {
+      map.set(key, { ...local, ...p });
+    } else {
+      map.set(key, { ...p, ...local });
     }
   });
-  (cloudProjs || []).forEach(p => {
-    if (p && p.title && p.title.trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
-      const key = p.title.trim().toUpperCase();
-      const existing = map.get(key);
-      map.set(key, existing ? { ...existing, ...p } : p);
-    }
-  });
+
+  // Only keep unsynced local drafts when cloud hydrate failed / was skipped
+  if (!cloudAuthoritative) {
+    localByKey.forEach((p, key) => {
+      if (!map.has(key)) map.set(key, p);
+    });
+  }
+
   return Array.from(map.values());
 }
 
-function processAndStoreProjects(rawCloudProjects) {
-  if (!Array.isArray(rawCloudProjects)) return [];
+let healCloudLibraryTimer = null;
+
+function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true } = {}) {
   const localStr = localStorage.getItem('sps_project_library');
   let localProjs = [];
   if (localStr) {
@@ -335,47 +591,87 @@ function processAndStoreProjects(rawCloudProjects) {
   }
   if (!Array.isArray(localProjs)) localProjs = [];
 
-  const merged = mergeProjectArrays(rawCloudProjects, localProjs);
-  const newStr = JSON.stringify(merged);
+  // Durable failed with no usable list — keep local intact
+  if (!cloudAuthoritative && (!Array.isArray(rawCloudProjects) || rawCloudProjects.length === 0)) {
+    return filterOutDeletedProjects(localProjs);
+  }
+
+  if (!Array.isArray(rawCloudProjects)) return filterOutDeletedProjects(localProjs);
+
+  const deletedKeys = readDeletedTitleKeys();
+  const cloudHadGhosts = (rawCloudProjects || []).some((p) => deletedKeys.has(projectKey(p)));
+  // When durableOk is false, keep local-only drafts (do not treat cloud as full membership SoT)
+  const merged = mergeProjectArrays(rawCloudProjects, localProjs, {
+    cloudAuthoritative: Boolean(cloudAuthoritative)
+  });
+  const finalList = filterOutDeletedProjects(merged);
+
+  const newStr = JSON.stringify(finalList);
   if (newStr !== localStr) {
     localStorage.setItem('sps_project_library', newStr);
+    try {
+      localStorage.setItem('sps_projects_cloud_synced_at', new Date().toISOString());
+    } catch (e) {}
     window.dispatchEvent(new Event('sps_projects_updated'));
   }
-  return merged;
+
+  pruneAndPersistCollaboratorAllotments(finalList);
+
+  if (cloudHadGhosts && cloudAuthoritative) {
+    if (healCloudLibraryTimer) clearTimeout(healCloudLibraryTimer);
+    healCloudLibraryTimer = setTimeout(() => {
+      syncProjectLibraryToCloud(finalList);
+    }, 250);
+  }
+
+  return finalList;
 }
 
-// 6. Fetch Latest Project Library from Cloud Database (With Non-Destructive Union Merging)
+// 6. Fetch Latest Project Library from Cloud Database (cloud → local)
 export async function fetchProjectLibraryFromCloud() {
-  // 1. Try Native Vercel Serverless Sync Engine (/api/sync)
+  // 1. Try Native Vercel Serverless Sync Engine (authoritative when reachable)
   try {
-    const res = await fetch(`${NATIVE_SYNC_URL}?type=projects&t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects&t=${Date.now()}`);
+    if (res.status === 503) {
+      // Durable hydrate failed — do NOT clear local library
+      return processAndStoreProjects([], { cloudAuthoritative: false });
+    }
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.projects) && data.projects.length > 0) {
+      if (data?.durableFailed || data?.projects === null) {
+        return processAndStoreProjects([], { cloudAuthoritative: false });
+      }
+      if (Array.isArray(data.deletedTitles) && data.deletedTitles.length) {
+        markProjectTitlesDeleted(data.deletedTitles);
+      }
+      if (Array.isArray(data.projects)) {
+        // Empty cloud library is valid only when durableOk (explicit empty SoT)
+        return processAndStoreProjects(data.projects, {
+          cloudAuthoritative: data.durableOk !== false
+        });
+      }
+    }
+  } catch (e) {}
+
+  // 2. Prefer durable JSONBlob over rate-limited RESTFUL
+  try {
+    const res = await fetchJsonTimed(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.deletedTitles)) markProjectTitlesDeleted(data.deletedTitles);
+      if (Array.isArray(data.projects)) {
         return processAndStoreProjects(data.projects);
       }
     }
   } catch (e) {}
 
-  // 2. Try Primary RESTful Cloud DB
   try {
-    const res = await fetch(`${SPS_PROJECTS_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${SPS_PROJECTS_BLOB_URL}?t=${Date.now()}`);
     if (res.ok) {
       const resData = await res.json();
       const projects = resData?.data?.projects || resData?.projects;
-      if (Array.isArray(projects) && projects.length > 0) {
+      if (Array.isArray(projects)) {
         return processAndStoreProjects(projects);
-      }
-    }
-  } catch (e) {}
-
-  // Fallback to JSONBlob
-  try {
-    const res = await fetch(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.projects) && data.projects.length > 0) {
-        return processAndStoreProjects(data.projects);
       }
     }
   } catch (e) {}
@@ -386,19 +682,24 @@ export async function fetchProjectLibraryFromCloud() {
       const snap = await getDoc(libRef);
       if (snap.exists()) {
         const data = snap.data();
-        if (Array.isArray(data.projects) && data.projects.length > 0) {
+        if (Array.isArray(data.projects)) {
           return processAndStoreProjects(data.projects);
         }
       }
     } catch (e) {}
   }
 
+  // Cloud unreachable — keep local (non-authoritative)
   const saved = localStorage.getItem('sps_project_library');
-  return saved ? JSON.parse(saved) : [];
+  try {
+    return saved ? filterOutDeletedProjects(JSON.parse(saved)) : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // 7. Broadcast user active editing slot to Cloud
-export async function broadcastActiveSlotEditing(userEmail, userName, projectTitle, shotId, isEditing = false) {
+export async function broadcastActiveSlotEditing(userEmail, userName, projectTitle, shotId, isEditing = false, roomId = '') {
   if (!userEmail || !shotId) return;
   const cleanEmail = userEmail.trim().toLowerCase();
   const presenceId = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
@@ -408,35 +709,36 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
     userEmail: cleanEmail,
     userName: userName || cleanEmail.split('@')[0],
     projectTitle: projectTitle || 'STAGE PRODUCTION STUDIO',
+    roomId: roomId || (typeof window !== 'undefined' ? (localStorage.getItem('sps_cloud_room_id') || '') : ''),
     activeShotId: shotId,
     isEditing: Boolean(isEditing),
     timestamp: Date.now()
   };
 
-  // Push to Native Vercel Serverless Sync Engine (/api/sync)
+  // Native sync is SoT — dedicated blob is read-merge backup only when GET succeeds
   try {
-    await fetch(`${NATIVE_SYNC_URL}?type=presence`, {
+    await fetchJsonTimed(`${syncApiUrl()}?type=presence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
   } catch (e) {}
 
-  // Dedicated presence blob only (never overwrite the rooms hub)
   try {
-    const res = await fetch(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`);
+    if (!res.ok) return; // Never PUT empty slots on failed GET (wipes peers)
     let data = { activeSlots: {} };
-    if (res.ok) {
-      try {
-        const parsed = await res.json();
-        data = parsed?.activeSlots ? parsed : { activeSlots: parsed || {} };
-        if (!data.activeSlots) data.activeSlots = {};
-      } catch (e) {}
+    try {
+      const parsed = await res.json();
+      data = parsed?.activeSlots ? parsed : { activeSlots: parsed || {} };
+      if (!data.activeSlots || typeof data.activeSlots !== 'object') data.activeSlots = {};
+    } catch (e) {
+      return;
     }
     data.activeSlots[presenceId] = payload;
     data.updatedAt = new Date().toISOString();
 
-    await fetch(SPS_PRESENCE_BLOB_URL, {
+    await fetchJsonTimed(SPS_PRESENCE_BLOB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -451,55 +753,61 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
   }
 }
 
-// 8. Subscribe to Active Editing Slots in Real Time (Conflict detection in cloud mode)
+function collectActiveUsers(activeSlots, currentEmail, now = Date.now()) {
+  const activeUsersMap = [];
+  Object.values(activeSlots || {}).forEach((item) => {
+    if (item && (now - (item.timestamp || 0)) < 120000) {
+      if (item.userEmail !== (currentEmail || '').trim().toLowerCase()) {
+        activeUsersMap.push(item);
+      }
+    }
+  });
+  return activeUsersMap;
+}
+
+// 8. Subscribe to Active Editing Slots — always on when called (Local badge must not hide peers)
 export function subscribeToActiveEditingSlots(currentEmail, callback) {
-  const isCloudMode = typeof window !== 'undefined' && localStorage.getItem('sps_app_version_mode') === 'cloud';
-  if (!isCloudMode) return () => {};
+  if (typeof window === 'undefined') return () => {};
 
   const checkPresence = async () => {
     if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      // 1. Try Native Vercel Serverless Sync Engine
-      const res = await fetch(`${NATIVE_SYNC_URL}?type=presence&t=${Date.now()}`, { cache: 'no-store' });
-      if (res.ok) {
-        const resData = await res.json();
-        const activeUsersMap = [];
-        const now = Date.now();
-        if (resData && resData.activeSlots) {
-          Object.values(resData.activeSlots).forEach((item) => {
-            if (item && (now - (item.timestamp || 0)) < 120000) {
-              if (item.userEmail !== (currentEmail || '').trim().toLowerCase()) {
-                activeUsersMap.push(item);
-              }
-            }
-          });
-          if (typeof callback === 'function') callback(activeUsersMap);
-          return;
-        }
-      }
+      const merged = {};
+      const now = Date.now();
 
-      // 2. Fallback to RESTful Presence Blob
-      const resBlob = await fetch(SPS_PRESENCE_BLOB_URL, { cache: 'no-store' });
-      if (resBlob.ok) {
-        const data = await resBlob.json();
-        const activeUsersMap = [];
-        const now = Date.now();
-        if (data && data.activeSlots) {
-          Object.values(data.activeSlots).forEach((item) => {
-            if (item && (now - (item.timestamp || 0)) < 120000) {
-              if (item.userEmail !== (currentEmail || '').trim().toLowerCase()) {
-                activeUsersMap.push(item);
-              }
+      // 1. Native sync engine (Vercel /api/sync — durable presence store)
+      try {
+        const res = await fetch(`${syncApiUrl()}?type=presence&t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const resData = await res.json();
+          Object.assign(merged, resData?.activeSlots || {});
+        }
+      } catch (e) {}
+
+      // 2. Always merge dedicated presence blob (multi-instance + offline fallback)
+      try {
+        const resBlob = await fetch(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        if (resBlob.ok) {
+          const data = await resBlob.json();
+          const slots = data?.activeSlots || (data && typeof data === 'object' ? data : {});
+          Object.entries(slots).forEach(([key, val]) => {
+            if (!val || typeof val !== 'object') return;
+            const existing = merged[key];
+            if (!existing || (val.timestamp || 0) >= (existing.timestamp || 0)) {
+              merged[key] = val;
             }
           });
         }
-        if (typeof callback === 'function') callback(activeUsersMap);
+      } catch (e) {}
+
+      if (typeof callback === 'function') {
+        callback(collectActiveUsers(merged, currentEmail, now));
       }
     } catch (e) {}
   };
 
   checkPresence();
-  const interval = setInterval(checkPresence, 5000);
+  const interval = setInterval(checkPresence, 3000);
 
   return () => clearInterval(interval);
 }
@@ -508,20 +816,24 @@ export function subscribeToActiveEditingSlots(currentEmail, callback) {
 export async function testDatabaseConnection() {
   const startTime = Date.now();
   try {
-    const res = await fetch(SPS_PROJECTS_BLOB_URL, { cache: 'no-store' });
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=presence&t=${Date.now()}`);
     const latency = Date.now() - startTime;
     if (res.ok) {
-      return { 
-        connected: true, 
-        message: `🟢 Production Cloud Database Connected • Operational (Ping: ${latency}ms)` 
+      return {
+        connected: true,
+        message: `🟢 Production Sync Connected • Operational (Ping: ${latency}ms)`
       };
     }
-  } catch (err) {}
-
-  return { 
-    connected: true, 
-    message: "🟢 Production Database Engine Active (Local & Cloud Sync Ready)" 
-  };
+    return {
+      connected: false,
+      message: `🔴 Sync API returned HTTP ${res.status}`
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      message: `🔴 Sync unreachable: ${err?.message || 'network error'}`
+    };
+  }
 }
 
 // Auto Initialize Database on import

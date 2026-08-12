@@ -45,9 +45,9 @@ export const initSettingsVaultDB = () => {
 // Default Allotted Settings Storage Directory
 export const getAllottedSettingsFolderPath = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('sps_allotted_settings_folder') || '/Users/pedditiram/Documents/PROMPT ENGINEERING/settings/';
+    return localStorage.getItem('sps_allotted_settings_folder') || './settings/';
   }
-  return '/Users/pedditiram/Documents/PROMPT ENGINEERING/settings/';
+  return './settings/';
 };
 
 // Set Allotted Settings Storage Directory
@@ -60,9 +60,9 @@ export const setAllottedSettingsFolderPath = (pathStr) => {
 // Default Allotted Image & Asset Storage Directory Path (Local Disk Folder)
 export const getAllottedStorageFolderPath = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('sps_allotted_storage_folder') || '/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/';
+    return localStorage.getItem('sps_allotted_storage_folder') || './storage/';
   }
-  return '/Users/pedditiram/Documents/PROMPT ENGINEERING/storage/';
+  return './storage/';
 };
 
 // Set Allotted Image & Asset Storage Directory Path
@@ -112,33 +112,58 @@ export const getFullAppSettingsPackage = () => {
 
   const keysToExport = [
     'sps_llm_provider',
+    'sps_api_key',
     'sps_gemini_api_key',
     'sps_anthropic_api_key',
     'sps_openai_api_key',
     'sps_byteplus_api_key',
+    'sps_byteplus_endpoint_url',
+    'sps_byteplus_model_id',
+    'sps_magnific_api_key',
+    'sps_magnific_email',
+    'sps_video_api_key',
     'sps_minimax_api_key',
     'sps_kling_api_key',
     'sps_luma_api_key',
     'sps_gpt_oss_api_key',
     'sps_active_llm_engine',
+    'sps_image_gen_engine',
+    'sps_google_image_model',
     'sps_color_theme',
     'sps_enable_canvas_tab',
     'sps_app_version_mode',
     'sps_authorized_phone_users',
     'sps_authorized_user_email',
+    'sps_authorized_admin_email',
     'sps_project_library',
     'sps_preset_profile',
     'sps_custom_genre_profiles',
     'sps_custom_admin_id',
     'sps_custom_admin_password',
     'sps_allotted_settings_folder',
-    'sps_allotted_storage_folder'
+    'sps_allotted_storage_folder',
+    'sps_character_bible_vault',
+    'sps_current_screenplay_text',
+    'sps_extracted_master_story',
+    'sps_narrative_prose_story',
+    'sps_selected_story_mode',
+    'sps_include_story_in_prompt',
+    'sps_selected_character_source',
+    'sps_include_characters_in_prompt',
+    'sps_active_view',
+    'sps_active_shot_index',
+    'sps_current_shots',
+    'sps_generated_images_map',
+    'sps_current_project_title',
+    'sps_current_target_model',
+    'sps_current_aspect_ratio',
+    'sps_is_admin_logged_in'
   ];
 
   const settingsData = {};
   keysToExport.forEach(k => {
     const val = localStorage.getItem(k);
-    if (val !== null) {
+    if (val !== null && val !== undefined) {
       try {
         settingsData[k] = JSON.parse(val);
       } catch (e) {
@@ -218,4 +243,61 @@ export const importAppSettingsFromFile = (file) => {
     reader.onerror = () => reject(new Error('Error reading settings file'));
     reader.readAsText(file);
   });
+};
+
+// Auto-Restore all app settings & projects from persistent IndexedDB vault on app startup
+export const autoRestoreAppSettingsFromVault = async () => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const db = await initSettingsVaultDB();
+    if (db) {
+      const tx = db.transaction(SETTINGS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(SETTINGS_STORE_NAME);
+      const request = store.getAll();
+
+      await new Promise((resolve) => {
+        request.onsuccess = () => {
+          const records = request.result || [];
+          let restoredCount = 0;
+          records.forEach((item) => {
+            if (item && item.key) {
+              const existing = localStorage.getItem(item.key);
+              // Auto-restore if missing or empty in localStorage
+              if (existing === null || existing === undefined || existing === '') {
+                const valStr = typeof item.value === 'object' ? JSON.stringify(item.value) : String(item.value);
+                localStorage.setItem(item.key, valStr);
+                restoredCount++;
+              }
+            }
+          });
+          if (restoredCount > 0) {
+            console.log(`[SPS Auto-Vault] Auto-restored ${restoredCount} settings from persistent local vault.`);
+          }
+          resolve(true);
+        };
+        request.onerror = () => resolve(false);
+      });
+    }
+  } catch (e) {
+    console.warn('Auto-restore from vault warning:', e);
+  }
+
+  // Also query physical disk server endpoint (/api/load-settings-disk)
+  try {
+    const res = await fetch('/api/load-settings-disk').catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json();
+      const settingsMap = data.settings || {};
+      for (const [key, val] of Object.entries(settingsMap)) {
+        if (key && (localStorage.getItem(key) === null || localStorage.getItem(key) === '')) {
+          const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
+          localStorage.setItem(key, valStr);
+          await saveAppSettingToVault(key, val);
+        }
+      }
+    }
+  } catch (e) {}
+
+  return true;
 };

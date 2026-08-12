@@ -63,6 +63,22 @@ function localDiskVaultPlugin() {
   const presencePath = path.join(cloudDir, 'presence.json');
   const collaboratorsPath = path.join(cloudDir, 'collaborators.json');
   const cloudProjectsPath = path.join(cloudDir, 'projects.json');
+  const cloudChatDir = path.join(cloudDir, 'chat');
+  if (!fs.existsSync(cloudChatDir)) {
+    fs.mkdirSync(cloudChatDir, { recursive: true });
+  }
+
+  function mergeChatMessages(localList, remoteList) {
+    const map = new Map();
+    [...(localList || []), ...(remoteList || [])].forEach((m) => {
+      if (!m?.id) return;
+      map.set(m.id, m);
+    });
+    return Array.from(map.values())
+      .filter((m) => !m.deleted)
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')))
+      .slice(-400);
+  }
 
   function readJsonFile(filePath, fallback) {
     try {
@@ -115,6 +131,15 @@ function localDiskVaultPlugin() {
                 });
                 return sendJson(res, 200, { success: true, activeSlots });
               }
+              if (type === 'chat') {
+                const chatPath = path.join(cloudChatDir, `${safeRoomFileName(roomId)}.json`);
+                const data = readJsonFile(chatPath, { messages: [] });
+                return sendJson(res, 200, {
+                  success: true,
+                  messages: Array.isArray(data.messages) ? data.messages : [],
+                  roomId,
+                });
+              }
 
               const roomPath = path.join(cloudRoomsDir, safeRoomFileName(roomId));
               const roomData = readJsonFile(roomPath, null);
@@ -126,26 +151,41 @@ function localDiskVaultPlugin() {
 
               if (type === 'projects') {
                 const incoming = Array.isArray(body.projects) ? body.projects : (Array.isArray(body) ? body : []);
+                const cleanedIncoming = (incoming || []).filter((p) => {
+                  const title = String(p?.title || '').trim();
+                  return title && title.toUpperCase() !== 'STAGE PRODUCTION STUDIO';
+                });
                 const existing = readJsonFile(cloudProjectsPath, { projects: [] });
-                const projMap = new Map();
+                if (cleanedIncoming.length === 0 && (existing.projects || []).length > 0) {
+                  return sendJson(res, 200, { success: true, projects: existing.projects || [], ignoredEmpty: true });
+                }
+                const prevByTitle = new Map();
                 (existing.projects || []).forEach((p) => {
-                  if (p?.title) projMap.set(p.title, p);
+                  const title = String(p?.title || '').trim().toUpperCase();
+                  if (title) prevByTitle.set(title, p);
                 });
-                incoming.forEach((p) => {
-                  if (p?.title) {
-                    const prev = projMap.get(p.title);
-                    projMap.set(p.title, prev ? { ...prev, ...p } : p);
-                  }
+                // Incoming owns membership (deletes stick); merge fields for same titles
+                const projects = cleanedIncoming.map((p) => {
+                  const key = String(p.title).trim().toUpperCase();
+                  const prev = prevByTitle.get(key);
+                  return prev ? { ...prev, ...p } : p;
                 });
-                const projects = Array.from(projMap.values());
                 writeJsonFile(cloudProjectsPath, { projects, updatedAt: new Date().toISOString() });
                 return sendJson(res, 200, { success: true, projects });
               }
 
               if (type === 'collaborators') {
                 const users = Array.isArray(body.users) ? body.users : (Array.isArray(body) ? body : []);
+                const existing = readJsonFile(collaboratorsPath, { users: [] });
+                if (users.length === 0 && (existing.users || []).length > 0) {
+                  return sendJson(res, 200, {
+                    success: true,
+                    users: existing.users || [],
+                    ignoredEmpty: true
+                  });
+                }
                 writeJsonFile(collaboratorsPath, { users, updatedAt: new Date().toISOString() });
-                return sendJson(res, 200, { success: true });
+                return sendJson(res, 200, { success: true, users });
               }
 
               if (type === 'presence') {
@@ -156,6 +196,15 @@ function localDiskVaultPlugin() {
                 existing[presenceId] = { ...body, timestamp: Date.now() };
                 writeJsonFile(presencePath, existing);
                 return sendJson(res, 200, { success: true });
+              }
+
+              if (type === 'chat') {
+                const chatPath = path.join(cloudChatDir, `${safeRoomFileName(roomId)}.json`);
+                const existing = readJsonFile(chatPath, { messages: [] });
+                const incoming = Array.isArray(body.messages) ? body.messages : [];
+                const messages = mergeChatMessages(existing.messages || [], incoming);
+                writeJsonFile(chatPath, { messages, roomId, updatedAt: new Date().toISOString() });
+                return sendJson(res, 200, { success: true, messages, roomId });
               }
 
               const payload = body.data || body;
@@ -331,6 +380,12 @@ export default defineConfig({
     tailwindcss(),
     localDiskVaultPlugin()
   ],
+  optimizeDeps: {
+    include: ['pdfjs-dist']
+  },
+  worker: {
+    format: 'es'
+  },
   server: {
     host: true, // Exposes app on local intranet (Wi-Fi / LAN)
     port: 5173,

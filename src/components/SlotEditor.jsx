@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Maximize2, X, Check, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Sparkles, Maximize2, Minimize2, X, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown, Volume2, VolumeX } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
-import { CRAFT_INSPIRATION_DATA } from '../constants/craftInspirationGraphics';
+
 import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
+import SaveCloseConfirmModal from './SaveCloseConfirmModal';
+import { parseSceneAndShotID } from '../utils/sceneShotUtils';
+import { compileNarrativeProse } from '../utils/narrativeCompiler';
+import IntensityScaleSelector from './IntensityScaleSelector';
 
 export default function SlotEditor({ 
   slotConfig, 
   value, 
   onChange, 
+  shot = {},
   compact = false, 
   onSelectSlot,
   isForcePopupOpen,
@@ -17,23 +22,141 @@ export default function SlotEditor({
   onNavigatePrevSlot,
   allSlots = [],
   onJumpToSlot,
+  onJumpToShot,
   embedded = false,
   totalShotsCount = 0,
   currentShotIndex = 0,
   onNavigateNextShot,
   onNavigatePrevShot,
-  onJumpToShot,
   scenesList = [],
   currentSceneId = '',
   onNavigateNextScene,
   onNavigatePrevScene,
-  onJumpToScene
+  onJumpToScene,
+  isMuted = false,
+  onToggleMute,
+  colorTheme = 'paper'
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
   const [activeConfig, setActiveConfig] = useState(slotConfig);
   const [isEnhancingCraft, setIsEnhancingCraft] = useState(false);
+  const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
+  const [promptViewFormat, setPromptViewFormat] = useState('crafts'); // 'crafts' | 'prose'
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [promptCopyToast, setPromptCopyToast] = useState(false);
+
+  const renderLiveMasterPromptWithHighlight = (activeKey, currentVal, shotData = {}) => {
+    const activeShotData = { ...(shotData || {}), [activeKey]: currentVal };
+    const parsedId = parseSceneAndShotID(activeShotData.sceneShotId || '', currentShotIndex);
+
+    const allCrafts = [
+      { key: 'sceneShotId', label: 'Shot ID', prefix: 'Shot ID: ' },
+      { key: 'sceneSynopsis', label: 'Scene Synopsis', prefix: 'Synopsis: ' },
+      { key: 'shotComposition', label: 'Framing', prefix: 'Framing: ' },
+      { key: 'cameraMotionTag', label: 'Camera Motion', prefix: 'Camera: ' },
+      { key: 'lensAndFocalLength', label: 'Lens & Focal Length', prefix: 'Lens: ' },
+      { key: 'timeAndLightingEnv', label: 'Weather & Time Rig', prefix: 'Weather/Time Rig: ' },
+      { key: 'directionalLightingAndHighlight', label: 'Light Angle & Highlight Rig', prefix: 'Light Angle/Highlight: ' },
+      { key: 'subjectLightingTag', label: 'Subject Lighting', prefix: 'Subject Lighting: ' },
+      { key: 'subjectColorTag', label: 'Subject Color', prefix: 'Subject Color: ' },
+      { key: 'backgroundLightingTag', label: 'Background Lighting', prefix: 'BG Lighting: ' },
+      { key: 'backgroundColorTag', label: 'Background Color', prefix: 'BG Color: ' },
+      { key: 'colorPaletteSlot', label: 'Color Palette', prefix: 'Palette: ' },
+      { key: 'characterIdAssetRef', label: 'Character ID', prefix: 'Character Ref: ' },
+      { key: 'coArtistInteraction', label: 'Co-Artist', prefix: 'Co-Artist: ' },
+      { key: 'actionEnvContext', label: 'Environment Context', prefix: 'Environment: ' },
+      { key: 'characterExpression', label: 'Expression', prefix: 'Expression: ' },
+      { key: 'characterPsychologyState', label: 'Psychology & Mindstate', prefix: 'Mindstate: ' },
+      { key: 'characterMannerismAndPosture', label: 'Mannerisms & Posture', prefix: 'Mannerism: ' },
+      { key: 'characterPlacement', label: 'Placement', prefix: 'Placement: ' },
+      { key: 'characterDialogue', label: 'Dialogue', prefix: 'Dialogue: ' },
+      { key: 'characterMovement', label: 'Movement', prefix: 'Action Performance: ' },
+      { key: 'characterEyeLooks', label: 'Eye Look', prefix: 'Eye Look: ' },
+      { key: 'makeupAndHairStyle', label: 'Makeup & Hair', prefix: 'Makeup/Hair: ' },
+      { key: 'stuntAndSafetyNotes', label: 'Stunts & Choreography', prefix: 'Stunts: ' },
+      { key: 'atmosphereVolumetricsTag', label: 'Atmosphere', prefix: 'Atmosphere: ' },
+      { key: 'vfxCgiBreakdown', label: 'VFX & CGI', prefix: 'VFX/CGI: ' },
+      { key: 'soundFxAndFoley', label: 'Sound FX & Foley', prefix: 'Audio/SFX: ' },
+      { key: 'backgroundScoreMood', label: 'Score Mood', prefix: 'Score: ' },
+      { key: 'editTransitionCut', label: 'Edit Transition', prefix: 'Cut/Transition: ' },
+      { key: 'shotDurationAndImages', label: 'Duration & Assets', prefix: 'Duration & Assets: ' }
+    ];
+
+    if (promptViewFormat === 'prose') {
+      const proseText = compileNarrativeProse(activeShotData) || 'No narrative prose available yet for this shot.';
+      return (
+        <div className="text-zinc-200 leading-relaxed text-xs font-serif italic p-3 bg-zinc-950/90 rounded-xl border border-zinc-800/80 shadow-inner">
+          "{proseText}"
+        </div>
+      );
+    }
+
+    return (
+      <div className="leading-relaxed text-[11.5px] flex flex-wrap items-center">
+        {allCrafts.map((craft) => {
+          const rawVal = activeShotData[craft.key] || '';
+          const isActive = craft.key === activeKey;
+          
+          if (!rawVal && !isActive) return null;
+
+          const displayStr = rawVal || `[Editing ${craft.label}...]`;
+
+          return (
+            <React.Fragment key={craft.key}>
+              {isActive ? (
+                <mark className="bg-[#FFEE00] text-black font-black px-2 py-0.5 rounded shadow border border-amber-500 inline-block mx-0.5 my-0.5 animate-pulse font-mono text-xs scale-105">
+                  {craft.prefix}{displayStr}
+                </mark>
+              ) : (
+                <span className="text-zinc-200 font-normal mx-0.5 my-0.5 bg-zinc-950/60 px-1.5 py-0.5 rounded border border-zinc-800/80 inline-block">
+                  <span className="text-zinc-400 font-semibold">{craft.prefix}</span>
+                  <span>{displayStr}.</span>
+                </span>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const isNative = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      const isStored = localStorage.getItem('sps_slot_editor_fullscreen') === 'true';
+      return isNative || isStored;
+    }
+    return false;
+  });
+
+  // Native Browser Fullscreen Bypass to hide Safari URL bar & tabs completely
+  const toggleFullscreenMode = async (enable) => {
+    const targetState = typeof enable === 'boolean' ? enable : !isFullscreen;
+    setIsFullscreen(targetState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_slot_editor_fullscreen', targetState ? 'true' : 'false');
+    }
+
+    try {
+      if (targetState) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          await elem.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            await document.webkitExitFullscreen();
+          }
+        }
+      }
+    } catch (e) {}
+  };
 
   useEffect(() => {
     setActiveConfig(slotConfig);
@@ -42,7 +165,14 @@ export default function SlotEditor({
   const availableSlotsList = (allSlots && allSlots.length > 0) ? allSlots : SEEDANCE_SLOTS;
 
   const isModalActive = Boolean(isForcePopupOpen || isPopupOpen);
-  
+  const initialValueOnOpenRef = React.useRef(value);
+
+  useEffect(() => {
+    if (isModalActive) {
+      initialValueOnOpenRef.current = value;
+    }
+  }, [isModalActive]);
+
   const handleCloseModal = () => {
     setIsPopupOpen(false);
     if (onCloseForcePopup) onCloseForcePopup();
@@ -112,6 +242,28 @@ export default function SlotEditor({
       const isLeft = key === 'ArrowLeft' || key === 'Left';
       const isRight = key === 'ArrowRight' || key === 'Right';
 
+      if ((e.metaKey || e.ctrlKey) && key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFullscreenMode();
+        return;
+      }
+
+      if (key === 'Escape' || ((e.metaKey || e.ctrlKey) && (e.code === 'Space' || key === ' ' || key === 'Spacebar'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (embedded) {
+          handleCloseModal();
+          return;
+        }
+        if (key === 'Escape' && isFullscreen) {
+          toggleFullscreenMode(false);
+        } else {
+          setIsEscConfirmOpen(true);
+        }
+        return;
+      }
+
       if (!isModifier) return;
 
       // Cmd / Alt / Ctrl + Shift + Up Arrow (⌘⇧↑ / ⌥⇧↑) -> Previous Scene
@@ -126,35 +278,35 @@ export default function SlotEditor({
         e.stopPropagation();
         if (callbacksRef.current.onNavigateNextScene) callbacksRef.current.onNavigateNextScene();
       }
-      // Cmd / Alt / Ctrl + Right Arrow (⌘→ / ⌥→) -> Next Craft Slot
-      else if (!e.shiftKey && isRight) {
+      // Cmd / Alt / Ctrl + Down Arrow (⌘↓ / ⌥↓) -> Next Craft Slot (Shift to craft below)
+      else if (!e.shiftKey && isDown) {
         e.preventDefault();
         e.stopPropagation();
         if (callbacksRef.current.handleNextSlot) callbacksRef.current.handleNextSlot();
       }
-      // Cmd / Alt / Ctrl + Left Arrow (⌘← / ⌥←) -> Prev Craft Slot
-      else if (!e.shiftKey && isLeft) {
+      // Cmd / Alt / Ctrl + Up Arrow (⌘↑ / ⌥↑) -> Previous Craft Slot (Shift to craft above)
+      else if (!e.shiftKey && isUp) {
         e.preventDefault();
         e.stopPropagation();
         if (callbacksRef.current.handlePrevSlot) callbacksRef.current.handlePrevSlot();
       }
-      // Cmd / Alt / Ctrl + Up Arrow (⌘↑ / ⌥↑) -> Previous Shot
-      else if (!e.shiftKey && isUp) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (callbacksRef.current.onNavigatePrevShot) callbacksRef.current.onNavigatePrevShot();
-      }
-      // Cmd / Alt / Ctrl + Down Arrow (⌘↓ / ⌥↓) -> Next Shot
-      else if (!e.shiftKey && isDown) {
+      // Cmd / Alt / Ctrl + Right Arrow (⌘→ / ⌥→) -> Next Shot
+      else if (!e.shiftKey && isRight) {
         e.preventDefault();
         e.stopPropagation();
         if (callbacksRef.current.onNavigateNextShot) callbacksRef.current.onNavigateNextShot();
+      }
+      // Cmd / Alt / Ctrl + Left Arrow (⌘← / ⌥←) -> Previous Shot
+      else if (!e.shiftKey && isLeft) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (callbacksRef.current.onNavigatePrevShot) callbacksRef.current.onNavigatePrevShot();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isModalActive]);
+  }, [isModalActive, isFullscreen]);
 
   // 1. Saved Custom Presets per Slot Key
   const [userPresets, setUserPresets] = useState(() => {
@@ -300,128 +452,103 @@ export default function SlotEditor({
     }
   };
 
-  // Render Shared Compact Popup Modal Window
+  // Render Shared Popup Modal Window
   const renderPopupModal = () => {
-    if (!isModalActive) return null;
+    if (!isModalActive && !embedded) return null;
 
     const cardContent = (
       <div 
-        className={`bg-zinc-950 border border-zinc-800 text-white rounded-2xl p-4 w-full shadow-2xl space-y-3.5 flex flex-col font-mono ${
-          embedded ? 'h-full max-h-full border-cyan-500/40 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700' : 'max-w-2xl max-h-[90vh] p-5 overflow-hidden'
+        className={`bg-zinc-950 border border-zinc-800 text-white shadow-2xl space-y-3.5 flex flex-col font-mono transition-all ${
+          embedded 
+            ? 'h-full max-h-full border-cyan-500/40 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 p-4 rounded-2xl' 
+            : isFullscreen
+              ? 'h-full w-full max-w-none max-h-none rounded-none border-0 p-6 overflow-hidden'
+              : 'w-full max-w-5xl max-h-[92vh] rounded-2xl p-5 overflow-hidden'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header Bar */}
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-cyan-950/80 text-cyan-400 border border-cyan-800 shrink-0">
-              <Sparkles className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white font-sans">{activeConfig.label}</h3>
-              <p className="text-[11px] text-zinc-400 font-mono">{activeConfig.description}</p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleCloseModal}
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
         <div className="overflow-y-auto space-y-3 flex-1 pr-1">
-          {/* VISUAL INSPIRATION GRAPHIC BANNER FOR TECHNICIANS (ALL 25 CRAFTS) */}
-          {(() => {
-            const insp = CRAFT_INSPIRATION_DATA[activeConfig.key];
-            if (!insp) return null;
-            const IconComp = insp.icon;
-            const craftIndex = availableSlotsList.findIndex(s => s.key === activeConfig.key) + 1;
 
-            return (
-              <div className={`p-3 rounded-2xl border ${insp.border} bg-gradient-to-r ${insp.gradient} space-y-2 font-mono shadow-lg relative overflow-hidden group`}>
-                {/* Header Row */}
-                <div className="flex items-start justify-between gap-3 relative z-10">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-700/80 text-amber-400 shrink-0 shadow-inner">
-                      <IconComp className="w-4 h-4" style={{ color: insp.accentColor }} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white font-sans flex items-center gap-1.5 flex-wrap">
-                        <span>{insp.title}</span>
-                        <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-zinc-950/90 text-cyan-300 border border-zinc-800 font-mono font-bold">
-                          Craft #{craftIndex < 10 ? '0' + craftIndex : craftIndex}
-                        </span>
-                      </h4>
-                      <p className="text-[10.5px] text-zinc-300/90 font-mono italic leading-tight mt-0.5">
-                        "{insp.quote}"
-                      </p>
-                    </div>
-                  </div>
+          {/* THE SINGLE, MAXIMUM-EXPANDED CHROME YELLOW SLOT EDITING BOX */}
+          <div className="w-full space-y-2.5 p-3.5 rounded-2xl bg-[#FFEE00] border-2 border-amber-500 shadow-xl font-mono text-black">
+            <div className="flex items-center justify-between border-b border-black/20 pb-2 flex-wrap gap-2">
+              <span className="font-black text-black text-xs font-mono uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+                ⚡ ACTIVE CRAFT PARAMETER: {activeConfig.label || activeConfig.key}
+              </span>
 
-                  {/* Badges */}
-                  <div className="hidden sm:flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[200px]">
-                    {insp.badges.map((b, bIdx) => (
-                      <span key={bIdx} className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-950/90 text-amber-200 border border-zinc-800/80 font-bold shadow-xs">
-                        {b}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Auto Synopsis Button (if sceneSynopsis) */}
+                {activeConfig.key === 'sceneSynopsis' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const autoVal = shot.sceneSynopsis || `Scene Location & Context: ${shot.actionEnvContext || 'Dramatic environment'}. Featuring ${shot.characterIdAssetRef || 'primary subject'}. Action: ${shot.characterMovement || 'Dynamic performance'}.`;
+                      onChange(autoVal);
+                    }}
+                    className="px-2.5 py-1 rounded-xl bg-black/10 hover:bg-black/20 text-black border border-black/30 text-xs font-bold font-mono flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                    title="Load LLM Auto-Extracted Scene Synopsis"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-black" />
+                    <span>🤖 Auto Synopsis</span>
+                  </button>
+                )}
 
-                {/* SVG Graphic Art Illustration Banner */}
-                <div className="w-full bg-zinc-950/90 rounded-xl p-2 border border-zinc-800/80 flex items-center justify-center shadow-inner relative z-10 overflow-hidden">
-                  {insp.renderGraphic()}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* SLOT TIP CARD INSIDE POPUP MODAL */}
-          {activeConfig.tip && (
-            <div className="p-3.5 rounded-xl border border-zinc-800/90 bg-zinc-900/90 space-y-2 font-mono shadow-sm">
-              <div className="flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-cyan-400 shrink-0" />
-                <h4 className="text-xs font-bold text-white font-sans">
-                  {activeConfig.tipTitle || activeConfig.label}
-                </h4>
-              </div>
-              <p className="text-[11px] text-zinc-300 leading-relaxed p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80 font-mono shadow-inner">
-                {activeConfig.tip}
-              </p>
-            </div>
-          )}
-
-          {/* Complete Textarea Box */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] text-zinc-200 font-bold font-mono">Complete Text Value:</label>
-              <div className="flex items-center gap-2">
+                {/* Pedditi Labs AI Enhance Button */}
                 <button
                   type="button"
                   onClick={handleAIEnhanceCraft}
                   disabled={isEnhancingCraft}
-                  className="px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-md transition-all border border-cyan-400/40 cursor-pointer"
+                  className="px-3 py-1 rounded-xl bg-black text-amber-300 hover:bg-zinc-900 border border-black text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0"
                   title="Enhance Craft Parameter using Pedditi Labs Cinema Intelligence Engine"
                 >
-                  <Sparkles className={`w-3 h-3 text-amber-300 ${isEnhancingCraft ? 'animate-spin' : ''}`} />
-                  <span>{isEnhancingCraft ? 'Enhancing...' : '⚡ Pedditi Labs AI Enhance'}</span>
+                  <Sparkles className={`w-3.5 h-3.5 text-amber-400 ${isEnhancingCraft ? 'animate-spin' : ''}`} />
+                  <span className="font-bold">{isEnhancingCraft ? 'Enhancing...' : '⚡ Pedditi Labs AI Enhance'}</span>
                 </button>
-                <span className="text-[10px] text-cyan-400 font-mono font-bold">{value ? value.length : 0} chars</span>
+
+                {/* Character Counter */}
+                <span className="text-xs text-black font-black bg-amber-300/80 px-2.5 py-1 rounded-xl border border-black/30 shadow-sm shrink-0">
+                  {(value || '').length} chars
+                </span>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onCloseForcePopup) onCloseForcePopup();
+                    handleCloseModal();
+                  }}
+                  className="p-1 rounded-xl bg-black/10 hover:bg-black/20 text-black border border-black/30 transition-all cursor-pointer shrink-0"
+                  title="Close expanded craft view"
+                >
+                  <X className="w-4 h-4 text-black" />
+                </button>
               </div>
             </div>
 
+            {/* 🔥 INTERACTIVE INTENSITY SCALE SELECTOR */}
+            <div className="pb-1">
+              <IntensityScaleSelector 
+                value={value || ''} 
+                onChange={(newVal) => onChange && onChange(newVal)} 
+                craftKey={activeConfig.key} 
+                isPaperTheme={colorTheme === 'paper'} 
+              />
+            </div>
+
+            {/* Full-width 100% Expanded Chrome Yellow Textarea */}
             <textarea
-              rows={2}
+              rows={4}
               value={value || ''}
               onChange={handleCustomInput}
+              onFocus={handleFocus}
               autoFocus
-              placeholder={`Enter complete ${(activeConfig.label || '').toLowerCase()} text...`}
-              className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y font-bold shadow-inner"
+              placeholder={`Enter complete ${(activeConfig.label || '').toLowerCase()} parameter text...`}
+              style={{ backgroundColor: '#FFEE00', color: '#000000', fontWeight: '900' }}
+              className="w-full bg-[#FFEE00] text-black border border-amber-600/40 rounded-xl p-3 text-sm font-mono leading-relaxed resize-y font-black shadow-inner focus:outline-none focus:ring-2 focus:ring-amber-600 placeholder:text-black/60"
             />
           </div>
+
+
 
           {/* CRAFT #25: FIXED MULTI-MODAL ASSET SLOTS (image_1..9, video_1..3, audio_1..3) */}
           {activeConfig.key === 'characterIdMatrix' && (() => {
@@ -768,10 +895,10 @@ export default function SlotEditor({
                   <div
                     key={`std_${idx}`}
                     onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono ${
+                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono font-bold ${
                       isSelected 
                         ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md scale-105'
-                        : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:border-cyan-500/60 font-medium'
+                        : 'bg-zinc-900 text-zinc-100 border-zinc-700 hover:border-cyan-400 font-bold'
                     }`}
                   >
                     <button
@@ -783,7 +910,7 @@ export default function SlotEditor({
                       <Star className="w-3.5 h-3.5" />
                     </button>
 
-                    <span className="truncate max-w-[220px] font-medium">
+                    <span className="truncate max-w-[220px] font-bold">
                       {isCustom ? `➕ ${preset}` : preset}
                     </span>
 
@@ -893,7 +1020,7 @@ export default function SlotEditor({
                     if (onNavigateNextShot) onNavigateNextShot();
                   }}
                   className="p-1 rounded hover:bg-amber-600 hover:text-white text-amber-300 transition-colors"
-                  title="Next Shot (Cmd + Down Arrow | ⌘↓)"
+                  title="Next Shot (Cmd + Right Arrow | ⌘→)"
                 >
                   <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
                 </button>
@@ -909,7 +1036,7 @@ export default function SlotEditor({
                   handlePrevSlot();
                 }}
                 className="p-1 rounded hover:bg-cyan-600 hover:text-white text-cyan-300 transition-colors"
-                title="Previous Craft Slot (Cmd + Left Arrow)"
+                title="Previous Craft Slot Below (Cmd + Up Arrow | ⌘↑)"
               >
                 <ChevronLeft className="w-3.5 h-3.5 text-cyan-400" />
               </button>
@@ -919,7 +1046,7 @@ export default function SlotEditor({
                   value={activeConfig.key}
                   onChange={(e) => handleDirectJump(e.target.value)}
                   className="bg-transparent text-cyan-300 text-[11px] font-bold font-mono py-0.5 pl-1 pr-4 appearance-none cursor-pointer focus:outline-none truncate w-full"
-                  title="Jump to Craft Slot"
+                  title="Jump to Craft Slot (Shift to craft below/above)"
                 >
                   {availableSlotsList.map((s, idx) => {
                     const numStr = idx + 1 < 10 ? `0${idx + 1}` : `${idx + 1}`;
@@ -940,7 +1067,7 @@ export default function SlotEditor({
                   handleNextSlot();
                 }}
                 className="p-1 rounded hover:bg-cyan-600 hover:text-white text-cyan-300 transition-colors"
-                title="Next Craft Slot (Cmd + Right Arrow)"
+                title="Next Craft Slot Below (Cmd + Down Arrow | ⌘↓)"
               >
                 <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
               </button>
@@ -950,9 +1077,13 @@ export default function SlotEditor({
           {/* Right: Sleek Done & Close Button */}
           <button
             type="button"
-            onClick={handleCloseModal}
-            className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1 ml-auto"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCloseModal();
+            }}
+            className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1 ml-auto cursor-pointer"
           >
+            <span>Done</span>
           </button>
         </div>
       </div>
@@ -962,7 +1093,9 @@ export default function SlotEditor({
 
     return (
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 font-mono"
+        className={`fixed inset-0 z-50 flex items-center justify-center font-mono transition-all ${
+          isFullscreen ? 'p-0 bg-black' : 'p-4 bg-black/85 backdrop-blur-md'
+        }`}
         onClick={handleCloseModal}
       >
         {cardContent}
@@ -970,76 +1103,76 @@ export default function SlotEditor({
     );
   };
 
+  const isPaperTheme = colorTheme === 'paper' || colorTheme === 'light';
+
   if (compact) {
     return (
-      <div className="flex items-center gap-1 w-full min-w-[170px] font-mono">
+      <div className={`flex items-center gap-1 w-full min-w-[170px] font-mono transition-opacity ${isMuted ? 'opacity-40' : 'opacity-100'}`}>
+        {onToggleMute && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleMute(slotConfig.key);
+            }}
+            className={`p-1 rounded-md text-xs shrink-0 transition-colors shadow-sm cursor-pointer border ${
+              isMuted
+                ? 'bg-red-950/90 text-red-400 border-red-800 hover:bg-red-900'
+                : isPaperTheme
+                  ? 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border-amber-300'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
+            }`}
+            title={isMuted ? `Unmute ${slotConfig.label} (Click to enable slot)` : `Mute ${slotConfig.label} (Click to disable slot)`}
+          >
+            {isMuted ? <VolumeX className="w-3 h-3 text-red-400" /> : <Volume2 className={`w-3 h-3 ${isPaperTheme ? 'text-amber-800' : 'text-zinc-400'}`} />}
+          </button>
+        )}
+
         <input
           type="text"
+          disabled={isMuted}
           value={value || ''}
           onChange={handleCustomInput}
           onFocus={handleFocus}
           onDoubleClick={handleOpenModal}
-          placeholder={`Type ${slotConfig.label}...`}
-          title={value ? `Full Text:\n${value}\n\n(Double-click or click 🔍 to manage favorites & presets)` : `Type ${slotConfig.label}`}
-          className="w-full bg-zinc-950 text-amber-200 border border-zinc-800 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-amber-500/80 font-mono truncate shadow-inner cursor-pointer"
+          placeholder={isMuted ? `[MUTED] ${slotConfig.label}` : `Type ${slotConfig.label}...`}
+          title={isMuted ? `[MUTED SLOT] ${slotConfig.label} is currently disabled` : (value ? `Full Text:\n${value}\n\n(Double-click or click 🔍 to manage favorites & presets)` : `Type ${slotConfig.label}`)}
+          className={`w-full border rounded-md px-2 py-1 text-xs focus:outline-none font-mono truncate shadow-inner cursor-pointer ${
+            isMuted 
+              ? 'bg-zinc-900 text-zinc-500 border-red-900/40 line-through cursor-not-allowed' 
+              : isPaperTheme
+                ? 'bg-white text-slate-900 border-amber-300 focus:border-amber-500 font-bold placeholder:text-zinc-400'
+                : 'bg-zinc-950 text-amber-200 border-zinc-800 focus:border-amber-500/80'
+          }`}
         />
-
-        <button
-          type="button"
-          onClick={() => {
-            handleFocus();
-            handleOpenModal();
-          }}
-          className="p-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 border border-zinc-700/90 text-xs font-mono shrink-0 transition-colors shadow-sm flex items-center gap-0.5"
-          title={`View full text, add/delete & favorite presets for ${slotConfig.label}`}
-        >
-          <Maximize2 className="w-3 h-3" />
-          {favoriteItems.length > 0 && <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />}
-        </button>
-
-        <div className="relative shrink-0" title={`Select preset for ${slotConfig.label}`}>
-          <div className="p-1 px-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/90 text-xs font-mono flex items-center justify-center gap-0.5 cursor-pointer transition-colors shadow-sm">
-            <Sparkles className="w-3 h-3 text-cyan-400" />
-            <span className="text-[9px] opacity-70">▾</span>
-          </div>
-
-          <select
-            value={allVisiblePresets.includes(value) ? value : ''}
-            onChange={handleSelectChange}
-            onFocus={handleFocus}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-xs font-mono"
-          >
-            <option value="">-- Presets for {slotConfig.label} --</option>
-            {favoriteItems.length > 0 && (
-              <optgroup label="⭐ Favorite Presets">
-                {favoriteItems.map((preset, idx) => (
-                  <option key={`fav_${idx}`} value={preset}>
-                    ⭐ {preset}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {userPresets.length > 0 && (
-              <optgroup label="➕ Custom Presets">
-                {userPresets.filter(p => !favoritePresets.includes(p)).map((preset, idx) => (
-                  <option key={`usr_${idx}`} value={preset}>
-                    ➕ {preset}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label="🎬 Studio Presets">
-              {activeStandardPresets.filter(p => !favoritePresets.includes(p)).map((preset, idx) => (
-                <option key={`std_${idx}`} value={preset}>
-                  {preset}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
 
         {renderPopupModal()}
       </div>
+    );
+  }
+
+  // If embedded or modal is active, return ONLY the main editor card (no outer header or duplicate textarea)
+  if (embedded || isModalActive) {
+    return (
+      <>
+        {renderPopupModal()}
+        <SaveCloseConfirmModal
+          isOpen={isEscConfirmOpen}
+          title="Save & Close Craft Editor"
+          onSaveAndClose={() => {
+            setIsEscConfirmOpen(false);
+            handleCloseModal();
+          }}
+          onCloseWithoutSave={() => {
+            setIsEscConfirmOpen(false);
+            if (initialValueOnOpenRef.current !== undefined && onChange) {
+              onChange(initialValueOnOpenRef.current);
+            }
+            handleCloseModal();
+          }}
+          onCancel={() => setIsEscConfirmOpen(false)}
+        />
+      </>
     );
   }
 
@@ -1047,93 +1180,52 @@ export default function SlotEditor({
   return (
     <div 
       onClick={handleFocus}
-      className="p-2.5 rounded-xl border border-zinc-800/90 bg-zinc-900/80 backdrop-blur-md shadow-sm space-y-2 font-mono hover:border-cyan-500/50 transition-colors"
+      className={`p-2.5 rounded-xl border transition-all space-y-2 font-mono ${
+        isMuted 
+          ? 'bg-zinc-950/60 border-red-900/40 opacity-50' 
+          : 'border-zinc-800/90 bg-zinc-900/80 backdrop-blur-md shadow-sm hover:border-cyan-500/50'
+      }`}
     >
       {/* Card Header */}
       <div className="flex items-center justify-between gap-2 border-b border-zinc-800/60 pb-1.5">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <div className="p-1 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className={`p-1 rounded border shrink-0 ${isMuted ? 'bg-red-950/50 text-red-400 border-red-800' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'}`}>
+            {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Sparkles className="w-3.5 h-3.5" />}
           </div>
-          <h4 className="text-xs font-bold text-white font-sans leading-tight">
+          <h4 className={`text-xs font-bold font-sans leading-tight truncate ${isMuted ? 'text-zinc-400 line-through' : 'text-white'}`}>
             {slotConfig.label}
           </h4>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {/* Maximize / Expand Full Text Modal Popup Button in Form View */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleFocus();
-              handleOpenModal();
-            }}
-            className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold shrink-0 transition-colors flex items-center gap-0.5"
-            title="Expand full text & preset manager window"
-          >
-            <Maximize2 className="w-3 h-3 text-amber-400" />
-            {favoriteItems.length > 0 && <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />}
-          </button>
-
-          {/* Small Icon Preset Selector */}
-          <div className="relative shrink-0" title={`Select preset for ${slotConfig.label}`}>
-            <div className="px-2 py-0.5 rounded-md bg-zinc-950 hover:bg-zinc-800 text-cyan-300 border border-zinc-700/90 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm">
-              <Sparkles className="w-3 h-3 text-cyan-400" />
-              <span className="hidden xs:inline">Presets</span>
-              <span className="text-[9px] opacity-70">▾</span>
-            </div>
-
-            <select
-              value={allVisiblePresets.includes(value) ? value : ''}
-              onChange={handleSelectChange}
-              onFocus={handleFocus}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-xs font-mono"
-            >
-              <option value="">-- Select Preset for {slotConfig.label} --</option>
-              {favoriteItems.length > 0 && (
-                <optgroup label="⭐ Favorite Presets">
-                  {favoriteItems.map((preset, idx) => (
-                    <option key={`fav_${idx}`} value={preset}>
-                      ⭐ {preset}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {userPresets.length > 0 && (
-                <optgroup label="➕ Custom Presets">
-                  {userPresets.filter(p => !favoritePresets.includes(p)).map((preset, idx) => (
-                    <option key={`usr_${idx}`} value={preset}>
-                      ➕ {preset}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              <optgroup label="🎬 Studio Presets">
-                {activeStandardPresets.filter(p => !favoritePresets.includes(p)).map((preset, idx) => (
-                  <option key={`std_${idx}`} value={preset}>
-                    {preset}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
+          {isMuted && <span className="text-[9px] px-1 py-0.5 rounded bg-red-950 text-red-300 border border-red-800 font-mono font-bold">MUTED</span>}
         </div>
       </div>
 
-      {/* Direct Text Value Box with double-click to expand */}
+      {/* Direct Text Value Box */}
       <textarea
         rows={2}
         value={value || ''}
         onChange={handleCustomInput}
         onFocus={handleFocus}
         onDoubleClick={() => setIsPopupOpen(true)}
-        placeholder={`Enter ${slotConfig.label.toLowerCase()} text... (Double-click to expand)`}
-        title="Double-click to expand full text & preset manager window"
-        className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800/90 rounded-lg p-2 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-none cursor-pointer"
+        placeholder={`Enter ${slotConfig.label.toLowerCase()} text...`}
+        className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800/90 rounded-lg p-2 text-xs focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-none cursor-pointer font-bold"
       />
 
-      {renderPopupModal()}
+      <SaveCloseConfirmModal
+        isOpen={isEscConfirmOpen}
+        title="Save & Close Craft Editor"
+        onSaveAndClose={() => {
+          setIsEscConfirmOpen(false);
+          handleCloseModal();
+        }}
+        onCloseWithoutSave={() => {
+          setIsEscConfirmOpen(false);
+          if (initialValueOnOpenRef.current !== undefined && onChange) {
+            onChange(initialValueOnOpenRef.current);
+          }
+          handleCloseModal();
+        }}
+        onCancel={() => setIsEscConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -67,6 +67,120 @@ export const CRAFT_INSPIRATION_DATA = {
     )
   },
 
+  timeAndLightingEnv: {
+    title: "Time of Day, Sun/Shade & Light Source Rig",
+    quote: "Harmonize day & night timings, sun exposure vs canopy shade, and natural or indoor light source emitters.",
+    badges: ["🌅 Day & Night Timing", "🌲 Direct Sun vs Shade", "💡 Light Source Rigs"],
+    gradient: "from-amber-950/90 via-zinc-900 to-orange-950/70",
+    border: "border-amber-500/50",
+    accentColor: "#F59E0B",
+    icon: Sun,
+    renderGraphic: () => (
+      <svg className="w-full h-16 opacity-90" viewBox="0 0 240 60" fill="none">
+        {/* Sun & Ray beam */}
+        <circle cx="35" cy="18" r="9" fill="#FBBF24" />
+        <line x1="35" y1="4" x2="35" y2="7" stroke="#FBBF24" strokeWidth="1.5" />
+        <line x1="35" y1="29" x2="35" y2="32" stroke="#FBBF24" strokeWidth="1.5" />
+        <line x1="21" y1="18" x2="24" y2="18" stroke="#FBBF24" strokeWidth="1.5" />
+        <line x1="46" y1="18" x2="49" y2="18" stroke="#FBBF24" strokeWidth="1.5" />
+        <polygon points="35,28 100,56 10,56" fill="url(#sunEnvBeam)" opacity="0.35" />
+
+        {/* Tree Canopy Shade */}
+        <path d="M100 48 Q 115 20, 130 48 Z" fill="#059669" opacity="0.7" />
+        <path d="M120 48 Q 135 15, 150 48 Z" fill="#047857" opacity="0.8" />
+        <line x1="125" y1="48" x2="125" y2="56" stroke="#78350F" strokeWidth="2.5" />
+
+        {/* Moon / Night & Indoor Lamp */}
+        <path d="M185 14 A 8 8 0 0 1 195 24 A 8.5 8.5 0 1 0 185 14 Z" fill="#67E8F9" opacity="0.9" />
+        <path d="M215 32 L225 32 L220 22 Z" fill="#F43F5E" />
+        <line x1="220" y1="32" x2="220" y2="50" stroke="#F43F5E" strokeWidth="1.5" />
+        <circle cx="220" cy="50" r="3" fill="#F43F5E" />
+
+        <defs>
+          <linearGradient id="sunEnvBeam" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FBBF24" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#FBBF24" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      </svg>
+    )
+  },
+
+  directionalLightingAndHighlight: {
+    title: "Directional Light Angle & Special Highlights",
+    quote: "Sculpt character dimension with 45° Rembrandt keylight, shadow placement, invisible bounce fill & eye catchlights.",
+    badges: ["📐 Light Angle Vector", "👥 Shadow Placement", "✨ Eye Catchlight & Rim"],
+    gradient: "from-yellow-950/90 via-zinc-900 to-amber-950/70",
+    border: "border-yellow-400/50",
+    accentColor: "#EAB308",
+    icon: Zap,
+    renderGraphic: () => (
+      <svg className="w-full h-16 opacity-90" viewBox="0 0 240 60" fill="none">
+        {/* 45 Degree Angle Light Source */}
+        <line x1="20" y1="10" x2="70" y2="35" stroke="#FACC15" strokeWidth="2" strokeDasharray="3 2" />
+        <polygon points="70,35 60,30 63,38" fill="#FACC15" />
+        <circle cx="20" cy="10" r="6" fill="#FEF08A" />
+
+        {/* Subject Head & Shadow Split */}
+        <circle cx="120" cy="30" r="14" fill="#27272A" stroke="#FACC15" strokeWidth="1.5" />
+        <path d="M120 16 A 14 14 0 0 1 120 44 Z" fill="#FACC15" opacity="0.3" />
+        <circle cx="115" cy="26" r="2" fill="#FFFFFF" /> {/* Catchlight */}
+        
+        {/* Invisible Bounce Card & Rim Highlight */}
+        <rect x="160" y="15" width="4" height="30" rx="2" fill="#38BDF8" opacity="0.8" />
+        <path d="M134 20 C 136 25, 136 35, 134 40" stroke="#38BDF8" strokeWidth="2" fill="none" />
+      </svg>
+    )
+  },
+  characterPsychologyState: {
+    title: "🧠 Psychological State & Subconscious Mindframe",
+    subtitle: "Cognitive Archetype, Trauma Baseline, Internal Conflict & Pressure Reaction",
+    badges: ["🧠 Cognitive Archetype", "⚡ Behavioral Triggers", "👁️ Subconscious Mindframe", "🔥 Pressure Response"],
+    accentColor: "#F59E0B",
+    icon: Sparkles,
+    renderGraphic: () => (
+      <svg className="w-full h-16 opacity-90" viewBox="0 0 240 60" fill="none">
+        {/* Brain Neural Mindstate Silhouette */}
+        <circle cx="120" cy="30" r="18" fill="#18181B" stroke="#F59E0B" strokeWidth="2" />
+        <path d="M110 30 Q 120 15 130 30 T 110 30" stroke="#F59E0B" strokeWidth="1.5" fill="none" strokeDasharray="3 2" />
+        <path d="M112 25 C 116 18, 124 18, 128 25" stroke="#38BDF8" strokeWidth="1.5" fill="none" />
+        <path d="M112 35 C 116 42, 124 42, 128 35" stroke="#EC4899" strokeWidth="1.5" fill="none" />
+        {/* Synapse Nodes */}
+        <circle cx="112" cy="25" r="2.5" fill="#F59E0B" />
+        <circle cx="128" cy="25" r="2.5" fill="#38BDF8" />
+        <circle cx="120" cy="18" r="2" fill="#10B981" />
+        <circle cx="120" cy="42" r="2" fill="#EC4899" />
+        {/* Pulse Frequency Line */}
+        <path d="M30 30 L 70 30 L 75 18 L 82 42 L 90 22 L 96 34 L 102 30 L 140 30 L 145 15 L 152 45 L 160 30 L 210 30" stroke="#F59E0B" strokeWidth="1.5" fill="none" />
+      </svg>
+    )
+  },
+  characterMannerismAndPosture: {
+    title: "🖐️ Mannerisms, Body Ticks & Posture Habits",
+    subtitle: "Actor Physical Quirks, Hand Gestures, Posture Alignment & Head Tilts",
+    badges: ["🖐️ Hand Gestures", "📐 Spine Alignment", "📐 15° Head Tilt", "⚡ Body Ticks"],
+    accentColor: "#A855F7",
+    icon: User,
+    renderGraphic: () => (
+      <svg className="w-full h-16 opacity-90" viewBox="0 0 240 60" fill="none">
+        {/* Posture Spine Axis Line */}
+        <line x1="120" y1="8" x2="120" y2="52" stroke="#A855F7" strokeWidth="2" strokeDasharray="3 2" />
+        {/* Head Tilt Circle (15 Deg Tilt) */}
+        <circle cx="120" cy="16" r="8" fill="#18181B" stroke="#C084FC" strokeWidth="2" />
+        {/* Shoulder Bar */}
+        <line x1="95" y1="28" x2="145" y2="28" stroke="#C084FC" strokeWidth="3" strokeLinecap="round" />
+        {/* Hand Gesture Vectors */}
+        <circle cx="95" cy="38" r="3" fill="#F59E0B" />
+        <circle cx="145" cy="38" r="3" fill="#38BDF8" />
+        <path d="M95 28 L 95 38" stroke="#A855F7" strokeWidth="2" />
+        <path d="M145 28 L 145 38" stroke="#A855F7" strokeWidth="2" />
+        {/* Alignment Angle Indicator */}
+        <path d="M120 16 L 132 10" stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="2 1" />
+        <text x="135" y="12" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">15°</text>
+      </svg>
+    )
+  },
+
   subjectLightingTag: {
     title: "Subject Keylight & Modeling",
     quote: "Illuminate character soul with volumetric keylight, soft ambient fill & razor rim highlights.",

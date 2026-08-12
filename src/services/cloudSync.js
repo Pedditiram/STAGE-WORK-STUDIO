@@ -11,33 +11,62 @@ import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
 const NATIVE_SYNC_PATH = '/api/sync';
+/** Production Vercel origin — source of truth for projects, collaborators, rooms, chat. */
+export const PRODUCTION_SYNC_ORIGIN = 'https://stage-production-studio.vercel.app';
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
-const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019f9748-ab24-7be0-8065-27742b7c70bd';
+const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-43e0-74db-bb8d-6211e85dc74e';
 
-const POLL_MS = 3000;
+/** Active-tab room poll target (~2s). Hidden tabs back off to save quota. */
+const POLL_MS_ACTIVE = 2000;
+const POLL_MS_HIDDEN = 12000;
 
 let db = null;
 let broadcastChannel = null;
-let lastSyncedPayloadStr = '';
-let lastAppliedUpdatedAt = '';
-let lastAppliedRevision = 0;
+
+/** Per-room apply cursors so switching rooms does not drop remote updates. */
+const roomApplyState = new Map();
+
+function getRoomState(roomId) {
+  if (!roomApplyState.has(roomId)) {
+    roomApplyState.set(roomId, {
+      lastSyncedPayloadStr: '',
+      lastAppliedUpdatedAt: '',
+      lastAppliedRevision: 0
+    });
+  }
+  return roomApplyState.get(roomId);
+}
 
 function isBrowser() {
   return typeof window !== 'undefined';
 }
 
-function isCloudMode() {
-  return isBrowser() && localStorage.getItem('sps_app_version_mode') === 'cloud';
+function isProductionHost(hostname = '') {
+  const h = String(hostname || '').toLowerCase();
+  return (
+    h.includes('vercel.app') ||
+    h === 'stageproductionstudio.com' ||
+    h.endsWith('.stageproductionstudio.com')
+  );
 }
 
-/** Prefer same-origin /api/sync when served over http(s); Electron file:// uses remote hubs. */
+/**
+ * Sync API URL. Vercel production is the source of truth.
+ * - On Vercel / custom prod domain → same-origin /api/sync
+ * - On localhost, LAN, Electron file://, tunnels → always hit Vercel so local RECEIVES from cloud
+ */
 export function getNativeSyncUrl() {
-  if (!isBrowser()) return NATIVE_SYNC_PATH;
-  const { protocol, origin } = window.location;
+  if (!isBrowser()) return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
+  const { protocol, hostname, origin } = window.location;
   if (protocol === 'http:' || protocol === 'https:') {
-    return `${origin}${NATIVE_SYNC_PATH}`;
+    if (isProductionHost(hostname)) {
+      return `${origin}${NATIVE_SYNC_PATH}`;
+    }
+    // Local Vite / Electron / tunnel clients hydrate from Vercel, not a private disk store
+    return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
   }
-  return NATIVE_SYNC_PATH;
+  // file:// Electron package
+  return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
 }
 
 function initFirebaseIfConfigured() {
@@ -99,10 +128,18 @@ function normalizeRoomPayload(roomId, projectData = {}) {
   };
 }
 
-async function fetchJson(url, options = {}) {
-  const res = await fetch(url, { cache: 'no-store', ...options });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+const FETCH_TIMEOUT_MS = 12000;
+
+async function fetchJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Read room from native /api/sync */
@@ -112,10 +149,10 @@ async function pullNativeRoom(roomId) {
   return resObj?.data || null;
 }
 
-/** Write room to native /api/sync */
+/** Write room to native /api/sync — returns server JSON (may include skipped:'stale'). */
 async function pushNativeRoom(roomId, payload) {
   const base = getNativeSyncUrl();
-  await fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}`, {
+  return fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -124,7 +161,6 @@ async function pushNativeRoom(roomId, payload) {
 
 /** Hub blob shape: { rooms: { [roomId]: payload }, updatedAt } */
 async function pullHubRoom(roomId) {
-  // Prefer JSONBlob (CORS-friendly PUT/GET)
   try {
     const hub = await fetchJson(`${JSONBLOB_HUB_URL}?t=${Date.now()}`);
     const rooms = hub?.rooms || hub?.data?.rooms || {};
@@ -140,13 +176,28 @@ async function pullHubRoom(roomId) {
   return null;
 }
 
+/**
+ * Best-effort hub backup. Aborts if hub GET failed — never PUT { [roomId]: payload }
+ * alone (that wipes every other room in the durable hub).
+ */
 async function pushHubRoom(roomId, payload) {
-  // Merge into hub map so rooms do not clobber each other
-  let rooms = {};
+  let rooms = null;
   try {
     const hub = await fetchJson(`${JSONBLOB_HUB_URL}?t=${Date.now()}`);
-    rooms = { ...(hub?.rooms || hub?.data?.rooms || {}) };
+    const raw = hub?.rooms || hub?.data?.rooms;
+    if (raw && typeof raw === 'object') rooms = { ...raw };
   } catch (e) {}
+
+  if (!rooms) {
+    try {
+      const hub = await fetchJson(`${RESTFUL_HUB_URL}?t=${Date.now()}`);
+      const raw = hub?.data?.rooms || hub?.rooms;
+      if (raw && typeof raw === 'object') rooms = { ...raw };
+    } catch (e) {}
+  }
+
+  // Failed hydrate → skip write (native /api/sync already owns durable rooms)
+  if (!rooms) return false;
 
   rooms[roomId] = payload;
   const body = { rooms, updatedAt: new Date().toISOString(), app: 'stage-production-studio' };
@@ -166,6 +217,7 @@ async function pushHubRoom(roomId, payload) {
       body: JSON.stringify({ name: 'SPS Cloud Rooms Hub', data: body })
     });
   } catch (e) {}
+  return true;
 }
 
 /**
@@ -176,22 +228,23 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   if (typeof onDataReceived !== 'function' || !roomId) return () => {};
 
   initFirebaseIfConfigured();
+  const state = getRoomState(roomId);
 
   const deliver = (payload, source = 'unknown') => {
     if (!payload || !Array.isArray(payload.shots)) return;
     const payloadStr = JSON.stringify(payload);
-    if (payloadStr === lastSyncedPayloadStr) return;
+    if (payloadStr === state.lastSyncedPayloadStr) return;
 
     const remoteUpdated = payload.lastUpdated || '';
     const remoteRev = typeof payload.revision === 'number' ? payload.revision : 0;
     // Ignore strictly older remote payloads (prevents echo / ping-pong)
-    if ((remoteRev || remoteUpdated) && !isNewerPayload(payload, lastAppliedUpdatedAt, lastAppliedRevision)) {
+    if ((remoteRev || remoteUpdated) && !isNewerPayload(payload, state.lastAppliedUpdatedAt, state.lastAppliedRevision)) {
       return;
     }
 
-    lastSyncedPayloadStr = payloadStr;
-    if (remoteUpdated) lastAppliedUpdatedAt = remoteUpdated;
-    if (remoteRev) lastAppliedRevision = remoteRev;
+    state.lastSyncedPayloadStr = payloadStr;
+    if (remoteUpdated) state.lastAppliedUpdatedAt = remoteUpdated;
+    if (remoteRev) state.lastAppliedRevision = remoteRev;
 
     if (isBrowser()) {
       safeLocalStorageSetItem(cacheKey(roomId), payloadStr);
@@ -199,15 +252,12 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     onDataReceived(payload, source);
   };
 
-  // 1. Local cache hydrate
+  // 1. Local cache hydrate (do not advance revision cursor — network may be newer)
   if (isBrowser()) {
     const cachedStr = localStorage.getItem(cacheKey(roomId));
     if (cachedStr) {
       try {
         const cached = JSON.parse(cachedStr);
-        lastSyncedPayloadStr = cachedStr;
-        lastAppliedUpdatedAt = cached.lastUpdated || '';
-        lastAppliedRevision = typeof cached.revision === 'number' ? cached.revision : 0;
         onDataReceived(cached, 'cache');
       } catch (e) {}
     }
@@ -231,9 +281,12 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   };
   if (broadcastChannel) broadcastChannel.addEventListener('message', handleBroadcast);
 
-  // 4. Network poll (cloud mode only; re-check each tick so mode switches work)
+  // 4. Network poll — always hit Vercel/native (cloud is source of truth)
+  let pollTimer = null;
+  let cancelled = false;
+
   const pollCloudDatabase = async () => {
-    if (!isCloudMode()) return;
+    if (cancelled) return;
     try {
       let payload = null;
       try {
@@ -248,8 +301,33 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
     } catch (e) {}
   };
 
+  const schedulePoll = () => {
+    if (pollTimer) clearInterval(pollTimer);
+    const ms =
+      isBrowser() && typeof document !== 'undefined' && document.hidden
+        ? POLL_MS_HIDDEN
+        : POLL_MS_ACTIVE;
+    pollTimer = setInterval(pollCloudDatabase, ms);
+  };
+
+  const onVisibilityOrFocus = () => {
+    if (cancelled) return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      schedulePoll();
+      return;
+    }
+    pollCloudDatabase();
+    schedulePoll();
+  };
+
   pollCloudDatabase();
-  const pollInterval = setInterval(pollCloudDatabase, POLL_MS);
+  schedulePoll();
+
+  if (isBrowser()) {
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    window.addEventListener('focus', onVisibilityOrFocus);
+    window.addEventListener('pageshow', onVisibilityOrFocus);
+  }
 
   // 5. Firestore realtime (optional)
   let unsubscribeFirestore = () => {};
@@ -267,8 +345,14 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   }
 
   return () => {
-    clearInterval(pollInterval);
-    if (isBrowser()) window.removeEventListener('storage', handleStorageChange);
+    cancelled = true;
+    if (pollTimer) clearInterval(pollTimer);
+    if (isBrowser()) {
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      window.removeEventListener('pageshow', onVisibilityOrFocus);
+    }
     if (broadcastChannel) broadcastChannel.removeEventListener('message', handleBroadcast);
     unsubscribeFirestore();
   };
@@ -281,10 +365,9 @@ export async function publishToCloudRoom(roomId, projectData) {
 
   const payload = normalizeRoomPayload(roomId, projectData);
   const payloadStr = JSON.stringify(payload);
-  lastSyncedPayloadStr = payloadStr;
-  lastAppliedUpdatedAt = payload.lastUpdated;
-  lastAppliedRevision = payload.revision;
+  const state = getRoomState(roomId);
 
+  // Optimistic local cache for UX — revision cursor only advances after native accepts
   if (isBrowser()) {
     safeLocalStorageSetItem(cacheKey(roomId), payloadStr);
     if (Array.isArray(payload.shots)) {
@@ -296,27 +379,45 @@ export async function publishToCloudRoom(roomId, projectData) {
     broadcastChannel.postMessage({ roomId, payload });
   }
 
-  // Always try native API when available (local Vite / hosted web)
   let nativeOk = false;
+  let skippedStale = false;
+  let serverData = null;
   try {
-    await pushNativeRoom(roomId, payload);
-    nativeOk = true;
+    const res = await pushNativeRoom(roomId, payload);
+    if (res?.skipped === 'stale') {
+      skippedStale = true;
+      serverData = res?.data || null;
+      // Do not advance local cursor or hub-write a rejected revision
+    } else {
+      nativeOk = true;
+      serverData = res?.data || payload;
+      state.lastSyncedPayloadStr = JSON.stringify(serverData);
+      state.lastAppliedUpdatedAt = serverData.lastUpdated || payload.lastUpdated;
+      state.lastAppliedRevision =
+        typeof serverData.revision === 'number' ? serverData.revision : payload.revision;
+    }
   } catch (e) {}
 
-  // Remote hubs for Electron / cross-origin / multi-region backup
-  if (isCloudMode() || !nativeOk) {
+  // Hub backup only when native accepted (or native unreachable — then try carefully)
+  if (!skippedStale) {
     try {
       await pushHubRoom(roomId, payload);
     } catch (e) {}
   }
 
-  if (db) {
+  if (db && !skippedStale) {
     try {
       await setDoc(doc(db, 'production_rooms', roomId), payload, { merge: true });
     } catch (err) {}
   }
 
-  return { success: true, lastUpdated: payload.lastUpdated, nativeOk };
+  return {
+    success: nativeOk || skippedStale,
+    lastUpdated: serverData?.lastUpdated || payload.lastUpdated,
+    nativeOk,
+    skippedStale,
+    data: serverData
+  };
 }
 
 /** Force-enable cloud mode (invite join / admin toggle helpers). */

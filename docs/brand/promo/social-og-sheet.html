@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SPS — Social / OG Promo Pattern</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&family=Syne:wght@800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0a0c12;
+      font-family: 'Outfit', sans-serif;
+      padding: 1.5rem;
+    }
+    .og {
+      width: min(100%, 1200px);
+      aspect-ratio: 1.91 / 1;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      background:
+        radial-gradient(ellipse 80% 60% at 15% 20%, rgba(34,211,238,0.22), transparent 50%),
+        radial-gradient(ellipse 70% 50% at 85% 15%, rgba(245,158,11,0.16), transparent 45%),
+        linear-gradient(160deg, #07090f 0%, #0e1219 55%, #141a24 100%);
+      border: 1px solid rgba(34,211,238,0.28);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+      color: #e8edf5;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: clamp(1.25rem, 4vw, 3rem);
+    }
+    .og::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.05;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    .eyebrow {
+      position: relative;
+      z-index: 1;
+      font-size: clamp(0.65rem, 1.5vw, 0.85rem);
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #f59e0b;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      position: relative;
+      z-index: 1;
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.8rem, 5.5vw, 3.6rem);
+      line-height: 0.95;
+      margin: 0 0 0.75rem;
+      max-width: 14ch;
+    }
+    p {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      max-width: 36rem;
+      color: #94a3b8;
+      font-size: clamp(0.85rem, 2vw, 1.15rem);
+      line-height: 1.45;
+    }
+    .copy-block {
+      max-width: 720px;
+      margin-top: 1.5rem;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .copy-block strong { color: #e8edf5; }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="og" role="img" aria-label="Stage Production Studio social preview">
+      <div class="eyebrow">Pedditi Labs</div>
+      <h1>Stage Production Studio</h1>
+      <p>Cinema craft intelligence — script to 24-craft matrix, cloud rooms, prompt-ready keyframes.</p>
+    </div>
+    <p class="copy-block">
+      <strong>Paste-ready OG:</strong>
+      Stage Production Studio — cinema craft intelligence for directors who refuse to compromise the frame. Script to 24-craft matrix. Cloud rooms. Prompt-ready keyframes. · pedditiram@gmail.com
+    </p>
+  </div>
+</body>
+</html>

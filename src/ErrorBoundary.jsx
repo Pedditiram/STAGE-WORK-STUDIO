@@ -17,8 +17,8 @@ export default class ErrorBoundary extends React.Component {
 
   handleResetApp = () => {
     if (typeof window !== 'undefined') {
-      localStorage.clear();
-      window.location.href = window.location.origin;
+      this.setState({ hasError: false, error: null, errorInfo: null });
+      window.location.reload();
     }
   };
 

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stage Production Studio — Investor One-Pager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #07090f;
+      --surface: #141a24;
+      --text: #e8edf5;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --amber: #f59e0b;
+      --font: 'Outfit', sans-serif;
+      --display: 'Syne', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 10% -10%, rgba(34,211,238,0.12), transparent 55%),
+        radial-gradient(700px 400px at 90% 0%, rgba(245,158,11,0.08), transparent 50%),
+        var(--bg);
+    }
+    .sheet {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 3rem;
+    }
+    .eyebrow {
+      font-size: 0.7rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--amber);
+      font-weight: 700;
+      margin: 0 0 0.75rem;
+    }
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(2.4rem, 6vw, 3.5rem);
+      line-height: 0.95;
+      margin: 0 0 1rem;
+      letter-spacing: -0.02em;
+    }
+    .lead {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 36rem;
+      line-height: 1.55;
+      margin: 0 0 2rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    @media (min-width: 720px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    .card {
+      background: rgba(20,26,36,0.85);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 14px;
+      padding: 1.15rem 1.25rem;
+    }
+    .card h2 {
+      font-family: var(--display);
+      font-size: 1rem;
+      margin: 0 0 0.5rem;
+      color: var(--cyan);
+    }
+    .card p, .card li {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .card ul { margin: 0; padding-left: 1.1rem; }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-top: 2rem;
+    }
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.7rem 1.1rem;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-decoration: none;
+    }
+    .cta-primary { background: linear-gradient(90deg, var(--cyan), #38bdf8); color: #07090f; }
+    .cta-amber { background: linear-gradient(90deg, var(--amber), #f97316); color: #07090f; }
+    .cta-ghost { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); color: var(--text); }
+    footer {
+      margin-top: 2.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <article class="sheet">
+    <p class="eyebrow">Pedditi Labs</p>
+    <h1>Stage Production Studio</h1>
+    <p class="lead">Cinema craft intelligence for directors who refuse to compromise the frame — script to 24-craft matrix, cloud co-authoring, prompt-ready keyframes.</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Problem</h2>
+        <p>Pre-viz is slow, expensive, and scattered across tools that don’t speak craft.</p>
+      </section>
+      <section class="card">
+        <h2>Solution</h2>
+        <p>One slate: AI breakdown, genre-aware crafts, shot-level sync, dual prompt compiler.</p>
+      </section>
+      <section class="card">
+        <h2>Proof</h2>
+        <ul>
+          <li>10× path from text to camera parameters</li>
+          <li>80%+ traditional pre-viz cost cut</li>
+          <li>Zero-conflict multi-user rooms</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>Ask</h2>
+        <p>Pilot access, partnership, or investment conversation with Pedditi Ram.</p>
+      </section>
+    </div>
+
+    <div class="cta-row">
+      <a class="cta cta-primary" href="mailto:pedditiram@gmail.com?subject=Stage%20Production%20Studio%20%E2%80%94%20Access%20Request">Request access</a>
+      <a class="cta cta-amber" href="/">Open studio / Login</a>
+      <a class="cta cta-ghost" href="mailto:pedditiram@gmail.com">Contact Owner</a>
+    </div>
+
+    <footer>© Pedditi Labs · Stage Production Studio · pedditiram@gmail.com</footer>
+  </article>
+</body>
+</html>

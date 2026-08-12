@@ -19,6 +19,8 @@ import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import CharacterBibleModal, { saveStoredCharacterProfiles } from './components/CharacterBibleModal';
 import ScriptSynopsisModal from './components/ScriptSynopsisModal';
+import CollabChatPanel from './components/CollabChatPanel';
+import { subscribeToCollabChat } from './services/collabChat';
 import { extractProjectCharactersWithLLM } from './services/aiScriptParser';
 import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
 import { saveProjectToVault, loadProjectsFromVault } from './services/projectDiskVault';
@@ -34,8 +36,19 @@ import {
   broadcastActiveSlotEditing,
   subscribeToActiveEditingSlots
 } from './services/dbService';
-import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES } from './constants/seedancePresets';
+import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES, getMergedGenreProfiles } from './constants/seedancePresets';
 import { safeLocalStorageSetItem } from './utils/safeStorage';
+import {
+  getCurrentUserEmail,
+  isGuestSession,
+  isStudioAdmin,
+  canAccessProject,
+  canCreateOrDeleteProjects,
+  canEditProjects,
+  filterAccessibleProjects,
+  markCollaboratorSession,
+  purgeWeakAdminCredentials
+} from './utils/projectPermissions';
 import { Check, Copy, RefreshCw, Play, FastForward, Code, Image as ImageIcon } from 'lucide-react';
 
 const INITIAL_SHOTS = [
@@ -108,15 +121,19 @@ export default function App() {
 
   const [showCanvasTab, setShowCanvasTab] = useState(() => {
     if (typeof window !== 'undefined') {
+      // One-time migration: canvas was previously default-ON; hide for all users by default
+      if (localStorage.getItem('sps_canvas_default_hidden_v1') !== '1') {
+        localStorage.setItem('sps_enable_canvas_tab', 'false');
+        localStorage.setItem('sps_canvas_default_hidden_v1', '1');
+      }
       const saved = localStorage.getItem('sps_enable_canvas_tab');
-      // Default ON so Director Visual Canvas is available unless explicitly disabled
       if (saved === null || saved === undefined || saved === '') {
-        localStorage.setItem('sps_enable_canvas_tab', 'true');
-        return true;
+        localStorage.setItem('sps_enable_canvas_tab', 'false');
+        return false;
       }
       return saved === 'true';
     }
-    return true;
+    return false;
   });
 
   const [colorTheme, setColorTheme] = useState(() => {
@@ -174,10 +191,24 @@ export default function App() {
     return 'mythological';
   });
 
-  // Auto-detect script profile when project title or shots update
+  // Prefer per-project genre from library; fall back to script auto-detect
   useEffect(() => {
+    try {
+      const library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+      const proj = Array.isArray(library)
+        ? library.find((p) => String(p?.title || '').trim() === String(projectTitle || '').trim())
+        : null;
+      if (proj?.genreKey) {
+        const profiles = getMergedGenreProfiles();
+        if (profiles[proj.genreKey]) {
+          setPresetProfile((prev) => (prev === proj.genreKey ? prev : proj.genreKey));
+          localStorage.setItem('sps_preset_profile', proj.genreKey);
+          return;
+        }
+      }
+    } catch (e) {}
     const detected = detectScriptGenre(projectTitle, shots);
-    setPresetProfile(prev => (prev === detected ? prev : detected));
+    setPresetProfile((prev) => (prev === detected ? prev : detected));
   }, [projectTitle, shots]);
 
   // Auto-extract Character Bibles ONCE on app mount if vault is empty
@@ -209,12 +240,12 @@ export default function App() {
   const [activeView, setActiveView] = useState(() => {
     if (typeof window !== 'undefined') {
       const savedCanvas = localStorage.getItem('sps_enable_canvas_tab');
-      const canShowCanvas = savedCanvas !== 'false';
+      const canShowCanvas = savedCanvas === 'true';
       const saved = localStorage.getItem('sps_active_view');
       if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || (saved === 'canvas' && canShowCanvas))) {
         return saved;
       }
-      return canShowCanvas ? 'canvas' : 'spreadsheet';
+      return 'spreadsheet';
     }
     return 'spreadsheet';
   });
@@ -238,7 +269,7 @@ export default function App() {
     return 0;
   });
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
-  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(true);
+  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
   const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedSeeDream, setCopiedSeeDream] = useState(false);
@@ -299,12 +330,22 @@ export default function App() {
   const [redoStack, setRedoStack] = useState([]);
 
   const updateShotsWithHistory = (newShots) => {
+    if (!canEditProjects()) {
+      alert('🔒 READ-ONLY ACCESS:\nYour access level is Viewer. You can open allotted projects but cannot edit them. Ask the studio Owner to upgrade you to Editor.');
+      return false;
+    }
+    if (!canAccessProject(projectTitle) && !canCreateOrDeleteProjects()) {
+      alert('🔒 ACCESS RESTRICTED:\nThis project is not allotted to your account.');
+      return false;
+    }
     setHistoryStack(prev => [...prev.slice(-50), shots]);
     setRedoStack([]);
     setShots(newShots);
+    return true;
   };
 
   const handleUndo = () => {
+    if (!canEditProjects()) return;
     if (historyStack.length === 0) return;
     const previousShots = historyStack[historyStack.length - 1];
     const newHistory = historyStack.slice(0, historyStack.length - 1);
@@ -312,9 +353,11 @@ export default function App() {
     setRedoStack(prev => [shots, ...prev]);
     setHistoryStack(newHistory);
     setShots(previousShots);
+    syncToCloud({ shots: previousShots });
   };
 
   const handleRedo = () => {
+    if (!canEditProjects()) return;
     if (redoStack.length === 0) return;
     const nextShots = redoStack[0];
     const newRedo = redoStack.slice(1);
@@ -322,14 +365,24 @@ export default function App() {
     setHistoryStack(prev => [...prev, shots]);
     setRedoStack(newRedo);
     setShots(nextShots);
+    syncToCloud({ shots: nextShots });
   };
 
   // Keyboard shortcut listener for Cmd+Z (Undo), Cmd+Shift+Z (Redo), Cmd+O (Open Projects), Cmd+Enter (Fullscreen), Esc (Normal View)
+  // Note: Cmd/Ctrl+K (Studio Settings) lives in a separate effect near admin state below.
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Cmd+O / Ctrl+O -> Open Projects Library Console
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
+        if (isGuestSession()) {
+          alert(
+            '🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to use Projects Console, or request access from pedditiram@gmail.com.'
+          );
+          setIsProjectConsoleOpen(false);
+          setIsInvestorDeckOpen(true);
+          return;
+        }
         setIsProjectConsoleOpen(true);
         return;
       }
@@ -450,21 +503,114 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeConflict, setActiveConflict] = useState(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+  // Always start logged-out in UI; LoginModal after splash confirms identity
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sps_is_admin_logged_in');
-      if (saved !== null) return saved === 'true';
-      // Default to true (Unlocked) so studio is never locked out
-      localStorage.setItem('sps_is_admin_logged_in', 'true');
-      return true;
+      purgeWeakAdminCredentials();
+      localStorage.setItem('sps_is_admin_logged_in', 'false');
     }
-    return true;
+    return false;
   });
 
   const handleSetAdminLoggedIn = (val) => {
-    setIsAdminLoggedIn(val);
+    if (typeof window !== 'undefined' && val) {
+      const email = getCurrentUserEmail();
+      // Only primary studio admin sessions may hold the admin flag
+      if (email && !isStudioAdmin(email)) {
+        setIsAdminLoggedIn(false);
+        localStorage.setItem('sps_is_admin_logged_in', 'false');
+        return;
+      }
+      if (!email) {
+        markCollaboratorSession('pedditiram@gmail.com');
+      }
+    }
+    setIsAdminLoggedIn(Boolean(val));
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_is_admin_logged_in', val ? 'true' : 'false');
+    }
+  };
+
+  // Cmd+K / Ctrl+K → Studio Settings (AdminSettingsModal, All Settings tab)
+  // Same access rules as the Header Settings gear (alert + login if not admin).
+  useEffect(() => {
+    let lastOpenAt = 0;
+    const openStudioSettings = () => {
+      const now = Date.now();
+      if (now - lastOpenAt < 400) return;
+      lastOpenAt = now;
+      if (isGuestSession()) {
+        alert(
+          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio owner.\n\nOpen the Investor Deck, request access, or log in.'
+        );
+        setIsAdminModalOpen(false);
+        setIsInvestorDeckOpen(true);
+        return;
+      }
+      if (!isAdminLoggedIn) {
+        alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can open Admin Settings (create users, allot projects, delete projects).');
+        setIsLoginModalOpen(true);
+        return;
+      }
+      setAdminModalTab('all');
+      setIsAdminModalOpen(true);
+    };
+
+    const handleKeyDown = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k' || e.altKey || e.shiftKey) return;
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      openStudioSettings();
+    };
+
+    const onMenuOpen = () => openStudioSettings();
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('sps_open_studio_settings', onMenuOpen);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('sps_open_studio_settings', onMenuOpen);
+    };
+  }, [isAdminLoggedIn]);
+
+  const enforceAccessibleActiveProject = (preferredTitle = '') => {
+    if (typeof window === 'undefined') return;
+    const email = getCurrentUserEmail();
+    if (!email || isStudioAdmin(email)) return;
+
+    let library = [];
+    try {
+      library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+    } catch (e) {
+      library = [];
+    }
+    if (!Array.isArray(library)) library = [];
+
+    const visible = filterAccessibleProjects(library, email);
+    const want = String(preferredTitle || projectTitle || localStorage.getItem('sps_current_project_title') || '').trim();
+    const match =
+      visible.find((p) => String(p?.title || '').toLowerCase() === want.toLowerCase()) ||
+      visible[0] ||
+      null;
+
+    if (!match) {
+      setProjectTitle('');
+      setShots([]);
+      safeLocalStorageSetItem('sps_current_project_title', '');
+      safeLocalStorageSetItem('sps_current_shots', '[]');
+      return;
+    }
+
+    if (String(match.title) !== String(projectTitle)) {
+      setProjectTitle(match.title);
+      if (Array.isArray(match.shots)) setShots(match.shots);
+      if (match.targetModel) setTargetModel(match.targetModel);
+      if (match.aspectRatio) setAspectRatio(match.aspectRatio);
+      if (match.roomId) setRoomId(match.roomId);
+      safeLocalStorageSetItem('sps_current_project_title', match.title);
+      if (Array.isArray(match.shots)) {
+        safeLocalStorageSetItem('sps_current_shots', JSON.stringify(match.shots));
+      }
     }
   };
   const [currentRole, setCurrentRole] = useState('director');
@@ -473,7 +619,10 @@ export default function App() {
     { name: 'DP Lead', role: '🎥 Cinematographer' },
     { name: 'Lighting Tech', role: '💡 Lighting Lead' }
   ]);
+  const [activeRemoteUsers, setActiveRemoteUsers] = useState([]);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [isCollabChatOpen, setIsCollabChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   // Local vault may keep a project-scoped key; cloud collab always uses invite roomId only.
   const effectiveRoomId = roomId || 'SPS-CLOUD-8821';
@@ -489,13 +638,23 @@ export default function App() {
       'sps_save_project': () => electronMenuRef.current.saveProject?.(),
       'sps_export_project': () => electronMenuRef.current.exportProject?.(),
       'sps_import_project': () => {
+        if (!canCreateOrDeleteProjects()) {
+          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can import projects.');
+          return;
+        }
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
         input.onchange = (e) => electronMenuRef.current.importProject?.(e);
         input.click();
       },
-      'sps_new_project': () => electronMenuRef.current.openNewProject?.(),
+      'sps_new_project': () => {
+        if (!canCreateOrDeleteProjects()) {
+          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can create projects. Open Project Console to edit an allotted project.');
+          return;
+        }
+        electronMenuRef.current.openNewProject?.();
+      },
       'sps_open_help': () => setIsHelpModalOpen(true),
       'sps_set_view': (e) => {
         const view = e.detail;
@@ -554,31 +713,55 @@ export default function App() {
           try { localShots = JSON.parse(savedShotsStr); } catch (e) {}
         }
 
-        if ((!localShots || localShots.length === 0) && activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
-          setShots(activeProj.shots);
-          setProjectTitle(activeProj.title || 'STAGE PRODUCTION STUDIO');
-          if (activeProj.targetModel) setTargetModel(activeProj.targetModel);
-          if (activeProj.aspectRatio) setAspectRatio(activeProj.aspectRatio);
-          safeLocalStorageSetItem('sps_current_shots', JSON.stringify(activeProj.shots));
-          safeLocalStorageSetItem('sps_current_project_title', activeProj.title || 'STAGE PRODUCTION STUDIO');
+        // Prefer an accessible project for the current user (collaborators: allotted only)
+        const email = getCurrentUserEmail();
+        const visible = filterAccessibleProjects(mergedProjects, email);
+        const savedTitle = localStorage.getItem('sps_current_project_title') || '';
+        const preferred =
+          visible.find((p) => String(p?.title || '').toLowerCase() === String(savedTitle).toLowerCase()) ||
+          visible[0] ||
+          (isStudioAdmin(email) ? activeProj : null);
+
+        if ((!localShots || localShots.length === 0) && preferred && Array.isArray(preferred.shots) && preferred.shots.length > 0) {
+          setShots(preferred.shots);
+          setProjectTitle(preferred.title || 'STAGE PRODUCTION STUDIO');
+          if (preferred.targetModel) setTargetModel(preferred.targetModel);
+          if (preferred.aspectRatio) setAspectRatio(preferred.aspectRatio);
+          safeLocalStorageSetItem('sps_current_shots', JSON.stringify(preferred.shots));
+          safeLocalStorageSetItem('sps_current_project_title', preferred.title || 'STAGE PRODUCTION STUDIO');
+        } else if (email && !isStudioAdmin(email)) {
+          enforceAccessibleActiveProject(savedTitle);
         }
       }
 
-      // 3. Auto-Login & Remember Last Logged-In User
-      const isManualLogout = localStorage.getItem('sps_user_manually_logged_out') === 'true';
-      if (isManualLogout) {
-        setIsLoginModalOpen(true);
-      } else {
-        if (!localStorage.getItem('sps_authorized_user_email')) {
-          localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
-        }
-        localStorage.setItem('sps_is_admin_logged_in', 'true');
-        setIsAdminLoggedIn(true);
-        setIsLoginModalOpen(false);
-      }
+      // 3. Do NOT auto-login / skip LoginModal when a remembered email exists.
+      // Splash onFinish always opens LoginModal so the user can pick Gmail / Admin / collaborator.
+      // Remembered email stays in localStorage for LoginModal prefilling only.
+      setIsAdminLoggedIn(false);
+      localStorage.setItem('sps_is_admin_logged_in', 'false');
     };
 
     autoRestoreAppVault();
+  }, []);
+
+  // Keep admin flag + active project aligned when profiles/allotments change
+  useEffect(() => {
+    const syncSessionRights = () => {
+      const email = getCurrentUserEmail();
+      if (!email) {
+        setIsAdminLoggedIn(false);
+        return;
+      }
+      markCollaboratorSession(email);
+      setIsAdminLoggedIn(isStudioAdmin(email));
+      if (!isStudioAdmin(email)) enforceAccessibleActiveProject();
+    };
+    window.addEventListener('sps_collaborators_updated', syncSessionRights);
+    window.addEventListener('storage', syncSessionRights);
+    return () => {
+      window.removeEventListener('sps_collaborators_updated', syncSessionRights);
+      window.removeEventListener('storage', syncSessionRights);
+    };
   }, []);
 
   // Local Storage & Library Persistence (Guarantees sps_project_library is always in sync with active project)
@@ -593,11 +776,15 @@ export default function App() {
 
     if (projectTitle && Array.isArray(shots) && shots.length > 0) {
       try {
+        // Collaborators may only update allotted projects; never create new library entries
+        if (!canAccessProject(projectTitle)) return;
         const savedLibStr = localStorage.getItem('sps_project_library');
         let library = savedLibStr ? JSON.parse(savedLibStr) : [];
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === projectTitle);
+        if (existingIdx === -1 && !canCreateOrDeleteProjects()) return;
+
         const updatedProjectData = {
           id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
           title: projectTitle,
@@ -620,68 +807,86 @@ export default function App() {
     }
   }, [shots, projectTitle, targetModel, aspectRatio, activeView, activeShotIndex, effectiveRoomId]);
 
-  // Hydrate Latest Projects & Collaborators from Cloud Database on App Mount (Cloud Mode Only)
+  // Hydrate projects & collaborators from Vercel cloud (source of truth) on every open.
+  // Local disk/localStorage RECEIVES from cloud; do not echo-push stale local back.
   useEffect(() => {
-    if (appVersionMode !== 'cloud') return;
+    let cancelled = false;
 
-    fetchProjectLibraryFromCloud().then(projs => {
-      let updatedProjs = Array.isArray(projs) 
-        ? projs.filter(p => p && p.title && String(p.title).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') 
+    fetchProjectLibraryFromCloud().then((projs) => {
+      if (cancelled) return;
+      let updatedProjs = Array.isArray(projs)
+        ? projs.filter((p) => p && p.title && String(p.title).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO')
         : [];
-      
-      // Self-healing guard: ensure active loaded project is NEVER missing from Projects Library
-      const activeTitle = (projectTitle && typeof projectTitle === 'string' && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO') ? projectTitle : '001';
-      const exists = updatedProjs.some(p => p.title === activeTitle);
-      if (!exists && shots && shots.length > 0) {
-        updatedProjs.unshift({
-          id: `proj_${Date.now()}`,
-          title: activeTitle,
-          description: `Cinema Production Studio Project with ${shots.length} shots`,
-          targetModel: targetModel || 'SPS Direct Cinema 2.0',
-          aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-          roomId: effectiveRoomId || 'SPS-PROJ-8476',
-          lastModified: new Date().toLocaleDateString(),
-          shots: shots
-        });
+
+      // Self-heal active project into library for UI only — do NOT push this back to cloud here
+      const activeTitle =
+        projectTitle && typeof projectTitle === 'string' && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO'
+          ? projectTitle
+          : '';
+      if (activeTitle && shots && shots.length > 0) {
+        const exists = updatedProjs.some((p) => p.title === activeTitle);
+        if (!exists) {
+          updatedProjs = [
+            {
+              id: `proj_${Date.now()}`,
+              title: activeTitle,
+              description: `Cinema Production Studio Project with ${shots.length} shots`,
+              targetModel: targetModel || 'SPS Direct Cinema 2.0',
+              aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+              roomId: effectiveRoomId || 'SPS-CLOUD-8821',
+              lastModified: new Date().toLocaleDateString(),
+              shots: shots,
+            },
+            ...updatedProjs,
+          ];
+        }
       }
 
       safeLocalStorageSetItem('sps_project_library', JSON.stringify(updatedProjs));
       window.dispatchEvent(new Event('sps_projects_updated'));
-      syncProjectLibraryToCloud(updatedProjs);
 
-      const activeProj = updatedProjs.find(p => p.title === projectTitle || p.id === 'proj_default');
-      const savedShotsStr = localStorage.getItem('sps_current_shots');
-      let localSavedShots = [];
-      if (savedShotsStr) {
-        try { localSavedShots = JSON.parse(savedShotsStr); } catch (e) {}
-      }
-
+      const activeProj = updatedProjs.find((p) => p.title === projectTitle || p.id === 'proj_default');
       if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
-        // If local browser has more shots (e.g. newly added script breakdown), keep local shots!
-        const targetShots = (Array.isArray(localSavedShots) && localSavedShots.length > activeProj.shots.length)
-          ? localSavedShots
-          : activeProj.shots;
-
-        const cloudHash = JSON.stringify({ 
-          shots: targetShots, 
-          projectTitle: activeProj.title || projectTitle, 
-          targetModel: activeProj.targetModel || targetModel, 
-          aspectRatio: activeProj.aspectRatio || aspectRatio 
+        // Cloud wins on reload — apply cloud shots (local must RECEIVE from Vercel)
+        const targetShots = activeProj.shots;
+        const cloudHash = JSON.stringify({
+          shots: targetShots,
+          projectTitle: activeProj.title || projectTitle,
+          targetModel: activeProj.targetModel || targetModel,
+          aspectRatio: activeProj.aspectRatio || aspectRatio,
         });
         lastSyncedHash.current = cloudHash;
+        isReceivingCloudUpdate.current = true;
         setShots(targetShots);
+        if (activeProj.targetModel) setTargetModel(activeProj.targetModel);
+        if (activeProj.aspectRatio) setAspectRatio(activeProj.aspectRatio);
         localStorage.setItem('sps_current_shots', JSON.stringify(targetShots));
-      } else if (Array.isArray(localSavedShots) && localSavedShots.length > 0) {
-        setShots(localSavedShots);
+        setTimeout(() => {
+          isReceivingCloudUpdate.current = false;
+        }, 400);
       }
     }).catch(() => {});
 
-    fetchCollaboratorsFromCloud().then(users => {
-      if (Array.isArray(users) && users.length > 0) {
-        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(users));
-        window.dispatchEvent(new Event('sps_collaborators_updated'));
-      }
-    }).catch(() => {});
+    fetchCollaboratorsFromCloud()
+      .then(() => {
+        if (!cancelled) window.dispatchEvent(new Event('sps_collaborators_updated'));
+      })
+      .catch(() => {});
+
+    // Live cloud polls — keep library / allotments fresh without full reload
+    const unsubLib = subscribeToProjectLibraryUpdates(() => {
+      if (!cancelled) window.dispatchEvent(new Event('sps_projects_updated'));
+    });
+    const unsubCollab = subscribeToCollaboratorUpdates(() => {
+      if (!cancelled) window.dispatchEvent(new Event('sps_collaborators_updated'));
+    });
+
+    return () => {
+      cancelled = true;
+      unsubLib();
+      unsubCollab();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / mode change hydrate only
   }, [appVersionMode]);
 
   // Auto-Save Active Project to Physical Hard Drive Folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
@@ -707,8 +912,9 @@ export default function App() {
     saveProjectToVault(activeProj);
   }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId]);
 
+  // Cloud room sync always on — Local badge is storage preference; Vercel is SoT
   useEffect(() => {
-    if (appVersionMode !== 'cloud') return;
+    if (!effectiveRoomId) return;
     const unsubscribe = subscribeToCloudRoom(effectiveRoomId, (cloudData) => {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
         const nextTitle = cloudData.projectTitle || projectTitle;
@@ -743,7 +949,7 @@ export default function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [effectiveRoomId, appVersionMode]);
+  }, [effectiveRoomId]);
 
   // -------------------------------------------------------------
   // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
@@ -758,25 +964,65 @@ export default function App() {
     projectTitleRef.current = projectTitle;
   });
 
+  // Presence always publishes when logged in + room (works in Local UI mode too)
   useEffect(() => {
-    if (typeof window === 'undefined' || appVersionMode !== 'cloud') return;
+    if (typeof window === 'undefined' || !effectiveRoomId) return;
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email');
     if (!currentUserEmail) return;
-    const activeShot = shots[activeShotIndex];
-    if (activeShot && activeShot.sceneShotId) {
-      // Passive presence: isEditing = false by default
-      broadcastActiveSlotEditing(currentUserEmail, currentUserEmail.split('@')[0], projectTitle, activeShot.sceneShotId, false);
-    }
-  }, [activeShotIndex, appVersionMode]);
+
+    const publishPresence = (isEditing = false) => {
+      const activeShot = shotsRef.current[activeShotIndexRef.current];
+      if (activeShot && activeShot.sceneShotId) {
+        broadcastActiveSlotEditing(
+          currentUserEmail,
+          currentUserEmail.split('@')[0],
+          projectTitleRef.current,
+          activeShot.sceneShotId,
+          isEditing,
+          effectiveRoomId
+        );
+      }
+    };
+
+    publishPresence(false);
+    const heartbeat = setInterval(() => publishPresence(false), 8000);
+    return () => clearInterval(heartbeat);
+  }, [activeShotIndex, projectTitle, effectiveRoomId]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !effectiveRoomId) {
+      setActiveRemoteUsers([]);
+      return;
+    }
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email') || 'unauthenticated';
     const unsubPresence = subscribeToActiveEditingSlots(currentUserEmail, (otherActiveUsers) => {
+      const sameProjectUsers = (otherActiveUsers || []).filter((u) => {
+        const sameProject = !u.projectTitle || u.projectTitle === projectTitleRef.current;
+        const sameRoom = !u.roomId || !effectiveRoomId || u.roomId === effectiveRoomId;
+        return sameProject && sameRoom;
+      });
+      setActiveRemoteUsers(sameProjectUsers);
+
+      // Keep collaborator chip list in sync with live presence
+      setCollaborators((prev) => {
+        const locals = prev.filter((c) => !c.isRemote);
+        const remotes = sameProjectUsers.map((u) => {
+          const name = u.userName || (u.userEmail || '').split('@')[0] || 'Collaborator';
+          return {
+            name,
+            email: u.userEmail,
+            role: u.isEditing ? `Editing ${u.activeShotId}` : `On ${u.activeShotId || 'project'}`,
+            isRemote: true,
+            activeShotId: u.activeShotId
+          };
+        });
+        return [...locals, ...remotes];
+      });
+
       const activeShot = shotsRef.current[activeShotIndexRef.current];
       if (activeShot && activeShot.sceneShotId) {
         // ONLY trigger popup if collaborator is actively typing/editing a field (isEditing === true)
-        const matchingConflict = otherActiveUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.projectTitle === projectTitleRef.current && u.isEditing === true);
+        const matchingConflict = sameProjectUsers.find(u => u.activeShotId === activeShot.sceneShotId && u.isEditing === true);
         if (matchingConflict) {
           setActiveConflict(matchingConflict);
           setIsConflictModalOpen(true);
@@ -786,7 +1032,35 @@ export default function App() {
     return () => {
       if (typeof unsubPresence === 'function') unsubPresence();
     };
-  }, []);
+  }, [effectiveRoomId]);
+
+  // Room chat / shot comments — unread badge while panel closed
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const key = effectiveRoomId;
+    let lastSeen = 0;
+    try {
+      lastSeen = Number(localStorage.getItem(`sps_chat_last_seen_${key}`) || 0) || 0;
+    } catch (e) {}
+
+    const unsub = subscribeToCollabChat(key, (list) => {
+      if (isCollabChatOpen) {
+        setUnreadChatCount(0);
+        try {
+          localStorage.setItem(`sps_chat_last_seen_${key}`, String(Date.now()));
+        } catch (e) {}
+        return;
+      }
+      const myEmail = String(localStorage.getItem('sps_authorized_user_email') || '').toLowerCase();
+      const unread = (list || []).filter((m) => {
+        const t = Date.parse(m.createdAt || '') || 0;
+        const fromOther = String(m.userEmail || '').toLowerCase() !== myEmail;
+        return fromOther && t > lastSeen;
+      }).length;
+      setUnreadChatCount(unread);
+    });
+    return () => unsub();
+  }, [effectiveRoomId, isCollabChatOpen]);
 
   // -------------------------------------------------------------
   // AUTOMATIC 30-MINUTE PROJECT BACKUP & VERSION SNAPSHOT ENGINE
@@ -880,9 +1154,13 @@ export default function App() {
 
   const syncToCloud = (updatedState = {}) => {
     if (isReceivingCloudUpdate.current) return;
+    // Viewers / non-allotted users must never publish room or library mutations
+    if (!canEditProjects()) return;
+    const nextTitle = updatedState?.projectTitle || projectTitle;
+    if (!canCreateOrDeleteProjects() && !canAccessProject(nextTitle)) return;
 
     const newShots = updatedState?.shots || shots;
-    const newTitle = updatedState?.projectTitle || projectTitle;
+    const newTitle = nextTitle;
     const newModel = updatedState?.targetModel || targetModel;
     const newRatio = updatedState?.aspectRatio || aspectRatio;
     const newImages = updatedState?.projectGeneratedImages || projectGeneratedImages;
@@ -900,34 +1178,36 @@ export default function App() {
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === newTitle);
-        const updatedProjectData = {
-          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
-          title: newTitle,
-          description: `Cinema Production Studio Project with ${newShots.length} shots`,
-          targetModel: newModel,
-          aspectRatio: newRatio,
-          roomId: roomId,
-          lastModified: new Date().toLocaleDateString(),
-          shots: newShots,
-          projectGeneratedImages: newImages
-        };
-
-        if (existingIdx !== -1) {
-          library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
+        // Collaborators cannot create new library titles via sync side-effect
+        if (existingIdx === -1 && !canCreateOrDeleteProjects()) {
+          // Still publish room shots for allotted open sessions without minting library rows
         } else {
-          library.unshift(updatedProjectData);
-        }
+          const updatedProjectData = {
+            id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+            title: newTitle,
+            description: `Cinema Production Studio Project with ${newShots.length} shots`,
+            targetModel: newModel,
+            aspectRatio: newRatio,
+            roomId: roomId,
+            lastModified: new Date().toLocaleDateString(),
+            shots: newShots,
+            projectGeneratedImages: newImages
+          };
 
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
-        if (appVersionMode === 'cloud') {
-          syncProjectLibraryToCloud(library);
+          if (existingIdx !== -1) {
+            library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
+          } else if (canCreateOrDeleteProjects()) {
+            library.unshift(updatedProjectData);
+          }
+
+          safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+          // Always mirror library to Vercel (Local badge does not disable cloud SoT)
+          if (library.length > 0) syncProjectLibraryToCloud(library);
         }
       } catch (e) {}
     }
 
-    // Publish only in cloud mode — invite roomId must match host + remote browsers
-    if (appVersionMode !== 'cloud') return;
-
+    // Always publish room shots to Vercel — Local mode still receives/sends via getNativeSyncUrl
     setIsCloudSyncing(true);
     publishToCloudRoom(roomId || 'SPS-CLOUD-8821', {
       projectTitle: newTitle,
@@ -1083,8 +1363,7 @@ export default function App() {
     } else {
       newShots[index] = updatedShotOrKey;
     }
-    updateShotsWithHistory(newShots);
-    syncToCloud({ shots: newShots });
+    if (updateShotsWithHistory(newShots)) syncToCloud({ shots: newShots });
   };
 
   const handleAddShot = () => {
@@ -1107,7 +1386,7 @@ export default function App() {
       characterEyeLooks: "[Eye Look: Direct Eye Contact with Camera Lens]"
     };
     const newShots = [...shots, newShot];
-    updateShotsWithHistory(newShots);
+    if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(shots.length);
     syncToCloud({ shots: newShots });
   };
@@ -1129,8 +1408,7 @@ export default function App() {
       archivedAt: new Date().toLocaleTimeString() + ' - ' + new Date().toLocaleDateString()
     };
 
-    updateShotsWithHistory(newShots);
-    syncToCloud({ shots: newShots });
+    if (updateShotsWithHistory(newShots)) syncToCloud({ shots: newShots });
   };
 
   const handleRestoreShot = (index) => {
@@ -1138,8 +1416,7 @@ export default function App() {
     if (newShots[index]) {
       const { isArchived, archivedAt, ...rest } = newShots[index];
       newShots[index] = rest;
-      updateShotsWithHistory(newShots);
-      syncToCloud({ shots: newShots });
+      if (updateShotsWithHistory(newShots)) syncToCloud({ shots: newShots });
     }
   };
 
@@ -1150,8 +1427,7 @@ export default function App() {
         ...newShots[index],
         isMuted: !newShots[index].isMuted
       };
-      updateShotsWithHistory(newShots);
-      syncToCloud({ shots: newShots });
+      if (updateShotsWithHistory(newShots)) syncToCloud({ shots: newShots });
     }
   };
 
@@ -1161,7 +1437,7 @@ export default function App() {
     const cloned = { ...shots[index] };
     const newShots = [...shots];
     newShots.splice(index + 1, 0, cloned);
-    updateShotsWithHistory(newShots);
+    if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(index + 1);
     syncToCloud({ shots: newShots });
   };
@@ -1175,7 +1451,7 @@ export default function App() {
     const temp = newShots[index];
     newShots[index] = newShots[targetIdx];
     newShots[targetIdx] = temp;
-    updateShotsWithHistory(newShots);
+    if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(targetIdx);
     syncToCloud({ shots: newShots });
   };
@@ -1185,7 +1461,7 @@ export default function App() {
     const newShots = [...shots];
     const [movedShot] = newShots.splice(fromIndex, 1);
     newShots.splice(toIndex, 0, movedShot);
-    updateShotsWithHistory(newShots);
+    if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(toIndex);
     syncToCloud({ shots: newShots });
   };
@@ -1197,10 +1473,33 @@ export default function App() {
     incomingCount: 0,
     pendingAiShots: [],
     pendingTitle: '',
-    existingShots: []
+    existingShots: [],
+    pendingExtraElements: null
   });
 
   const executeApplyAIShots = (aiShots, titleToApply, mode, baseShots = [], extraElements = null) => {
+    const nextTitle = titleToApply || projectTitle;
+    if (!canEditProjects()) {
+      alert('🔒 READ-ONLY ACCESS:\nViewers cannot apply AI shots. Ask the studio Owner to upgrade you to Editor.');
+      return;
+    }
+    if (!Array.isArray(aiShots) || aiShots.length === 0) {
+      alert('Parse produced no shots. Existing project was left unchanged.');
+      return;
+    }
+    // Collaborators may only write into allotted projects; creating a new title is admin-only
+    if (!canCreateOrDeleteProjects()) {
+      let library = [];
+      try {
+        library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+      } catch (e) {}
+      const exists = Array.isArray(library) && library.some((p) => String(p?.title || '').toLowerCase() === String(nextTitle || '').toLowerCase());
+      if (!exists || !canAccessProject(nextTitle)) {
+        alert('🔒 ACCESS RESTRICTED:\nYou can only edit projects allotted to your account. Ask the studio Owner to allot a project or create a new one.');
+        return;
+      }
+    }
+
     let finalShots = aiShots;
     if (mode === 'merge' && baseShots.length > 0) {
       const startNum = baseShots.length + 1;
@@ -1212,7 +1511,7 @@ export default function App() {
     }
 
     setShots(finalShots);
-    setProjectTitle(titleToApply);
+    setProjectTitle(nextTitle);
     setActiveShotIndex(0);
     setActiveView("spreadsheet");
 
@@ -1222,13 +1521,13 @@ export default function App() {
         let library = savedLibStr ? JSON.parse(savedLibStr) : [];
         if (!Array.isArray(library)) library = [];
 
-        const existingIdx = library.findIndex(p => p.title === titleToApply);
+        const existingIdx = library.findIndex(p => p.title === nextTitle);
         const existingProj = existingIdx !== -1 ? library[existingIdx] : {};
 
         const newProj = {
           ...existingProj,
           id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
-          title: titleToApply,
+          title: nextTitle,
           description: `Cinema Production Studio Project with ${finalShots.length} shots`,
           targetModel: targetModel || 'SPS Direct Cinema 2.0',
           aspectRatio: aspectRatio || '2.39:1 Anamorphic',
@@ -1254,11 +1553,16 @@ export default function App() {
       } catch (e) {}
     }
 
-    syncToCloud({ shots: finalShots, projectTitle: titleToApply });
+    syncToCloud({ shots: finalShots, projectTitle: nextTitle });
   };
 
   const handleApplyAIShots = (aiShots, newTitle, extraElements = null) => {
     const titleToApply = newTitle || projectTitle;
+
+    if (!Array.isArray(aiShots) || aiShots.length === 0) {
+      alert('Parse produced no shots. Existing project was left unchanged.');
+      return;
+    }
 
     // Detect if current shots are just default sample demo shots
     const isSampleDemoShots = (arr) => {
@@ -1289,7 +1593,8 @@ export default function App() {
         incomingCount: aiShots.length,
         pendingAiShots: aiShots,
         pendingTitle: titleToApply,
-        existingShots: targetExistingShots
+        existingShots: targetExistingShots,
+        pendingExtraElements: extraElements
       });
       return;
     }
@@ -1298,14 +1603,23 @@ export default function App() {
   };
 
   const handleLoadTemplate = (template) => {
+    const nextTitle = String(template?.title || '').toUpperCase();
+    if (!canEditProjects()) {
+      alert('🔒 READ-ONLY ACCESS:\nViewers cannot load templates into the active project.');
+      return;
+    }
+    if (!canCreateOrDeleteProjects() && !canAccessProject(nextTitle)) {
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can create projects. Collaborators can open allotted projects only.');
+      return;
+    }
     setShots(template.shots);
-    setProjectTitle(template.title.toUpperCase());
+    setProjectTitle(nextTitle);
     setAspectRatio(template.aspectRatio);
     setActiveShotIndex(0);
     setActiveView("spreadsheet");
     syncToCloud({
       shots: template.shots,
-      projectTitle: template.title.toUpperCase(),
+      projectTitle: nextTitle,
       aspectRatio: template.aspectRatio
     });
   };
@@ -1329,6 +1643,11 @@ export default function App() {
   };
 
   const importJSONProject = (e) => {
+    if (!canCreateOrDeleteProjects()) {
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can import projects.');
+      if (e?.target) e.target.value = '';
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -1408,7 +1727,16 @@ export default function App() {
     saveProject: handleSaveProjectToApp,
     exportProject: exportJSONProject,
     importProject: importJSONProject,
-    openNewProject: () => setIsProjectConsoleOpen(true),
+    openNewProject: () => {
+      if (isGuestSession()) {
+        alert(
+          '🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to use Projects Console, or request access from pedditiram@gmail.com.'
+        );
+        setIsInvestorDeckOpen(true);
+        return;
+      }
+      setIsProjectConsoleOpen(true);
+    },
   };
 
   return (
@@ -1419,7 +1747,13 @@ export default function App() {
     }`}>
       {/* Cinematic Studio Splash Launch Screen */}
       {showSplash && (
-        <SplashScreen onFinish={() => { setShowSplash(false); setIsProjectConsoleOpen(true); }} />
+        <SplashScreen
+          onFinish={() => {
+            setShowSplash(false);
+            setIsProjectConsoleOpen(false);
+            setIsLoginModalOpen(true);
+          }}
+        />
       )}
       {/* Top Header Bar (Always visible in normal view, hidden only in native OS full screen) */}
       {!isFullscreen && (
@@ -1438,8 +1772,28 @@ export default function App() {
           onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
           onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
           onOpenAIModal={() => setIsAIModalOpen(true)}
-          onOpenProjectConsole={() => { setProjectConsoleInitialTab('library'); setIsProjectConsoleOpen(true); }}
-          onOpenDirectorPsychology={() => { setProjectConsoleInitialTab('director_psychology'); setIsProjectConsoleOpen(true); }}
+          onOpenProjectConsole={() => {
+            if (isGuestSession()) {
+              alert(
+                '🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to use Projects Console, or request access from pedditiram@gmail.com.'
+              );
+              setIsInvestorDeckOpen(true);
+              return;
+            }
+            setProjectConsoleInitialTab('library');
+            setIsProjectConsoleOpen(true);
+          }}
+          onOpenDirectorPsychology={() => {
+            if (isGuestSession()) {
+              alert(
+                '🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to use Director Psychology, or request access from pedditiram@gmail.com.'
+              );
+              setIsInvestorDeckOpen(true);
+              return;
+            }
+            setProjectConsoleInitialTab('director_psychology');
+            setIsProjectConsoleOpen(true);
+          }}
           onOpenCharacterBible={handleOpenCharactersModal}
           onOpenStory={handleOpenStoryModal}
           onOpenScriptSynopsisModal={() => setIsScriptSynopsisModalOpen(true)}
@@ -1449,7 +1803,8 @@ export default function App() {
           appVersionMode={appVersionMode}
           onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
           roomId={roomId}
-          collaboratorCount={collaborators.length}
+          collaboratorCount={Math.max(collaborators.length, activeRemoteUsers.length + 1)}
+          activeRemoteUsers={activeRemoteUsers}
           isAdminLoggedIn={isAdminLoggedIn}
           showCanvasTab={showCanvasTab}
           onSaveProject={handleSaveProjectToApp}
@@ -1468,16 +1823,25 @@ export default function App() {
           redoCount={redoStack.length}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => toggleFullscreenMode()}
+          onOpenCollabChat={() => {
+            setIsCollabChatOpen((v) => !v);
+            setUnreadChatCount(0);
+            try {
+              localStorage.setItem(`sps_chat_last_seen_${effectiveRoomId}`, String(Date.now()));
+            } catch (e) {}
+          }}
+          collabChatOpen={isCollabChatOpen}
+          unreadChatCount={unreadChatCount}
         />
       )}
 
 
 
       {/* Main Studio Body View */}
-      <main className="flex-1 w-full p-2 sm:p-3 flex flex-col gap-2 overflow-hidden min-h-0">
+      <main className="flex-1 w-full p-1.5 sm:p-3 flex flex-col gap-2 overflow-hidden min-h-0">
         
         {/* DYNAMICALLY SEGREGATED WORKSPACE VIEW CONTAINER */}
-        <div className="flex-1 w-full min-h-0 overflow-hidden flex flex-col sps-view-enter">
+        <div key={activeView} className="flex-1 w-full min-h-0 overflow-hidden flex flex-col sps-view-enter">
           
           {/* TAB 1: DIRECTOR CANVAS VIEW */}
           {showCanvasTab && activeView === 'canvas' && (
@@ -1497,7 +1861,7 @@ export default function App() {
                   projectTitle={projectTitle}
                   onEmbedImage={handleEmbedImageToProject}
                   onOpenAdminSettings={(tab) => {
-                    setAdminModalTab('all');
+                    setAdminModalTab(tab || 'all');
                     setIsAdminModalOpen(true);
                   }}
                 />
@@ -1714,7 +2078,10 @@ export default function App() {
       {/* Admin Settings Modal */}
       <AdminSettingsModal
         isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
+        onClose={() => {
+          setIsAdminModalOpen(false);
+          setAdminModalTab('all'); // prevent cloud_collab (or any deep-link) sticking for next open
+        }}
         targetModel={targetModel}
         setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
         isAdminLoggedIn={isAdminLoggedIn}
@@ -1753,7 +2120,7 @@ export default function App() {
         currentProjectTitle={projectTitle}
         setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
         shots={shots}
-        setShots={(val) => { updateShotsWithHistory(val); syncToCloud({ shots: val }); }}
+        setShots={(val) => { if (updateShotsWithHistory(val)) syncToCloud({ shots: val }); }}
         targetModel={targetModel}
         setTargetModel={(val) => { setTargetModel(val); syncToCloud({ targetModel: val }); }}
         aspectRatio={aspectRatio}
@@ -1832,14 +2199,14 @@ export default function App() {
         existingCount={mergePromptState.existingCount}
         incomingCount={mergePromptState.incomingCount}
         onOverwrite={() => {
-          const { pendingAiShots, pendingTitle } = mergePromptState;
+          const { pendingAiShots, pendingTitle, pendingExtraElements } = mergePromptState;
           setMergePromptState(prev => ({ ...prev, isOpen: false }));
-          executeApplyAIShots(pendingAiShots, pendingTitle, 'overwrite', []);
+          executeApplyAIShots(pendingAiShots, pendingTitle, 'overwrite', [], pendingExtraElements);
         }}
         onMerge={() => {
-          const { pendingAiShots, pendingTitle, existingShots } = mergePromptState;
+          const { pendingAiShots, pendingTitle, existingShots, pendingExtraElements } = mergePromptState;
           setMergePromptState(prev => ({ ...prev, isOpen: false }));
-          executeApplyAIShots(pendingAiShots, pendingTitle, 'merge', existingShots);
+          executeApplyAIShots(pendingAiShots, pendingTitle, 'merge', existingShots, pendingExtraElements);
         }}
         onCancel={() => {
           setMergePromptState(prev => ({ ...prev, isOpen: false }));
@@ -1878,6 +2245,16 @@ export default function App() {
           <span>⚡ Bi-Directional Cloud Sync Complete! (Uploaded Local Edits & Pulled Latest Cloud Projects)</span>
         </div>
       )}
+
+      <CollabChatPanel
+        isOpen={isCollabChatOpen}
+        onClose={() => setIsCollabChatOpen(false)}
+        roomId={effectiveRoomId}
+        projectTitle={projectTitle}
+        activeShotId={currentShotObj?.sceneShotId || ''}
+        activeRemoteUsers={activeRemoteUsers}
+        colorTheme={colorTheme}
+      />
     </div>
   );
 }

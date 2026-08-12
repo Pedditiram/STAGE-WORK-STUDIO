@@ -4,6 +4,8 @@ import {
   X, Cloud, Users, Copy, Check, Share2, Sparkles, Wifi, RefreshCw, Key, ShieldCheck, 
   Phone, Lock, UserCheck, Activity, Send, Clock, ShieldAlert, CheckCircle2
 } from 'lucide-react';
+import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, sanitizeAuthorizedUsers } from '../utils/projectPermissions';
+import { syncCollaboratorsToCloud } from '../services/dbService';
 
 export default function CloudCollabModal({ 
   isOpen, 
@@ -23,7 +25,7 @@ export default function CloudCollabModal({
   const [designation, setDesignation] = useState('Lead Director');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [selectedRole, setSelectedRole] = useState('Editor'); // 'Editor' | 'Viewer' | 'Director & Owner'
+  const [selectedRole, setSelectedRole] = useState('Editor'); // 'Viewer' | 'Editor' | 'Owner'
   
   // OTP Verification State
   const [generatedOtp, setGeneratedOtp] = useState('');
@@ -109,7 +111,7 @@ export default function CloudCollabModal({
         designation: 'Lead Director', 
         email: 'rahul@studioproductions.com', 
         phone: '+91 98765 43210', 
-        role: 'Director & Owner', 
+        role: 'Editor', 
         status: 'Active', 
         verifiedAt: 'Today, 10:15 AM' 
       },
@@ -137,7 +139,14 @@ export default function CloudCollabModal({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_collaboration_activity_log', JSON.stringify(activityLog));
-      localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
+      const secured = ensurePrimaryAdminUser(sanitizeAuthorizedUsers(authorizedUsers));
+      localStorage.setItem('sps_authorized_phone_users', JSON.stringify(secured));
+      window.dispatchEvent(new Event('sps_collaborators_updated'));
+      // Debounced cloud mirror so role flips reach Vercel without empty wipes
+      const t = setTimeout(() => {
+        if (secured.length > 0) syncCollaboratorsToCloud(secured);
+      }, 400);
+      return () => clearTimeout(t);
     }
   }, [activityLog, authorizedUsers]);
 
@@ -211,6 +220,8 @@ export default function CloudCollabModal({
       const userName = collaboratorName.trim() || 'Collaborator';
       const userDesig = designation.trim() || 'Production Staff';
       const userMail = email.trim() || `${userName.toLowerCase().replace(/\s+/g, '')}@studio.com`;
+      const accessLevel = normalizeAccessLevel(selectedRole);
+      const isOwnerInvite = accessLevel === 'Owner';
 
       // Add to authorized users
       const newUser = {
@@ -218,11 +229,14 @@ export default function CloudCollabModal({
         designation: userDesig,
         email: userMail,
         phone: userPhone,
-        role: selectedRole,
+        role: accessLevel,
+        isStudioAdmin: isOwnerInvite,
+        allottedProjects: isOwnerInvite ? ['All Studio Projects (Full Access)'] : [],
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
       };
       setAuthorizedUsers(prev => [newUser, ...prev]);
+      window.dispatchEvent(new Event('sps_collaborators_updated'));
 
       // Add to activity log with Date information
       const newActivity = {
@@ -274,9 +288,21 @@ export default function CloudCollabModal({
     setActivityLog(prev => [newActivity, ...prev]);
   };
 
-  // 4. UPDATE COLLABORATOR ROLE
+  // 4. UPDATE COLLABORATOR ACCESS LEVEL
   const handleRoleChange = (phoneToUpdate, newRole) => {
-    setAuthorizedUsers(prev => prev.map(u => u.phone === phoneToUpdate ? { ...u, role: newRole } : u));
+    const accessLevel = normalizeAccessLevel(newRole);
+    const isOwnerRole = accessLevel === 'Owner';
+    setAuthorizedUsers(prev => prev.map(u => {
+      if (u.phone !== phoneToUpdate) return u;
+      return {
+        ...u,
+        role: accessLevel,
+        isStudioAdmin: isOwnerRole,
+        allottedProjects: isOwnerRole
+          ? ['All Studio Projects (Full Access)']
+          : (Array.isArray(u.allottedProjects) ? u.allottedProjects.filter((t) => !String(t).toLowerCase().startsWith('all studio projects')) : u.allottedProjects),
+      };
+    }));
     
     const user = authorizedUsers.find(u => u.phone === phoneToUpdate);
     const now = new Date();
@@ -290,10 +316,11 @@ export default function CloudCollabModal({
       dateFormatted: todayFormatted,
       time: nowStr,
       user: 'Admin Owner',
-      action: `Changed role for ${user?.name || 'User'} to ${newRole}`,
+      action: `Changed access level for ${user?.name || 'User'} to ${accessLevel}`,
       status: 'system'
     };
     setActivityLog(prev => [newActivity, ...prev]);
+    window.dispatchEvent(new Event('sps_collaborators_updated'));
   };
 
   // 5. EXPORT DATE-WISE AUDIT LOG AS CSV
@@ -383,7 +410,7 @@ export default function CloudCollabModal({
                   Live Sync Active
                 </span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400">Manage phone-verified collaborator access, roles (Viewer/Editor), and track live activity.</p>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">Manage phone-verified collaborator access (Viewer / Editor / Owner) and track live activity.</p>
             </div>
           </div>
 
@@ -468,20 +495,21 @@ export default function CloudCollabModal({
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-slate-700 dark:text-zinc-300 font-bold block mb-1">Designation / Role Title:</label>
+                    <label className="text-[11px] text-slate-700 dark:text-zinc-300 font-bold block mb-1">Designation (Job Title):</label>
                     <select
                       value={designation}
                       onChange={(e) => setDesignation(e.target.value)}
                       className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-cyan-700 dark:text-cyan-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-mono font-bold"
                     >
-                      <option value="Lead Director">💼 Lead Director</option>
-                      <option value="Executive Producer">💼 Executive Producer</option>
-                      <option value="DOP / Cinematographer">💼 DOP / Cinematographer</option>
-                      <option value="Lighting Specialist">💼 Lighting Specialist</option>
-                      <option value="Sound Engineer">💼 Sound Engineer</option>
-                      <option value="Lead Editor">💼 Lead Editor</option>
-                      <option value="Co-Artist & Performer">💼 Co-Artist & Performer</option>
+                      {STUDIO_DESIGNATIONS.map((d) => (
+                        <option key={d} value={d}>
+                          💼 {d}
+                        </option>
+                      ))}
                     </select>
+                    <p className="text-[10px] text-slate-500 dark:text-zinc-500 mt-1">
+                      Job title only — does not grant create/delete rights.
+                    </p>
                   </div>
                 </div>
 
@@ -510,16 +538,29 @@ export default function CloudCollabModal({
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-slate-700 dark:text-zinc-300 font-bold block mb-1">Studio Access Role:</label>
-                    <select
-                      value={selectedRole}
-                      onChange={(e) => setSelectedRole(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-slate-900 dark:text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-mono font-bold"
-                    >
-                      <option value="Editor">✏️ Editor (Full Access)</option>
-                      <option value="Viewer">👁️ Viewer (Read-Only)</option>
-                      <option value="Director & Owner">👑 Director & Owner</option>
-                    </select>
+                    <label className="text-[11px] text-slate-700 dark:text-zinc-300 font-bold block mb-1">Access Level:</label>
+                    <div className="flex flex-col gap-1 rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1.5">
+                      {ACCESS_LEVELS.map((level) => (
+                        <label key={level} className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-slate-800 dark:text-zinc-200">
+                          <input
+                            type="radio"
+                            name="sps_cloud_access_level_invite"
+                            value={level}
+                            checked={selectedRole === level}
+                            onChange={() => setSelectedRole(level)}
+                            className="accent-cyan-600"
+                          />
+                          <span>
+                            {level === 'Owner' && '👑 Owner — create / delete'}
+                            {level === 'Editor' && '✏️ Editor — allotted only'}
+                            {level === 'Viewer' && '👁️ Viewer — read-only'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-zinc-500 mt-1">
+                      Only <strong className="text-amber-600 dark:text-amber-300">Owner</strong> can create or delete projects.
+                    </p>
                   </div>
                 </div>
 
@@ -649,19 +690,22 @@ export default function CloudCollabModal({
                           </span>
                         )}
 
-                        {/* Role Switcher Selector */}
+                        {/* Access Level Switcher */}
                         <select
-                          value={user.role}
+                          value={normalizeAccessLevel(user.role)}
                           onChange={(e) => handleRoleChange(user.phone, e.target.value)}
                           className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold cursor-pointer bg-white dark:bg-zinc-950 ${
-                            user.role === 'Viewer' 
-                              ? 'text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-800' 
-                              : (user.role.includes('Director') ? 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800' : 'text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800')
+                            normalizeAccessLevel(user.role) === 'Viewer'
+                              ? 'text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-800'
+                              : normalizeAccessLevel(user.role) === 'Owner'
+                                ? 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                : 'text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
                           }`}
+                          title="Owner = create/delete; Editor = allotted edit; Viewer = read-only"
                         >
-                          <option value="Editor">✏️ Editor (Full Access)</option>
+                          <option value="Editor">✏️ Editor (Allotted Only)</option>
                           <option value="Viewer">👁️ Viewer (Read-Only)</option>
-                          <option value="Director & Owner">👑 Director & Owner</option>
+                          <option value="Owner">👑 Owner (Create / Delete)</option>
                         </select>
                       </div>
 

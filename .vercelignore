@@ -1,0 +1,18 @@
+# Keep Vercel uploads small and deploy-ready
+node_modules
+.release
+release
+dist
+.storage
+storage
+projects
+settings
+.git
+.DS_Store
+*.icns
+*.dmg
+build/icons
+.env*
+!.env.example
+agent-transcripts
+.cursor

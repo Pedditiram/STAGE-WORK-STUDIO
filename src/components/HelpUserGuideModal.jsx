@@ -258,45 +258,45 @@ export default function HelpUserGuideModal({ isOpen, onClose }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md font-mono select-none">
-      <div className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 text-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md font-mono">
+      <div className="relative w-full max-w-5xl bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white border border-slate-300 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[92vh]">
         
-        {/* Modal Header */}
-        <div className="p-4 px-6 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between">
+        {/* Header */}
+        <div className="p-4 px-6 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              <BookOpen className="w-5 h-5 text-cyan-400" />
+            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+              <HelpCircle className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2 font-sans">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 font-sans">
                 Stage Production Studio — User Guide
-                <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800 font-mono font-bold">
+                <span className="text-[10px] bg-cyan-100 dark:bg-cyan-950 text-cyan-900 dark:text-cyan-300 px-2 py-0.5 rounded border border-cyan-300 dark:border-cyan-800 font-mono font-bold">
                   v2.0 Production Release
                 </span>
               </h3>
-              <p className="text-xs text-zinc-400 font-mono">Complete documentation & workflow guide for filmmakers & collaborators.</p>
+              <p className="text-xs text-slate-600 dark:text-zinc-400 font-mono">Complete documentation & workflow guide for filmmakers & collaborators.</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Search Bar */}
-        <div className="p-3 px-6 bg-zinc-900/60 border-b border-zinc-800/80 flex items-center gap-3">
+        <div className="p-3 px-6 bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800/80 flex items-center gap-3">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
             <input
               type="text"
               placeholder="Search help topics, features, genre presets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500 font-mono"
+              className="w-full bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-900 dark:text-zinc-200 font-bold focus:outline-none focus:border-cyan-500 font-mono"
             />
           </div>
         </div>
@@ -305,7 +305,7 @@ export default function HelpUserGuideModal({ isOpen, onClose }) {
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-[500px]">
           
           {/* Left Navigation Sidebar */}
-          <div className="w-full md:w-64 border-r border-zinc-800/80 bg-zinc-900/40 p-3 space-y-1 overflow-y-auto shrink-0">
+          <div className="w-full md:w-64 border-r border-slate-200 dark:border-zinc-800/80 bg-slate-100/90 dark:bg-zinc-900/40 p-3 space-y-1 overflow-y-auto shrink-0">
             {filteredSections.map((sec) => {
               const IconComp = sec.icon;
               const isActive = activeSectionId === sec.id;
@@ -316,12 +316,12 @@ export default function HelpUserGuideModal({ isOpen, onClose }) {
                   onClick={() => setActiveSectionId(sec.id)}
                   className={`w-full p-2.5 rounded-xl text-left font-mono text-xs transition-all flex items-center justify-between cursor-pointer ${
                     isActive
-                      ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/40 font-bold'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent'
+                      ? 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border border-cyan-500/40 font-bold shadow-sm'
+                      : 'text-slate-700 dark:text-zinc-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/80 dark:hover:bg-zinc-900 border border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-cyan-400' : 'text-zinc-500'}`} />
+                    <IconComp className={`w-4 h-4 shrink-0 ${isActive ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-zinc-500'}`} />
                     <span className="truncate">{sec.title}</span>
                   </div>
                   <ChevronRight className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-cyan-400' : 'text-zinc-600'}`} />

@@ -788,6 +788,20 @@ export const SEEDANCE_SLOTS = [
     ]
   },
   {
+    key: "sceneSynopsis",
+    label: "📖 Scene Synopsis",
+    icon: "BookOpen",
+    description: "LLM auto-extracted scene narrative synopsis or writer custom fed scene beat.",
+    tipTitle: "Scene Narrative Synopsis",
+    tip: "Contains the auto-extracted scene synopsis or writer's custom scene beat. Used directly in the prompt under 'Scene Synopsis:'.",
+    presets: [
+      "Scene Location & Context: Janasthana Forest | Featured Subject: Lord Rama | Action: Walking gracefully among ancient trees with noble composure.",
+      "Rain-slicked futuristic concert stage under neon city lights. Lead artist performing vocal climax under strobing spotlights.",
+      "Opulent palace courtyard decorated with thousands of marigold garlands. Hero & Heroine performing synchronized dance spin.",
+      "Slick asphalt mountain pass hairpin turn at midnight with tire smoke drifting. Supercar downshifting into 90-degree drift."
+    ]
+  },
+  {
     key: "shotComposition",
     label: "📐 Shot Framing & Composition",
     icon: "Maximize",
@@ -836,21 +850,60 @@ export const SEEDANCE_SLOTS = [
     ]
   },
   {
+    key: "timeAndLightingEnv",
+    label: "🌅 Weather, Time & Environment Rig",
+    icon: "Sun",
+    description: "Weather conditions (Sunny, Overcast, Rain, Fog, Storm, Snow), day & night timing, indoor/outdoor setup, sun vs shade.",
+    tipTitle: "Weather, Timing & Environment Setup",
+    tip: "Specify natural weather conditions (Sunny Clear Sky, Overcast Diffuse, Rain Monsoon, Fog Haze, Storm Lightning, Snow Glisten), day/night timing (Golden Hour, High Noon, Blue Hour, Midnight), and indoor/outdoor environment.",
+    presets: [
+      "[Weather: Sunny Clear Sky] • [Timing: Golden Hour Sunset] • [Env: Outdoor Direct Sun] • [Source: Low Solar Ray]",
+      "[Weather: Overcast Diffused Sky] • [Timing: Afternoon Daylight] • [Env: Outdoor Open Meadow] • [Source: Soft Shadowless Skylight]",
+      "[Weather: Rainy Monsoon Downpour] • [Timing: Dusk Twilight] • [Env: Outdoor Rain-Slicked Street] • [Source: Neon Wet Reflection]",
+      "[Weather: Dense Rolling Fog] • [Timing: Early Morning Dawn] • [Env: Outdoor Pine Forest] • [Source: Atmospheric Solar God-Rays]",
+      "[Weather: Stormy Thundercloud Dark Sky] • [Timing: Deep Night] • [Env: Outdoor Coastal Cliff] • [Source: Blue Lightning Flash]",
+      "[Weather: Snowy Frost Glisten] • [Timing: High Noon Sun] • [Env: Outdoor Mountain Peak] • [Source: High Albedo White Bounce]",
+      "[Weather: Desert Sandstorm Dust Haze] • [Timing: Scorching Midday] • [Env: Outdoor Dunes] • [Source: Intense Heat Shimmer]",
+      "[Weather: Clear Interior Night] • [Timing: Evening Midnight] • [Env: Indoor Enclosed Room] • [Source: Practical Warm Tungsten Lamp]"
+    ]
+  },
+  {
+    key: "directionalLightingAndHighlight",
+    label: "💡 Directional Lighting & Subject Highlight Rig",
+    icon: "Zap",
+    description: "Light source direction angle, subject shadow placement, invisible fills, eye catchlights, and kicker highlights.",
+    tipTitle: "Light Vector, Shadow & Special Highlight Rigs",
+    tip: "Set exact light source angles (45° Rembrandt, Overhead Downlight, 180° Backlight Rim, Split Profile), shadow placement (Under Canopy Leaf Shade, Architectural Umbra, Threshold Half-Shadow), and special subject highlights (Invisible Bounce Fill, Negative Fill, Eye Catchlight, Kicker Edge).",
+    presets: [
+      "[Angle: 45° Side Key Light] • [Shadow: Subject Under Tree Leaf Canopy Shade] • [Highlight: Eye Catchlight & Subtle Bounce Fill]",
+      "[Angle: 180° Direct Backlight] • [Shadow: Subject Silhouetted in Focal Beam] • [Highlight: Razor Hair Rim Light & Volumetric Haze]",
+      "[Angle: 75° Overhead Zenith Downlight] • [Shadow: Subject Standing in Direct Sun] • [Highlight: High-Contrast Kicker Light]",
+      "[Angle: 90° Hard Profile Split Light] • [Shadow: Threshold Half-Sun Half-Shadow] • [Highlight: Invisible Negative Fill (Black Card)]",
+      "[Angle: Low-Angle Footlight Up-Glow] • [Shadow: Architectural Building Umbra] • [Highlight: Eerie Pupil Catchlight]",
+      "[Angle: Frontal Softbox Key Light] • [Shadow: Controlled Studio Room Shadow] • [Highlight: Glamour Soft Fill & White Bounce Board]"
+    ]
+  },
+  {
     key: "subjectLightingTag",
     label: "💡 Subject Lighting Tag",
     icon: "Sun",
     description: "Key, fill, and rim lighting setup focused on the primary performing artist.",
     tipTitle: "Subject Key Lighting",
-    tip: "Set key, fill, and rim lighting setups (Volumetric Solar, Chiaroscuro, Neon Glow) to isolate the primary artist with high visual contrast and dimensional pop.",
+    tip: "Set key, fill, and rim lighting setups (Volumetric Solar, Chiaroscuro, Neon Glow, Direct Sun, Canopy Shade) to isolate the primary artist with high visual contrast and dimensional pop.",
     presets: [
-      "[Lighting: Volumetric Divine Solar Sunbeams]",
-      "[Lighting: Golden Temple Diya Lamp Warm Glow]",
-      "[Lighting: Rembrandt 3-Point Classic]",
-      "[Lighting: Soft Diffused Window Light]",
-      "[Lighting: High-Contrast Chiaroscuro Noir]",
-      "[Lighting: Warm Golden Hour Rim Light]",
+      "[Lighting: Direct High-Noon Solar Sunbeam]",
+      "[Lighting: Dappled Tree Canopy Shade Light]",
+      "[Lighting: Golden Hour Sunset Backlight & Rim]",
+      "[Lighting: Morning Sunrise Soft Diffused Key Light]",
+      "[Lighting: Blue Hour Dusk Ambient Fill]",
+      "[Lighting: Midnight Silver Moonbeam Rim Highlight]",
+      "[Lighting: Indoor Sunlit Window Alcove Key]",
+      "[Lighting: Indoor Practical Warm Tungsten Lamp Glow]",
       "[Lighting: Cyberpunk Neon Blue & Pink Dual Glow]",
-      "[Lighting: Eerie Under-Lighting Silhouette]"
+      "[Lighting: Venetian Blind Chiaroscuro Window Slats]",
+      "[Lighting: Fireplace Ember & Torchlight Flicker]",
+      "[Lighting: Volumetric Divine Solar Sunbeams]",
+      "[Lighting: Rembrandt 3-Point Classic Studio Rig]"
     ]
   },
   {
@@ -995,6 +1048,40 @@ export const SEEDANCE_SLOTS = [
     ]
   },
   {
+    key: "characterPsychologyState",
+    label: "🧠 Psychological State & Subconscious Mindframe",
+    icon: "Activity",
+    description: "Subject's internal psychological state, subconscious motivation, cognitive archetype, and pressure baseline.",
+    tipTitle: "Subconscious Psychology & Mental Archetype",
+    tip: "Define the character's internal mindstate (Paranoid Suspicion, Heroic Adrenaline, Stoic Duty, Disassociated Trauma, Calculated Strategy) to drive believable performance and body language.",
+    presets: [
+      "[Mindstate: Paranoid Suspicion & Hyper-Vigilance under Threat]",
+      "[Mindstate: Heroic Adrenaline Surge & Unwavering Protective Oath]",
+      "[Mindstate: Traumatized Disassociation & Distant Melancholy Gaze]",
+      "[Mindstate: Cold Strategic Calculation & Unmoved Analytical Focus]",
+      "[Mindstate: Vulnerable Emotional Breakdown & Heavy Guilt]",
+      "[Mindstate: Unhinged Volatile Mania & Unpredictable Intensity]",
+      "[Mindstate: Quiet Stoic Resignation & Devout Sense of Duty]"
+    ]
+  },
+  {
+    key: "characterMannerismAndPosture",
+    label: "🖐️ Mannerisms, Body Ticks & Posture Habits",
+    icon: "UserCheck",
+    description: "Actor's physical quirks, hand gestures, posture alignment, head tilts, and involuntary body ticks.",
+    tipTitle: "Physical Mannerisms & Body Language",
+    tip: "Specify physical mannerisms (Hand resting on sword hilt, nervous collar-adjusting, 15° head tilt, military straight spine) to ground character realism and performance authenticity.",
+    presets: [
+      "[Mannerism: Military Straight Spine & Hand Resting on Sword Hilt]",
+      "[Mannerism: Nervous Fidgeting & Adjusting Collar under Pressure]",
+      "[Mannerism: Head Tilted 15° with Penetrating Analytical Gaze]",
+      "[Mannerism: Relaxed Slouch with Hands in Pockets & Subtle Smirk]",
+      "[Mannerism: Involuntary Jaw-Clench & Tightened Shoulder Tension]",
+      "[Mannerism: Defensive Hunched Posture & Arms Folded across Chest]",
+      "[Mannerism: Elegant Royal Poise with Fluid Graceful Hand Motion]"
+    ]
+  },
+  {
     key: "characterPlacement",
     label: "📍 Character Placement",
     icon: "Grid",
@@ -1114,80 +1201,6 @@ export const SEEDANCE_SLOTS = [
       "24mm Ultra Wide Angle (f/2.8) - Dynamic Environmental Scale",
       "100mm Macro Lens (f/2.8) - Razor Blade Close-Up Detail",
       "70-200mm Telephoto Zoom (f/2.8) - Compressed Action Tracking"
-    ]
-  },
-  {
-    key: "vfxCgiBreakdown",
-    label: "✨ Visual Effects & CGI Compositing",
-    icon: "Sparkles",
-    description: "CGI assets, green screen keying, particle FX, and digital matte painting.",
-    tipTitle: "VFX & CGI Asset Layering",
-    tip: "Tag digital compositing layers (Green Screen Keying, 3D Particle Destruction, Holographic HUD Overlay, Digital Matte Painting) for post-production VFX teams.",
-    presets: [
-      "[VFX: Practical Shot - 100% In-Camera Live Action]",
-      "[VFX: Digital Environment Matte Painting & Sky Replacement]",
-      "[VFX: 3D CGI Particle Destruction & Volumetric Smoke Composite]",
-      "[VFX: Green Screen Keying & Cyberpunk Hologram Overlay]",
-      "[VFX: Slow-Motion 1000fps High-Speed Impact FX]"
-    ]
-  },
-  {
-    key: "stuntAndSafetyNotes",
-    label: "🛡️ Stunt Rigging & Action Safety",
-    icon: "Shield",
-    description: "Stunt harness wirework, prop safety weapons, and controlled impact rigging.",
-    tipTitle: "Stunt Choreography & Safety Protocols",
-    tip: "Document stunt execution parameters (Wire Harness Jump Landing, Rubber Prop Knife, Precision Car Drift, Certified Pyrotechnic Charge) for action sequences.",
-    presets: [
-      "[Stunt: Safe Handler Control & Rubber Blade Prop Knife]",
-      "[Stunt: High-Wire Harness Rigging for Aerial Jump Landing]",
-      "[Stunt: Controlled Precision Car Drift with Trained Stunt Driver]",
-      "[Stunt: Martial Arts Choreography with Soft Mat Landing Area]",
-      "[Stunt: Certified Pyrotechnic Fire Charge with Safety Marshal]"
-    ]
-  },
-  {
-    key: "makeupAndHairStyle",
-    label: "💄 Makeup, Hair & Prosthetics",
-    icon: "Sparkle",
-    description: "Character makeup design, prosthetics, wound FX, facial hair, and period hairstyles.",
-    tipTitle: "Character Makeup & Prosthetics",
-    tip: "Detail character grooming and FX (Sun-Tanned Rural Skin, Saffron Tilak, Cyberpunk LED Liner, Prosthetic Battle Scratches, 1980s Vintage Hairstyle) to maintain character visual consistency.",
-    presets: [
-      "[Makeup: Authentic 1980s Village Sun-Tanned Skin & Natural Sweat Glow]",
-      "[Makeup: Celestial Divine Saffron Tilak & Royal Gold Powder]",
-      "[Makeup: Cyberpunk Metallic Face Tattoo & Neon LED Liner]",
-      "[Makeup: Gritty Battle Scratches & Prosthetic Wound FX]",
-      "[Makeup: Vintage 1980s Telugu Hairstyle & Traditional Bindi]"
-    ]
-  },
-  {
-    key: "editTransitionCut",
-    label: "✂️ Film Editing Cut & Transition",
-    icon: "Scissors",
-    description: "Editing cut style, J-Cut/L-Cut audio transitions, match cuts, and scene pacing.",
-    tipTitle: "Film Editing & Transition Pacing",
-    tip: "Specify post-production edit cuts (Hard Cut, L-Cut Audio Overlap, Fast Whip Pan Match Cut, Smash Cut) to dictate scene pacing and seamless shot flow.",
-    presets: [
-      "Hard Cut (Standard Scene Beat)",
-      "L-Cut / J-Cut Audio Overlap",
-      "Fast Whip Pan Match Cut",
-      "Slow Cross-Dissolve Fade (60 Frames)",
-      "Smash Cut to High-Action Impact",
-      "Invisible Match Cut on Character Motion"
-    ]
-  },
-  {
-    key: "characterIdMatrix",
-    label: "🎭 Character ID & Multi-Modal Asset Matrix",
-    icon: "Users",
-    description: "Multi-modal reference bindings: Image_1..9, Video_1..3, Audio_1..3 for Seedance & ComfyUI.",
-    tipTitle: "Character ID & Multi-Modal Reference Matrix",
-    tip: "Manage resolved character tags, scene reference images, video clips, and audio tracks (Image_1..9, Video_1..3, Audio_1..3) to feed ByteDance Seedance 2.0 & ComfyUI nodes.",
-    presets: [
-      "Image_1 = sunil | Image_2 = bujji | Image_3 = sunil | Image_4 = samudra | Image_5 = crowd | Image_6 = scene | Image_7 = supporting artist | Image_8 = | Image_9 = ",
-      "Image_1 = lord_rama | Image_2 = kara_dhushan | Image_3 = ayodhya_palace | Image_4 = crowd | Image_5 = supporting artist | Video_1 = crane_sweep | Audio_1 = dappu_drums",
-      "Image_1 = hero_cyber | Image_2 = aria_singer | Image_3 = warehouse_stage | Image_4 = crowd | Video_1 = camera_orbit | Audio_1 = vocal_track"
     ]
   }
 ];

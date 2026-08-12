@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Mail, ArrowRight, CheckCircle2, Key, AlertCircle, Film, Send } from 'lucide-react';
+import { markCollaboratorSession, isStudioAdmin } from '../utils/projectPermissions';
 
 export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
   const [isLocked, setIsLocked] = useState(false);
@@ -71,9 +72,20 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
         window.dispatchEvent(new CustomEvent('sps_app_version_mode_changed', { detail: 'cloud' }));
       } catch (e) {}
 
-      // Save authorized email session
+      // Save authorized email session (collaborator — not studio admin unless primary email)
       try {
-        localStorage.setItem('sps_authorized_user_email', userMail);
+        const cleanMail = userMail.trim().toLowerCase();
+        markCollaboratorSession(cleanMail);
+
+        // Infer allotted project from invite room when possible
+        let allottedFromRoom = [];
+        try {
+          const library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+          const matched = Array.isArray(library)
+            ? library.find((p) => p && (p.roomId === roomKey || p.id === roomKey))
+            : null;
+          if (matched?.title) allottedFromRoom = [matched.title];
+        } catch (err) {}
 
         // Add to activity log
         const savedLog = localStorage.getItem('sps_collaboration_activity_log');
@@ -82,25 +94,42 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
         log.unshift({
           id: `act_${Date.now()}`,
           time: nowStr,
-          user: `Collaborator (${userMail})`,
-          action: `Opened link, verified email (${userMail}) with OTP (${cleanInput}), and unlocked Stage Production Studio`,
+          user: `Collaborator (${cleanMail})`,
+          action: `Opened link, verified email (${cleanMail}) with OTP (${cleanInput}), and unlocked Stage Production Studio`,
           status: 'verified'
         });
         localStorage.setItem('sps_collaboration_activity_log', JSON.stringify(log));
 
-        // Add to authorized users
+        // Add / refresh authorized users as collaborators (admin allotment required for project access)
         const savedUsers = localStorage.getItem('sps_authorized_phone_users');
         let users = savedUsers ? JSON.parse(savedUsers) : [];
-        if (!users.some(u => u.email === userMail)) {
+        const existingIdx = users.findIndex((u) => (u.email || '').trim().toLowerCase() === cleanMail);
+        if (existingIdx === -1) {
           users.unshift({
-            name: userMail.split('@')[0],
-            email: userMail,
-            role: 'Email Authorized Collaborator',
+            name: cleanMail.split('@')[0],
+            email: cleanMail,
+            role: isStudioAdmin(cleanMail) ? 'Owner' : 'Editor',
+            isStudioAdmin: isStudioAdmin(cleanMail),
+            designation: isStudioAdmin(cleanMail) ? 'Lead Director' : 'Collaborator',
             status: 'Active',
+            allottedProjects: allottedFromRoom,
             verifiedAt: `Today, ${nowStr}`
           });
-          localStorage.setItem('sps_authorized_phone_users', JSON.stringify(users));
+        } else {
+          const existingAllotments = Array.isArray(users[existingIdx].allottedProjects)
+            ? users[existingIdx].allottedProjects
+            : [];
+          const mergedAllotments = Array.from(new Set([...existingAllotments, ...allottedFromRoom].filter(Boolean)));
+          users[existingIdx] = {
+            ...users[existingIdx],
+            status: 'Active',
+            allottedProjects: mergedAllotments,
+            verifiedAt: `Today, ${nowStr}`
+          };
         }
+        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(users));
+        markCollaboratorSession(cleanMail);
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
       } catch (e) {}
 
       setTimeout(() => {
@@ -122,8 +151,8 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/95 backdrop-blur-2xl font-mono">
-      <div className="relative w-full max-w-md bg-zinc-900 border border-cyan-500/40 rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5 text-center">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/95 backdrop-blur-2xl font-mono">
+      <div className="relative w-full max-w-md max-h-[min(100dvh,100%)] sm:max-h-[90dvh] overflow-y-auto bg-zinc-900 border border-cyan-500/40 rounded-t-2xl sm:rounded-2xl shadow-2xl p-6 space-y-5 text-center pb-[max(1.25rem,env(safe-area-inset-bottom,0px))]">
         
         {/* Header Icon */}
         <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 p-0.5 shadow-xl shadow-cyan-950/60 flex items-center justify-center">
