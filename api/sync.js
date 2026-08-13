@@ -11,7 +11,7 @@
  *   (aliases) KV_REST_API_URL / KV_REST_API_TOKEN
  *             UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
  * Uses Upstash command-array REST: POST baseUrl with ["GET"|"SET", key, value?]
- * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence
+ * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence | sps:screenplay
  * Without KV env vars the API safely falls back to JSONBlob (+ RESTFUL best-effort).
  */
 
@@ -20,12 +20,14 @@ let memoryProjects = [];
 let memoryCollaborators = [];
 let memoryPresence = {};
 let memoryChat = {}; // roomId -> messages[]
+let memoryScreenplay = {}; // `${roomId}::${projectKey}` -> screenplay collab doc
 let memoryDeletedTitles = []; // uppercase title keys tombstoned across instances
 let projectsHydrated = false;
 let collaboratorsHydrated = false;
 let roomsHydrated = false;
 let chatHydrated = false;
 let presenceHydrated = false;
+let screenplayHydrated = false;
 let lastProjectsDurableOk = false;
 let lastCollaboratorsDurableOk = false;
 let lastRoomsDurableOk = false;
@@ -720,6 +722,153 @@ async function loadChatStore() {
   return { chat: null, ok: false }; // null = hydrate failed — do not treat as empty
 }
 
+function screenplayDocKey(roomId, projectTitle) {
+  const p = String(projectTitle || 'default').trim().toUpperCase().slice(0, 48) || 'DEFAULT';
+  return `${String(roomId || 'SPS-CLOUD-8821')}::${p}`;
+}
+
+function pruneScreenplayLocks(locks) {
+  const now = Date.now();
+  const out = {};
+  Object.entries(locks || {}).forEach(([k, lock]) => {
+    if (!lock) return;
+    const exp = Date.parse(lock.expiresAt || '') || 0;
+    if (exp && exp < now) return;
+    out[k] = lock;
+  });
+  return out;
+}
+
+function mergeScreenplayServer(existing, incoming) {
+  const base = existing && typeof existing === 'object' ? existing : {};
+  const next = incoming && typeof incoming === 'object' ? incoming : {};
+  const locks = pruneScreenplayLocks({ ...(base.locks || {}), ...(next.locks || {}) });
+  Object.keys(locks).forEach((key) => {
+    const a = base.locks?.[key];
+    const b = next.locks?.[key];
+    if (a && b) {
+      const at = Date.parse(a.lockedAt || '') || 0;
+      const bt = Date.parse(b.lockedAt || '') || 0;
+      locks[key] = bt >= at ? b : a;
+    }
+  });
+
+  const baseSegs = Array.isArray(base.segments) ? base.segments : [];
+  const nextSegs = Array.isArray(next.segments) ? next.segments : [];
+  const map = new Map();
+  [...baseSegs, ...nextSegs].forEach((s) => {
+    if (!s?.key) return;
+    const prev = map.get(s.key);
+    if (!prev) {
+      map.set(s.key, s);
+      return;
+    }
+    const pt = Date.parse(prev.updatedAt || '') || 0;
+    const nt = Date.parse(s.updatedAt || '') || 0;
+    map.set(s.key, nt >= pt ? s : prev);
+  });
+
+  const order = [];
+  const seen = new Set();
+  [...nextSegs, ...baseSegs].forEach((s) => {
+    if (!s?.key || seen.has(s.key)) return;
+    seen.add(s.key);
+    order.push(s.key);
+  });
+  const segments = order.map((key, index) => ({ ...(map.get(key) || { key, text: '' }), index }));
+  const text =
+    segments.length > 0
+      ? segments.map((s) => s.text || '').join('')
+      : String(next.text || base.text || '');
+
+  const presenceMap = new Map();
+  [...(base.presence || []), ...(next.presence || [])].forEach((p) => {
+    if (!p?.userEmail) return;
+    const email = String(p.userEmail).toLowerCase();
+    const prev = presenceMap.get(email);
+    const pt = Date.parse(prev?.updatedAt || '') || 0;
+    const nt = Date.parse(p.updatedAt || '') || 0;
+    if (!prev || nt >= pt) presenceMap.set(email, p);
+  });
+  const presence = Array.from(presenceMap.values()).filter((p) => {
+    const t = Date.parse(p.updatedAt || '') || 0;
+    return t && Date.now() - t < 60000;
+  });
+
+  return {
+    projectTitle: next.projectTitle || base.projectTitle || '',
+    text,
+    segments,
+    locks,
+    presence,
+    revision: Math.max(base.revision || 0, next.revision || 0, Date.now()),
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+async function loadScreenplayStore() {
+  if (kvConfigured()) {
+    try {
+      const data = await kvGet('screenplay');
+      const map = data?.screenplay || data;
+      if (map && typeof map === 'object' && !Array.isArray(map)) {
+        return { screenplay: map, ok: true };
+      }
+    } catch (e) {}
+  }
+  try {
+    const hub = await hydrateRoomsFromDurable();
+    if (hub?.ok && hub.rooms) {
+      const map = {};
+      Object.entries(hub.rooms).forEach(([roomId, room]) => {
+        const collab = room?.screenplayCollab;
+        if (collab && typeof collab === 'object') {
+          const k = screenplayDocKey(roomId, collab.projectTitle || room.projectTitle || '');
+          map[k] = collab;
+        }
+      });
+      if (Object.keys(map).length) return { screenplay: map, ok: true };
+    }
+  } catch (e) {}
+  return { screenplay: null, ok: false };
+}
+
+async function saveScreenplayStore(screenplayMap) {
+  const body = {
+    screenplay: screenplayMap || {},
+    updatedAt: new Date().toISOString(),
+    app: 'sps-screenplay-collab'
+  };
+  if (!body.screenplay || Object.keys(body.screenplay).length === 0) return false;
+  return coalesceDurableWrite('screenplay', body, async (payload) => {
+    let ok = false;
+    if (kvConfigured()) {
+      try {
+        ok = (await kvSet('screenplay', payload)) || ok;
+      } catch (e) {}
+    }
+    try {
+      const hydrate = await hydrateRoomsFromDurable();
+      if (hydrate.ok || roomsHydrated) {
+        const rooms = { ...(hydrate.rooms || memoryRooms) };
+        Object.entries(payload.screenplay || {}).forEach(([docKey, doc]) => {
+          const roomId = String(docKey).split('::')[0];
+          if (!roomId) return;
+          rooms[roomId] = {
+            ...(rooms[roomId] || { roomId }),
+            screenplayCollab: doc,
+            lastUpdated: new Date().toISOString()
+          };
+        });
+        memoryRooms = { ...memoryRooms, ...rooms };
+        ok = (await saveHub({ rooms: memoryRooms })) || ok;
+        if (ok) roomsHydrated = true;
+      }
+    } catch (e) {}
+    return ok;
+  });
+}
+
 async function saveChatStore(chatMap) {
   const body = {
     chat: chatMap || {},
@@ -900,6 +1049,29 @@ export default async function handler(req, res) {
       });
     }
 
+    if (type === 'screenplay') {
+      const projectTitle = String(req.query.project || '').trim();
+      const loaded = await loadScreenplayStore();
+      if (loaded.ok && loaded.screenplay) {
+        memoryScreenplay = { ...memoryScreenplay, ...loaded.screenplay };
+        screenplayHydrated = true;
+      }
+      const docKey = screenplayDocKey(safeRoomId, projectTitle);
+      let doc = memoryScreenplay[docKey] || null;
+      // Also accept room-embedded collab if memory miss
+      if (!doc) {
+        await hydrateRoomsFromDurable();
+        const room = memoryRooms[safeRoomId];
+        if (room?.screenplayCollab) doc = room.screenplayCollab;
+      }
+      return res.status(200).json({
+        success: true,
+        screenplay: doc,
+        roomId: safeRoomId,
+        durableOk: loaded.ok || screenplayHydrated
+      });
+    }
+
     // Room GET — always merge durable hub so other Vercel instances see latest writes
     await hydrateRoomsFromDurable();
     const room = memoryRooms[safeRoomId] || null;
@@ -931,23 +1103,23 @@ export default async function handler(req, res) {
           });
         }
 
-        // Merge tombstones from client
+        // Merge tombstones from client — but never tombstone titles that are still live in this push
+        const incomingKeys = new Set(cleanedIncoming.map((p) => titleKey(p.title)));
         if (incomingDeleted.length) {
           memoryDeletedTitles = normalizeDeletedTitles([
             ...memoryDeletedTitles,
             ...incomingDeleted
           ]);
         }
-
-        // Titles present in previous library but missing from incoming → tombstone
-        if (cleanedIncoming.length > 0 && memoryProjects.length > 0) {
-          const incomingKeys = new Set(cleanedIncoming.map((p) => titleKey(p.title)));
-          memoryProjects.forEach((p) => {
-            const k = titleKey(p?.title);
-            if (k && !incomingKeys.has(k)) memoryDeletedTitles.push(k);
-          });
-          memoryDeletedTitles = normalizeDeletedTitles(memoryDeletedTitles);
+        // Live library wins: any title in this push is removed from the delete tombstone list
+        if (incomingKeys.size) {
+          memoryDeletedTitles = normalizeDeletedTitles(
+            memoryDeletedTitles.filter((t) => !incomingKeys.has(titleKey(t)))
+          );
         }
+
+        // Do NOT auto-tombstone titles merely missing from an incomplete client push —
+        // that was silently archiving live projects (e.g. KARA) without user action.
 
         const prevByTitle = new Map();
         memoryProjects.forEach((p) => {
@@ -956,14 +1128,21 @@ export default async function handler(req, res) {
             prevByTitle.set(title, p);
           }
         });
-        memoryProjects = filterDeletedProjects(
-          cleanedIncoming.map((p) => {
-            const key = titleKey(p.title);
-            const existing = prevByTitle.get(key);
-            return existing ? { ...existing, ...p } : p;
-          }),
-          memoryDeletedTitles
-        );
+        // Prefer incoming live list; keep prior cloud projects that were not explicitly deleted
+        const mergedLive = cleanedIncoming.map((p) => {
+          const key = titleKey(p.title);
+          const existing = prevByTitle.get(key);
+          return existing ? { ...existing, ...p } : p;
+        });
+        memoryProjects.forEach((p) => {
+          const key = titleKey(p?.title);
+          if (!key || key === 'STAGE PRODUCTION STUDIO') return;
+          if (incomingKeys.has(key)) return;
+          if (memoryDeletedTitles.includes(key)) return;
+          // Preserve cloud-only live projects not included in this push
+          if (!mergedLive.some((x) => titleKey(x.title) === key)) mergedLive.push(p);
+        });
+        memoryProjects = filterDeletedProjects(mergedLive, memoryDeletedTitles);
         projectsHydrated = true;
 
         const durableOk = await saveProjectsStore(memoryProjects, memoryDeletedTitles);
@@ -1091,6 +1270,35 @@ export default async function handler(req, res) {
         roomId: safeRoomId,
         durableOk,
         durableSkipped: durableOk ? undefined : 'hydrate_failed_or_rate_limited'
+      });
+    }
+
+    if (type === 'screenplay') {
+      const projectTitle = String(body.projectTitle || body.screenplay?.projectTitle || '').trim();
+      const incoming = body.screenplay && typeof body.screenplay === 'object' ? body.screenplay : {};
+      const loaded = await loadScreenplayStore();
+      if (loaded.ok && loaded.screenplay) {
+        memoryScreenplay = { ...memoryScreenplay, ...loaded.screenplay };
+        screenplayHydrated = true;
+      }
+      const docKey = screenplayDocKey(safeRoomId, projectTitle);
+      const existing = memoryScreenplay[docKey] || null;
+      const merged = mergeScreenplayServer(existing, { ...incoming, projectTitle });
+      memoryScreenplay[docKey] = merged;
+
+      let durableOk = false;
+      try {
+        durableOk = await saveScreenplayStore({ ...memoryScreenplay, [docKey]: merged });
+        if (durableOk) screenplayHydrated = true;
+      } catch (e) {
+        durableOk = false;
+      }
+
+      return res.status(200).json({
+        success: true,
+        screenplay: merged,
+        roomId: safeRoomId,
+        durableOk
       });
     }
 

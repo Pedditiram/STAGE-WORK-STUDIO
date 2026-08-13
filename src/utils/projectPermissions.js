@@ -29,7 +29,19 @@ export const ACCESS_LEVELS = ['Viewer', 'Editor', 'Owner'];
 
 export function getCurrentUserEmail() {
   if (typeof window === 'undefined') return '';
-  return String(localStorage.getItem('sps_authorized_user_email') || '').trim().toLowerCase();
+  return normalizeEmail(localStorage.getItem('sps_authorized_user_email') || '');
+}
+
+/** Fix common typos so owner session / presence don't fork (e.g. gmai.com). */
+export function normalizeEmail(email) {
+  let clean = String(email || '').trim().toLowerCase();
+  if (!clean) return '';
+  clean = clean
+    .replace(/@gmai\.com$/i, '@gmail.com')
+    .replace(/@gmial\.com$/i, '@gmail.com')
+    .replace(/@gmail\.co$/i, '@gmail.com')
+    .replace(/@gmal\.com$/i, '@gmail.com');
+  return clean;
 }
 
 /**
@@ -327,7 +339,7 @@ export function filterAccessibleProjects(projectLibrary, email = getCurrentUserE
 
 export function markCollaboratorSession(email) {
   if (typeof window === 'undefined') return;
-  const clean = String(email || '').trim().toLowerCase();
+  const clean = normalizeEmail(email);
   if (!clean) return;
   localStorage.setItem('sps_authorized_user_email', clean);
   localStorage.setItem('sps_is_admin_logged_in', isStudioOwner(clean) ? 'true' : 'false');

@@ -97,6 +97,56 @@ function localDiskVaultPlugin() {
     name: 'sps-local-disk-vault',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        // --- Server PDF extract (Node pdfjs-legacy) — same path as Vercel /api/extract-pdf ---
+        if (req.url && req.url.startsWith('/api/extract-pdf')) {
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 200;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.end();
+            return;
+          }
+          try {
+            const body = req.method === 'POST' || req.method === 'PUT' ? await readJsonBody(req) : {};
+            const fakeReq = { method: req.method, body };
+            const fakeRes = {
+              statusCode: 200,
+              setHeader(k, v) {
+                res.setHeader(k, v);
+                return this;
+              },
+              status(code) {
+                this.statusCode = code;
+                res.statusCode = code;
+                return this;
+              },
+              json(payload) {
+                res.statusCode = this.statusCode || 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify(payload));
+                return this;
+              },
+              end() {
+                res.end();
+                return this;
+              }
+            };
+            const extractPdfMod = await import('./api/extract-pdf.js');
+            const extractPdfHandler = extractPdfMod.default || extractPdfMod;
+            await extractPdfHandler(fakeReq, fakeRes);
+          } catch (err) {
+            return sendJson(res, 500, {
+              success: false,
+              code: 'PARSE_FAILED',
+              error: err?.message || 'PDF extraction failed'
+            });
+          }
+          return;
+        }
+
         // --- Multi-user cloud sync (durable on disk for local + LAN browser collab) ---
         if (req.url && req.url.startsWith('/api/sync')) {
           if (req.method === 'OPTIONS') {
@@ -392,7 +442,18 @@ export default defineConfig({
     // Allow Cloudflare quick tunnels + LAN hostnames for remote browser collab
     allowedHosts: true,
     watch: {
-      ignored: ['**/projects/**', '**/settings/**', '**/storage/**', '**/storage/cloud/**']
+      // Electron builds + docs thrash the watcher and force full reloads → splash/login loops
+      ignored: [
+        '**/projects/**',
+        '**/settings/**',
+        '**/storage/**',
+        '**/storage/cloud/**',
+        '**/release/**',
+        '**/dist/**',
+        '**/docs/**',
+        '**/.vercel/**',
+        '**/node_modules/**'
+      ]
     }
   }
 })

@@ -8,7 +8,6 @@ import ScreenplayEditor from './components/ScreenplayEditor';
 import TemplateSelector from './components/TemplateSelector';
 import PromptCompilerModal from './components/PromptCompilerModal';
 import AdminSettingsModal from './components/AdminSettingsModal';
-import AIScriptModal from './components/AIScriptModal';
 import ProjectConsoleModal from './components/ProjectConsoleModal';
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import HelpUserGuideModal from './components/HelpUserGuideModal';
@@ -18,7 +17,7 @@ import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import CharacterBibleModal, { saveStoredCharacterProfiles } from './components/CharacterBibleModal';
-import ScriptSynopsisModal from './components/ScriptSynopsisModal';
+import WorldEnvironmentConsole from './components/WorldEnvironmentConsole';
 import CollabChatPanel from './components/CollabChatPanel';
 import { subscribeToCollabChat } from './services/collabChat';
 import { extractProjectCharactersWithLLM } from './services/aiScriptParser';
@@ -26,6 +25,8 @@ import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/c
 import { saveProjectToVault, loadProjectsFromVault } from './services/projectDiskVault';
 import { autoRestoreAppSettingsFromVault } from './services/appSettingsDiskVault';
 import { subscribeToCloudRoom, publishToCloudRoom, enableCloudCollaborationMode } from './services/cloudSync';
+import StudioBrainModal from './components/StudioBrainModal';
+import PromoPackModal from './components/PromoPackModal';
 import { 
   syncProjectLibraryToCloud, 
   syncCollaboratorsToCloud, 
@@ -34,10 +35,20 @@ import {
   fetchProjectLibraryFromCloud,
   fetchCollaboratorsFromCloud,
   broadcastActiveSlotEditing,
-  subscribeToActiveEditingSlots
+  subscribeToActiveEditingSlots,
+  filterOutDeletedProjects,
+  isProjectTitleDeleted,
+  healActiveProjectFromArchive,
+  clearDeletedProjectTitles
 } from './services/dbService';
+import {
+  learnFromProject,
+  boostSlotsWithStudioBrain,
+  hydrateStudioBrainFromDisk
+} from './services/studioBrain';
 import { SEEDANCE_SLOTS, getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES, getMergedGenreProfiles } from './constants/seedancePresets';
 import { safeLocalStorageSetItem } from './utils/safeStorage';
+import { parseSceneAndShotID } from './utils/sceneShotUtils';
 import {
   getCurrentUserEmail,
   isGuestSession,
@@ -97,7 +108,15 @@ const INITIAL_SHOTS = [
 ];
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      // After first splash in this tab session, skip — avoids HMR/reload login loops
+      return sessionStorage.getItem('sps_splash_done') !== '1';
+    } catch {
+      return true;
+    }
+  });
 
   const [projectTitle, setProjectTitle] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -114,9 +133,9 @@ export default function App() {
   });
   const [aspectRatio, setAspectRatio] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_current_aspect_ratio') || "2.39:1 Anamorphic";
+      return localStorage.getItem('sps_current_aspect_ratio') || '21:9 Ultrawide';
     }
-    return "2.39:1 Anamorphic";
+    return '21:9 Ultrawide';
   });
 
   const [showCanvasTab, setShowCanvasTab] = useState(() => {
@@ -234,7 +253,7 @@ export default function App() {
     }
   };
 
-  const activeSlots = getSlotsForGenre(presetProfile);
+  const activeSlots = boostSlotsWithStudioBrain(getSlotsForGenre(presetProfile));
 
   // Default active view tab: 'canvas' | 'spreadsheet' | 'form'
   const [activeView, setActiveView] = useState(() => {
@@ -269,6 +288,7 @@ export default function App() {
     return 0;
   });
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
+  const [isPromoPackOpen, setIsPromoPackOpen] = useState(false);
   const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
   const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -278,6 +298,7 @@ export default function App() {
 
   // App-Wide 100% Native Fullscreen State
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [headerMinimized, setHeaderMinimized] = useState(false);
 
   // Native Browser Fullscreen Bypass to hide Safari URL bar & tabs completely
   const toggleFullscreenMode = async (enable) => {
@@ -485,28 +506,52 @@ export default function App() {
 
   const [isCharacterBibleOpen, setIsCharacterBibleOpen] = useState(false);
   const [characterBibleTab, setCharacterBibleTab] = useState('roster'); // 'roster' | 'script_story'
-  const [isScriptSynopsisModalOpen, setIsScriptSynopsisModalOpen] = useState(false);
+  const [isWorldEnvironmentOpen, setIsWorldEnvironmentOpen] = useState(false);
+  const [writerConsoleTab, setWriterConsoleTab] = useState('screenplay'); // 'screenplay' | 'synopsis'
 
   const handleOpenCharactersModal = () => {
     setCharacterBibleTab('roster');
     setIsCharacterBibleOpen(true);
   };
 
+  const handleOpenWorldEnvironment = () => {
+    setIsWorldEnvironmentOpen(true);
+  };
+
+  const openWriterConsole = (tab = 'screenplay') => {
+    setWriterConsoleTab(tab === 'synopsis' ? 'synopsis' : 'screenplay');
+    setActiveView('screenplay');
+  };
+
   const handleOpenStoryModal = () => {
-    setIsScriptSynopsisModalOpen(true);
+    openWriterConsole('synopsis');
   };
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [adminModalTab, setAdminModalTab] = useState('all');
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isStudioBrainOpen, setIsStudioBrainOpen] = useState(false);
   const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeConflict, setActiveConflict] = useState(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
-  // Always start logged-out in UI; LoginModal after splash confirms identity
+  // Always start logged-out in UI unless this browser tab already completed login (HMR-safe)
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
     if (typeof window !== 'undefined') {
       purgeWeakAdminCredentials();
+      try {
+        if (
+          sessionStorage.getItem('sps_session_authed') === '1' &&
+          localStorage.getItem('sps_user_manually_logged_out') !== 'true'
+        ) {
+          const email = getCurrentUserEmail();
+          if (email && isStudioAdmin(email)) {
+            localStorage.setItem('sps_is_admin_logged_in', 'true');
+            return true;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
       localStorage.setItem('sps_is_admin_logged_in', 'false');
     }
     return false;
@@ -524,12 +569,50 @@ export default function App() {
       if (!email) {
         markCollaboratorSession('pedditiram@gmail.com');
       }
+      try {
+        sessionStorage.setItem('sps_session_authed', '1');
+      } catch {
+        /* ignore */
+      }
     }
     setIsAdminLoggedIn(Boolean(val));
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_is_admin_logged_in', val ? 'true' : 'false');
+      if (!val) {
+        try {
+          sessionStorage.removeItem('sps_session_authed');
+        } catch {
+          /* ignore */
+        }
+      }
     }
   };
+
+  // If splash was skipped (same tab / HMR), restore remembered session — don't re-trap user in login
+  useEffect(() => {
+    if (showSplash) return;
+    try {
+      if (sessionStorage.getItem('sps_login_prompted') === '1') return;
+      sessionStorage.setItem('sps_login_prompted', '1');
+      if (sessionStorage.getItem('sps_session_authed') === '1') return;
+      if (localStorage.getItem('sps_user_manually_logged_out') === 'true') {
+        setIsLoginModalOpen(true);
+        return;
+      }
+      const email = getCurrentUserEmail();
+      if (email) {
+        sessionStorage.setItem('sps_session_authed', '1');
+        if (isStudioAdmin(email)) {
+          setIsAdminLoggedIn(true);
+          localStorage.setItem('sps_is_admin_logged_in', 'true');
+        }
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    setIsLoginModalOpen(true);
+  }, [showSplash]);
 
   // Cmd+K / Ctrl+K → Studio Settings (AdminSettingsModal, All Settings tab)
   // Same access rules as the Header Settings gear (alert + login if not admin).
@@ -671,6 +754,11 @@ export default function App() {
   // Automatic Vault & Projects Restoration on App Mount (Local & Cloud Modes)
   useEffect(() => {
     const autoRestoreAppVault = async () => {
+      // 0. Hydrate Studio Brain from IndexedDB
+      try {
+        await hydrateStudioBrainFromDisk();
+      } catch (e) {}
+
       // 1. Auto-Restore App Settings & API Keys from persistent IndexedDB vault
       await autoRestoreAppSettingsFromVault();
 
@@ -689,6 +777,7 @@ export default function App() {
 
         vaultProjects.forEach(vProj => {
           if (vProj && vProj.id) {
+            if (isProjectTitleDeleted(vProj.title)) return;
             const idx = mergedProjects.findIndex(p => p.id === vProj.id || p.title === vProj.title);
             if (idx === -1) {
               mergedProjects.push(vProj);
@@ -700,13 +789,14 @@ export default function App() {
           }
         });
 
+        const cleanedMerged = filterOutDeletedProjects(mergedProjects);
         if (hasNewVaultProject || currentLib.length === 0) {
-          safeLocalStorageSetItem('sps_project_library', JSON.stringify(mergedProjects));
+          safeLocalStorageSetItem('sps_project_library', JSON.stringify(cleanedMerged));
           window.dispatchEvent(new Event('sps_projects_updated'));
         }
 
         // Auto-load most recently saved project if current shots are empty or default
-        const activeProj = mergedProjects[0] || vaultProjects[0];
+        const activeProj = cleanedMerged[0] || vaultProjects.find((p) => !isProjectTitleDeleted(p?.title)) || vaultProjects[0];
         const savedShotsStr = localStorage.getItem('sps_current_shots');
         let localShots = [];
         if (savedShotsStr) {
@@ -715,7 +805,7 @@ export default function App() {
 
         // Prefer an accessible project for the current user (collaborators: allotted only)
         const email = getCurrentUserEmail();
-        const visible = filterAccessibleProjects(mergedProjects, email);
+        const visible = filterAccessibleProjects(cleanedMerged, email);
         const savedTitle = localStorage.getItem('sps_current_project_title') || '';
         const preferred =
           visible.find((p) => String(p?.title || '').toLowerCase() === String(savedTitle).toLowerCase()) ||
@@ -776,11 +866,16 @@ export default function App() {
 
     if (projectTitle && Array.isArray(shots) && shots.length > 0) {
       try {
+        // Active project must stay in Library — clear stale tombstones instead of skipping
+        if (isProjectTitleDeleted(projectTitle)) {
+          clearDeletedProjectTitles([projectTitle]);
+        }
         // Collaborators may only update allotted projects; never create new library entries
         if (!canAccessProject(projectTitle)) return;
         const savedLibStr = localStorage.getItem('sps_project_library');
         let library = savedLibStr ? JSON.parse(savedLibStr) : [];
         if (!Array.isArray(library)) library = [];
+        library = filterOutDeletedProjects(library);
 
         const existingIdx = library.findIndex(p => p.title === projectTitle);
         if (existingIdx === -1 && !canCreateOrDeleteProjects()) return;
@@ -802,7 +897,14 @@ export default function App() {
           library.unshift(updatedProjectData);
         }
 
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(library)));
+        learnFromProject({
+          projectTitle,
+          shots,
+          genreKey: presetProfile,
+          aspectRatio,
+          targetModel
+        });
       } catch (e) {}
     }
   }, [shots, projectTitle, targetModel, aspectRatio, activeView, activeShotIndex, effectiveRoomId]);
@@ -814,16 +916,28 @@ export default function App() {
 
     fetchProjectLibraryFromCloud().then((projs) => {
       if (cancelled) return;
+      // Undo false archive/tombstone for the project currently open
+      const healed = healActiveProjectFromArchive();
       let updatedProjs = Array.isArray(projs)
         ? projs.filter((p) => p && p.title && String(p.title).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO')
         : [];
+      updatedProjs = filterOutDeletedProjects(updatedProjs);
 
-      // Self-heal active project into library for UI only — do NOT push this back to cloud here
+      if (healed?.title) {
+        const key = String(healed.title).trim().toUpperCase();
+        updatedProjs = [
+          healed,
+          ...updatedProjs.filter((p) => String(p?.title || '').trim().toUpperCase() !== key)
+        ];
+      }
+
+      // Self-heal active project into library for UI — clear stale tombstone if needed
       const activeTitle =
         projectTitle && typeof projectTitle === 'string' && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO'
           ? projectTitle
           : '';
       if (activeTitle && shots && shots.length > 0) {
+        if (isProjectTitleDeleted(activeTitle)) clearDeletedProjectTitles([activeTitle]);
         const exists = updatedProjs.some((p) => p.title === activeTitle);
         if (!exists) {
           updatedProjs = [
@@ -842,8 +956,12 @@ export default function App() {
         }
       }
 
-      safeLocalStorageSetItem('sps_project_library', JSON.stringify(updatedProjs));
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(updatedProjs)));
       window.dispatchEvent(new Event('sps_projects_updated'));
+      // Push healed library so cloud drops stale tombstones
+      if (healed || (activeTitle && updatedProjs.some((p) => p.title === activeTitle))) {
+        syncProjectLibraryToCloud(updatedProjs);
+      }
 
       const activeProj = updatedProjs.find((p) => p.title === projectTitle || p.id === 'proj_default');
       if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
@@ -1178,8 +1296,10 @@ export default function App() {
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === newTitle);
-        // Collaborators cannot create new library titles via sync side-effect
-        if (existingIdx === -1 && !canCreateOrDeleteProjects()) {
+        // Never resurrect archived/deleted titles via cloud room sync
+        if (isProjectTitleDeleted(newTitle)) {
+          // skip library write
+        } else if (existingIdx === -1 && !canCreateOrDeleteProjects()) {
           // Still publish room shots for allotted open sessions without minting library rows
         } else {
           const updatedProjectData = {
@@ -1200,6 +1320,7 @@ export default function App() {
             library.unshift(updatedProjectData);
           }
 
+          library = filterOutDeletedProjects(library);
           safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
           // Always mirror library to Vercel (Local badge does not disable cloud SoT)
           if (library.length > 0) syncProjectLibraryToCloud(library);
@@ -1245,6 +1366,7 @@ export default function App() {
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString();
       
       const existingIdx = library.findIndex(p => p.title === projectTitle || p.id === 'proj_default');
+      if (!isProjectTitleDeleted(projectTitle)) {
       const updatedProjectData = {
         id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
         title: projectTitle,
@@ -1265,7 +1387,9 @@ export default function App() {
       } else {
         library.unshift(updatedProjectData);
       }
+      }
 
+      library = filterOutDeletedProjects(library);
       safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
       safeLocalStorageSetItem('sps_current_project_title', projectTitle);
       safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
@@ -1367,27 +1491,58 @@ export default function App() {
   };
 
   const handleAddShot = () => {
-    const nextShotNum = shots.length + 1;
+    const anchorIdx =
+      shots.length === 0 ? -1 : Math.max(0, Math.min(Number(activeShotIndex) || 0, shots.length - 1));
+    const anchor = anchorIdx >= 0 ? shots[anchorIdx] : {};
+    const { sceneNum } = parseSceneAndShotID(anchor || {}, Math.max(0, anchorIdx));
+    const targetScene = Number.isFinite(sceneNum) && sceneNum > 0 ? sceneNum : 1;
+
+    let maxShotInScene = 0;
+    let lastIdxInScene = anchorIdx;
+    shots.forEach((s, i) => {
+      const p = parseSceneAndShotID(s, i);
+      if (p.sceneNum === targetScene) {
+        if (Number(p.shotNum) > maxShotInScene) maxShotInScene = Number(p.shotNum);
+        lastIdxInScene = i;
+      }
+    });
+
+    const insertAfter =
+      anchorIdx >= 0 && parseSceneAndShotID(shots[anchorIdx], anchorIdx).sceneNum === targetScene
+        ? anchorIdx
+        : Math.max(lastIdxInScene, -1);
+
+    const nextShotNum = Math.max(1, maxShotInScene + 1);
+    const sceneStr = `SC${String(targetScene).padStart(2, '0')}`;
+    const shotStr = `SH${String(nextShotNum).padStart(2, '0')}`;
+
     const newShot = {
-      sceneShotId: `SC01_SH${nextShotNum < 10 ? '0' + nextShotNum : nextShotNum}`,
-      shotComposition: "Medium Shot (MS)",
-      cameraMotionTag: "[Camera: Static Anchor]",
-      subjectLightingTag: "[Lighting: Rembrandt 3-Point Classic]",
-      subjectColorTag: "[Subject Color: Teal & Orange Cinema Palette]",
-      backgroundLightingTag: "[BG Lighting: Mood Soft Ambient Falloff]",
-      backgroundColorTag: "[BG Color: Deep Midnight Blue & Indigo]",
-      characterIdAssetRef: "[CharID: @LeadSinger_Aria - Vocalist, leather jacket]",
-      coArtistInteraction: "[Co-Artist: Secondary dancer mirroring lead performer's choreography in background]",
-      actionEnvContext: "Cinematic interior concert venue with soft volumetric light falloff.",
-      characterExpression: "Stoic and determined, slight twitch of the jaw",
-      characterPlacement: "Foreground center stage, co-artists positioned in midground left & right",
+      sceneShotId: `${sceneStr}_${shotStr}`,
+      sceneSynopsis: anchor?.sceneSynopsis || '',
+      sceneHeading: anchor?.sceneHeading || '',
+      shotComposition: 'Medium Shot (MS)',
+      cameraMotionTag: '[Camera: Static Anchor]',
+      subjectLightingTag: '[Lighting: Rembrandt 3-Point Classic]',
+      subjectColorTag: '[Subject Color: Teal & Orange Cinema Palette]',
+      backgroundLightingTag: '[BG Lighting: Mood Soft Ambient Falloff]',
+      backgroundColorTag: '[BG Color: Deep Midnight Blue & Indigo]',
+      characterIdAssetRef: '[CharID: @LeadSinger_Aria - Vocalist, leather jacket]',
+      coArtistInteraction:
+        "[Co-Artist: Secondary dancer mirroring lead performer's choreography in background]",
+      actionEnvContext:
+        anchor?.actionEnvContext ||
+        'Cinematic interior concert venue with soft volumetric light falloff.',
+      characterExpression: 'Stoic and determined, slight twitch of the jaw',
+      characterPlacement: 'Foreground center stage, co-artists positioned in midground left & right',
       characterDialogue: '"Standing by for guitar drop."',
-      characterMovement: "Turning head slowly to look over shoulder towards camera",
-      characterEyeLooks: "[Eye Look: Direct Eye Contact with Camera Lens]"
+      characterMovement: 'Turning head slowly to look over shoulder towards camera',
+      characterEyeLooks: '[Eye Look: Direct Eye Contact with Camera Lens]'
     };
-    const newShots = [...shots, newShot];
+
+    const newShots = [...shots];
+    newShots.splice(insertAfter + 1, 0, newShot);
     if (!updateShotsWithHistory(newShots)) return;
-    setActiveShotIndex(shots.length);
+    setActiveShotIndex(insertAfter + 1);
     syncToCloud({ shots: newShots });
   };
 
@@ -1425,7 +1580,7 @@ export default function App() {
     if (newShots[index]) {
       newShots[index] = {
         ...newShots[index],
-        isMuted: !newShots[index].isMuted
+        isMuted: !newShots[index]?.isMuted
       };
       if (updateShotsWithHistory(newShots)) syncToCloud({ shots: newShots });
     }
@@ -1522,6 +1677,9 @@ export default function App() {
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === nextTitle);
+        if (isProjectTitleDeleted(nextTitle)) {
+          // Archived title — do not re-mint into live library from AI apply
+        } else {
         const existingProj = existingIdx !== -1 ? library[existingIdx] : {};
 
         const newProj = {
@@ -1547,9 +1705,11 @@ export default function App() {
           library.unshift(newProj);
         }
 
+        library = filterOutDeletedProjects(library);
         localStorage.setItem('sps_project_library', JSON.stringify(library));
         window.dispatchEvent(new Event('sps_projects_updated'));
         syncProjectLibraryToCloud(library);
+        }
       } catch (e) {}
     }
 
@@ -1741,9 +1901,11 @@ export default function App() {
 
   return (
     <div className={`h-screen w-full flex flex-col font-sans selection:bg-cyan-400/40 selection:text-white overflow-hidden transition-colors duration-300 ${
-      colorTheme === 'paper' 
-        ? 'bg-[#F4F7FB] text-[#0F172A] theme-paper' 
-        : 'bg-transparent text-zinc-100 theme-dark'
+      activeView === 'canvas'
+        ? 'bg-black text-zinc-100 theme-dark'
+        : colorTheme === 'paper' 
+          ? 'bg-[#F4F7FB] text-[#0F172A] theme-paper' 
+          : 'bg-transparent text-zinc-100 theme-dark'
     }`}>
       {/* Cinematic Studio Splash Launch Screen */}
       {showSplash && (
@@ -1755,8 +1917,8 @@ export default function App() {
           }}
         />
       )}
-      {/* Top Header Bar (Always visible in normal view, hidden only in native OS full screen) */}
-      {!isFullscreen && (
+      {/* Top Header Bar — hide in fullscreen or when user minimizes chrome */}
+      {!isFullscreen && !headerMinimized && (
         <Header
           projectTitle={projectTitle}
           setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
@@ -1769,9 +1931,9 @@ export default function App() {
           onExportProject={exportJSONProject}
           onImportProject={importJSONProject}
           onOpenCompiler={() => setIsCompilerOpen(true)}
+          onOpenPromoPack={() => setIsPromoPackOpen(true)}
           onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
           onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
-          onOpenAIModal={() => setIsAIModalOpen(true)}
           onOpenProjectConsole={() => {
             if (isGuestSession()) {
               alert(
@@ -1795,9 +1957,10 @@ export default function App() {
             setIsProjectConsoleOpen(true);
           }}
           onOpenCharacterBible={handleOpenCharactersModal}
-          onOpenStory={handleOpenStoryModal}
-          onOpenScriptSynopsisModal={() => setIsScriptSynopsisModalOpen(true)}
+          onOpenWorldEnvironment={handleOpenWorldEnvironment}
+          onOpenWriterConsole={openWriterConsole}
           onOpenHelpModal={() => setIsHelpModalOpen(true)}
+          onOpenStudioBrain={() => setIsStudioBrainOpen(true)}
           onOpenLoginModal={() => setIsLoginModalOpen(true)}
           onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
           appVersionMode={appVersionMode}
@@ -1823,6 +1986,7 @@ export default function App() {
           redoCount={redoStack.length}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => toggleFullscreenMode()}
+          onMinimizeHeader={() => setHeaderMinimized(true)}
           onOpenCollabChat={() => {
             setIsCollabChatOpen((v) => !v);
             setUnreadChatCount(0);
@@ -1835,173 +1999,46 @@ export default function App() {
         />
       )}
 
+      {/* Restore minimized top bar */}
+      {!isFullscreen && headerMinimized && (
+        <button
+          type="button"
+          onClick={() => setHeaderMinimized(false)}
+          className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-1.5 px-3 py-1 rounded-b-xl bg-zinc-900/95 border border-t-0 border-white/15 text-[11px] font-semibold text-zinc-200 hover:text-white hover:bg-zinc-800 shadow-lg"
+          title="Show top bar"
+        >
+          <span className="inline-block rotate-180">⌃</span>
+          Show toolbar
+        </button>
+      )}
 
 
       {/* Main Studio Body View */}
-      <main className="flex-1 w-full p-1.5 sm:p-3 flex flex-col gap-2 overflow-hidden min-h-0">
+      <main className={`flex-1 w-full flex flex-col overflow-hidden min-h-0 ${
+        isFullscreen || activeView === 'canvas' ? 'p-0 gap-0' : 'p-1.5 sm:p-3 gap-2'
+      }`}>
         
         {/* DYNAMICALLY SEGREGATED WORKSPACE VIEW CONTAINER */}
         <div key={activeView} className="flex-1 w-full min-h-0 overflow-hidden flex flex-col sps-view-enter">
           
-          {/* TAB 1: DIRECTOR CANVAS VIEW */}
+          {/* TAB 1: 3D STAGE (Director Canvas) — edge-to-edge */}
           {showCanvasTab && activeView === 'canvas' && (
-            <div className="flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-3 h-full overflow-hidden">
-              
-              {/* LEFT 7 COLUMNS: Interactive Director Canvas */}
-              <div className="lg:col-span-7 flex flex-col gap-3 overflow-y-auto pr-1 h-full">
-                <DirectorCanvas 
-                  shot={currentShotObj} 
-                  aspectRatio={aspectRatio}
-                  shots={shots}
-                  activeShotIndex={activeShotIndex}
-                  setActiveShotIndex={setActiveShotIndex}
-                  keyframeMode={canvasKeyframeMode}
-                  setKeyframeMode={setCanvasKeyframeMode}
-                  projectGeneratedImages={projectGeneratedImages}
-                  projectTitle={projectTitle}
-                  onEmbedImage={handleEmbedImageToProject}
-                  onOpenAdminSettings={(tab) => {
-                    setAdminModalTab(tab || 'all');
-                    setIsAdminModalOpen(true);
-                  }}
-                />
-              </div>
-
-              {/* RIGHT 5 COLUMNS: Live Prompt View Cards */}
-              <div className="lg:col-span-5 flex flex-col gap-3 overflow-y-auto pr-1 h-full">
-                
-                {/* FIRST FRAME PROMPT CARD */}
-                <div 
-                  onClick={() => setCanvasKeyframeMode('first_frame')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    canvasKeyframeMode === 'first_frame'
-                      ? 'bg-cyan-500/10 border-cyan-400/50 shadow-lg shadow-cyan-950/20'
-                      : colorTheme === 'paper'
-                        ? 'bg-white border-slate-200 hover:border-slate-300'
-                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
-                      <Play className="w-3.5 h-3.5 text-cyan-400" />
-                      First Frame · Frame 0
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); copyFirstFrame(); }}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
-                    >
-                      {copiedFirstFrame ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedFirstFrame ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all ${
-                    colorTheme === 'paper'
-                      ? 'text-slate-700 bg-slate-50 border-slate-200'
-                      : 'text-zinc-300 bg-black/30 border-white/5'
-                  }`}>
-                    {firstFrameText}
-                  </p>
-                </div>
-
-                {/* LAST FRAME PROMPT CARD */}
-                <div 
-                  onClick={() => setCanvasKeyframeMode('last_frame')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    canvasKeyframeMode === 'last_frame'
-                      ? 'bg-amber-500/10 border-amber-400/50 shadow-lg shadow-amber-950/20'
-                      : colorTheme === 'paper'
-                        ? 'bg-white border-slate-200 hover:border-slate-300'
-                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
-                      <FastForward className="w-3.5 h-3.5 text-amber-400" />
-                      Last Frame · Frame N
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); copyLastFrame(); }}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
-                    >
-                      {copiedLastFrame ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedLastFrame ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all ${
-                    colorTheme === 'paper'
-                      ? 'text-slate-700 bg-slate-50 border-slate-200'
-                      : 'text-zinc-300 bg-black/30 border-white/5'
-                  }`}>
-                    {lastFrameText}
-                  </p>
-                </div>
-
-                {/* STAGE PRODUCTION VIDEO PROMPT CARD */}
-                <div 
-                  onClick={() => setCanvasKeyframeMode('transition')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                    canvasKeyframeMode === 'transition'
-                      ? 'bg-pink-500/10 border-pink-400/50 shadow-lg shadow-pink-950/20'
-                      : colorTheme === 'paper'
-                        ? 'bg-white border-slate-200 hover:border-slate-300'
-                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-xs font-semibold text-pink-300 flex items-center gap-1.5">
-                      <Code className="w-3.5 h-3.5 text-pink-400" />
-                      Video prompt · Vector
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); copyActivePrompt(); }}
-                      className="px-2.5 py-1 rounded-lg bg-cyan-400 text-zinc-950 hover:bg-cyan-300 font-semibold text-[11px] flex items-center gap-1 shadow"
-                    >
-                      {copiedPrompt ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedPrompt ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all max-h-28 overflow-y-auto ${
-                    colorTheme === 'paper'
-                      ? 'text-slate-700 bg-slate-50 border-slate-200'
-                      : 'text-zinc-300 bg-black/30 border-white/5'
-                  }`}>
-                    {activeShotPromptText}
-                  </p>
-                </div>
-
-                {/* IMAGE PROMPT CARD */}
-                <div className={`p-4 rounded-2xl border transition-all ${
-                  colorTheme === 'paper'
-                    ? 'bg-white border-slate-200'
-                    : 'bg-white/[0.03] border-white/10'
-                }`}>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
-                      <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                      Image generation prompt
-                    </span>
-                    <button
-                      type="button"
-                      onClick={copyActiveSeeDreamPrompt}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400 text-zinc-950 hover:bg-amber-300 font-semibold text-[11px] flex items-center gap-1 shadow"
-                    >
-                      {copiedSeeDream ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedSeeDream ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className={`text-xs leading-relaxed p-3 rounded-xl border select-all max-h-28 overflow-y-auto ${
-                    colorTheme === 'paper'
-                      ? 'text-slate-700 bg-slate-50 border-slate-200'
-                      : 'text-zinc-300 bg-black/30 border-white/5'
-                  }`}>
-                    {activeShotSeeDreamText}
-                  </p>
-                </div>
-
-              </div>
+            <div className="flex-1 w-full h-full overflow-hidden min-h-0 m-0 p-0">
+              <DirectorCanvas
+                shot={currentShotObj}
+                aspectRatio={aspectRatio}
+                shots={shots}
+                activeShotIndex={activeShotIndex}
+                setActiveShotIndex={setActiveShotIndex}
+                setAspectRatio={(val) => { setAspectRatio(val); syncToCloud({ aspectRatio: val }); }}
+                projectTitle={projectTitle}
+                isFullscreen={isFullscreen}
+                onMinimizeHeader={() => setHeaderMinimized(true)}
+                onOpenAdminSettings={(tab) => {
+                  setAdminModalTab(tab || 'all');
+                  setIsAdminModalOpen(true);
+                }}
+              />
             </div>
           )}
 
@@ -2013,6 +2050,8 @@ export default function App() {
                 onUpdateShotsFromScript={updateShotsWithHistory}
                 onNavigateToView={setActiveView}
                 projectTitle={projectTitle}
+                initialConsoleTab={writerConsoleTab}
+                roomId={effectiveRoomId}
               />
             </div>
           )}
@@ -2034,11 +2073,13 @@ export default function App() {
                 onReorderShots={handleReorderShots}
                 onCompilePrompt={() => setIsCompilerOpen(true)}
                 colorTheme={colorTheme}
+                genreKey={presetProfile}
+                projectTitle={projectTitle}
               />
             </div>
           )}
 
-          {/* TAB 3: 📝 STUDIO FORM VIEW (24-Craft Production Form Editor) */}
+          {/* TAB 3: STUDIO FORM VIEW */}
           {activeView === 'form' && (
             <div className="flex-1 w-full h-full overflow-hidden">
               <StudioFormView
@@ -2050,6 +2091,8 @@ export default function App() {
                 allShotsList={shots}
                 colorTheme={colorTheme}
                 onFullEditorOpenChange={setIsFullEditorOpen}
+                genreKey={presetProfile}
+                projectTitle={projectTitle}
               />
             </div>
           )}
@@ -2073,6 +2116,23 @@ export default function App() {
         activeTargetModel={targetModel}
         projectTitle={projectTitle}
         colorTheme={colorTheme}
+        onOpenWriterSynopsis={() => {
+          setIsCompilerOpen(false);
+          openWriterConsole('synopsis');
+        }}
+        onEditShotInForm={(shotIdx) => {
+          setIsCompilerOpen(false);
+          setActiveShotIndex(shotIdx);
+          setActiveView('form');
+        }}
+      />
+
+      <PromoPackModal
+        isOpen={isPromoPackOpen}
+        onClose={() => setIsPromoPackOpen(false)}
+        shots={shots}
+        projectTitle={projectTitle}
+        aspectRatio={aspectRatio}
       />
 
       {/* Admin Settings Modal */}
@@ -2099,16 +2159,6 @@ export default function App() {
         collaborators={collaborators}
         isCloudSyncing={isCloudSyncing}
         initialCategoryTab={adminModalTab}
-        colorTheme={colorTheme}
-      />
-
-      {/* AI Script Breakdown Modal */}
-      <AIScriptModal
-        isOpen={isAIModalOpen}
-        onClose={() => setIsAIModalOpen(false)}
-        onApplyShots={handleApplyAIShots}
-        setProjectTitle={(val) => { setProjectTitle(val); syncToCloud({ projectTitle: val }); }}
-        currentProjectTitle={projectTitle}
         colorTheme={colorTheme}
       />
 
@@ -2161,6 +2211,10 @@ export default function App() {
       <HelpUserGuideModal
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}
+      />
+      <StudioBrainModal
+        isOpen={isStudioBrainOpen}
+        onClose={() => setIsStudioBrainOpen(false)}
       />
 
       {/* Gmail Login & Account Switcher Modal */}
@@ -2228,12 +2282,17 @@ export default function App() {
         shots={shots}
         projectTitle={projectTitle}
         initialTab={characterBibleTab || 'roster'}
+        onOpenWriterSynopsis={() => {
+          setIsCharacterBibleOpen(false);
+          openWriterConsole('synopsis');
+        }}
       />
 
-      {/* Master Script Synopsis Modal */}
-      <ScriptSynopsisModal
-        isOpen={isScriptSynopsisModalOpen}
-        onClose={() => setIsScriptSynopsisModalOpen(false)}
+      <WorldEnvironmentConsole
+        isOpen={isWorldEnvironmentOpen}
+        onClose={() => setIsWorldEnvironmentOpen(false)}
+        shots={shots}
+        projectTitle={projectTitle}
       />
 
       {/* Live Bi-Directional Sync Confirmation Toast Banner */}

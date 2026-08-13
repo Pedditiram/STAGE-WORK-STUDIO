@@ -473,6 +473,8 @@ function projectKey(p) {
 }
 
 const DELETED_TITLES_KEY = 'sps_deleted_project_titles';
+const PROJECT_ARCHIVE_KEY = 'sps_project_archive';
+const MAX_ARCHIVED_PROJECTS = 40;
 
 function readDeletedTitleKeys() {
   if (typeof window === 'undefined') return new Set();
@@ -488,6 +490,105 @@ function readDeletedTitleKeys() {
   }
 }
 
+/** True when a title was deleted/archived and must not re-enter the live library. */
+export function isProjectTitleDeleted(title) {
+  const key = String(title || '').trim().toUpperCase();
+  if (!key || key === 'STAGE PRODUCTION STUDIO') return false;
+  return readDeletedTitleKeys().has(key);
+}
+
+function readProjectArchive() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROJECT_ARCHIVE_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeProjectArchive(list) {
+  if (typeof window === 'undefined') return;
+  const next = Array.isArray(list) ? list.slice(0, MAX_ARCHIVED_PROJECTS) : [];
+  localStorage.setItem(PROJECT_ARCHIVE_KEY, JSON.stringify(next));
+  try {
+    window.dispatchEvent(new Event('sps_project_archive_updated'));
+  } catch (e) {}
+}
+
+export function getArchivedProjects() {
+  return readProjectArchive();
+}
+
+/**
+ * Move a live project into Archive (full snapshot) and tombstone its title
+ * so cloud hydrate / auto-heal cannot resurrect it into the library.
+ */
+export function archiveProjectSnapshot(project) {
+  if (typeof window === 'undefined' || !project?.title) return null;
+  const title = String(project.title).trim();
+  if (!title || title.toUpperCase() === 'STAGE PRODUCTION STUDIO') return null;
+
+  const archiveId = `arch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const entry = {
+    ...JSON.parse(JSON.stringify(project)),
+    archiveId,
+    archivedAt: new Date().toISOString(),
+    archivedAtLabel: new Date().toLocaleString()
+  };
+
+  const prev = readProjectArchive().filter(
+    (p) => String(p?.title || '').trim().toUpperCase() !== title.toUpperCase()
+  );
+  writeProjectArchive([entry, ...prev]);
+  markProjectTitlesDeleted([title]);
+  return entry;
+}
+
+/** Restore an archived project into the live library; clears its delete tombstone. */
+export function restoreProjectFromArchive(archiveId) {
+  if (typeof window === 'undefined' || !archiveId) return null;
+  const archive = readProjectArchive();
+  const idx = archive.findIndex((p) => p.archiveId === archiveId || p.id === archiveId);
+  if (idx === -1) return null;
+
+  const entry = archive[idx];
+  const { archiveId: _aid, archivedAt, archivedAtLabel, ...project } = entry;
+  const title = String(project.title || '').trim();
+  if (!title) return null;
+
+  clearDeletedTitleKeys([title]);
+
+  let library = [];
+  try {
+    library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+  } catch (e) {}
+  if (!Array.isArray(library)) library = [];
+
+  const key = title.toUpperCase();
+  const existingIdx = library.findIndex((p) => String(p?.title || '').trim().toUpperCase() === key);
+  const restored = {
+    ...project,
+    id: project.id || `proj_${Date.now()}`,
+    title,
+    lastModified: new Date().toLocaleDateString(),
+    restoredAt: new Date().toISOString()
+  };
+  if (existingIdx >= 0) library[existingIdx] = { ...library[existingIdx], ...restored };
+  else library.unshift(restored);
+
+  localStorage.setItem('sps_project_library', JSON.stringify(library));
+  writeProjectArchive(archive.filter((_, i) => i !== idx));
+  window.dispatchEvent(new Event('sps_projects_updated'));
+  return restored;
+}
+
+/** Permanently remove from Archive (cannot restore). */
+export function purgeArchivedProject(archiveId) {
+  if (typeof window === 'undefined' || !archiveId) return;
+  writeProjectArchive(readProjectArchive().filter((p) => p.archiveId !== archiveId && p.id !== archiveId));
+}
+
 /** Record deleted titles so cloud hydrates cannot resurrect them. */
 export function markProjectTitlesDeleted(titles) {
   if (typeof window === 'undefined') return;
@@ -495,9 +596,80 @@ export function markProjectTitlesDeleted(titles) {
   const set = readDeletedTitleKeys();
   list.forEach((t) => {
     const key = String(t || '').trim().toUpperCase();
-    if (key && key !== 'STAGE PRODUCTION STUDIO') set.add(key);
+    if (key && key === 'STAGE PRODUCTION STUDIO') return;
+    if (key) set.add(key);
   });
   localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
+}
+
+/**
+ * Apply cloud tombstones carefully: never mark a title deleted if it is still
+ * present in the live projects payload (restore / library push wins).
+ */
+export function applyCloudDeletedTitles(deletedTitles, liveProjects = []) {
+  if (typeof window === 'undefined') return;
+  const liveKeys = new Set(
+    (Array.isArray(liveProjects) ? liveProjects : [])
+      .map((p) => String(p?.title || '').trim().toUpperCase())
+      .filter(Boolean)
+  );
+  // Active project must never stay tombstoned
+  try {
+    const active =
+      localStorage.getItem('sps_active_project_title') ||
+      localStorage.getItem('sps_project_title') ||
+      '';
+    const activeKey = String(active).trim().toUpperCase();
+    if (activeKey) liveKeys.add(activeKey);
+  } catch (e) {}
+
+  const incoming = (Array.isArray(deletedTitles) ? deletedTitles : [])
+    .map((t) => String(t || '').trim().toUpperCase())
+    .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO' && !liveKeys.has(t));
+
+  if (incoming.length) markProjectTitlesDeleted(incoming);
+
+  // Clear tombstones for anything that is live again
+  if (liveKeys.size) clearDeletedTitleKeys(Array.from(liveKeys));
+}
+
+/**
+ * If the active project was wrongly swept into Archive, restore it to Library.
+ * Returns restored project or null.
+ */
+export function healActiveProjectFromArchive() {
+  if (typeof window === 'undefined') return null;
+  let activeTitle = '';
+  try {
+    activeTitle =
+      localStorage.getItem('sps_active_project_title') ||
+      localStorage.getItem('sps_project_title') ||
+      '';
+  } catch (e) {}
+  const key = String(activeTitle || '').trim().toUpperCase();
+  if (!key || key === 'STAGE PRODUCTION STUDIO') return null;
+
+  clearDeletedTitleKeys([activeTitle]);
+
+  let library = [];
+  try {
+    library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+  } catch (e) {}
+  if (!Array.isArray(library)) library = [];
+
+  const inLibrary = library.some((p) => String(p?.title || '').trim().toUpperCase() === key);
+  if (inLibrary) {
+    // Ensure library write reflects cleared tombstone
+    localStorage.setItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(library)));
+    return library.find((p) => String(p?.title || '').trim().toUpperCase() === key) || null;
+  }
+
+  const archive = readProjectArchive();
+  const idx = archive.findIndex((p) => String(p?.title || '').trim().toUpperCase() === key);
+  if (idx === -1) return null;
+
+  const restored = restoreProjectFromArchive(archive[idx].archiveId || archive[idx].id);
+  return restored;
 }
 
 function clearDeletedTitleKeys(titles) {
@@ -642,7 +814,7 @@ export async function fetchProjectLibraryFromCloud() {
         return processAndStoreProjects([], { cloudAuthoritative: false });
       }
       if (Array.isArray(data.deletedTitles) && data.deletedTitles.length) {
-        markProjectTitlesDeleted(data.deletedTitles);
+        applyCloudDeletedTitles(data.deletedTitles, Array.isArray(data.projects) ? data.projects : []);
       }
       if (Array.isArray(data.projects)) {
         // Empty cloud library is valid only when durableOk (explicit empty SoT)
@@ -658,7 +830,9 @@ export async function fetchProjectLibraryFromCloud() {
     const res = await fetchJsonTimed(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.deletedTitles)) markProjectTitlesDeleted(data.deletedTitles);
+      if (Array.isArray(data.deletedTitles)) {
+        applyCloudDeletedTitles(data.deletedTitles, Array.isArray(data.projects) ? data.projects : []);
+      }
       if (Array.isArray(data.projects)) {
         return processAndStoreProjects(data.projects);
       }

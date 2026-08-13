@@ -6,7 +6,7 @@ import {
   Check, Filter
 } from 'lucide-react';
 import { enhanceEntireShotWithLLM } from '../services/aiScriptParser';
-import { parseSceneAndShotID } from '../utils/sceneShotUtils';
+import { parseSceneAndShotID, deriveSceneGroupHeading } from '../utils/sceneShotUtils';
 
 const CATEGORIES = [
   { id: 'all', label: `All ${SEEDANCE_SLOTS.length} Crafts`, keys: [] },
@@ -30,7 +30,9 @@ export default function SpreadsheetView({
   activeShotIndex = 0, 
   setActiveShotIndex,
   onCompilePrompt,
-  colorTheme = 'paper'
+  colorTheme = 'paper',
+  genreKey = 'mythological',
+  projectTitle = ''
 }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -186,26 +188,23 @@ export default function SpreadsheetView({
       const sceneTag = parsed.sceneTag || `SCENE ${String(parsed.sceneNum).padStart(2, '0')}`;
       let existingGroup = groups.find(g => g.sceneTag === sceneTag);
       if (!existingGroup) {
-        let cleanSynopsis = (shot.sceneSynopsis || '').replace(/^Scene Location & Context:\s*/i, '').trim();
-        cleanSynopsis = cleanSynopsis
-          .replace(/-(?:BOLD|OBLIQUE|REGULAR|ITALIC)/gi, '')
-          .replace(/\b(?:PAGEMODE|USENONE|PAGES|CATALOG|AUTHOR|RAMAYANA PRODUCTION DOCUMENT|PNO:[A-Z0-9:]+|REVUAT!|UGR:V|JZDIN|QNHH8|MCQAFUGC\d*|A0ONLY|HVHQQ\d*|WFRGE\d*|FG7GI\d*)\b/gi, '')
-          .replace(/[\u0000-\u001F\u7F-\u009F]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        const headingStr = (cleanSynopsis && !/^[A-Z0-9_:\-!?\s]{40,}$/.test(cleanSynopsis) && !cleanSynopsis.includes('PNO:'))
-          ? (cleanSynopsis.length > 75 ? `${cleanSynopsis.substring(0, 75)}...` : cleanSynopsis)
-          : `SCENE ${String(parsed.sceneNum).padStart(2, '0')} PRODUCTION SEQUENCE`;
         existingGroup = {
           sceneTag,
-          heading: headingStr,
+          sceneNum: parsed.sceneNum,
+          heading: '',
           items: []
         };
         groups.push(existingGroup);
       }
       existingGroup.items.push({ shot, originalIdx });
     });
+
+    // Derive headings from the full scene (not only the first shot — cover pages often land on SH01)
+    groups.forEach((group) => {
+      const sceneShots = group.items.map((it) => it.shot);
+      group.heading = deriveSceneGroupHeading(sceneShots, group.sceneNum);
+    });
+
     return groups;
   }, [shots]);
 
@@ -221,8 +220,24 @@ export default function SpreadsheetView({
     }, []);
   }, [shots]);
 
-  const toggleSceneCollapse = (sceneTag) => {
-    setCollapsedScenes(prev => ({ ...prev, [sceneTag]: !prev[sceneTag] }));
+  const toggleSceneCollapse = (sceneTag, e) => {
+    if (e?.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const allCollapsed = sceneGroups.every((g) => collapsedScenes[g.sceneTag]);
+      if (allCollapsed) {
+        // Alt+click again when everything is minimized → expand all
+        setCollapsedScenes({});
+      } else {
+        const next = {};
+        sceneGroups.forEach((g) => {
+          next[g.sceneTag] = true;
+        });
+        setCollapsedScenes(next);
+      }
+      return;
+    }
+    setCollapsedScenes((prev) => ({ ...prev, [sceneTag]: !prev[sceneTag] }));
   };
 
   return (
@@ -235,7 +250,7 @@ export default function SpreadsheetView({
         style={isPaperTheme ? { backgroundColor: 'rgba(255,255,255,0.92)', borderColor: '#dbe3ee' } : { backgroundColor: 'rgba(20,26,36,0.88)', borderColor: 'rgba(148,163,184,0.14)' }}
         className="sps-matrix-toolbar p-2 sm:p-2.5 px-2 sm:px-4 border-b flex items-center justify-between gap-2 sm:gap-3 flex-wrap z-20"
       >
-        <div className="flex items-center gap-1.5 overflow-x-auto sps-header-scroll max-w-full pb-0.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto sps-header-scroll max-w-full pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1 mr-1 shrink-0 ${
             isPaperTheme ? 'text-slate-700' : 'text-zinc-400'
           }`} style={{ fontFamily: 'var(--sps-font)' }}>
@@ -330,12 +345,15 @@ export default function SpreadsheetView({
                       <div className="flex items-center justify-between gap-4">
                         <div 
                           className="flex items-center gap-3 cursor-pointer"
-                          onClick={() => toggleSceneCollapse(group.sceneTag)}
+                          onClick={(e) => toggleSceneCollapse(group.sceneTag, e)}
+                          title={isCollapsed ? 'Click to expand · Alt+click expands all scenes' : 'Click to minimize · Alt+click minimizes all scenes'}
                         >
                           <button 
                             type="button" 
                             style={isPaperTheme ? { backgroundColor: '#f59e0b', color: '#000000' } : { backgroundColor: '#09090b', color: '#f59e0b' }}
                             className="w-5 h-5 rounded-md font-bold flex items-center justify-center text-xs border border-amber-500/40"
+                            title={isCollapsed ? 'Expand scene · Alt+click = expand all' : 'Minimize scene · Alt+click = minimize all'}
+                            aria-label={isCollapsed ? 'Expand scene' : 'Minimize scene'}
                           >
                             {isCollapsed ? '+' : '−'}
                           </button>
@@ -345,9 +363,13 @@ export default function SpreadsheetView({
                           >
                             🎬 {group.sceneTag}
                           </span>
-                          <h3 className={`text-xs sm:text-sm font-black font-mono tracking-wider uppercase truncate max-w-2xl ${
-                            isPaperTheme ? 'text-amber-950' : 'text-white'
-                          }`}>
+                          <h3
+                            className={`text-xs sm:text-sm font-bold tracking-tight truncate max-w-3xl ${
+                              isPaperTheme ? 'text-amber-950' : 'text-white'
+                            }`}
+                            style={{ fontFamily: 'var(--sps-font)' }}
+                            title={group.heading}
+                          >
                             {group.heading}
                           </h3>
                         </div>
@@ -366,8 +388,9 @@ export default function SpreadsheetView({
 
                   {/* SHOT ROWS IN THIS SCENE */}
                   {!isCollapsed && group.items.map(({ shot, originalIdx: shotIdx }) => {
+                    if (!shot) return null;
                     const isActive = shotIdx === activeShotIndex;
-                    const isMuted = !!shot.isMuted;
+                    const isMuted = !!shot?.isMuted;
                     const isBeingDragged = draggedShotIdx === shotIdx;
                     const isTargetDrop = dragOverShotIdx === shotIdx;
 
@@ -537,6 +560,7 @@ export default function SpreadsheetView({
                                 slotConfig={slot}
                                 value={shot[slot.key] || ''}
                                 onChange={(val) => handleCellChange(shotIdx, slot.key, val)}
+                                shot={shot}
                                 isMuted={Boolean(shot?.mutedSlots?.[slot.key])}
                                 onToggleMute={(slotKey) => {
                                   const currentMuted = shot?.mutedSlots || {};
@@ -545,6 +569,8 @@ export default function SpreadsheetView({
                                 }}
                                 compact={true}
                                 colorTheme={colorTheme}
+                                genreKey={genreKey}
+                                projectTitle={projectTitle}
                                 allSlots={filteredSlots}
                                 isForcePopupOpen={activeModalCell?.shotIdx === shotIdx && activeModalCell?.slotKey === slot.key}
                                 onOpenPopup={() => setActiveModalCell({ shotIdx, slotKey: slot.key })}
@@ -623,6 +649,7 @@ export default function SpreadsheetView({
             onClick={onAddShot}
             style={{ backgroundColor: '#f59e0b', color: '#000000' }}
             className="px-3.5 py-1.5 rounded-xl font-black text-xs font-mono flex items-center gap-1.5 shadow-md hover:bg-amber-400 cursor-pointer transition-all uppercase tracking-wide"
+            title="Add shot into the selected scene (after active row)"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Add Shot</span>

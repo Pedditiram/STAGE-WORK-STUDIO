@@ -4,6 +4,9 @@ import {
   LayoutGrid, FileText, Video, Cloud, Key, CheckCircle2, 
   HelpCircle, ChevronRight, Search, Layers, RefreshCw, Archive, Sliders, Play, Copy
 } from 'lucide-react';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+
+const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
 const GUIDE_SECTIONS = [
   {
@@ -18,13 +21,13 @@ const GUIDE_SECTIONS = [
             🎬 Welcome to Stage Production Studio
           </h4>
           <p className="leading-relaxed">
-            Stage Production Studio is an all-in-one workstation designed for filmmakers, directors, prompt engineers, and creative teams to transform screenplays into professional 25-craft production matrices, AI keyframe storyboards, and multi-user live room collaborations.
+            {`Stage Production Studio is an all-in-one workstation designed for filmmakers, directors, prompt engineers, and creative teams to transform screenplays into professional ${CRAFT_COUNT}-craft production matrices, AI keyframe storyboards, and multi-user live room collaborations.`}
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-1">
-            <span className="font-bold text-amber-400 block">📐 25 Crafts of Cinema Matrix</span>
+            <span className="font-bold text-amber-400 block">{`📐 ${CRAFT_COUNT} Crafts of Cinema Matrix`}</span>
             <p className="text-zinc-400 leading-snug">Fine-tune framing, camera motion, lens optics, lighting, characters, sound design, Foley, VFX, and reference images per shot.</p>
           </div>
           <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-1">
@@ -63,8 +66,8 @@ const GUIDE_SECTIONS = [
           <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex items-start gap-3">
             <span className="p-1.5 rounded-md bg-purple-500/20 text-purple-300 font-bold shrink-0">Step 1</span>
             <div>
-              <strong className="text-white block mb-0.5">Open AI Breakdown Modal</strong>
-              <p className="text-zinc-400">Click <strong>"🪄 AI Script Breakdown"</strong> in the top toolbar or project header.</p>
+              <strong className="text-white block mb-0.5">Open AI Breakdown in Projects Console</strong>
+              <p className="text-zinc-400">Open <strong>Projects Console</strong> from the header, then use the <strong>AI Breakdown</strong> workflow there (not a top-toolbar magic button).</p>
             </div>
           </div>
 
@@ -80,7 +83,7 @@ const GUIDE_SECTIONS = [
             <span className="p-1.5 rounded-md bg-purple-500/20 text-purple-300 font-bold shrink-0">Step 3</span>
             <div>
               <strong className="text-white block mb-0.5">Generate Shot List</strong>
-              <p className="text-zinc-400">Click <strong>"⚡ Analyze & Build Production Matrix"</strong> to populate your spreadsheet with scenes and 28 shot breakdowns.</p>
+              <p className="text-zinc-400">Click <strong>"⚡ Analyze & Build Production Matrix"</strong> to populate your spreadsheet with scenes and craft breakdowns.</p>
             </div>
           </div>
         </div>
@@ -90,7 +93,7 @@ const GUIDE_SECTIONS = [
   {
     id: 'craft_matrix',
     icon: Sliders,
-    title: '3. 25 Crafts Matrix & Prompt Compiler',
+    title: `3. ${CRAFT_COUNT} Crafts Matrix & Prompt Compiler`,
     badge: 'PROMPT ENGINE',
     content: (
       <div className="space-y-4 text-xs font-mono">
@@ -99,7 +102,7 @@ const GUIDE_SECTIONS = [
             ⚙️ Editing Shot Attributes & Compiling Prompts
           </h4>
           <p className="leading-relaxed">
-            Each shot row contains 24 cinema craft columns plus image reference inputs. Customize details per shot and compile production-ready AI image/video prompts.
+            {`Each shot row contains ${CRAFT_COUNT} cinema craft columns plus image reference inputs. Customize details per shot and compile production-ready AI image/video prompts.`}
           </p>
         </div>
 
@@ -167,12 +170,15 @@ const GUIDE_SECTIONS = [
   {
     id: 'genres',
     icon: Sparkles,
-    title: '5. Script Genre Profiles (9 Profiles)',
-    badge: 'PRESETS',
+    title: '5. Script Genre Profiles & Cinematic References',
+    badge: 'PRESETS + REFS',
     content: (
       <div className="space-y-4 text-xs font-mono">
         <p className="text-zinc-300 leading-relaxed">
-          Select from <strong>9 Production Genre Profiles</strong> to pre-fill framing, lighting, color, and character choreography presets:
+          Select a <strong>Production Genre Profile</strong> to pre-fill framing, lighting, color, and choreography.
+          Each genre also unlocks <strong>Cinematic References</strong> (movies, directors, DoPs, art direction, screenplays)
+          inside Matrix craft popups, Writer Digest, Character Bible, World Console, Promo Pack, and Compiler prompts —
+          so LLM enhance follows concrete taste anchors for your script (e.g. mythological → Baahubali / Rajamouli / KK Senthil Kumar).
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-zinc-300">
@@ -193,26 +199,17 @@ const GUIDE_SECTIONS = [
             <span>Urban Gunfights, Car Chases, Rain Alleys & Tactical Agents</span>
           </div>
           <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800">
-            <strong className="text-blue-300 block mb-0.5">🧙‍♂️ Fantasy & Dark Magic</strong>
+            <strong className="text-blue-300 block mb-0.5">🧙 Fantasy & Dark Magic</strong>
             <span>High Sorcery, Rune Staffs, Spellcasting Arcana & Dragons</span>
           </div>
           <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800">
             <strong className="text-red-300 block mb-0.5">👻 Horror & Supernatural Dread</strong>
             <span>Haunted Mansions, Paranormal Entities, Shadows & Flickering Light</span>
           </div>
-          <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800">
-            <strong className="text-pink-300 block mb-0.5">💃 Bollywood & Musical Spectacle</strong>
-            <span>Sherwanis, Lehengas, Holi Colors, 50 Dancers & Marigold Petals</span>
-          </div>
-          <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800">
-            <strong className="text-amber-200 block mb-0.5">📜 Historical Drama & Period Romance</strong>
-            <span>Victorian Ballrooms, Regency Silk Gowns, Candlelight & Waltzes</span>
-          </div>
-          <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 col-span-1 md:col-span-2">
-            <strong className="text-orange-400 block mb-0.5">🏎️ High-Octane Racing & Supercar Heist</strong>
-            <span>Underground Drifts, Carbon Visors, NOS Exhaust Flames & Vault Pursuits</span>
-          </div>
         </div>
+        <p className="text-zinc-500 text-[11px] leading-relaxed">
+          Tip: open any Matrix craft → expand → scroll to <em>Cinematic references</em> → click a chip to insert, or Copy for LLM.
+        </p>
       </div>
     )
   },

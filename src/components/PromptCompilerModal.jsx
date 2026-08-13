@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { createZipArchive } from '../utils/zipUtils';
-import SlotEditor from './SlotEditor';
+import { loadDirectorPsychology } from '../utils/directorPsychologyStorage';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import { 
   X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Archive, Edit3, BookOpen,
-  Maximize2, Minimize2
+  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Archive, BookOpen,
+  Maximize2, Minimize2, ExternalLink
 } from 'lucide-react';
 import { parseSceneAndShotID, formatShotIdForPrompt, formatShotFilename } from '../utils/sceneShotUtils';
+import { compileMasterCinemaCompilerPrompt } from '../utils/compileMasterCinemaPrompt';
 
-export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateShot, activeTargetModel = "Stage Production Studio", projectTitle }) {
+export default function PromptCompilerModal({
+  isOpen,
+  onClose,
+  shots,
+  onUpdateShot: _onUpdateShot, // retained for API compat; crafts are read-only — edit via Form
+  activeTargetModel = "Stage Production Studio",
+  projectTitle,
+  onOpenWriterSynopsis,
+  onEditShotInForm,
+}) {
   const [formatMode, setFormatMode] = useState('seedance_tagged'); // Default to SPS Standard Tagged
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'single'
   const [copied, setCopied] = useState(false);
@@ -33,6 +43,21 @@ export default function PromptCompilerModal({ isOpen, onClose, shots, onUpdateSh
     }
     return '';
   });
+
+  const [extractedMasterStory, setExtractedMasterStory] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sps_extracted_master_story') || '';
+    }
+    return '';
+  });
+
+  // Writer Console owns synopsis; refresh read-only status when Compiler opens
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    setScriptSynopsisSource(localStorage.getItem('sps_script_synopsis_source') || 'auto_llm');
+    setWriterCustomScriptSynopsis(localStorage.getItem('sps_writer_custom_script_synopsis') || '');
+    setExtractedMasterStory(localStorage.getItem('sps_extracted_master_story') || '');
+  }, [isOpen]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [splitRatioMode, setSplitRatioMode] = useState('standard'); // 'standard' (35/65) | 'inverse' (65/35) | 'equal' (50/50)
@@ -406,379 +431,12 @@ ${promptNarrative.trim()}`;
   };
 
   const compileComfyUISeedanceFormat = (shot, shotIdx) => {
-    const parsedId = parseSceneAndShotID(shot, shotIdx);
-    const shotId = parsedId.shortId;
-    const scShNumber = parsedId.formattedId;
-    const framing = shot.shotComposition || 'Medium Shot';
-    const motion = (shot.cameraMotionTag || 'Tracking Shot').replace(/\[Camera:\s*/, '').replace(/\]/, '');
-    const lighting = (shot.subjectLightingTag || 'Golden Hour').replace(/\[|\]/g, '');
-    const color = (shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
-
-    const subjectsMap = new Map();
-    const rawMatrixStr = shot.characterIdMatrix || '';
-
-    // Smart shot-specific subject context verification
-    const shotTextContext = `
-      ${shot.characterIdAssetRef || ''}
-      ${shot.coArtistInteraction || ''}
-      ${shot.actionEnvContext || ''}
-      ${shot.characterDialogue || ''}
-      ${shot.characterMovement || ''}
-      ${shot.characterExpression || ''}
-      ${shot.sceneShotId || ''}
-    `.toLowerCase();
-
-    if (rawMatrixStr.includes('Image_')) {
-      const parts = rawMatrixStr.split('|').map(s => s.trim()).filter(Boolean);
-      parts.forEach(p => {
-        const m = p.match(/Image_(\d+)\s*=\s*(.*)/i);
-        if (m) {
-          const num = parseInt(m[1], 10);
-          const val = m[2].trim();
-          if (val && val !== 'Image_') {
-            const cleanVal = val.toLowerCase().replace(/\[|\]|charid:\s*|@/g, '').trim();
-            // Verify if this subject is actually featured in THIS specific shot context
-            const isGenericEnv = num === 5 || num === 6 || cleanVal === 'scene' || cleanVal === 'crowd' || cleanVal === 'environment' || cleanVal === 'forest trail';
-            const isMentionedInShot = shotTextContext.includes(cleanVal) || 
-                                      cleanVal.split(/\s+/).some(token => token.length >= 4 && shotTextContext.includes(token));
-
-            if (isMentionedInShot || isGenericEnv) {
-              subjectsMap.set(num, val);
-            }
-          }
-        }
-      });
-    }
-
-    const rawImagesStr = shot.shotDurationAndImages || '';
-    const pairMatches = Array.from(rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g));
-
-    if (pairMatches.length > 0) {
-      for (const match of pairMatches) {
-        const imgNum = parseInt(match[1], 10);
-        if (!subjectsMap.has(imgNum)) {
-          const tag = match[2].replace('@', '').toLowerCase();
-          let cleanName = tag.split('_')[0];
-          if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
-          if (shotTextContext.includes(cleanName) || imgNum >= 5) {
-            subjectsMap.set(imgNum, cleanName);
-          }
-        }
-      }
-    }
-
-    // Auto-extract primary & secondary subjects if not mapped yet
-    if (!subjectsMap.has(1) && shot.characterIdAssetRef) {
-      const cleanRef = String(shot.characterIdAssetRef).replace(/\[|\]|CharID:\s*|@/g, '').trim().split('_')[0];
-      if (cleanRef) subjectsMap.set(1, cleanRef);
-    }
-
-    if (!subjectsMap.has(2) && shot.coArtistInteraction) {
-      const cleanCo = String(shot.coArtistInteraction).replace(/\[|\]|CharID:\s*|@/g, '').trim().split('_')[0];
-      if (cleanCo) subjectsMap.set(2, cleanCo);
-    }
-
-    const sanitizeSubjectNameTag = (str) => {
-      if (!str) return '';
-      let cleaned = str.replace(/\[|\]|CharID:\s*|@/gi, '').trim();
-      // Cut at punctuation break (;, ., |)
-      if (cleaned.includes(';')) cleaned = cleaned.split(';')[0].trim();
-      if (cleaned.includes('|')) cleaned = cleaned.split('|')[0].trim();
-      // Remove long action verbs and narrative descriptions
-      cleaned = cleaned.replace(/\s+(?:standing|riding|whipping|brandishing|fleeing|surviving|looking|moving|walking|running|fighting|holding|seated|watching|overlooking|defeating)\b.*$/i, '');
-      
-      const words = cleaned.split(/\s+/);
-      if (words.length > 4) {
-        cleaned = words.slice(0, 4).join(' ');
-      }
-      return cleaned.trim();
-    };
-
-    const SUBJECT_ROLE_LABELS = [
-      "Lead Subject",
-      "Co-Artist",
-      "Action Ref / Prop",
-      "Supporting Ref",
-      "Crowd / Army",
-      "Scene Environment",
-      "Ambience / Haze",
-      "Style & Color Ref",
-      "VFX & Special FX"
-    ];
-
-    const subjectsLines = [];
-    for (let i = 1; i <= 9; i++) {
-      const rawVal = subjectsMap.get(i) || '';
-      const cleanVal = sanitizeSubjectNameTag(rawVal);
-      const role = SUBJECT_ROLE_LABELS[i - 1];
-      subjectsLines.push(`Image_${i} (${role}) = ${cleanVal}`);
-    }
-
-    // Extract duration (default 4s)
-    let duration = '4s';
-    if (shot.shotDurationAndImages) {
-      const match = String(shot.shotDurationAndImages).match(/(?:Duration:\s*|Duration\s*=|\b)(\d+(?:\.\d+)?\s*s|\d+\s*sec|\d+\s*seconds?)/i);
-      if (match) {
-        duration = match[1].trim();
-      } else if (typeof shot.shotDurationAndImages === 'string' && shot.shotDurationAndImages.trim()) {
-        const firstToken = shot.shotDurationAndImages.trim().split('|')[0].trim();
-        duration = firstToken.startsWith('Duration:') ? firstToken.replace('Duration:', '').trim() : firstToken;
-      }
-    }
-
-    // Read user checkmark preferences for Final Prompt Inclusion
-    const includeChars = typeof window !== 'undefined' ? (localStorage.getItem('sps_include_characters_in_prompt') !== 'false') : true;
-    const includeStory = typeof window !== 'undefined' ? (localStorage.getItem('sps_include_story_in_prompt') !== 'false') : true;
-
-    // 1. SCRIPT SYNOPSIS (LLM Auto-Generated vs Writer Custom)
-    let scriptSynopsis = '';
-    let sceneSynopsis = '';
-    const env = shot.actionEnvContext || 'Dramatic stage environment';
-
-    if (includeStory) {
-      if (scriptSynopsisSource === 'writer_custom' && writerCustomScriptSynopsis && writerCustomScriptSynopsis.trim()) {
-        scriptSynopsis = writerCustomScriptSynopsis.trim();
-      } else {
-        // Find master screenplay / script story arc
-        const fullScriptCandidates = [
-          localStorage.getItem('sps_extracted_master_story'),
-          localStorage.getItem('sps_master_script_story'),
-          localStorage.getItem('sps_current_screenplay_text'),
-          localStorage.getItem('sps_narrative_prose_story'),
-          localStorage.getItem('sps_extracted_script_story')
-        ];
-
-        for (const cand of fullScriptCandidates) {
-          if (cand && cand.trim() && !cand.startsWith('Complete master script story arc and thematic overview')) {
-            scriptSynopsis = cand.trim();
-            break;
-          }
-        }
-
-        if (!scriptSynopsis) {
-          try {
-            const projLib = localStorage.getItem('sps_project_library');
-            if (projLib) {
-              const projects = JSON.parse(projLib);
-              if (Array.isArray(projects) && projects[0]) {
-                const p = projects[0];
-                scriptSynopsis = p.scriptText || p.masterStory || p.narrativeProse || p.description || '';
-              }
-            }
-          } catch (e) {}
-        }
-
-        if (!scriptSynopsis.trim()) {
-          scriptSynopsis = `Master Script Synopsis: The narrative arc follows the central protagonists through high-stakes dramatic conflicts, emotional character transformations, and pivotal turning points as events unfold in the story world.`;
-        }
-      }
-
-      // 2. SCENE SYNOPSIS (Dedicated sceneSynopsis slot OR dynamic beat)
-      if (shot.sceneSynopsis && shot.sceneSynopsis.trim()) {
-        sceneSynopsis = shot.sceneSynopsis.trim();
-      } else {
-        const sceneParts = [];
-        sceneParts.push(`Scene Location & Context: ${env}`);
-        if (shot.characterIdAssetRef) {
-          sceneParts.push(`Featured Subject: ${shot.characterIdAssetRef.replace(/\[|\]/g, '')}`);
-        }
-        if (shot.characterMovement) {
-          sceneParts.push(`Action Performance: ${shot.characterMovement}`);
-        }
-        if (shot.characterExpression) {
-          sceneParts.push(`Facial Expression: ${shot.characterExpression}`);
-        }
-        if (shot.coArtistInteraction) {
-          sceneParts.push(`Co-Artist Interaction: ${shot.coArtistInteraction.replace(/\[|\]/g, '')}`);
-        }
-        if (shot.characterDialogue) {
-          sceneParts.push(`Dialogue Sync: "${shot.characterDialogue.replace(/"/g, '')}"`);
-        }
-
-        const builtBeat = sceneParts.join(' | ');
-        sceneSynopsis = `Shot #${shotIdx + 1} (${shotId}) Beat — ${builtBeat}`;
-      }
-    } else {
-      scriptSynopsis = '[Excluded by User Checkmark Toggle]';
-      sceneSynopsis = '[Excluded by User Checkmark Toggle]';
-    }
-
-    // 2. CHARACTER BIBLE VAULT & ID DETAILS WITH SMART FUZZY MATCHING
-    let characterBibleVaultBlock = '';
-    let characterStoryNote = '';
-    if (includeChars) {
-      try {
-        const storedCharsStr = localStorage.getItem('sps_character_bible_vault');
-        if (storedCharsStr) {
-          const charProfiles = JSON.parse(storedCharsStr);
-          if (Array.isArray(charProfiles) && charProfiles.length > 0) {
-            
-            // Smart fuzzy character matcher
-            const matchCharacter = (char, refText) => {
-              if (!refText) return false;
-              const refLower = refText.toLowerCase();
-              const tagLower = (char.tag || '').toLowerCase().replace(/@/g, '').trim();
-              const nameLower = (char.name || '').toLowerCase().trim();
-              const idLower = (char.id || '').toLowerCase().trim();
-
-              if (tagLower && refLower.includes(tagLower)) return true;
-              if (nameLower && refLower.includes(nameLower)) return true;
-              if (idLower && refLower.includes(idLower)) return true;
-
-              const tokens = [...nameLower.split(/\s+/), ...tagLower.split(/\s+/), ...idLower.split(/[\s_]+/)]
-                .filter(t => t.length >= 3 && t !== 'hero' && t !== 'asset' && t !== 'char');
-
-              return tokens.some(t => refLower.includes(t));
-            };
-
-            const refText = `
-              ${shot.characterIdAssetRef || ''}
-              ${shot.coArtistInteraction || ''}
-              ${shot.characterIdMatrix || ''}
-              ${shot.shotDurationAndImages || ''}
-            `;
-
-            const matchingChars = charProfiles.filter(char => matchCharacter(char, refText));
-            const targetChars = matchingChars.length > 0 ? matchingChars : charProfiles;
-
-            targetChars.forEach(char => {
-              const traits = [];
-              if (char.backstory) traits.push(`Story: ${char.backstory}`);
-              if (char.characterConnections) traits.push(`Connections: ${char.characterConnections}`);
-              if (char.shotPurpose) traits.push(`Purpose: ${char.shotPurpose}`);
-              if (char.mannerism) traits.push(`Mannerism: ${char.mannerism}`);
-              if (char.walkingStyle) traits.push(`Gait: ${char.walkingStyle}`);
-              if (traits.length > 0) {
-                characterStoryNote += `[${char.name || char.tag} Persona & Purpose: ${traits.join(' | ')}] `;
-              }
-
-              characterBibleVaultBlock += `CHARACTER BIBLE PROFILE — ${char.name || char.tag} (${char.tag || '@CharID'}) :\n`;
-              if (char.backstory) characterBibleVaultBlock += `  • Deep Backstory & Motivation: ${char.backstory}\n`;
-              if (char.characterConnections) characterBibleVaultBlock += `  • Character Connections: ${char.characterConnections}\n`;
-              if (char.shotPurpose) characterBibleVaultBlock += `  • Shot Presence Purpose: ${char.shotPurpose}\n`;
-              if (char.mannerism) characterBibleVaultBlock += `  • Mannerisms & Gesture: ${char.mannerism}\n`;
-              if (char.walkingStyle) characterBibleVaultBlock += `  • Gait / Movement Style: ${char.walkingStyle}\n`;
-              if (char.uniqueVoice) characterBibleVaultBlock += `  • Voice Cadence & Delivery: ${char.uniqueVoice} | ${char.dialogueDelivery || ''}\n\n`;
-            });
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (!characterBibleVaultBlock.trim()) {
-      characterBibleVaultBlock = includeChars 
-        ? `[No Character Bible profiles extracted in vault yet. Open Character Vault tab to add profiles.]` 
-        : `[Character Bible Vault Excluded by User Checkmark Toggle]`;
-    }
-
-    let directorPsychologyBlock = '';
-    if (typeof window !== 'undefined') {
-      try {
-        const savedPsych = localStorage.getItem('sps_director_psychology_' + (projectTitle || 'default')) || localStorage.getItem('sps_global_director_psychology');
-        if (savedPsych) {
-          const parsedPsych = JSON.parse(savedPsych);
-          if (parsedPsych) {
-            const activeStreamKey = parsedPsych.compilerActiveMode || 'hybrid';
-            let targetVision = parsedPsych[activeStreamKey] || parsedPsych.hybrid || parsedPsych.human || parsedPsych;
-            if (!targetVision?.corePhilosophicalIdea && parsedPsych.corePhilosophicalIdea) {
-              targetVision = parsedPsych;
-            }
-            if (targetVision && targetVision.corePhilosophicalIdea) {
-              directorPsychologyBlock = `DIRECTOR'S CORE SCRIPT PSYCHOLOGY & THEMATIC VISION [${activeStreamKey.toUpperCase()} STREAM] :
-  • Underlying Core Idea & Soul: ${targetVision.corePhilosophicalIdea}
-  • Director's Belief of Success: ${targetVision.directorBeliefOfSuccess || 'N/A'}
-  • Subconscious Emotional Frequency: ${targetVision.emotionalFrequencyTarget || 'N/A'}
-  • Directorial Production Rules: ${targetVision.directorialRules || 'N/A'}`;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    const bgLighting = (shot.backgroundLightingTag || 'Ambient Fill').replace(/\[|\]/g, '');
-    const bgColor = (shot.backgroundColorTag || 'Muted Slate').replace(/\[|\]/g, '');
-
-    // 3. SCENE HEADING & ENVIRONMENT SPECS
-    const sceneHeadingBlock = `SCENE HEADING & ENVIRONMENT SPECS :
-  • Scene Heading: ${shotId} — ${env.toUpperCase().slice(0, 60)}
-  • Environment Context: ${env}
-  • Subject Lighting: ${lighting}
-  • Background Lighting: ${bgLighting}
-  • Subject Color Grading: ${color}
-  • Background Color Grading: ${bgColor}
-  • Atmosphere Volumetrics: ${shot.atmosphereVolumetricsTag || 'Atmospheric Haze & Cinematic Depth'}`;
-
-    // 4. ALL 28 CINEMA CRAFTS BREAKDOWN
-    const crafts22Breakdown = `ALL 28 CRAFTS CINEMA BREAKDOWN :
-  1. Shot ID / Number: ${scShNumber}
-  2. Scene Synopsis: ${sceneSynopsis}
-  3. Shot Framing & Composition: ${framing}
-  4. Camera Motion & Optics: ${motion}
-  5. Camera Lens & Focal Optics: ${shot.lensAndFocalLength || '35mm Anamorphic Prime'}
-  6. Weather, Time & Environment Rig: ${shot.timeAndLightingEnv || '[Weather: Daylight Clear] [Env: Outdoor]'}
-  7. Directional Light Angle & Highlight Rig: ${shot.directionalLightingAndHighlight || '[Angle: 45° Side Key] [Highlight: Catchlight]'}
-  8. Subject Lighting: ${lighting}
-  9. Subject Color Palette: ${color}
-  10. Background Lighting: ${bgLighting}
-  11. Background Color Palette: ${bgColor}
-  12. Color Palette & Visual Swatches: ${shot.colorPaletteSlot || 'Custom Cinema Swatch'}
-  13. Atmosphere & Volumetrics: ${shot.atmosphereVolumetricsTag || 'Atmospheric Haze & Depth'}
-  14. Character ID Asset Ref: ${shot.characterIdAssetRef || '[CharID: @PrimarySubject]'}
-  15. Co-Artist Interaction: ${shot.coArtistInteraction || '[Co-Artist: Supporting ensemble reaction]'}
-  16. Action & Environment Context: ${env}
-  17. Facial Expression: ${shot.characterExpression || 'Intense dramatic focus'}
-  18. Psychological State & Mindstate: ${shot.characterPsychologyState || '[Mindstate: Heroic Adrenaline Surge & Oath]'}
-  19. Mannerisms, Ticks & Posture Habits: ${shot.characterMannerismAndPosture || '[Mannerism: Military Straight Spine & Hand on Hilt]'}
-  20. Character Placement / Grid: ${shot.characterPlacement || 'Foreground Rule of Thirds'}
-  21. Dialogue & Vocal Sync: ${shot.characterDialogue || 'N/A'}
-  22. Movement & Physical Performance: ${shot.characterMovement || 'Paced cinematic movement'}
-  23. Eye Look & Gaze Direction: ${shot.characterEyeLooks || '[Eye Look: Direct Eye Contact with Lens]'}
-  24. Makeup & Hair Style: ${shot.makeupAndHairStyle || 'Natural studio styling'}
-  25. Stunts & Choreography: ${shot.stuntAndSafetyNotes || 'Standard performance'}
-  26. Image_1 to Image_9 Asset Matrix: ${shot.characterIdMatrix || 'Configured'}
-  27. Shot Duration & Image References: ${shot.shotDurationAndImages || duration}
-  28. Sound Design & Foley FX: ${shot.soundFxAndFoley || 'Cinematic Foley'}`;
-
-    // 5. THE MAIN CONDITIONING PROMPT
-    let mainPrompt = `A cinematic ${framing.toLowerCase()} (${scShNumber}). Duration: ${duration}. `;
-    if (env) mainPrompt += `Environment: ${env}. `;
-    if (shot.timeAndLightingEnv) mainPrompt += `Weather & Time Setup: ${shot.timeAndLightingEnv}. `;
-    if (shot.directionalLightingAndHighlight) mainPrompt += `Directional Light & Highlight Rig: ${shot.directionalLightingAndHighlight}. `;
-    if (characterStoryNote) mainPrompt += `${characterStoryNote.trim()}. `;
-    if (shot.characterIdAssetRef) mainPrompt += `Featuring ${shot.characterIdAssetRef}. `;
-    if (shot.coArtistInteraction) mainPrompt += `Co-artist interaction: ${shot.coArtistInteraction}. `;
-    if (motion) mainPrompt += `Camera moves with ${motion}. `;
-    if (lighting) mainPrompt += `Subject lighting: ${lighting}. `;
-    if (color) mainPrompt += `Subject color grading: ${color}. `;
-    if (bgLighting) mainPrompt += `Background lighting: ${bgLighting}. `;
-    if (bgColor) mainPrompt += `Background color grading: ${bgColor}. `;
-    if (shot.atmosphereVolumetricsTag) mainPrompt += `Atmosphere: ${shot.atmosphereVolumetricsTag.replace(/\[|\]/g, '')}. `;
-    if (shot.characterMovement) mainPrompt += `Action performance: ${shot.characterMovement}. `;
-    if (shot.characterPsychologyState) mainPrompt += `Psychological Mindstate: ${shot.characterPsychologyState}. `;
-    if (shot.characterMannerismAndPosture) mainPrompt += `Mannerisms & Posture: ${shot.characterMannerismAndPosture}. `;
-    if (shot.characterExpression) mainPrompt += `Facial expression: ${shot.characterExpression}. `;
-    if (shot.characterPlacement) mainPrompt += `Placement: ${shot.characterPlacement}. `;
-    if (shot.characterEyeLooks) mainPrompt += `Eye gaze: ${shot.characterEyeLooks}. `;
-    if (shot.characterDialogue) mainPrompt += `Vocal sync: ${shot.characterDialogue}. `;
-
-    return `======================================================================
-Script Synopsis:
-${scriptSynopsis.trim()}
-
-Scene Synopsis:
-${sceneSynopsis.trim()}
-
-${directorPsychologyBlock ? directorPsychologyBlock.trim() + '\n\n' : ''}Character Bible:
-${characterBibleVaultBlock.trim()}
-
-Character ID:
-${subjectsLines.join('\n')}
-
-Prompt:
-SHOT NUMBER: ${scShNumber} | DURATION: ${duration}
-
-${mainPrompt.trim()}
-======================================================================`;
+    const { masterCinemaPrompt } = compileMasterCinemaCompilerPrompt(shot, shotIdx, {
+      projectTitle,
+      scriptSynopsisSource,
+      writerCustomScriptSynopsis
+    });
+    return masterCinemaPrompt;
   };
 
   const compileSoraFormat = (shot) => {
@@ -1460,64 +1118,50 @@ ${mainPrompt}`;
               </div>
             </div>
 
-            {/* SCRIPT SYNOPSIS SELECTION & WRITER CUSTOM INPUT PANEL */}
-            <div className="p-3 px-4 bg-slate-50 dark:bg-zinc-950/80 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-amber-800 dark:text-amber-300 font-bold flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  Script Synopsis Mode:
-                </span>
-
-                <div className="flex items-center bg-slate-200 dark:bg-zinc-900 p-0.5 rounded-lg border border-slate-300 dark:border-zinc-800">
+            {/* SCRIPT SYNOPSIS STATUS (read-only — Writer Console owns edits) */}
+            {(() => {
+              const isWriterCustom = scriptSynopsisSource === 'writer_custom';
+              const activeSynopsisText = isWriterCustom
+                ? (writerCustomScriptSynopsis || '').trim()
+                : (extractedMasterStory || '').trim();
+              const preview = activeSynopsisText
+                ? (activeSynopsisText.length > 120 ? `${activeSynopsisText.slice(0, 120)}…` : activeSynopsisText)
+                : 'No synopsis set yet — edit in Writer Console.';
+              return (
+                <div className="p-3 px-4 bg-slate-50 dark:bg-zinc-950/80 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                    <span className="text-amber-800 dark:text-amber-300 font-bold flex items-center gap-1.5 shrink-0">
+                      <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      Script Synopsis:
+                    </span>
+                    <span
+                      className={`px-2.5 py-1 rounded-md text-xs font-bold shrink-0 ${
+                        isWriterCustom
+                          ? 'bg-purple-600/90 text-white'
+                          : 'bg-amber-500/90 text-slate-950'
+                      }`}
+                    >
+                      {isWriterCustom ? '✍️ Writer Custom' : '🤖 LLM Auto-Generated'}
+                    </span>
+                    <span
+                      className="text-slate-600 dark:text-zinc-400 truncate min-w-0 max-w-xl"
+                      title={activeSynopsisText || undefined}
+                    >
+                      {preview}
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setScriptSynopsisSource('auto_llm');
-                      localStorage.setItem('sps_script_synopsis_source', 'auto_llm');
-                    }}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      scriptSynopsisSource === 'auto_llm'
-                        ? 'bg-amber-500 text-slate-950 font-black shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    onClick={() => onOpenWriterSynopsis?.()}
+                    className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 border border-purple-400/40 transition-all cursor-pointer shrink-0 shadow-sm"
+                    title="Edit synopsis in Writer Console"
                   >
-                    <Sparkles className="w-3 h-3 text-zinc-950" />
-                    <span>🤖 LLM Auto-Generated</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScriptSynopsisSource('writer_custom');
-                      localStorage.setItem('sps_script_synopsis_source', 'writer_custom');
-                    }}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      scriptSynopsisSource === 'writer_custom'
-                        ? 'bg-purple-600 text-white font-black shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <Edit3 className="w-3 h-3 text-purple-200" />
-                    <span>✍️ Writer Custom Synopsis</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Edit in Writer Console</span>
                   </button>
                 </div>
-              </div>
-
-              {scriptSynopsisSource === 'writer_custom' && (
-                <div className="w-full flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={writerCustomScriptSynopsis}
-                    onChange={(e) => {
-                      setWriterCustomScriptSynopsis(e.target.value);
-                      localStorage.setItem('sps_writer_custom_script_synopsis', e.target.value);
-                    }}
-                    placeholder="Enter custom Writer Script Synopsis..."
-                    className="w-full bg-white dark:bg-zinc-900 text-amber-950 dark:text-amber-300 border border-purple-300 dark:border-purple-500/50 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              )}
-            </div>
+              );
+            })()}
           </>
         )}
 
@@ -1569,10 +1213,10 @@ ${mainPrompt}`;
                             type="button"
                             onClick={() => setEditingShotIdx(idx)}
                             className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/40 text-amber-900 dark:text-amber-300 text-xs font-mono font-bold flex items-center gap-1 transition-all border border-amber-300 dark:border-amber-500/40 cursor-pointer shadow-sm"
-                            title={`Edit shot #${idx + 1} (${filename}) - opens all 25 crafts in a pinned popup window`}
+                            title={`View crafts for shot #${idx + 1} (${filename}) — edit values in Form`}
                           >
-                            <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            <span>Edit Shot</span>
+                            <BookOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>View Crafts</span>
                           </button>
 
                           <button
@@ -1645,23 +1289,38 @@ ${mainPrompt}`;
             <div className="p-3.5 px-5 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
-                  <Edit3 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <BookOpen className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Full 25 Crafts Breakdown for Shot #{editingShotIdx + 1}</span>
+                    <span>{`Full ${SEEDANCE_SLOTS.length} Crafts Breakdown for Shot #${editingShotIdx + 1}`}</span>
                     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-cyan-800 dark:text-cyan-300 border border-slate-300 dark:border-zinc-700 text-xs font-bold">
                       {getShotFilename(shots[editingShotIdx], editingShotIdx)}
                     </span>
                   </h3>
                   <p className="text-[11px] text-slate-600 dark:text-zinc-400 font-medium">
-                    📌 Pinned Dual-Pane Workspace • Click any craft to edit in right panel.
+                    📌 View crafts here • Edit values in Form view.
                   </p>
                 </div>
               </div>
 
               {/* RATIO & VIEW CONTROLS */}
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEditShotInForm?.(editingShotIdx, activeCraftKey);
+                    setEditingShotIdx(null);
+                    setActiveCraftKey(null);
+                    onClose?.();
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-md border border-cyan-400/40 transition-all cursor-pointer"
+                  title="Open this shot in Form view to edit crafts"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Edit in Form</span>
+                </button>
+
                 <div className="flex items-center bg-slate-200 dark:bg-zinc-950 p-1 rounded-xl border border-slate-300 dark:border-zinc-800 shrink-0 gap-0.5 font-mono text-xs">
                   <button
                     type="button"
@@ -1669,7 +1328,7 @@ ${mainPrompt}`;
                     className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                       splitRatioMode === 'standard' ? 'bg-cyan-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
                     }`}
-                    title="Standard Split: 35% Sidebar List / 65% Editor Focus"
+                    title="Standard Split: 35% Sidebar List / 65% Detail Focus"
                   >
                     📊 35/65
                   </button>
@@ -1679,7 +1338,7 @@ ${mainPrompt}`;
                     className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                       splitRatioMode === 'equal' ? 'bg-purple-500 text-white font-black shadow' : 'text-zinc-400 hover:text-white'
                     }`}
-                    title="Equal Split: 50% Sidebar / 50% Editor"
+                    title="Equal Split: 50% Sidebar / 50% Detail"
                   >
                     ⚖️ 50/50
                   </button>
@@ -1689,7 +1348,7 @@ ${mainPrompt}`;
                     className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                       splitRatioMode === 'inverse' ? 'bg-amber-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
                     }`}
-                    title="Inverse Split: 65% Crafts Grid / 35% Editor Focus"
+                    title="Inverse Split: 65% Crafts Grid / 35% Detail Focus"
                   >
                     🔄 65/35
                   </button>
@@ -1699,7 +1358,7 @@ ${mainPrompt}`;
                     className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                       splitRatioMode === 'full_left' ? 'bg-emerald-500 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
                     }`}
-                    title="100% Full View: Left 25 Crafts List Only"
+                    title={`100% Full View: Left ${SEEDANCE_SLOTS.length} Crafts List Only`}
                   >
                     🖥️ 100% Left
                   </button>
@@ -1709,7 +1368,7 @@ ${mainPrompt}`;
                     className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                       splitRatioMode === 'full_right' ? 'bg-cyan-400 text-zinc-950 font-black shadow' : 'text-zinc-400 hover:text-white'
                     }`}
-                    title="100% Full View: Right Active Editor Only"
+                    title="100% Full View: Right Active Detail Only"
                   >
                     ⚡ 100% Right
                   </button>
@@ -1749,7 +1408,7 @@ ${mainPrompt}`;
                             <h4 className="text-[11px] font-bold text-zinc-200 group-hover:text-cyan-300 font-sans truncate flex-1 ml-1">
                               {slot.label}
                             </h4>
-                            <Edit3 className="w-3 h-3 text-zinc-500 group-hover:text-amber-400 shrink-0" />
+                            <BookOpen className="w-3 h-3 text-zinc-500 group-hover:text-cyan-400 shrink-0" />
                           </div>
 
                           <p className="text-[11px] font-mono text-amber-200/90 bg-zinc-950 p-2 rounded-lg border border-zinc-800/80 line-clamp-2 min-h-[36px] break-words">
@@ -1763,7 +1422,7 @@ ${mainPrompt}`;
               ) : (
                 /* INVERSE DUAL-PANE SPLIT WORKSPACE */
                 <div className="flex-1 flex w-full h-full overflow-hidden">
-                  {/* LEFT PANEL: 25 Crafts Sidebar List */}
+                  {/* LEFT PANEL: Crafts sidebar list */}
                   {splitRatioMode !== 'full_right' && (
                     <div 
                       className={`border-r border-zinc-800 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950/90 p-3 space-y-2 shrink-0 transition-all ${
@@ -1774,7 +1433,7 @@ ${mainPrompt}`;
                     >
                       <div className="flex items-center justify-between px-1 pb-1">
                         <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
-                          25 Crafts List ({SEEDANCE_SLOTS.length}):
+                          {`${SEEDANCE_SLOTS.length} Crafts List:`}
                         </span>
                         <button
                           type="button"
@@ -1823,7 +1482,7 @@ ${mainPrompt}`;
                     </div>
                   )}
 
-                  {/* RIGHT PANEL: Embedded Active Craft Editor Workspace */}
+                  {/* RIGHT PANEL: Read-only craft detail + Edit in Form CTA */}
                   {splitRatioMode !== 'full_left' && (
                     <div 
                       className={`flex-1 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 bg-zinc-950 p-2 sm:p-3 transition-all ${
@@ -1835,94 +1494,81 @@ ${mainPrompt}`;
                         {(() => {
                           const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
                           if (!slotConfig) return null;
-
-                          const scenesList = (shots || []).reduce((acc, s, idx) => {
-                            const parsed = parseSceneAndShotID(s, idx);
-                            const sceneId = parsed.sceneStr || `SC${String(Math.floor(idx / 3) + 1).padStart(2, '0')}`;
-                            const sceneLabel = parsed.sceneTag || `SCENE ${String(Math.floor(idx / 3) + 1).padStart(2, '0')}`;
-                            if (!acc.some(sc => sc.sceneId === sceneId)) {
-                              acc.push({ sceneId, label: sceneLabel, firstShotIndex: idx });
-                            }
-                            return acc;
-                          }, []);
-
-                          const currShotObj = shots[editingShotIdx];
-                          const parsedCurr = parseSceneAndShotID(currShotObj, editingShotIdx);
-                          const currentSceneId = parsedCurr.sceneStr || `SC${String(Math.floor(editingShotIdx / 3) + 1).padStart(2, '0')}`;
-
-                          const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+                          const craftValue = shots[editingShotIdx]?.[activeCraftKey] || '';
+                          const craftIdx = SEEDANCE_SLOTS.findIndex(s => s.key === activeCraftKey);
+                          const numStr = craftIdx + 1 < 10 ? '0' + (craftIdx + 1) : String(craftIdx + 1);
 
                           return (
-                            <SlotEditor
-                              slotConfig={slotConfig}
-                              value={shots[editingShotIdx]?.[activeCraftKey] || ''}
-                              onChange={(val) => {
-                                if (onUpdateShot) {
-                                  onUpdateShot(editingShotIdx, activeCraftKey, val);
-                                }
-                              }}
-                              compact={false}
-                              allSlots={SEEDANCE_SLOTS}
-                              isForcePopupOpen={true}
-                              embedded={true}
-                              totalShotsCount={shots.length}
-                              currentShotIndex={editingShotIdx}
-                              onNavigateNextShot={() => {
-                                setEditingShotIdx(prev => (prev < shots.length - 1 ? prev + 1 : 0));
-                              }}
-                              onNavigatePrevShot={() => {
-                                setEditingShotIdx(prev => (prev > 0 ? prev - 1 : shots.length - 1));
-                              }}
-                              onJumpToShot={(targetShotIdx) => setEditingShotIdx(targetShotIdx)}
-                              scenesList={scenesList}
-                              currentSceneId={currentSceneId}
-                              onNavigateNextScene={() => {
-                                setEditingShotIdx(prev => {
-                                  const currShotObj = shots[prev];
-                                  const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
-                                  const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
-                                  const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(prev / 3) + 1);
-                                  const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
-                                  const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
-                                  if (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1) {
-                                    return scenesList[currSceneIdx + 1].firstShotIndex;
-                                  }
-                                  return scenesList[0]?.firstShotIndex || 0;
-                                });
-                              }}
-                              onNavigatePrevScene={() => {
-                                setEditingShotIdx(prev => {
-                                  const currShotObj = shots[prev];
-                                  const rawCurrId = currShotObj?.sceneShotId || `SC01_SH${prev + 1 < 10 ? '0' + (prev + 1) : prev + 1}`;
-                                  const matchCurr = rawCurrId.match(/(?:SCENE|SC|S)\.?\s*0*(\d+)/i) || rawCurrId.match(/Scene\s*0*(\d+)/i);
-                                  const currSceneNum = matchCurr ? parseInt(matchCurr[1], 10) : (Math.floor(prev / 3) + 1);
-                                  const currentSceneId = `SC${currSceneNum < 10 ? '0' + currSceneNum : currSceneNum}`;
-                                  const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
-                                  if (currSceneIdx > 0) {
-                                    return scenesList[currSceneIdx - 1].firstShotIndex;
-                                  }
-                                  return scenesList[scenesList.length - 1]?.firstShotIndex || 0;
-                                });
-                              }}
-                              onJumpToScene={(targetScId) => {
-                                const found = scenesList.find(sc => sc.sceneId === targetScId);
-                                if (found) setEditingShotIdx(found.firstShotIndex);
-                              }}
-                              onCloseForcePopup={() => setActiveCraftKey(null)}
-                              onNavigateNextSlot={(currKey) => {
-                                const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                                if (idx !== -1 && idx < SEEDANCE_SLOTS.length - 1) {
-                                  setActiveCraftKey(SEEDANCE_SLOTS[idx + 1].key);
-                                }
-                              }}
-                              onNavigatePrevSlot={(currKey) => {
-                                const idx = SEEDANCE_SLOTS.findIndex(s => s.key === currKey);
-                                if (idx > 0) {
-                                  setActiveCraftKey(SEEDANCE_SLOTS[idx - 1].key);
-                                }
-                              }}
-                              onJumpToSlot={(targetKey) => setActiveCraftKey(targetKey)}
-                            />
+                            <div className="h-full flex flex-col gap-3 p-2 sm:p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-cyan-400 border border-zinc-800 shrink-0">
+                                    {numStr}
+                                  </span>
+                                  <h4 className="text-sm font-bold text-white font-sans truncate">
+                                    {slotConfig.label}
+                                  </h4>
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 shrink-0">
+                                    Read-only
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onEditShotInForm?.(editingShotIdx, activeCraftKey);
+                                    setEditingShotIdx(null);
+                                    setActiveCraftKey(null);
+                                    onClose?.();
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-md border border-cyan-400/40 transition-all cursor-pointer shrink-0"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Edit in Form</span>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (craftIdx > 0) setActiveCraftKey(SEEDANCE_SLOTS[craftIdx - 1].key);
+                                  }}
+                                  disabled={craftIdx <= 0}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                  ← Prev craft
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (craftIdx < SEEDANCE_SLOTS.length - 1) setActiveCraftKey(SEEDANCE_SLOTS[craftIdx + 1].key);
+                                  }}
+                                  disabled={craftIdx >= SEEDANCE_SLOTS.length - 1}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                  Next craft →
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveCraftKey(null)}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-zinc-700 text-cyan-400 hover:bg-zinc-800 cursor-pointer ml-auto"
+                                >
+                                  Close detail
+                                </button>
+                              </div>
+
+                              <textarea
+                                readOnly
+                                disabled
+                                value={craftValue}
+                                placeholder="Empty slot value..."
+                                className="flex-1 min-h-[220px] w-full resize-none rounded-xl bg-zinc-900/90 text-amber-100/90 border border-zinc-700 px-3 py-3 text-xs font-mono leading-relaxed cursor-default opacity-90"
+                              />
+
+                              <p className="text-[11px] text-zinc-500 font-mono">
+                                Craft values are edited in Form view — use <span className="text-cyan-400 font-bold">Edit in Form</span> to jump there.
+                              </p>
+                            </div>
                           );
                         })()}
                     </div>
@@ -1937,14 +1583,29 @@ ${mainPrompt}`;
                 Shot #{editingShotIdx + 1} • {shots[editingShotIdx]?.shotComposition || 'Medium Shot'}
               </span>
 
-              <button
-                type="button"
-                onClick={() => setEditingShotIdx(null)}
-                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Done & Close</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEditShotInForm?.(editingShotIdx, activeCraftKey);
+                    setEditingShotIdx(null);
+                    setActiveCraftKey(null);
+                    onClose?.();
+                  }}
+                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-mono font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer border border-cyan-400/40"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Edit in Form</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingShotIdx(null)}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Done & Close</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

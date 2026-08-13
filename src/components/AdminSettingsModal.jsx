@@ -9,6 +9,7 @@ import {
 } from '../services/appSettingsDiskVault';
 import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary } from '../utils/projectPermissions';
 import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 /** Persist collaborators to localStorage synchronously, then notify other UI (not this modal). */
 function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
@@ -2709,7 +2710,7 @@ export default function AdminSettingsModal({
                           Recommended Models for Cinema & Seedance Video Generation:
                         </div>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-zinc-300">
-                          <li><strong className="text-amber-300">Gemini 3.6 Flash (High)</strong>: Flagship top-tier model for 24-craft screenplay breakdown & asset tagging.</li>
+                          <li><strong className="text-amber-300">Gemini 3.6 Flash (High)</strong>: {`Flagship top-tier model for ${SEEDANCE_SLOTS.length}-craft screenplay breakdown & asset tagging.`}</li>
                           <li><strong className="text-amber-300">Claude Sonnet 4.6 (Thinking)</strong>: Deep reasoning model for script continuity & emotional subtext.</li>
                           <li><strong className="text-amber-300">Gemini 3.1 Pro (High)</strong>: Ultra-high precision model for complex multi-character matrix compilation.</li>
                           <li><strong className="text-amber-300">ByteDance Seaweed / Doubao</strong>: Native LLM for Seedance / SeedEdit video prompt conditioning & 9-image bindings.</li>

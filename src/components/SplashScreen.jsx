@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Film, ShieldCheck, Cloud, HardDrive, Sparkles, ArrowRight, Check } from 'lucide-react';
 
 const BOOT_STEPS = [
@@ -13,6 +13,23 @@ export default function SplashScreen({ onFinish }) {
   const [progress, setProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [entered, setEntered] = useState(false);
+  const onFinishRef = useRef(onFinish);
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
+
+  const finishOnce = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    try {
+      sessionStorage.setItem('sps_splash_done', '1');
+    } catch {
+      /* ignore */
+    }
+    onFinishRef.current?.();
+  }, []);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setEntered(true));
@@ -37,12 +54,12 @@ export default function SplashScreen({ onFinish }) {
   useEffect(() => {
     if (progress < 100) return undefined;
     const fadeTimer = setTimeout(() => setIsFadingOut(true), 700);
-    const exitTimer = setTimeout(() => onFinish?.(), 1200);
+    const exitTimer = setTimeout(() => finishOnce(), 1200);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(exitTimer);
     };
-  }, [progress, onFinish]);
+  }, [progress, finishOnce]);
 
   const activeStepIdx = Math.min(
     BOOT_STEPS.length - 1,
@@ -51,7 +68,7 @@ export default function SplashScreen({ onFinish }) {
 
   const handleSkip = () => {
     setIsFadingOut(true);
-    setTimeout(() => onFinish?.(), 380);
+    setTimeout(() => finishOnce(), 380);
   };
 
   return (

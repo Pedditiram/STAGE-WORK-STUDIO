@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Film, Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, FolderKanban, Video, Download, Upload, Check, Moon, Scroll, HelpCircle, ChevronDown, RefreshCw, RotateCcw, RotateCw, BookOpen, Users, MessageSquare
+  Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, FolderKanban, Video, Download, Upload, Check, Moon, Scroll, HelpCircle, ChevronDown, ChevronUp, RefreshCw, RotateCcw, RotateCw, Users, MessageSquare, Globe2, Brain, Clapperboard, Maximize2
 } from 'lucide-react';
 import {
   getAllottedProjectTitles,
@@ -12,6 +12,7 @@ import {
   filterAllottedTitlesToLiveLibrary,
   getLiveProjectLibrary
 } from '../utils/projectPermissions';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 export default function Header({ 
   projectTitle, 
@@ -24,14 +25,15 @@ export default function Header({
   onExportProject,
   onImportProject,
   onOpenCompiler,
+  onOpenPromoPack,
   onOpenAdminModal,
-  onOpenAIModal,
   onOpenProjectConsole,
   onOpenDirectorPsychology,
   onOpenCharacterBible,
-  onOpenStory,
-  onOpenScriptSynopsisModal,
+  onOpenWorldEnvironment,
+  onOpenWriterConsole,
   onOpenHelpModal,
+  onOpenStudioBrain,
   onOpenLoginModal,
   onOpenInvestorDeck,
   appVersionMode = 'local',
@@ -57,6 +59,7 @@ export default function Header({
   redoCount = 0,
   isFullscreen = false,
   onToggleFullscreen,
+  onMinimizeHeader,
   onOpenCollabChat,
   collabChatOpen = false,
   unreadChatCount = 0,
@@ -252,15 +255,32 @@ export default function Header({
         {/* LEFT SECTION: BRAND, PROJECTS CONSOLE & ACTIVE PROJECT TITLE */}
         {/* ========================================================================= */}
         <div className="sps-header-left flex items-center gap-1.5 min-w-0 shrink">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="relative p-1.5 rounded-xl bg-gradient-to-tr from-cyan-400 via-sky-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25 flex items-center justify-center shrink-0 ring-1 ring-white/20">
-              <Film className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-1.5 min-w-0" title="Stage Production Studio">
+            <div
+              className={`relative w-8 h-8 rounded-xl shadow-lg flex items-center justify-center shrink-0 ring-1 ${
+                colorTheme === 'paper'
+                  ? 'ring-slate-200 shadow-cyan-500/15 bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600'
+                  : 'ring-white/20 shadow-cyan-500/25 bg-gradient-to-tr from-cyan-400 via-sky-500 to-blue-600'
+              }`}
+              aria-hidden="true"
+            >
+              <Clapperboard className="w-4 h-4 text-white drop-shadow" />
             </div>
-            <div className="hidden 2xl:flex flex-col leading-tight min-w-0">
-              <h1 className="text-[11px] font-bold text-white tracking-wide font-display truncate">
+            <div className="flex flex-col leading-tight min-w-0 max-w-[7.5rem] sm:max-w-[11rem] lg:max-w-[13rem]">
+              <h1
+                className={`text-[11px] sm:text-[12px] font-bold tracking-wide font-display truncate ${
+                  colorTheme === 'paper' ? 'text-slate-900' : 'text-white'
+                }`}
+              >
                 Stage Production Studio
               </h1>
-              <span className="text-[9px] text-zinc-500 font-medium tracking-wide">Pedditi Labs · Cinema craft</span>
+              <span
+                className={`hidden sm:block text-[9px] font-medium tracking-wide truncate ${
+                  colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-500'
+                }`}
+              >
+                Pedditi Labs · Cinema craft
+              </span>
             </div>
           </div>
 
@@ -320,7 +340,7 @@ export default function Header({
         {/* ========================================================================= */}
         {/* CENTER SECTION: STUDIO WORKSPACES */}
         {/* ========================================================================= */}
-        <div className={`sps-header-center flex items-center gap-0.5 p-0.5 sm:p-1 rounded-2xl border min-w-0 shrink overflow-x-auto sps-header-scroll ${
+        <div className={`sps-header-center flex items-center gap-0.5 p-0.5 sm:p-1 rounded-2xl border min-w-0 shrink overflow-hidden ${
           colorTheme === 'paper'
             ? 'bg-white border-slate-200 shadow-sm'
             : 'bg-black/35 border-white/10 shadow-inner'
@@ -333,7 +353,8 @@ export default function Header({
                 redirectGuest('Writer Console');
                 return;
               }
-              setActiveView("screenplay");
+              if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
+              else setActiveView("screenplay");
             }}
             className={`sps-chrome-btn relative px-1.5 sm:px-2 py-1.5 rounded-xl flex items-center gap-1 shrink-0 ${
               activeView === "screenplay"
@@ -342,7 +363,7 @@ export default function Header({
                   ? "text-slate-600 hover:text-amber-800 hover:bg-amber-50"
                   : "text-zinc-400 hover:text-amber-200 hover:bg-white/5"
             }`}
-            title="Writer Console — Screenplay Editor & Script Synopsis"
+            title="Writer Console — Screenplay Editor & Master Script Synopsis"
           >
             <Scroll className="w-4 h-4 shrink-0" />
             <span className="hidden 2xl:inline text-[11px]">Writer</span>
@@ -359,7 +380,7 @@ export default function Header({
                   ? "text-slate-600 hover:text-cyan-800 hover:bg-cyan-50"
                   : "text-zinc-400 hover:text-cyan-200 hover:bg-white/5"
             }`}
-            title="24-Craft Cinema Matrix Spreadsheet View"
+            title={`${SEEDANCE_SLOTS.length}-Craft Cinema Matrix Spreadsheet View`}
           >
             <LayoutGrid className="w-4 h-4 shrink-0" />
             <span className="hidden 2xl:inline text-[11px]">Matrix</span>
@@ -376,7 +397,7 @@ export default function Header({
                   ? "text-slate-600 hover:text-emerald-800 hover:bg-emerald-50"
                   : "text-zinc-400 hover:text-emerald-200 hover:bg-white/5"
             }`}
-            title="Studio Form — 24-Craft Production Form Editor"
+            title={`Studio Form — ${SEEDANCE_SLOTS.length}-Craft Production Form Editor`}
           >
             <FileText className="w-4 h-4 shrink-0" />
             <span className="hidden 2xl:inline text-[11px]">Form</span>
@@ -394,10 +415,10 @@ export default function Header({
                     ? "text-sky-700 hover:text-sky-900 hover:bg-sky-50"
                     : "text-zinc-400 hover:text-sky-200 hover:bg-white/5"
               }`}
-              title="Director Visual Canvas View"
+              title="3D Stage — mannequins, cameras, Master Cinema framing"
             >
               <Video className="w-4 h-4 shrink-0" />
-              <span className="hidden 2xl:inline text-[11px]">Canvas</span>
+              <span className="hidden 2xl:inline text-[11px]">3D Stage</span>
             </button>
           )}
 
@@ -417,21 +438,18 @@ export default function Header({
             <Users className="w-4 h-4" />
           </button>
 
-          {/* 5b. Script Synopsis Vault */}
+          {/* 5b. World & Environment Console */}
           <button
             type="button"
-            onClick={withGuestGuard('Script Synopsis', () => {
-              if (onOpenScriptSynopsisModal) onOpenScriptSynopsisModal();
-              else if (onOpenStory) onOpenStory();
-            })}
+            onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)}
             className={`sps-chrome-btn relative px-1.5 py-1.5 rounded-xl shrink-0 ${
               colorTheme === 'paper'
                 ? 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900'
                 : 'text-zinc-400 hover:bg-white/5 hover:text-emerald-200'
             }`}
-            title="Master Script Synopsis"
+            title="World & Environment Console — locations, plates, props"
           >
-            <BookOpen className="w-4 h-4" />
+            <Globe2 className="w-4 h-4" />
           </button>
 
           {/* 6. Dedicated Director's Vision Vault */}
@@ -452,7 +470,7 @@ export default function Header({
         {/* ========================================================================= */}
         {/* RIGHT SECTION: SYSTEM TOOLS, SYNC, ADMIN */}
         {/* ========================================================================= */}
-        <div className="sps-header-actions flex items-center gap-1 min-w-0 shrink justify-end overflow-x-auto">
+        <div className="sps-header-actions flex items-center gap-0.5 min-w-0 shrink justify-end overflow-hidden">
 
           {/* UNDO & REDO BUTTONS */}
           <div className="flex items-center gap-0.5 bg-white/[0.03] p-0.5 rounded-xl border border-white/10 shrink-0">
@@ -535,7 +553,7 @@ export default function Header({
             title="Open studio chat & shot comments"
           >
             <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden 2xl:inline font-black">Chat</span>
+            <span className="sr-only">Chat</span>
             {unreadChatCount > 0 && !collabChatOpen && (
               <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
                 {unreadChatCount > 9 ? '9+' : unreadChatCount}
@@ -543,7 +561,7 @@ export default function Header({
             )}
           </button>
 
-          {/* Active users — shown whenever room collab is on (not gated by Local/Cloud badge) */}
+          {/* Active users — compact label; full list only in dropdown */}
           {Boolean(roomId && getCurrentUserEmail()) && (() => {
             const liveCount = activeRemoteUsers.length + 1;
             const hasOthers = activeRemoteUsers.length > 0;
@@ -554,22 +572,16 @@ export default function Header({
               'from-rose-500 to-pink-600',
               'from-sky-500 to-blue-700',
             ];
-            const previewUsers = activeRemoteUsers.slice(0, 3).map((u, idx) => {
-              const label = u.userName || (u.userEmail || '').split('@')[0] || 'User';
-              return {
-                key: u.presenceId || u.userEmail || `u-${idx}`,
-                initial: String(label).charAt(0).toUpperCase(),
-                label,
-                color: AVATAR_COLORS[idx % AVATAR_COLORS.length],
-              };
-            });
 
             return (
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsActiveUsersOpen((v) => !v)}
-                  className={`sps-chrome-btn h-8 pl-1.5 pr-1.5 xl:pr-2.5 rounded-full border flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    setIsActiveUsersOpen((v) => !v);
+                  }}
+                  className={`sps-chrome-btn relative z-[55] h-8 px-2 rounded-xl border flex items-center gap-1.5 shadow-sm cursor-pointer ${
                     hasOthers
                       ? colorTheme === 'paper'
                         ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-800 text-white'
@@ -578,125 +590,110 @@ export default function Header({
                         ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
                         : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/50 text-emerald-100'
                   }`}
-                  title={`${liveCount} online on this project`}
-                  aria-label={`${liveCount} active users`}
+                  title={`${liveCount} online — open users`}
+                  aria-label={`Users, ${liveCount} online`}
+                  aria-expanded={isActiveUsersOpen}
                 >
-                  {/* Overlapping avatar stack */}
-                  <span className="flex items-center -space-x-1.5 shrink-0">
-                    <span className="relative z-10 w-5 h-5 rounded-full bg-gradient-to-br from-cyan-400 to-indigo-600 text-[8px] font-black text-white flex items-center justify-center ring-2 ring-white/90 shadow-sm">
-                      Y
-                    </span>
-                    {previewUsers.map((p, i) => (
-                      <span
-                        key={p.key}
-                        className={`relative w-5 h-5 rounded-full bg-gradient-to-br ${p.color} text-[8px] font-black text-white flex items-center justify-center ring-2 ring-white/90 shadow-sm`}
-                        style={{ zIndex: 9 - i }}
-                        title={p.label}
-                      >
-                        {p.initial}
-                      </span>
-                    ))}
-                    {activeRemoteUsers.length > 3 && (
-                      <span className="relative z-0 w-5 h-5 rounded-full bg-zinc-800 text-[8px] font-black text-white flex items-center justify-center ring-2 ring-white/90">
-                        +{activeRemoteUsers.length - 3}
-                      </span>
-                    )}
-                  </span>
-
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <span className={`hidden xl:inline text-[11px] font-black tracking-wide uppercase whitespace-nowrap ${
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline text-[11px] font-bold tracking-wide">Users</span>
+                  <span
+                    className={`min-w-[1.15rem] h-[1.15rem] px-1 rounded-md text-[9px] font-black tabular-nums flex items-center justify-center ${
                       hasOthers
-                        ? ''
-                        : colorTheme === 'paper' ? 'text-emerald-900' : 'text-emerald-50'
-                    }`}>
-                      {liveCount} online
-                    </span>
-                    <span className={`xl:hidden text-[10px] font-black tabular-nums ${
-                      hasOthers
-                        ? ''
-                        : colorTheme === 'paper' ? 'text-emerald-900' : 'text-emerald-50'
-                    }`}>
-                      {liveCount}
-                    </span>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      hasOthers ? 'bg-lime-300 animate-pulse' : 'bg-emerald-400'
-                    }`} />
+                        ? colorTheme === 'paper'
+                          ? 'bg-white/25 text-white'
+                          : 'bg-zinc-950/20 text-zinc-950'
+                        : colorTheme === 'paper'
+                          ? 'bg-emerald-200 text-emerald-950'
+                          : 'bg-emerald-400/25 text-emerald-50'
+                    }`}
+                  >
+                    {liveCount}
                   </span>
+                  <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isActiveUsersOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {isActiveUsersOpen && (
-                  <div className={`sps-panel-enter absolute right-0 top-full mt-2 w-[min(100vw-1rem,20rem)] sm:w-80 rounded-2xl border shadow-2xl z-50 overflow-hidden ${
-                    colorTheme === 'paper'
-                      ? 'bg-white/95 backdrop-blur-xl border-emerald-200'
-                      : 'bg-zinc-950/92 backdrop-blur-xl border-emerald-500/30'
-                  }`}>
-                    <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${
-                      colorTheme === 'paper' ? 'border-emerald-100 bg-emerald-50' : 'border-white/10 bg-emerald-500/10'
+                  <>
+                    <div
+                      className="fixed inset-0 z-[45]"
+                      onClick={() => setIsActiveUsersOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div className={`sps-panel-enter absolute right-0 top-full mt-2 w-[min(100vw-1rem,20rem)] sm:w-80 rounded-2xl border shadow-2xl z-[60] overflow-hidden ${
+                      colorTheme === 'paper'
+                        ? 'bg-white/95 backdrop-blur-xl border-emerald-200'
+                        : 'bg-zinc-950/92 backdrop-blur-xl border-emerald-500/30'
                     }`}>
-                      <div>
-                        <p className={`text-[12px] font-black tracking-wide ${colorTheme === 'paper' ? 'text-emerald-950' : 'text-white'}`}>
-                          {liveCount} online now
-                        </p>
-                        <p className={`text-[10px] mt-0.5 ${colorTheme === 'paper' ? 'text-emerald-800/70' : 'text-zinc-400'}`}>
-                          <span className="font-semibold">{projectTitle || 'This project'}</span>
-                          {roomId ? <> · <span className="font-mono">{roomId}</span></> : null}
-                        </p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-lime-300 animate-pulse" />
-                        LIVE
-                      </span>
-                    </div>
-                    <ul className="max-h-72 overflow-y-auto py-1">
-                      <li className={`px-3 py-2.5 flex items-center gap-2.5 ${colorTheme === 'paper' ? 'bg-emerald-50/80' : 'bg-white/5'}`}>
-                        <span className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-indigo-600 text-[10px] font-black text-white flex items-center justify-center shrink-0 ring-2 ring-cyan-300/50">
-                          YOU
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-[12px] font-bold truncate ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`}>You</p>
-                          <p className={`text-[10px] truncate ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-400'}`}>Working here now</p>
+                      <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${
+                        colorTheme === 'paper' ? 'border-emerald-100 bg-emerald-50' : 'border-white/10 bg-emerald-500/10'
+                      }`}>
+                        <div>
+                          <p className={`text-[12px] font-black tracking-wide ${colorTheme === 'paper' ? 'text-emerald-950' : 'text-white'}`}>
+                            {liveCount} online now
+                          </p>
+                          <p className={`text-[10px] mt-0.5 ${colorTheme === 'paper' ? 'text-emerald-800/70' : 'text-zinc-400'}`}>
+                            <span className="font-semibold">{projectTitle || 'This project'}</span>
+                            {roomId ? <> · <span className="font-mono">{roomId}</span></> : null}
+                          </p>
                         </div>
-                        <span className="text-[9px] font-black uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md">You</span>
-                      </li>
-                      {activeRemoteUsers.length === 0 ? (
-                        <li className={`px-3 py-4 text-[11px] ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-500'}`}>
-                          No other remote users on this project right now.
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-lime-300 animate-pulse" />
+                          LIVE
+                        </span>
+                      </div>
+                      <ul className="max-h-72 overflow-y-auto py-1">
+                        <li className={`px-3 py-2.5 flex items-center gap-2.5 ${colorTheme === 'paper' ? 'bg-emerald-50/80' : 'bg-white/5'}`}>
+                          <span className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-indigo-600 text-[10px] font-black text-white flex items-center justify-center shrink-0 ring-2 ring-cyan-300/50">
+                            {firstLetter || 'Y'}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[12px] font-bold truncate ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`}>
+                              {userName || 'You'}
+                            </p>
+                            <p className={`text-[10px] truncate ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-400'}`}>Working here now</p>
+                          </div>
+                          <span className="text-[9px] font-black uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md">You</span>
                         </li>
-                      ) : (
-                        activeRemoteUsers.map((u, idx) => {
-                          const label = u.userName || (u.userEmail || '').split('@')[0] || 'Collaborator';
-                          const initial = String(label).charAt(0).toUpperCase();
-                          const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-                          return (
-                            <li
-                              key={u.presenceId || u.userEmail}
-                              className={`px-3 py-2.5 flex items-center gap-2.5 ${
-                                colorTheme === 'paper' ? 'hover:bg-emerald-50' : 'hover:bg-white/5'
-                              }`}
-                            >
-                              <span className={`w-8 h-8 rounded-full bg-gradient-to-br ${color} text-[12px] font-black text-white flex items-center justify-center shrink-0`}>
-                                {initial}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className={`text-[12px] font-bold truncate ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`}>{label}</p>
-                                <p className={`text-[10px] truncate ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-400'}`}>
-                                  {u.isEditing ? 'Editing' : 'Viewing'} {u.activeShotId || 'project'}
-                                  {u.userEmail ? ` · ${u.userEmail}` : ''}
-                                </p>
-                              </div>
-                              <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md shrink-0 ${
-                                u.isEditing
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}>
-                                {u.isEditing ? 'Edit' : 'Live'}
-                              </span>
-                            </li>
-                          );
-                        })
-                      )}
-                    </ul>
-                  </div>
+                        {activeRemoteUsers.length === 0 ? (
+                          <li className={`px-3 py-4 text-[11px] ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-500'}`}>
+                            No other remote users on this project right now.
+                          </li>
+                        ) : (
+                          activeRemoteUsers.map((u, idx) => {
+                            const label = u.userName || (u.userEmail || '').split('@')[0] || 'Collaborator';
+                            const initial = String(label).charAt(0).toUpperCase();
+                            const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                            return (
+                              <li
+                                key={u.presenceId || u.userEmail}
+                                className={`px-3 py-2.5 flex items-center gap-2.5 ${
+                                  colorTheme === 'paper' ? 'hover:bg-emerald-50' : 'hover:bg-white/5'
+                                }`}
+                              >
+                                <span className={`w-8 h-8 rounded-full bg-gradient-to-br ${color} text-[12px] font-black text-white flex items-center justify-center shrink-0`}>
+                                  {initial}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className={`text-[12px] font-bold truncate ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`}>{label}</p>
+                                  <p className={`text-[10px] truncate ${colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-400'}`}>
+                                    {u.isEditing ? 'Editing' : 'Viewing'} {u.activeShotId || 'project'}
+                                    {u.userEmail ? ` · ${u.userEmail}` : ''}
+                                  </p>
+                                </div>
+                                <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md shrink-0 ${
+                                  u.isEditing
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {u.isEditing ? 'Edit' : 'Live'}
+                                </span>
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -729,11 +726,11 @@ export default function Header({
             )}
           </button>
 
-          {/* Export JSON Button — desktop/tablet; profile covers overflow on phones */}
+          {/* Export JSON Button — 2xl+; profile covers overflow on smaller screens */}
           <button
             type="button"
             onClick={onExportProject}
-            className="sps-chrome-btn hidden sm:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 shrink-0"
+            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 shrink-0"
             title="Export .JSON Project File"
           >
             <Download className="w-3.5 h-3.5 text-cyan-300" />
@@ -741,7 +738,7 @@ export default function Header({
 
           {/* Import JSON Button — Owner only */}
           {canCreateOrDeleteProjects() && (
-            <label className="sps-chrome-btn hidden sm:inline-flex sps-touch p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 cursor-pointer shrink-0" title="Import .JSON Project File (Owner only)">
+            <label className="sps-chrome-btn hidden 2xl:inline-flex sps-touch p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 cursor-pointer shrink-0" title="Import .JSON Project File (Owner only)">
               <Upload className="w-3.5 h-3.5 text-amber-300" />
               <input type="file" accept=".json" onChange={onImportProject} className="hidden" />
             </label>
@@ -772,18 +769,28 @@ export default function Header({
             {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5 text-amber-300 animate-spin-slow" /> : <Lock className="w-3.5 h-3.5 text-zinc-400" />}
           </button>
 
+          {/* Studio Brain — local pipeline intelligence */}
+          <button
+            type="button"
+            onClick={onOpenStudioBrain}
+            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-violet-300 border border-white/10 shrink-0"
+            title="Studio Brain — learns your pipeline (offline presets)"
+          >
+            <Brain className="w-3.5 h-3.5 text-violet-300" />
+          </button>
+
           {/* Help & User Guide Trigger */}
           <button
             type="button"
             onClick={onOpenHelpModal}
-            className="sps-chrome-btn hidden sm:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-cyan-300 border border-white/10 shrink-0"
+            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-cyan-300 border border-white/10 shrink-0"
             title="Open Help & User Guide"
           >
             <HelpCircle className="w-3.5 h-3.5 text-cyan-300" />
           </button>
 
           {/* Color Theme Selector Pill */}
-          <div className="hidden sm:flex items-center gap-0.5 bg-white/[0.03] p-0.5 rounded-xl border border-white/10 shrink-0" title="Switch App Color Theme">
+          <div className="hidden 2xl:flex items-center gap-0.5 bg-white/[0.03] p-0.5 rounded-xl border border-white/10 shrink-0" title="Switch App Color Theme">
             <button
               type="button"
               onClick={() => onChangeColorTheme && onChangeColorTheme('dark')}
@@ -806,6 +813,17 @@ export default function Header({
             </button>
           </div>
 
+          {/* Promo Pack — Trailer / Teaser / Reels */}
+          <button
+            type="button"
+            onClick={withGuestGuard('Promo Pack', onOpenPromoPack)}
+            className="p-1.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-200 font-bold text-xs flex items-center justify-center gap-1 shadow border border-amber-700/40 shrink-0"
+            title="Promo Pack — Trailer 1:30 · Teaser 2:30 · Reels"
+          >
+            <Clapperboard className="w-3.5 h-3.5" />
+            <span className="hidden 2xl:inline">Promo</span>
+          </button>
+
           {/* Master Prompt Compiler Trigger */}
           <button
             type="button"
@@ -818,11 +836,36 @@ export default function Header({
           </button>
         </div>
 
+          {/* Minimize top bar */}
+          {typeof onMinimizeHeader === 'function' && (
+            <button
+              type="button"
+              onClick={onMinimizeHeader}
+              className="sps-chrome-btn p-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 text-zinc-300 hover:text-cyan-200 border border-white/10 hover:border-cyan-400/40 shrink-0"
+              title="Minimize top bar"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Fit / fullscreen (when provided) */}
+          {typeof onToggleFullscreen === 'function' && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className="sps-chrome-btn p-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 text-zinc-300 hover:text-cyan-200 border border-white/10 hover:border-cyan-400/40 shrink-0"
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           {/* EXTREME TOP RIGHT: Logged-In User Profile */}
           <div className="sps-header-profile shrink-0 relative">
             <button
               type="button"
               onClick={() => {
+                setIsActiveUsersOpen(false);
                 setCurrentUser(getLoggedInUser());
                 setIsProfileOpen(!isProfileOpen);
               }}
@@ -917,9 +960,9 @@ export default function Header({
 
                 {/* Quick Action & Login / Logout Controls */}
                 <div className={`space-y-2 pt-2 border-t ${colorTheme === 'paper' ? 'border-slate-200' : 'border-slate-800'}`}>
-                  {/* Mobile-only quick tools (hidden from dense header) */}
+                  {/* Tools tucked from dense header (<2xl) */}
                   {!isGuest && (
-                  <div className="sm:hidden grid grid-cols-2 gap-2">
+                  <div className="2xl:hidden grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => { setIsProfileOpen(false); onExportProject?.(); }}
@@ -945,6 +988,28 @@ export default function Header({
                     >
                       {colorTheme === 'paper' ? <Moon className="w-3.5 h-3.5" /> : <Scroll className="w-3.5 h-3.5 text-amber-600" />}
                       Theme
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsProfileOpen(false); onOpenStudioBrain?.(); }}
+                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
+                        colorTheme === 'paper'
+                          ? 'bg-slate-100 text-slate-900 border-slate-300'
+                          : 'bg-slate-900 text-slate-100 border-slate-800'
+                      }`}
+                    >
+                      <Brain className="w-3.5 h-3.5 text-violet-500" /> Brain
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsProfileOpen(false); onOpenHelpModal?.(); }}
+                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
+                        colorTheme === 'paper'
+                          ? 'bg-slate-100 text-slate-900 border-slate-300'
+                          : 'bg-slate-900 text-slate-100 border-slate-800'
+                      }`}
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-cyan-500" /> Help
                     </button>
                   </div>
                   )}
@@ -996,6 +1061,11 @@ export default function Header({
                         localStorage.setItem('sps_user_manually_logged_out', 'true');
                         localStorage.removeItem('sps_authorized_user_email');
                         localStorage.setItem('sps_is_admin_logged_in', 'false');
+                        try {
+                          sessionStorage.removeItem('sps_session_authed');
+                        } catch {
+                          /* ignore */
+                        }
                         window.history.replaceState({}, '', window.location.pathname);
                         window.dispatchEvent(new Event('sps_collaborators_updated'));
                         if (onOpenLoginModal) {

@@ -7,6 +7,7 @@ import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import IntensityScaleSelector from './IntensityScaleSelector';
+import CinematicReferencesPanel from './CinematicReferencesPanel';
 
 export default function SlotEditor({ 
   slotConfig, 
@@ -35,7 +36,9 @@ export default function SlotEditor({
   onJumpToScene,
   isMuted = false,
   onToggleMute,
-  colorTheme = 'paper'
+  colorTheme = 'paper',
+  genreKey = 'mythological',
+  projectTitle = ''
 }) {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
@@ -437,8 +440,11 @@ export default function SlotEditor({
     try {
       setIsEnhancingCraft(true);
       const enhancedStr = await enhanceCraftSlotWithLLM(activeConfig.key, value, {
-        sceneShotId: currentSceneId,
-        actionEnvContext: value
+        sceneShotId: currentSceneId || shot?.sceneShotId,
+        actionEnvContext: shot?.actionEnvContext || value,
+        genreKey,
+        projectTitle,
+        presetProfile: genreKey
       });
       if (enhancedStr) {
         onChange(enhancedStr);
@@ -548,7 +554,15 @@ export default function SlotEditor({
             />
           </div>
 
-
+          <CinematicReferencesPanel
+            genreKey={genreKey}
+            craftKey={activeConfig.key}
+            projectTitle={projectTitle}
+            onInsert={(item) => {
+              const next = value && String(value).trim() ? `${value.trim()} · ${item}` : item;
+              onChange(next);
+            }}
+          />
 
           {/* CRAFT #25: FIXED MULTI-MODAL ASSET SLOTS (image_1..9, video_1..3, audio_1..3) */}
           {activeConfig.key === 'characterIdMatrix' && (() => {

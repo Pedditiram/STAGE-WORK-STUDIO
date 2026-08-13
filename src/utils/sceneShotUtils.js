@@ -112,3 +112,88 @@ export function formatShotFilename(shotOrId, idx = 0, ext = 'txt') {
   const parsed = parseSceneAndShotID(shotOrId, idx);
   return `${parsed.shortId}.${ext}`;
 }
+
+/**
+ * Build a readable scene-group banner heading from shot craft fields.
+ * Prefer production-bible titles like:
+ *   "DEMON REVEAL · WIDE APPROACH — The Black Storm — Kara's Army Descends"
+ * over raw synopsis dumps (title pages, timecodes, "Featuring …").
+ */
+export function deriveSceneGroupHeading(shotsOrTexts, sceneNum) {
+  const n = Number(sceneNum);
+  const pad = Number.isFinite(n) && n > 0 ? String(n).padStart(2, '0') : '01';
+  const fallback = `SCENE ${pad} PRODUCTION SEQUENCE`;
+
+  const texts = (Array.isArray(shotsOrTexts) ? shotsOrTexts : [])
+    .flatMap((item) => {
+      if (typeof item === 'string') return [item];
+      if (!item || typeof item !== 'object') return [];
+      return [item.sceneSynopsis, item.actionEnvContext, item.sceneHeading, item.shotComposition];
+    })
+    .map((t) => String(t || '').replace(/^Scene Location & Context:\s*/i, '').trim())
+    .filter(Boolean);
+
+  if (!texts.length) return fallback;
+
+  const normalizeSpaces = (s) => String(s || '').replace(/[\u00A0\s]+/g, ' ').trim();
+
+  for (const raw of texts) {
+    const t = normalizeSpaces(raw);
+    if (!t) continue;
+    // Skip cover / prompt dumps
+    if (/RAMAYANA\s*·\s*ACTION SCRIPT|IMAGE PROMPT|PART ONE|Complete shot-by-shot/i.test(t) && !/SC\.?\s*0*\d+/i.test(t)) {
+      continue;
+    }
+
+    const mm = t.match(
+      new RegExp(
+        String.raw`SC\.?\s*0*${n}\s+\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}\s+(.+?)\s+(\d{1,3})\s*sec`,
+        'i'
+      )
+    );
+    if (!mm) continue;
+
+    const body = normalizeSpaces(mm[1]);
+    // ALL-CAPS tag with middle dot, then mixed-case poetic title
+    const parts = body.match(/^((?:[A-Z0-9/'’]+|·|\s)+?)\s+([A-Z][a-z].*)$/);
+    if (parts) {
+      const tag = normalizeSpaces(parts[1]).replace(/\s*·\s*/g, ' · ');
+      const poetic = normalizeSpaces(parts[2])
+        .replace(/\s*Featuring\b.*$/i, '')
+        .replace(/\s*Kara-Dhushan War\s*·\s*\d+\s*\/\s*\d+\s*$/i, '')
+        .trim();
+      if (tag.includes('·') && poetic) return `${tag} — ${poetic}`;
+      if (tag.includes('·')) return tag;
+    }
+
+    if (/^[A-Z0-9/'’\s·]+$/.test(body) && body.includes('·')) {
+      return normalizeSpaces(body).replace(/\s*·\s*/g, ' · ');
+    }
+  }
+
+  // Fallback: first clean TITLE · SUBTITLE (not cover page)
+  for (const raw of texts) {
+    const t = normalizeSpaces(raw);
+    const mid = t.match(/\b([A-Z][A-Z0-9/'’ ]{1,40}·\s*[A-Z][A-Z0-9/'’ ]{1,40})\b/);
+    if (mid && !/ACTION SCRIPT|RAMAYANA/i.test(mid[1])) {
+      return normalizeSpaces(mid[1]).replace(/\s*·\s*/g, ' · ');
+    }
+  }
+
+  // Last resort: short cleaned synopsis without noise
+  for (const raw of texts) {
+    let t = normalizeSpaces(raw)
+      .replace(/\bFeaturing\b.*/i, '')
+      .replace(/\bPNO:[A-Z0-9:]+\b/gi, '')
+      .replace(/-(?:BOLD|OBLIQUE|REGULAR|ITALIC)/gi, '')
+      .trim();
+    if (!t || t.length < 8) continue;
+    if (/RAMAYANA\s*·\s*ACTION SCRIPT|IMAGE PROMPT|PAGEMODE/i.test(t)) continue;
+    if (/^[A-Z0-9_:\-!?\s]{40,}$/.test(t)) continue;
+    if (t.length > 90) t = `${t.slice(0, 90).trim()}…`;
+    return t;
+  }
+
+  return fallback;
+}
+

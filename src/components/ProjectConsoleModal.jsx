@@ -3,7 +3,7 @@ import {
   X, Folder, Plus, Copy, Check, Trash2, Edit3, Share2, History, Layers, 
   RefreshCw, FileText, Download, ExternalLink, ShieldAlert, Sparkles, 
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders, Maximize2,
-  User, Brain, Camera, Music2, Ratio, KeyRound, Play, AlertTriangle
+  User, Brain, Camera, Music2, Ratio, KeyRound, Play, AlertTriangle, Archive, RotateCcw
 } from 'lucide-react';
 import { 
   parseRawScriptToShots, extractTextFromPDF, 
@@ -16,12 +16,20 @@ import {
 } from '../services/aiScriptParser';
 import { GENRE_PRESET_PROFILES, getMergedGenreProfiles, detectScriptGenre, SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import {
+  saveDirectorPsychology
+} from '../utils/directorPsychologyStorage';
+import {
   syncProjectLibraryToCloud,
   fetchProjectLibraryFromCloud,
   syncCollaboratorsToCloud,
-  markProjectTitlesDeleted,
   clearDeletedProjectTitles,
-  filterOutDeletedProjects
+  filterOutDeletedProjects,
+  isProjectTitleDeleted,
+  archiveProjectSnapshot,
+  getArchivedProjects,
+  restoreProjectFromArchive,
+  purgeArchivedProject,
+  healActiveProjectFromArchive
 } from '../services/dbService';
 import { 
   saveProjectToVault, loadProjectsFromVault, getAllottedFolderPath, 
@@ -186,7 +194,9 @@ export default function ProjectConsoleModal({
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return filterOutDeletedProjects(parsed);
+          }
         } catch (e) {}
       }
     }
@@ -211,6 +221,8 @@ export default function ProjectConsoleModal({
       }
     ];
   });
+
+  const [archivedProjects, setArchivedProjects] = useState(() => getArchivedProjects());
 
   const [activeTab, setActiveTab] = useState(
     initialTab === 'genre' ? 'library' : (initialTab || 'library')
@@ -372,7 +384,11 @@ export default function ProjectConsoleModal({
       });
       if (typeof window !== 'undefined') {
         localStorage.setItem('sps_project_library', JSON.stringify(updated));
-        localStorage.setItem(`sps_${activeVaultKey}_${targetPsychologyProj.title}`, JSON.stringify(updatedObj));
+        if (activeVaultKey === 'directorPsychology') {
+          saveDirectorPsychology(targetPsychologyProj.title, updatedObj);
+        } else {
+          localStorage.setItem(`sps_${activeVaultKey}_${targetPsychologyProj.title}`, JSON.stringify(updatedObj));
+        }
       }
       return updated;
     });
@@ -785,16 +801,38 @@ export default function ProjectConsoleModal({
       setActiveTab(initialTab === 'genre' ? 'library' : initialTab);
     }
     if (isOpen) {
+      // Heal: active project must never sit only in Archive due to sync tombstones
+      const healed = healActiveProjectFromArchive();
+      // Filter tombstoned titles from Library display — never silently re-archive
+      setProjectLibrary((prev) => {
+        let base = Array.isArray(prev) ? prev : [];
+        if (healed?.title) {
+          const key = String(healed.title).trim().toUpperCase();
+          base = [healed, ...base.filter((p) => String(p?.title || '').trim().toUpperCase() !== key)];
+        }
+        try {
+          const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+          if (Array.isArray(saved) && saved.length) {
+            const map = new Map();
+            [...saved, ...base].forEach((p) => {
+              if (!p?.title) return;
+              map.set(String(p.title).trim().toUpperCase(), p);
+            });
+            base = Array.from(map.values());
+          }
+        } catch (e) {}
+        return sanitizeLibraryTitles(filterOutDeletedProjects(base));
+      });
+      setArchivedProjects(getArchivedProjects());
       fetchProjectLibraryFromCloud().then(cloudProjs => {
+        const healedAfter = healActiveProjectFromArchive();
         if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
           setProjectLibrary(prev => {
-            // Cloud is membership SoT — do not re-add local-only deleted titles
             const map = new Map();
             const cloudFiltered = filterOutDeletedProjects(cloudProjs);
             cloudFiltered.forEach((p) => {
               if (p && p.title) map.set(String(p.title).trim().toUpperCase(), p);
             });
-            // Overlay local field data for titles that still exist on cloud
             (prev || []).forEach((p) => {
               if (!p?.title) return;
               const key = String(p.title).trim().toUpperCase();
@@ -802,19 +840,30 @@ export default function ProjectConsoleModal({
               map.set(key, { ...p, ...map.get(key) });
             });
 
-            // Ensure current active project is NEVER missing from the library window
             const activeKey = currentProjectTitle ? String(currentProjectTitle).trim().toUpperCase() : '';
-            if (activeKey && activeKey !== 'STAGE PRODUCTION STUDIO' && !map.has(activeKey)) {
-              map.set(activeKey, {
-                id: `proj_${Date.now()}`,
-                title: currentProjectTitle,
-                description: `Cinema Production Studio Project`,
-                targetModel: 'SPS Direct Cinema 2.0',
-                aspectRatio: '2.39:1 Anamorphic',
-                roomId: 'SPS-CLOUD-8821',
-                lastModified: new Date().toLocaleDateString(),
-                shots: []
-              });
+            if (
+              activeKey &&
+              activeKey !== 'STAGE PRODUCTION STUDIO' &&
+              !map.has(activeKey)
+            ) {
+              const fromHeal =
+                healedAfter && String(healedAfter.title).trim().toUpperCase() === activeKey
+                  ? healedAfter
+                  : null;
+              map.set(
+                activeKey,
+                fromHeal || {
+                  id: `proj_${Date.now()}`,
+                  title: currentProjectTitle,
+                  description: `Cinema Production Studio Project`,
+                  targetModel: 'SPS Direct Cinema 2.0',
+                  aspectRatio: '2.39:1 Anamorphic',
+                  roomId: 'SPS-CLOUD-8821',
+                  lastModified: new Date().toLocaleDateString(),
+                  shots: []
+                }
+              );
+              clearDeletedProjectTitles([currentProjectTitle]);
             }
 
             let merged = filterOutDeletedProjects(Array.from(map.values()));
@@ -825,9 +874,22 @@ export default function ProjectConsoleModal({
                 return 0;
               });
             }
-            return sanitizeLibraryTitles(merged);
+            const sanitized = sanitizeLibraryTitles(merged);
+            try {
+              localStorage.setItem('sps_project_library', JSON.stringify(sanitized));
+            } catch (e) {}
+            return sanitized;
+          });
+        } else if (healedAfter) {
+          setProjectLibrary((prev) => {
+            const key = String(healedAfter.title).trim().toUpperCase();
+            const without = (prev || []).filter(
+              (p) => String(p?.title || '').trim().toUpperCase() !== key
+            );
+            return sanitizeLibraryTitles([healedAfter, ...without]);
           });
         }
+        setArchivedProjects(getArchivedProjects());
       }).catch(() => {});
     }
   }, [isOpen, initialTab, currentProjectTitle]);
@@ -1089,6 +1151,10 @@ export default function ProjectConsoleModal({
       setPdfFailure(null);
       if (typeof window !== 'undefined') {
         localStorage.setItem('sps_current_screenplay_text', extractedText);
+        localStorage.setItem('sps_live_screenplay_text', extractedText);
+        try {
+          window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'project_console' } }));
+        } catch (e) {}
       }
       const parsedShots = await parseRawScriptToShots(extractedText);
       const meta = getLastParseMeta();
@@ -1167,6 +1233,10 @@ export default function ProjectConsoleModal({
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem('sps_current_screenplay_text', rawScriptText);
+        localStorage.setItem('sps_live_screenplay_text', rawScriptText);
+        try {
+          window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'project_console_parse' } }));
+        } catch (e) {}
       }
       const parsedShots = await parseRawScriptToShots(rawScriptText);
       const meta = getLastParseMeta();
@@ -1255,25 +1325,25 @@ export default function ProjectConsoleModal({
     setProjectLibrary(prev => [...prev, dupObj]);
   };
 
-  // 5. DELETE PROJECT (PRIMARY ADMIN & OWNER AUTHORIZED RULE)
+  // 5. ARCHIVE PROJECT (PRIMARY ADMIN & OWNER) — remove from library, keep in Archive for restore
   const handleDeleteProject = (projId) => {
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner (pedditiram@gmail.com) can delete projects.");
+      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner (pedditiram@gmail.com) can archive projects.");
       return;
     }
 
     if (projectLibrary.length <= 1) {
-      alert("Cannot delete the last remaining project. Create a new project first!");
+      alert("Cannot archive the last remaining project. Create a new project first!");
       return;
     }
 
     const targetProj = projectLibrary.find(p => p.id === projId);
-    if (confirm(`⚠️ OWNER CONFIRMATION REQUIRED:\nAre you sure you want to permanently delete project "${targetProj?.title || projId}"?\nThis action cannot be undone.`)) {
+    if (confirm(`Archive project "${targetProj?.title || projId}"?\n\nIt will leave the Library and move to Archive so you can restore it later.`)) {
       const deletedTitle = targetProj?.title || '';
-      const updated = projectLibrary.filter(p => p.id !== projId);
+      if (targetProj) archiveProjectSnapshot(targetProj);
+      setArchivedProjects(getArchivedProjects());
 
-      // Tombstone so cloud hydrate / Admin allot dropdown cannot resurrect this title
-      if (deletedTitle) markProjectTitlesDeleted([deletedTitle]);
+      const updated = filterOutDeletedProjects(projectLibrary.filter(p => p.id !== projId));
 
       // Strip dead title from all collaborators' allotments (local + cloud)
       try {
@@ -1289,7 +1359,6 @@ export default function ProjectConsoleModal({
       } catch (e) {}
 
       setProjectLibrary(updated);
-      // Persist + push pruned library to Vercel immediately
       try {
         localStorage.setItem('sps_project_library', JSON.stringify(updated));
         window.dispatchEvent(new Event('sps_projects_updated'));
@@ -1300,6 +1369,37 @@ export default function ProjectConsoleModal({
         handleSwitchProject(updated[0]);
       }
     }
+  };
+
+  const handleRestoreArchivedProject = (archiveId) => {
+    if (!isPrimaryOwner) {
+      alert('🔒 Only the studio Owner can restore archived projects.');
+      return;
+    }
+    const restored = restoreProjectFromArchive(archiveId);
+    if (!restored) {
+      alert('Could not restore that archived project.');
+      return;
+    }
+    setArchivedProjects(getArchivedProjects());
+    setProjectLibrary((prev) => {
+      const key = String(restored.title).trim().toUpperCase();
+      const without = (prev || []).filter((p) => String(p?.title || '').trim().toUpperCase() !== key);
+      return [restored, ...without];
+    });
+    try {
+      syncProjectLibraryToCloud(
+        JSON.parse(localStorage.getItem('sps_project_library') || '[]')
+      );
+    } catch (e) {}
+    setActiveTab('library');
+  };
+
+  const handlePurgeArchivedProject = (archiveId, title) => {
+    if (!isPrimaryOwner) return;
+    if (!confirm(`Permanently delete archived project "${title}"?\nThis cannot be undone.`)) return;
+    purgeArchivedProject(archiveId);
+    setArchivedProjects(getArchivedProjects());
   };
 
   // 6. CREATE VERSION SNAPSHOT
@@ -1385,6 +1485,28 @@ export default function ProjectConsoleModal({
               <Folder className="w-4 h-4" />
               <span className="whitespace-nowrap">Library</span>
             </button>
+            {isPrimaryOwner && (
+              <button
+                type="button"
+                onClick={() => {
+                  setArchivedProjects(getArchivedProjects());
+                  setActiveTab('archive');
+                }}
+                className={`sps-chrome-btn px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm shrink-0 ${
+                  activeTab === 'archive'
+                    ? 'bg-amber-500 text-slate-950 shadow-[0_6px_20px_rgba(245,158,11,0.3)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+                }`}
+              >
+                <Archive className="w-4 h-4" />
+                <span className="whitespace-nowrap">Archive</span>
+                {archivedProjects.length > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-black/20 text-[10px] font-black">
+                    {archivedProjects.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Right Side: Profile Badge, Import Backup, + New Project, Close */}
@@ -1665,10 +1787,10 @@ export default function ProjectConsoleModal({
                               setPdfFailure(null);
                               setActiveTab('ai_breakdown');
                             }}
-                            className="sps-chrome-btn w-full py-2 px-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-400/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 text-amber-900 dark:text-amber-200 border border-amber-500/35 text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                            className="sps-chrome-btn w-full py-2 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 border border-amber-600/40 text-xs font-black tracking-wide flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                             title={`Run AI Script Breakdown for ${proj.title}`}
                           >
-                            <Wand2 className="w-4 h-4 text-amber-500 shrink-0" />
+                            <Wand2 className="w-4 h-4 text-zinc-950 shrink-0" />
                             <span>AI Script Breakdown</span>
                           </button>
 
@@ -1764,10 +1886,10 @@ export default function ProjectConsoleModal({
                                 type="button"
                                 onClick={() => handleDeleteProject(proj.id)}
                                 className="sps-chrome-btn py-1.5 px-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
-                                title="Delete Project"
+                                title="Move project to Archive (can restore later)"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                                <span>Delete</span>
+                                <Archive className="w-3.5 h-3.5 text-red-400" />
+                                <span>Archive</span>
                               </button>
                             ) : (
                               <div className="py-1.5 px-2 rounded-xl bg-zinc-900/40 text-zinc-500 text-[11px] font-semibold text-center">
@@ -1781,6 +1903,76 @@ export default function ProjectConsoleModal({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* TAB: PROJECT ARCHIVE — restore or permanently purge */}
+          {activeTab === 'archive' && isPrimaryOwner && (
+            <div className="h-full overflow-y-auto p-4 sm:p-5 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <Archive className="w-4 h-4 text-amber-500" />
+                    Project Archive
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 max-w-xl">
+                    Archived projects are removed from the Library but kept here so you can restore them. They will not reappear in the live library until restored.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setArchivedProjects(getArchivedProjects())}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-bold border border-slate-200 dark:border-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Refresh
+                </button>
+              </div>
+
+              {archivedProjects.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 dark:border-zinc-700 p-10 text-center text-slate-500 dark:text-zinc-500 text-sm">
+                  Archive is empty. Use <strong className="text-slate-700 dark:text-zinc-300">Archive</strong> on a Library card to move a project here.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {archivedProjects.map((proj) => (
+                    <div
+                      key={proj.archiveId || proj.id}
+                      className="rounded-2xl border border-amber-500/25 bg-amber-50/60 dark:bg-zinc-900/80 p-4 flex flex-col gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-base font-black text-slate-900 dark:text-white truncate">{proj.title}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                          {Array.isArray(proj.shots) ? proj.shots.length : (proj.shotCount || 0)} shots
+                          {proj.archivedAtLabel ? ` · Archived ${proj.archivedAtLabel}` : ''}
+                        </p>
+                        {proj.description && (
+                          <p className="text-[11px] text-slate-600 dark:text-zinc-500 mt-1 line-clamp-2">{proj.description}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreArchivedProject(proj.archiveId || proj.id)}
+                          className="flex-1 min-w-[120px] py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Restore to Library
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePurgeArchivedProject(proj.archiveId || proj.id, proj.title)}
+                          className="py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Permanently delete from Archive"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Purge
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

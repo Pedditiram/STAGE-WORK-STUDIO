@@ -5,7 +5,7 @@ export default function SaveCloseConfirmModal({ isOpen, onSaveAndClose, onCloseW
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
       <div className="w-full max-w-md bg-slate-950 text-white border-2 border-amber-500/60 rounded-2xl shadow-[0_25px_70px_rgba(245,158,11,0.3)] overflow-hidden font-mono text-xs text-left">
         
         {/* Header */}

@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Sparkles, Plus, Trash2, Edit3, Check, BookOpen, Volume2, 
   Activity, MessageSquare, Shield, Save, UserCheck, RefreshCw, AlertCircle,
-  Maximize2, Minimize2, Users, Palette, Grid, Copy, Download, Shirt, Smile
+  Maximize2, Minimize2, Users, Palette, Grid, Copy, Download, Shirt, Smile, ExternalLink
 } from 'lucide-react';
 import { composeCharacterPersonaWithLLM, extractProjectCharactersWithLLM } from '../services/aiScriptParser';
+import CinematicReferencesPanel from './CinematicReferencesPanel';
 
 export function getStoredCharacterProfiles() {
   if (typeof window === 'undefined') return [];
@@ -24,7 +25,7 @@ export function saveStoredCharacterProfiles(profiles) {
   } catch (e) {}
 }
 
-export default function CharacterBibleModal({ isOpen, onClose, shots = [], projectTitle = '', initialTab = 'roster' }) {
+export default function CharacterBibleModal({ isOpen, onClose, shots = [], projectTitle = '', initialTab = 'roster', onOpenWriterSynopsis }) {
   const [activeTab, setActiveTab] = useState(initialTab); // 'roster' | 'character_sheet' | 'script_story'
   const [characterSheetMode, setCharacterSheetMode] = useState('turnaround'); // 'turnaround' | 'expressions' | 'wardrobe'
   const [copiedSheet, setCopiedSheet] = useState(false);
@@ -193,14 +194,9 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
   const [toastMsg, setToastMsg] = useState(null);
   const [isComposingLLM, setIsComposingLLM] = useState(false);
   const [isExtractingLLM, setIsExtractingLLM] = useState(false);
-  const [extractedMasterStory, setExtractedMasterStory] = useState('');
-  const [isGeneratingStoryLLM, setIsGeneratingStoryLLM] = useState(false);
-  const [storySourceMode, setStorySourceMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_selected_story_mode') || 'auto_extracted';
-    }
-    return 'auto_extracted';
-  });
+  const [writerSynopsisSource, setWriterSynopsisSource] = useState('auto_llm');
+  const [writerAutoSynopsis, setWriterAutoSynopsis] = useState('');
+  const [writerCustomSynopsis, setWriterCustomSynopsis] = useState('');
   const [includeStoryInPrompt, setIncludeStoryInPrompt] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sps_include_story_in_prompt') !== 'false';
@@ -219,25 +215,9 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
     }
     return true;
   });
-  const [narrativeProseStory, setNarrativeProseStory] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showConfirmClosePopup, setShowConfirmClosePopup] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [writerOriginalScript, setWriterOriginalScript] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sps_current_screenplay_text') || '';
-    }
-    return '';
-  });
-
-  useEffect(() => {
-    if (isOpen && typeof window !== 'undefined') {
-      const savedScript = localStorage.getItem('sps_current_screenplay_text');
-      if (savedScript) setWriterOriginalScript(savedScript);
-      setHasUnsavedChanges(false);
-      setShowConfirmClosePopup(false);
-    }
-  }, [isOpen]);
 
   // Native Browser Fullscreen Bypass to hide Safari URL bar & tabs completely
   const toggleFullscreenMode = async (enable) => {
@@ -308,34 +288,15 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
     }
   };
 
-
-
-  // Synthesize master story & narrative prose for common man/children
+  // Read-only mirror of Writer Console Master Synopsis keys (source of truth lives in Writer)
   useEffect(() => {
-    if (!isOpen || !shots || shots.length === 0) return;
-    const storyBeats = shots.map((s, idx) => {
-      const char = s.characterIdAssetRef || '';
-      const env = s.actionEnvContext || '';
-      const dialogue = s.characterDialogue ? ` (Dialogue: "${s.characterDialogue}")` : '';
-      return `• Beat ${idx + 1} (${s.sceneShotId || 'Shot'}): ${env} - ${char}${dialogue}`;
-    }).join('\n');
-
-    const fullStorySummary = `=== MASTER SCRIPT STORY & NARRATIVE ARC (${projectTitle || 'STAGE PRODUCTION STUDIO'}) ===\n\n1. SCRIPT SUMMARY & OVERALL PLOT:\nAct I-III Narrative Arc compiled from writer script and shot sequence across ${shots.length} scene beats.\n\n2. EXTRACTED SHOT SEQUENCE BEATS:\n${storyBeats}\n\n3. WRITER & LLM MASTER CHARACTER PROFILE SUMMARY:\n${characters.map(c => `• ${c.name} (${c.tag}): ${c.backstory || 'No backstory defined.'}`).join('\n')}`;
-
-    setExtractedMasterStory(fullStorySummary);
-
-    const charNames = characters.length > 0 ? characters.map(c => c.name).join(', ') : 'our courageous heroes';
-    let prose = `📖 SIMPLE NARRATIVE STORY: ${projectTitle || 'THE GREAT TALE'}\n\n`;
-    prose += `Once upon a time in "${projectTitle || 'our epic world'}", a grand adventure unfolded starring ${charNames}.\n\n`;
-    shots.forEach((s, idx) => {
-      const charRef = s.characterIdAssetRef ? s.characterIdAssetRef.replace(/\[|\]/g, '').replace(/CharID:\s*/i, '') : 'our lead character';
-      const env = s.actionEnvContext || 'in a vivid setting';
-      const dialogue = s.characterDialogue ? ` They declared: "${s.characterDialogue}".` : '';
-      prose += `Chapter ${idx + 1} (${s.sceneShotId || 'Scene'}):\nIn this moment, ${env}.\nHere, ${charRef} steps into the scene.${dialogue}\n\n`;
-    });
-    prose += `And so, step by step, the story of ${projectTitle || 'the realm'} reaches its grand resolution!`;
-    setNarrativeProseStory(prose);
-  }, [isOpen, shots, characters, projectTitle]);
+    if (!isOpen || typeof window === 'undefined') return;
+    setWriterSynopsisSource(localStorage.getItem('sps_script_synopsis_source') || 'auto_llm');
+    setWriterAutoSynopsis(localStorage.getItem('sps_extracted_master_story') || '');
+    setWriterCustomSynopsis(localStorage.getItem('sps_writer_custom_script_synopsis') || '');
+    setHasUnsavedChanges(false);
+    setShowConfirmClosePopup(false);
+  }, [isOpen]);
 
   const handleExtractCharactersFromShots = async () => {
     setIsExtractingLLM(true);
@@ -426,14 +387,14 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
             </div>
             <div>
               <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
-                {activeTab === 'script_story' ? '📜 Master Script Story Engine' : '🎭 Character Bible Vault'}
+                {activeTab === 'script_story' ? '📜 Master Synopsis (Writer)' : '🎭 Character Bible Vault'}
                 <span className="text-[10px] bg-purple-950 text-amber-300 border border-purple-700 px-2 py-0.5 rounded font-mono font-bold">
                   {projectTitle || 'Current Project'}
                 </span>
               </h3>
               <p className="text-xs text-zinc-400">
                 {activeTab === 'script_story' 
-                  ? 'Total extracted story arc from screenplay & scene beats.' 
+                  ? 'Read-only view of Writer Console Master Synopsis — edit there to update prompts.' 
                   : 'Manage detailed character backstories, mannerisms, gait & voice for character consistency.'}
               </p>
             </div>
@@ -578,8 +539,20 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
             }`}
           >
             <BookOpen className="w-4 h-4" />
-            <span>📜 Master Script Story Engine</span>
+            <span>📜 Master Synopsis</span>
           </button>
+        </div>
+
+        <div className="px-4 pt-3 shrink-0">
+          <CinematicReferencesPanel
+            sectionId="character"
+            genreKey={
+              (typeof window !== 'undefined' && localStorage.getItem('sps_preset_profile')) ||
+              'mythological'
+            }
+            projectTitle={projectTitle}
+            compact
+          />
         </div>
 
         {activeTab === 'character_sheet' ? (
@@ -707,65 +680,18 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                 <BookOpen className="w-4 h-4" />
-                <span>📜 TOTAL SCRIPT STORY & MASTER SYNTHESIS</span>
+                <span>📜 WRITER MASTER SYNOPSIS (READ-ONLY)</span>
               </div>
 
-              {/* Sub Toggle: Auto-Extracted LLM Story vs Narrative Prose vs Writer Original Screenplay */}
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStorySourceMode('auto_extracted');
-                      localStorage.setItem('sps_selected_story_mode', 'auto_extracted');
-                    }}
-                    className={`px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      storySourceMode === 'auto_extracted'
-                        ? 'bg-amber-500 text-zinc-950 font-extrabold shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {storySourceMode === 'auto_extracted' && <Check className="w-3.5 h-3.5 text-zinc-950 stroke-[3]" />}
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>🤖 Auto-Extracted LLM Story</span>
-                  </button>
+                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                  writerSynopsisSource === 'writer_custom'
+                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-600/60'
+                    : 'bg-amber-950/80 text-amber-300 border-amber-600/60'
+                }`}>
+                  {writerSynopsisSource === 'writer_custom' ? '✍️ Writer Custom' : '🤖 Auto LLM'}
+                </span>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStorySourceMode('narrative_prose');
-                      localStorage.setItem('sps_selected_story_mode', 'narrative_prose');
-                    }}
-                    className={`px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      storySourceMode === 'narrative_prose'
-                        ? 'bg-purple-500 text-white font-extrabold shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {storySourceMode === 'narrative_prose' && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>📖 Narrative Prose (Simple Story)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStorySourceMode('writer_original');
-                      localStorage.setItem('sps_selected_story_mode', 'writer_original');
-                    }}
-                    className={`px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      storySourceMode === 'writer_original'
-                        ? 'bg-cyan-500 text-zinc-950 font-extrabold shadow'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {storySourceMode === 'writer_original' && <Check className="w-3.5 h-3.5 text-zinc-950 stroke-[3]" />}
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>✍️ Writer Original Screenplay</span>
-                  </button>
-                </div>
-
-                {/* Checkmark Checkbox for Adding Story Memory to Final Prompt */}
                 <button
                   type="button"
                   onClick={() => {
@@ -780,7 +706,7 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
                       ? 'bg-amber-950/90 text-amber-300 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
                       : 'bg-zinc-900 text-zinc-500 border-zinc-800'
                   }`}
-                  title="Check to include selected Story Memory in the compiled final prompt"
+                  title="Check to include Writer Master Synopsis in the compiled final prompt"
                 >
                   <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border transition-colors ${includeStoryInPrompt ? 'bg-amber-500 border-amber-400 text-zinc-950' : 'border-zinc-700'}`}>
                     {includeStoryInPrompt && <Check className="w-3 h-3 stroke-[3]" />}
@@ -788,21 +714,33 @@ Full-body character performance model sheet of ${charName} (${charTag}), display
                   <span>Add to Final Prompt</span>
                 </button>
 
-                <span className="text-xs text-zinc-400 bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
-                  Beats: {shots.length}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => onOpenWriterSynopsis?.()}
+                  className="px-3 py-1 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-zinc-950 border border-cyan-400 cursor-pointer shadow-sm"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Edit in Writer Console → Master Synopsis</span>
+                </button>
               </div>
             </div>
 
-            <div className="bg-zinc-900/90 p-5 rounded-2xl border border-amber-500/30 text-xs leading-relaxed font-mono whitespace-pre-wrap selection:bg-amber-500/30 shadow-inner">
-              {storySourceMode === 'writer_original' ? (
-                writerOriginalScript || "No writer screenplay text available in current project."
-              ) : storySourceMode === 'narrative_prose' ? (
-                narrativeProseStory
-              ) : (
-                extractedMasterStory
-              )}
+            <div className="bg-zinc-900/90 p-5 rounded-2xl border border-amber-500/30 text-xs leading-relaxed font-mono whitespace-pre-wrap selection:bg-amber-500/30 shadow-inner min-h-[12rem]">
+              {writerSynopsisSource === 'writer_custom'
+                ? (writerCustomSynopsis.trim() || 'No writer custom synopsis yet. Edit in Writer Console → Master Synopsis.')
+                : (writerAutoSynopsis.trim() || 'No auto LLM synopsis yet. Edit in Writer Console → Master Synopsis.')}
             </div>
+
+            {(writerSynopsisSource === 'writer_custom' ? writerAutoSynopsis : writerCustomSynopsis).trim() ? (
+              <details className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">
+                <summary className="cursor-pointer text-zinc-300 font-bold">
+                  {writerSynopsisSource === 'writer_custom' ? 'Also on disk: Auto LLM synopsis' : 'Also on disk: Writer custom synopsis'}
+                </summary>
+                <pre className="mt-2 whitespace-pre-wrap font-mono text-zinc-500">
+                  {writerSynopsisSource === 'writer_custom' ? writerAutoSynopsis : writerCustomSynopsis}
+                </pre>
+              </details>
+            ) : null}
           </div>
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-hidden">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Film, Zap, Shield, ArrowRight } from 'lucide-react';
-import { getCurrentUserEmail, isStudioAdmin, markCollaboratorSession, PRIMARY_ADMIN_EMAILS } from '../utils/projectPermissions';
+import { getCurrentUserEmail, isStudioAdmin, markCollaboratorSession, PRIMARY_ADMIN_EMAILS, normalizeEmail } from '../utils/projectPermissions';
 
 export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
   const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin'
@@ -15,7 +15,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
   // Prefill last known email when modal opens — still require explicit login choice
   useEffect(() => {
     if (!isOpen) return;
-    const remembered = getCurrentUserEmail();
+    const remembered = normalizeEmail(getCurrentUserEmail());
     setRememberedEmail(remembered);
     if (remembered) setEmailInput(remembered);
     setErrorMsg('');
@@ -26,10 +26,16 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
   if (!isOpen) return null;
 
   const completeLogin = (email, message) => {
-    const clean = String(email || '').trim().toLowerCase();
+    const clean = normalizeEmail(email);
     markCollaboratorSession(clean);
     const admin = isStudioAdmin(clean);
     if (setIsAdminLoggedIn) setIsAdminLoggedIn(admin);
+    try {
+      sessionStorage.setItem('sps_session_authed', '1');
+      sessionStorage.setItem('sps_login_prompted', '1');
+    } catch {
+      /* ignore */
+    }
     setSuccessMsg(message);
     window.history.replaceState({}, '', window.location.pathname);
     setTimeout(() => {
@@ -43,7 +49,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanEmail = normalizeEmail(emailInput);
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setErrorMsg('Please enter a valid Gmail / Email Address.');
       return;

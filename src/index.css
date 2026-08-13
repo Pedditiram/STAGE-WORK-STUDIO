@@ -252,18 +252,26 @@ a:focus:not(:focus-visible) {
   font-family: var(--sps-font);
 }
 
-/* Header toolbar: keep dense action clusters inside the viewport */
+/* Header toolbar: keep dense action clusters inside the viewport — no horizontal scroll */
 .sps-header-actions {
-  max-width: min(58vw, 720px);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
+  max-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sps-header-actions::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 @media (min-width: 768px) {
   .sps-header-actions {
     margin-left: auto;
+    justify-content: flex-end;
   }
 
   .sps-header-profile {
@@ -272,35 +280,31 @@ a:focus:not(:focus-visible) {
 }
 
 .sps-header-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
-.sps-header-actions::-webkit-scrollbar,
 .sps-header-scroll::-webkit-scrollbar {
-  height: 3px;
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 .sps-header-actions::-webkit-scrollbar-thumb,
-.sps-header-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.45);
-  border-radius: 999px;
-}
-
+.sps-header-scroll::-webkit-scrollbar-thumb,
 .sps-header-actions::-webkit-scrollbar-track,
 .sps-header-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .theme-paper .sps-header-actions {
-  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+  scrollbar-width: none;
 }
 
 .theme-paper .sps-header-actions::-webkit-scrollbar-thumb,
 .theme-paper .sps-header-scroll::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.45);
+  background: transparent;
 }
 
 /* Mobile: stack header into readable rows; enlarge tap targets */
@@ -614,6 +618,17 @@ html, body, #root {
   backdrop-filter: blur(16px);
 }
 
+/* Brand title must stay readable on paper chrome (never white-on-white) */
+.theme-paper .sps-header-left h1 {
+  color: #0f172a !important;
+  background: transparent !important;
+  -webkit-text-fill-color: #0f172a;
+}
+
+.theme-paper .sps-header-left span {
+  color: #64748b !important;
+}
+
 .theme-paper button.bg-zinc-900:not(.force-dark),
 .theme-paper button.bg-zinc-950:not(.force-dark),
 .theme-paper button.bg-black:not(.force-dark) {
@@ -641,28 +656,103 @@ html, body, #root {
   font-weight: 600 !important;
 }
 
+/* Writer Console dual-layer editor: never paint over the color highlight pre */
+.theme-paper .force-dark textarea.sps-screenplay-textarea,
+.theme-paper .force-dark textarea.sps-screenplay-textarea.bg-transparent {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  font-weight: 400 !important;
+}
+
+.theme-paper .force-dark textarea.sps-screenplay-textarea.text-transparent {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Writer immersive modes — avoid element.requestFullscreen on nested divs (Safari blanks on Esc/app-switch) */
+html.sps-fs-active,
+html.sps-fs-active body,
+html.sps-fs-active #root {
+  height: 100% !important;
+  min-height: 100% !important;
+  background: #09090b !important;
+}
+
+.sps-writer-console.sps-fs-console {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 80 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.sps-draft-paper.sps-fs-draft {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 90 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.sps-draft-paper.sps-fs-draft .sps-screenplay-textarea,
+.sps-draft-paper.sps-fs-draft pre {
+  padding: 2.5rem 8vw !important;
+}
+
+/* Promo Pack immersive fullscreen (⌘Enter) */
+.sps-promo-shell.sps-promo-fs {
+  padding: 0 !important;
+}
+
+.sps-promo-panel.sps-promo-fs {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* Solid saturated CTAs only — never blanket-override bg-gradient-to-r.
+   Light tint gradients (e.g. amber-500/15) need dark ink; forcing white
+   washed letters like the "t" in "Script" → looked like "AI Scrip…". */
 .theme-paper .bg-purple-600,
 .theme-paper .bg-cyan-600,
 .theme-paper .bg-emerald-600,
-.theme-paper .bg-cyan-500,
-.theme-paper .bg-gradient-to-r {
+.theme-paper .bg-cyan-500 {
   color: #FFFFFF !important;
 }
 
 .theme-paper .bg-cyan-500 *,
 .theme-paper .bg-cyan-600 *,
 .theme-paper .bg-purple-600 *,
-.theme-paper .bg-emerald-600 *,
-.theme-paper .bg-gradient-to-r * {
+.theme-paper .bg-emerald-600 * {
   color: #FFFFFF !important;
 }
 
 .theme-paper button.bg-amber-400,
+.theme-paper button.bg-amber-500,
 .theme-paper button.bg-cyan-500,
 .theme-paper button.bg-cyan-400,
 .theme-paper button.bg-emerald-400 {
   color: #09090B !important;
   font-weight: 700 !important;
+}
+
+.theme-paper button.bg-amber-400 *,
+.theme-paper button.bg-amber-500 *,
+.theme-paper button.bg-cyan-500 *,
+.theme-paper button.bg-cyan-400 *,
+.theme-paper button.bg-emerald-400 * {
+  color: #09090B !important;
 }
 
 .theme-paper .text-zinc-400,

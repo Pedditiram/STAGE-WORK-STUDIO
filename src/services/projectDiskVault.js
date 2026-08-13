@@ -3,6 +3,7 @@
 // =========================================================
 
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
+import { saveDirectorPsychology } from '../utils/directorPsychologyStorage';
 
 const DB_NAME = 'sps_local_disk_vault_db';
 const DB_VERSION = 1;
@@ -217,7 +218,7 @@ export const importProjectPackageFromFile = (file) => {
 
         if (projectData.directorPsychology && projectData.title) {
           try {
-            localStorage.setItem('sps_director_psychology_' + projectData.title, JSON.stringify(projectData.directorPsychology));
+            saveDirectorPsychology(projectData.title, projectData.directorPsychology);
           } catch (e) {}
         }
 

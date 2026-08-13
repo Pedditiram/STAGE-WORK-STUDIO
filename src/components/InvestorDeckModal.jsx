@@ -3,8 +3,10 @@ import {
   X, ChevronLeft, ChevronRight, Play, Pause, Film, Shield, Zap,
   Award, Target, Lock, ArrowRight, CheckCircle2, Cloud, Mail, Clapperboard
 } from 'lucide-react';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 const OWNER_EMAIL = 'pedditiram@gmail.com';
+const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
 const DECK_SLIDES = [
   {
@@ -14,7 +16,7 @@ const DECK_SLIDES = [
     title: 'Stage Production Studio',
     subtitle: 'Cinema craft intelligence for directors who refuse to compromise the frame.',
     points: [
-      'Script → 24-craft shot matrix without the pre-viz tax',
+      `Script → ${CRAFT_COUNT}-craft shot matrix without the pre-viz tax`,
       'Cloud rooms where Directors, DPs, and Editors co-author in real time',
       'Prompt-ready keyframes for AI video pipelines'
     ],
@@ -57,13 +59,13 @@ const DECK_SLIDES = [
     kind: 'content',
     badge: 'CRAFT PIPELINE',
     accent: 'emerald',
-    title: '25 crafts. Full creative autonomy.',
+    title: `${CRAFT_COUNT} crafts. Full creative autonomy.`,
     subtitle: 'Composition, lighting, camera dynamics, psychology — every slot intentional.',
     points: [
       'Shot composition: ECU to anamorphic wide, tracking low-angle',
       'Lighting & grade: Rembrandt classic to volumetric neon',
       'Camera dynamics: push-in, whip pan, floating steadicam',
-      'Character bible, director psychology, and synopsis vaults'
+      'Character bible, World & Environment console, director psychology, and Writer Console synopsis'
     ],
     highlight: 'Full creative autonomy without technical bottlenecks',
     icon: Target

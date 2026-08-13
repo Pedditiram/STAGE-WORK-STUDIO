@@ -1,4 +1,9 @@
 import { detectScriptGenre } from '../constants/seedancePresets';
+import { getCinematicReferences, formatReferencesForLLM } from '../constants/cinematicReferences';
+import {
+  joinPdfTextItems,
+  repairTeluguPdfText
+} from '../utils/repairTeluguPdfText';
 
 function safeTrim(str) {
   if (str == null) return '';
@@ -288,9 +293,73 @@ async function loadPdfJsLibrary() {
   }
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Prefer same-origin /api/extract-pdf (Vercel serverless + Vite local middleware).
+ * Electron file:// falls back to the production extract API.
+ */
+function getPdfExtractApiUrl() {
+  if (typeof window === 'undefined') return 'https://stage-production-studio.vercel.app/api/extract-pdf';
+  try {
+    const { protocol, origin } = window.location;
+    if (protocol === 'http:' || protocol === 'https:') {
+      return `${origin}/api/extract-pdf`;
+    }
+  } catch (e) {}
+  return 'https://stage-production-studio.vercel.app/api/extract-pdf';
+}
+
+/**
+ * Server-side pdfjs-legacy extract (reliable for styled / CID font PDFs like Kara-Dhushan).
+ * Returns text or null if unavailable — never throws for network blips.
+ */
+async function extractTextFromPDFViaServer(file, originalArrayBuffer) {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return null;
+  try {
+    const pdfBase64 = arrayBufferToBase64(originalArrayBuffer);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 55000) : null;
+    const res = await fetch(getPdfExtractApiUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pdfBase64,
+        fileName: file?.name || 'script.pdf'
+      }),
+      signal: controller?.signal,
+      cache: 'no-store'
+    });
+    if (timer) clearTimeout(timer);
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success && data?.text && looksLikeUsableScriptText(data.text)) {
+      return safeTrim(repairTeluguPdfText(data.text));
+    }
+    // Propagate definitive server codes so UI can show the right message
+    if (data?.code === 'NO_TEXT_LAYER' || data?.code === 'PDF_GARBAGE' || data?.code === 'TOO_LARGE') {
+      throw new PdfExtractError(data.code, PDF_EXTRACT_MESSAGES[data.code] || data.error || PDF_EXTRACT_MESSAGES.PARSE_FAILED);
+    }
+    console.warn('[PDF] Server extract unavailable:', res.status, data?.error || data?.code);
+    return null;
+  } catch (e) {
+    if (e instanceof PdfExtractError) throw e;
+    console.warn('[PDF] Server extract failed, will try browser pdf.js:', e?.message || e);
+    return null;
+  }
+}
+
 /**
  * Extract selectable text from a PDF File/Blob.
  * Throws PdfExtractError on scanned/empty/garbage/parse failure — never returns PDF binary noise.
+ * Prefer Vercel /api/extract-pdf (Node pdfjs-legacy); fall back to in-browser pdf.js.
  */
 export async function extractTextFromPDF(file) {
   if (!file) {
@@ -304,6 +373,10 @@ export async function extractTextFromPDF(file) {
   if (originalArrayBuffer.byteLength > PDF_MAX_BYTES) {
     throw new PdfExtractError('TOO_LARGE', PDF_EXTRACT_MESSAGES.TOO_LARGE);
   }
+
+  // 0) Server extract first — fixes browser false NO_TEXT_LAYER on text-layer PDFs
+  const serverText = await extractTextFromPDFViaServer(file, originalArrayBuffer);
+  if (serverText) return serverText;
 
   // Fresh copies per attempt — pdf.js workers transfer/detach ArrayBuffers
   const clonePdfBytes = () => new Uint8Array(originalArrayBuffer.slice(0));
@@ -494,45 +567,27 @@ export async function extractPagesTextFromPdfObj(pdf) {
         disableCombineTextItems: false
       });
 
-      let pageLines = [];
-      let lastY = null;
-      let currentLine = '';
+      const items = textContent.items || [];
       let pageRawChars = 0;
       let pageTextItems = 0;
-
-      for (const item of textContent.items || []) {
+      for (const item of items) {
         if (!item || typeof item.str !== 'string') continue;
         pageTextItems += 1;
         totalTextItems += 1;
-        const str = item.str;
-        if (!str) continue;
-        pageRawChars += str.length;
-        rawCharCount += str.length;
-        const y = item.transform ? item.transform[5] : null;
-
-        if (lastY !== null && y !== null && Math.abs(y - lastY) > 4) {
-          if (safeTrim(currentLine)) {
-            pageLines.push(safeTrim(currentLine));
-          }
-          currentLine = str;
-        } else {
-          currentLine += (currentLine ? ' ' : '') + str;
-        }
-        if (y !== null) lastY = y;
-      }
-
-      if (safeTrim(currentLine)) {
-        pageLines.push(safeTrim(currentLine));
+        pageRawChars += item.str.length;
+        rawCharCount += item.str.length;
       }
 
       if (pageRawChars > 0) pagesWithText += 1;
 
-      const pageText = pageLines.join('\n');
-      // Keep raw assembly; only fall back to light clean if heavy sanitize wipes valid chars
-      const heavy = sanitizePdfExtractedText(pageText);
-      let cleanPageText = heavy;
-      if (!safeTrim(heavy) && pageRawChars > 0) {
-        cleanPageText = lightSanitizePdfExtractedText(pageText);
+      const pageText = joinPdfTextItems(items);
+      let cleanPageText = pageText;
+      if (/[\u0C00-\u0C7F]/.test(pageText)) {
+        // Geometry join already repaired Telugu — avoid aggressive Latin sanitize wiping script
+        cleanPageText = repairTeluguPdfText(pageText);
+      } else {
+        const heavy = sanitizePdfExtractedText(pageText);
+        cleanPageText = safeTrim(heavy) || lightSanitizePdfExtractedText(pageText);
       }
       if (safeTrim(cleanPageText)) {
         extractedPagesText.push(cleanPageText);
@@ -932,10 +987,11 @@ Parse the following screenplay script into a complete JSON array of 26-craft sta
 
 NATIVE TELUGU & MULTILINGUAL SCRIPT DIRECTIVE:
 1. The input screenplay text may be written in Telugu Script (Unicode: తెలుగు), Transliterated/Romanized Telugu, English, or a mix of Telugu & English (Tollywood Screenplay Format).
-2. Carefully analyze all Telugu scene headings (e.g. సీన్ 1, EXT. PANCHAVATI, INT. ROOM - NIGHT), Telugu character names (e.g. రాముడు, లక్ష్మణుడు, సీత, దుషణుడు), and Telugu dialogue.
-3. Preserve authentic character dialogue in 'characterDialogue' (in Telugu Unicode script or transliterated Telugu as written).
-4. Translate technical camera, lighting, composition, score, lens, and VFX fields into clean, high-end, professional English Hollywood 26-craft descriptors so AI Image & Video engines can process them seamlessly.
-5. In 'characterIdMatrix', use short 1-to-3 word character/asset reference tags (e.g. Image_1 = rama | Image_2 = sita | Image_3 = dushana).
+2. Carefully analyze Telugu scene headings, Telugu character names (e.g. రాముడు, లక్ష్మణుడు, సీత, దుషణుడు), and Telugu dialogue — then map them into the 26-craft shot schema.
+3. DIALOGUE ONLY IN TELUGU: Preserve authentic spoken lines in 'characterDialogue' exactly as written (Telugu Unicode or transliterated Telugu). Do NOT translate dialogue into English.
+4. CHARACTER NAMES ALWAYS IN ENGLISH: In EVERY craft field that names a person/role — especially 'characterIdAssetRef', 'characterIdMatrix', 'coArtistInteraction', 'characterPlacement', 'sceneSynopsis', 'actionEnvContext', and any speaker cue inside dialogue formatting — use standard English spellings (e.g. Rama, Lakshmana, Sita, Dushana, Surpanakha). Never leave Telugu-script names in those fields. Prefer industry-familiar English forms (Lord Rama, not రాముడు).
+5. ALL OTHER CRAFT FIELDS IN ENGLISH: Translate camera, lighting, composition, score, lens, VFX, psychology, movement, and synopsis into clean, high-end Hollywood English so AI Image & Video engines can process them seamlessly.
+6. In 'characterIdMatrix', use short 1-to-3 word ENGLISH character/asset tags (e.g. Image_1 = Rama | Image_2 = Sita | Image_3 = Dushana).
 
 CRITICAL DIRECTIVE: Carefully analyze the screenplay text. Identify every scene and shot explicitly or implicitly defined in the document. Map each shot accurately. Do NOT skip, omit, or invent shots beyond what is in the screenplay.
 
@@ -947,7 +1003,9 @@ Each shot object in the JSON array MUST strictly contain all 26 canonical craft 
 In "characterIdMatrix", specify the ComfyUI Seedance 2.0 multi-modal reference slots formatted as:
 "Image_1 = [char/subject 1] | Image_2 = [char/subject 2] | Image_3 = [char/subject 3] | Image_4 = [char 4] | Image_5 = crowd | Image_6 = scene | Image_7 = | Image_8 = | Image_9 = "
 
-CRITICAL REQUIREMENT FOR 'characterIdMatrix': Use ONLY short, concise 1-to-3 word Character/Asset Names (e.g. 'Lord Rama', 'Dushana', 'John', 'Sarah'). Do NOT put long action descriptions inside 'characterIdMatrix'. Only include characters actually present in this specific shot.
+CRITICAL REQUIREMENT FOR 'characterIdMatrix': Use ONLY short, concise 1-to-3 word ENGLISH Character/Asset Names (e.g. 'Lord Rama', 'Dushana', 'John', 'Sarah'). Never Telugu script. Do NOT put long action descriptions inside 'characterIdMatrix'. Only include characters actually present in this specific shot.
+
+OPTIONAL dialogue format tip: You may prefix Telugu lines with an English speaker cue, e.g. Rama: "నీవు ఎవరు?" — speaker name English, quoted line Telugu.
 
 Screenplay text to break down:
 ${fullTextToProcess}
@@ -1460,7 +1518,58 @@ function parseRawScriptFallback(scriptText) {
     });
   });
 
-  return parsedShots.map((s, idx) => normalizeShotTo26Crafts(s, idx, scriptText));
+  return enrichShotsWithStudioBrain(parsedShots).map((s, idx) => normalizeShotTo26Crafts(s, idx, scriptText));
+}
+
+/** Prefer Studio Brain learned crafts when offline heuristic uses generic placeholders. */
+function enrichShotsWithStudioBrain(shots) {
+  if (typeof window === 'undefined' || !Array.isArray(shots) || !shots.length) return shots;
+  let pick;
+  try {
+    const raw = JSON.parse(localStorage.getItem('sps_studio_brain_v1') || '{}');
+    const banks = raw.craftBanks || {};
+    pick = (key, fallback = '') => {
+      const list = Array.isArray(banks[key]) ? banks[key] : [];
+      return list[0]?.text || fallback;
+    };
+  } catch {
+    return shots;
+  }
+
+  const isGeneric = (val, needles = []) => {
+    const s = String(val || '');
+    if (!s.trim()) return true;
+    return needles.some((n) => s.includes(n));
+  };
+
+  return shots.map((shot) => {
+    const next = { ...shot };
+    if (isGeneric(next.cameraMotionTag, ['Static Locked'])) {
+      next.cameraMotionTag = pick('cameraMotionTag', next.cameraMotionTag);
+    }
+    if (isGeneric(next.subjectLightingTag, ['Natural Soft Ambient'])) {
+      next.subjectLightingTag = pick('subjectLightingTag', next.subjectLightingTag);
+    }
+    if (isGeneric(next.atmosphereVolumetricsTag, ['Haze & Dust Motes'])) {
+      next.atmosphereVolumetricsTag = pick('atmosphereVolumetricsTag', next.atmosphereVolumetricsTag);
+    }
+    if (isGeneric(next.characterExpression, ['Focused determination'])) {
+      next.characterExpression = pick('characterExpression', next.characterExpression);
+    }
+    if (isGeneric(next.characterMovement, ['Dynamic movement focused'])) {
+      next.characterMovement = pick('characterMovement', next.characterMovement);
+    }
+    if (isGeneric(next.backgroundScoreMood, ['Orchestral Cinematic Strings'])) {
+      next.backgroundScoreMood = pick('backgroundScoreMood', next.backgroundScoreMood);
+    }
+    if (isGeneric(next.lensAndFocalLength, ['50mm Master Prime'])) {
+      next.lensAndFocalLength = pick('lensAndFocalLength', next.lensAndFocalLength);
+    }
+    if (isGeneric(next.soundFxAndFoley, ['Environmental Foley'])) {
+      next.soundFxAndFoley = pick('soundFxAndFoley', next.soundFxAndFoley);
+    }
+    return next;
+  });
 }
 
 export async function generateScriptFromConcept(conceptPrompt, shotCount = 5) {
@@ -1540,6 +1649,21 @@ function generateScriptFromConceptFallback(conceptPrompt, shotCount = 5) {
 export async function enhanceCraftSlotWithLLM(craftKey, currentValue, shotContext = {}) {
   const apiKey = getApiKey();
   const shotDesc = shotContext.actionEnvContext || shotContext.sceneShotId || 'Cinematic Shot';
+  const genreKey = shotContext.genreKey || shotContext.presetProfile || '';
+  const projectTitle = shotContext.projectTitle || '';
+
+  let referenceBlock = '';
+  try {
+    const refs = getCinematicReferences({
+      genreKey: genreKey || 'mythological',
+      craftKey,
+      projectTitle,
+      limitPerCategory: 4
+    });
+    referenceBlock = formatReferencesForLLM(refs, { maxItems: 3 });
+  } catch {
+    referenceBlock = '';
+  }
 
   if (!apiKey) {
     const fallback = currentValue ? `[Enhanced] ${currentValue}` : `[Pedditi Labs Cinematic Preset for ${craftKey}]`;
@@ -1553,8 +1677,10 @@ Enhance the following film craft parameter for a cinema production script:
 Craft Field: "${craftKey}"
 Current Value: "${currentValue || ''}"
 Shot Context: "${shotDesc}"
+Project: "${projectTitle || 'Untitled'}"
 
-Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 25 words). Do NOT wrap in quotes or code blocks.`;
+${referenceBlock ? `${referenceBlock}\n` : ''}
+Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 25 words). Do NOT wrap in quotes or code blocks. Do not name movies unless essential to a technical grammar.`;
 
       const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
       if (response && response.ok) {
@@ -2237,3 +2363,182 @@ export async function synthesizeFullAppElementsFromScript(scriptText, projectTit
     } : null
   };
 }
+
+const WORLD_ASSET_TYPES = ['location', 'background', 'prop', 'element', 'atmosphere'];
+
+function slugWorldTag(name, type, idx) {
+  const base = String(name || type || 'World')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 4)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('_') || `Asset_${idx + 1}`;
+  return `@World_${base}`;
+}
+
+function heuristicWorldAssetsFromShots(shots = [], projectTitle = '') {
+  const map = new Map();
+  const pushAsset = (partial) => {
+    const type = WORLD_ASSET_TYPES.includes(partial.type) ? partial.type : 'location';
+    const name = safeTrim(partial.name) || `${type} asset`;
+    const key = `${type}:${name.toLowerCase()}`;
+    if (map.has(key)) return;
+    const idx = map.size;
+    const tag = partial.tag || slugWorldTag(name, type, idx);
+    const desc = safeTrim(partial.description) || name;
+    const promptAuto = safeTrim(partial.promptAuto) ||
+      `masterpiece 8k cinematic still, ${type} concept plate for "${projectTitle || 'stage production'}", ${desc}, photoreal environment reference, consistent world bible, no characters in frame unless prop requires hands, ultra-detailed materials, cinematic lighting`;
+    map.set(key, {
+      id: partial.id || `world_${Date.now()}_${idx}`,
+      tag,
+      name,
+      type,
+      description: desc,
+      promptAuto,
+      promptCustom: '',
+      promptSource: 'auto_llm',
+      weather: partial.weather || '',
+      timeOfDay: partial.timeOfDay || '',
+      materials: partial.materials || '',
+      lightingNotes: partial.lightingNotes || '',
+      referenceImageUrl: '',
+      includeInPrompt: true
+    });
+  };
+
+  (Array.isArray(shots) ? shots : []).forEach((shot) => {
+    if (!shot || typeof shot !== 'object') return;
+    const env = safeTrim(shot.actionEnvContext || shot.environmentContext || '');
+    const weatherBlock = safeTrim(shot.timeAndLightingEnv || '');
+    const atmos = safeTrim(shot.atmosphereVolumetricsTag || '');
+    const bg = safeTrim(`${shot.backgroundLightingTag || ''} ${shot.backgroundColorTag || ''}`);
+
+    if (env && env.length > 18) {
+      const shortName = env.split(/[.—,\n]/)[0].slice(0, 64).trim() || 'Primary Location';
+      pushAsset({
+        type: 'location',
+        name: shortName,
+        description: env.slice(0, 320),
+        weather: weatherBlock,
+        lightingNotes: bg,
+        promptAuto: `masterpiece 8k empty establishing plate of ${shortName}. ${env.slice(0, 220)}. Environment-only, no hero characters, cinematic world bible still.`
+      });
+      pushAsset({
+        type: 'background',
+        name: `${shortName} Background Plate`,
+        description: `Wide background / depth plate for ${shortName}`,
+        promptAuto: `masterpiece 8k deep background plate, ${env.slice(0, 180)}, soft focus distant layers, cinematic depth, empty of hero faces`
+      });
+    }
+
+    if (atmos && atmos.length > 8) {
+      pushAsset({
+        type: 'atmosphere',
+        name: atmos.replace(/[\[\]]/g, '').slice(0, 56) || 'Atmosphere Rig',
+        description: atmos,
+        promptAuto: `cinematic atmosphere volume plate: ${atmos}, particulate light, environmental haze, no characters`
+      });
+    }
+
+    if (weatherBlock && /weather|rain|fog|storm|night|dusk|dawn|golden/i.test(weatherBlock)) {
+      pushAsset({
+        type: 'element',
+        name: 'Weather & Time Element',
+        description: weatherBlock,
+        weather: weatherBlock,
+        timeOfDay: weatherBlock,
+        promptAuto: `environmental weather/time still: ${weatherBlock}, empty landscape response to climate, cinematic`
+      });
+    }
+  });
+
+  if (map.size === 0) {
+    pushAsset({
+      type: 'location',
+      name: projectTitle ? `${projectTitle} Primary Set` : 'Primary Production Set',
+      description: 'Primary cinematic location for the project world bible.',
+      promptAuto: `masterpiece 8k cinematic empty location plate for ${projectTitle || 'stage production'}, consistent world bible, photoreal set`
+    });
+  }
+
+  return Array.from(map.values()).slice(0, 24);
+}
+
+/**
+ * Extract World & Environment assets (locations, backgrounds, props, elements, atmosphere)
+ * for the World Console vault — feeds image→video asset consistency.
+ */
+export async function extractWorldEnvironmentAssetsWithLLM(shots = [], projectTitle = '') {
+  const apiKey = getApiKey();
+  const prompt = `You are a Production Designer & World-Building Analyst for cinema.
+Analyze these shots for "${projectTitle}" and extract a reusable WORLD & ENVIRONMENT ASSET BIBLE.
+
+Shots:
+${JSON.stringify((shots || []).slice(0, 40).map((s) => ({
+  sceneShotId: s.sceneShotId,
+  actionEnvContext: s.actionEnvContext,
+  timeAndLightingEnv: s.timeAndLightingEnv,
+  atmosphereVolumetricsTag: s.atmosphereVolumetricsTag,
+  backgroundLightingTag: s.backgroundLightingTag,
+  backgroundColorTag: s.backgroundColorTag,
+  sceneSynopsis: s.sceneSynopsis
+})), null, 2)}
+
+Return ONLY a JSON array (max 16 objects). Each object keys:
+{
+  "id": "world_unique",
+  "tag": "@World_Short_Tag",
+  "name": "Asset display name",
+  "type": "location|background|prop|element|atmosphere",
+  "description": "2-3 sentence visual bible for consistency",
+  "promptAuto": "Single image-gen prompt for an empty reference still (no hero characters unless prop needs hands)",
+  "weather": "optional weather notes",
+  "timeOfDay": "optional time of day",
+  "materials": "optional materials/textures",
+  "lightingNotes": "optional lighting for the plate"
+}
+
+Focus on locations, background plates, set props, environmental elements, atmosphere. Do NOT output markdown.`;
+
+  if (apiKey) {
+    try {
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 });
+      if (response && response.ok) {
+        const data = await response.json();
+        const responseText = extractGeminiResponseText(data);
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((raw, idx) => {
+              const type = WORLD_ASSET_TYPES.includes(raw?.type) ? raw.type : 'location';
+              const name = safeTrim(raw?.name) || `World Asset ${idx + 1}`;
+              return {
+                id: raw?.id || `world_${Date.now()}_${idx}`,
+                tag: raw?.tag || slugWorldTag(name, type, idx),
+                name,
+                type,
+                description: safeTrim(raw?.description) || name,
+                promptAuto: safeTrim(raw?.promptAuto) || `masterpiece 8k ${type} plate, ${name}, cinematic world bible`,
+                promptCustom: '',
+                promptSource: 'auto_llm',
+                weather: safeTrim(raw?.weather),
+                timeOfDay: safeTrim(raw?.timeOfDay),
+                materials: safeTrim(raw?.materials),
+                lightingNotes: safeTrim(raw?.lightingNotes),
+                referenceImageUrl: '',
+                includeInPrompt: true
+              };
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('LLM world/environment extraction fallback:', err);
+    }
+  }
+
+  return heuristicWorldAssetsFromShots(shots, projectTitle);
+}
+

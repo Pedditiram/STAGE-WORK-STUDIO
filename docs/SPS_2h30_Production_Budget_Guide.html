@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SPS 2:30 Production Budget Guide</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 24px; color: #111; line-height: 1.5; }
+    h1 { font-size: 1.75rem; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .35rem; }
+    h3 { font-size: 1.05rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; }
+    th { background: #f5f5f5; }
+    blockquote { border-left: 3px solid #888; margin: 1rem 0; padding: .5rem 1rem; color: #444; }
+    pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; background: #f7f7f7; padding: 12px; overflow: auto; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+    .actions { position: sticky; top: 0; background: #fff; padding: 12px 0; border-bottom: 1px solid #eee; margin-bottom: 1.5rem; z-index: 2; }
+    button { font: inherit; padding: 8px 14px; margin-right: 8px; cursor: pointer; border: 1px solid #ccc; background: #111; color: #fff; border-radius: 6px; }
+    button.secondary { background: #fff; color: #111; }
+    @media print { .actions { display: none; } body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    <button type="button" class="secondary" onclick="downloadMd()">Download Markdown</button>
+  </div>
+
+  <h1>Stage Production Studio</h1>
+  <h2>Budget &amp; Maintenance Guide — Idea → 2:30 Cinema</h2>
+  <p><strong>Version:</strong> Aug 2026 planning envelope<br />
+  <strong>Product:</strong> Stage Production Studio (SPS)<br />
+  <strong>Scope:</strong> Cursor · Vercel · GitHub · LLMs · Domain hosting · Video gen (hybrid / VFX / edit)</p>
+  <blockquote>These are <strong>planning envelopes, not vendor quotes</strong>. Re-check live pricing before purchase orders. Regen is the budget killer — prove look with Promo Pack / Compiler before mass generation.</blockquote>
+
+  <h2>1. Planning tiers</h2>
+  <table>
+    <tr><th>Tier</th><th>Monthly platform ops</th><th>One 2:30 film envelope</th><th>Year (ops + 1 film)</th></tr>
+    <tr><td>Studio ops only</td><td>~$180</td><td>—</td><td>~$2,160</td></tr>
+    <tr><td><strong>2:30 hybrid cinema (recommended)</strong></td><td>~$320</td><td>~$103,000</td><td>~$106,840</td></tr>
+    <tr><td>2:30 AI-heavy cinema</td><td>~$480</td><td>~$312,000</td><td>~$317,760</td></tr>
+  </table>
+
+  <h3>Hybrid film line items</h3>
+  <table>
+    <tr><th>Line</th><th>USD</th></tr>
+    <tr><td>LLM / intelligence</td><td>$2,800</td></tr>
+    <tr><td>Video generation</td><td>$45,000</td></tr>
+    <tr><td>VFX · edit · finish</td><td>$38,000</td></tr>
+    <tr><td>Domain · host extras</td><td>$400</td></tr>
+    <tr><td>Contingency (20%)</td><td>~$17,240</td></tr>
+    <tr><td><strong>Film total</strong></td><td><strong>~$103,440</strong></td></tr>
+  </table>
+
+  <h3>AI-heavy film line items</h3>
+  <table>
+    <tr><th>Line</th><th>USD</th></tr>
+    <tr><td>LLM / intelligence</td><td>$8,500</td></tr>
+    <tr><td>Video generation</td><td>$185,000</td></tr>
+    <tr><td>VFX · edit · finish</td><td>$55,000</td></tr>
+    <tr><td>Domain · host extras</td><td>$900</td></tr>
+    <tr><td>Contingency (25%)</td><td>~$62,350</td></tr>
+    <tr><td><strong>Film total</strong></td><td><strong>~$311,750</strong></td></tr>
+  </table>
+  <p><em>Assumptions:</em> ~1,500–2,200 Matrix shots for 150 min; regen 2.5× (hybrid) to 5× (AI-heavy).</p>
+
+  <h2>2. Pipeline — idea → production</h2>
+  <table>
+    <tr><th>#</th><th>Phase</th><th>Owner</th><th>SPS / tools</th></tr>
+    <tr><td>1</td><td>Core idea</td><td>Director / Writer</td><td>Writer Console, Master Synopsis</td></tr>
+    <tr><td>2</td><td>Screenplay</td><td>Writer</td><td>Screenplay Editor, voice-to-type, Telugu/EN</td></tr>
+    <tr><td>3</td><td>Bibles</td><td>Creative</td><td>Character Vault, World Console, Director Psychology</td></tr>
+    <tr><td>4</td><td>26-Craft Matrix</td><td>AD / Craft leads</td><td>Matrix, Form, Studio Brain</td></tr>
+    <tr><td>5</td><td>Compile prompts</td><td>Pipeline</td><td>Compiler, Promo Pack, Master Cinema frame</td></tr>
+    <tr><td>6</td><td>Video generation</td><td>AI / VFX</td><td>Seedance, Kling, Runway, Veo, Sora</td></tr>
+    <tr><td>7</td><td>Edit · VFX · grade</td><td>Post</td><td>Hybrid edit, VFX, DI, sound</td></tr>
+    <tr><td>8</td><td>Ship &amp; host</td><td>Prod / Eng</td><td>Vercel, domain, GitHub, backups</td></tr>
+  </table>
+
+  <h2>3. Cursor</h2>
+  <table>
+    <tr><th>Item</th><th>Monthly</th></tr>
+    <tr><td>Cursor Pro (1 designer-dev)</td><td>$20</td></tr>
+    <tr><td>Cursor Business / extra seats</td><td>$40–$80</td></tr>
+    <tr><td>Agent / SDK automation (optional)</td><td>$0–$50</td></tr>
+  </table>
+  <ul>
+    <li>Weekly smoke: Promo Pack, Compiler, sync, Writer Console</li>
+    <li>After every ship: hard-refresh production URL</li>
+    <li>Deploy: <code>npx vercel --prod --yes --token $VERCEL_TOKEN</code></li>
+    <li>Never commit secrets; Electron rebuild only after web prod is green</li>
+  </ul>
+
+  <h2>4. Vercel — projects · storage · database · deployment</h2>
+  <table>
+    <tr><th>Item</th><th>Guidance</th></tr>
+    <tr><td>Plan</td><td>Pro ($20/seat + $20 usage credit) for commercial SPS</td></tr>
+    <tr><td>Hobby</td><td>Personal R&amp;D only — pauses on overage</td></tr>
+    <tr><td>Project</td><td>stage-production-studio · lock production alias</td></tr>
+    <tr><td>Preview</td><td>Every PR / branch preview before promoting</td></tr>
+    <tr><td>Spend alerts</td><td>Soft $50 then $150</td></tr>
+  </table>
+  <h3>Storage (Blob)</h3>
+  <table>
+    <tr><th>Use</th><th>Budget cue</th></tr>
+    <tr><td>Character / world plates</td><td>20–100 GB · ~$0.023/GB Pro</td></tr>
+    <tr><td>Prompt packs / ZIP</td><td>Cheap; watch transfer</td></tr>
+    <tr><td>Video masters</td><td>Prefer R2 / S3 / Drive / NAS — not Blob alone</td></tr>
+  </table>
+  <h3>Database</h3>
+  <table>
+    <tr><th>Layer</th><th>Role</th></tr>
+    <tr><td>Neon / Postgres</td><td>Projects, rooms, sync, OTP</td></tr>
+    <tr><td>KV / Redis (optional)</td><td>Session / rate limits</td></tr>
+    <tr><td>IndexedDB + localStorage</td><td>Offline vault, Studio Brain</td></tr>
+    <tr><td>api/sync.js</td><td>Never tombstone live titles</td></tr>
+  </table>
+  <blockquote>Do not store 150 minutes of masters on Vercel Blob alone.</blockquote>
+
+  <h2>5. GitHub</h2>
+  <table>
+    <tr><th>Item</th><th>Monthly</th></tr>
+    <tr><td>GitHub Free (private)</td><td>$0</td></tr>
+    <tr><td>GitHub Team (recommended)</td><td>$4 / user</td></tr>
+    <tr><td>Actions overage</td><td>$0–$20</td></tr>
+  </table>
+  <ul>
+    <li>main = production; protect with PR + green build</li>
+    <li>Tag releases: sps-web-YYYYMMDD</li>
+    <li>Secrets only in Vercel / Actions — never in repo</li>
+  </ul>
+
+  <h2>6. Intelligence — LLMs</h2>
+  <table>
+    <tr><th>Model family</th><th>Best SPS job</th><th>In / Out (per 1M)</th><th>Film cue</th></tr>
+    <tr><td>GPT-5.6 Sol</td><td>Director psychology, hard scenes</td><td>$5 / $30</td><td>Hero passes</td></tr>
+    <tr><td>GPT-5.6 Terra</td><td>26-craft Matrix breakdown</td><td>$2 / $12</td><td>Workhorse</td></tr>
+    <tr><td>GPT-5.6 Luna</td><td>Captions, tags, Promo VO</td><td>$0.20 / $1.20</td><td>Batch cheap</td></tr>
+    <tr><td>Claude Sonnet 5</td><td>Script polish, Bible prose</td><td>$2 / $10</td><td>Writer assist</td></tr>
+    <tr><td>Claude Opus / high</td><td>Story surgery, continuity</td><td>~$5 / $25</td><td>Selective</td></tr>
+    <tr><td>Gemini 3.x Pro / Flash</td><td>Long script + PDF extract</td><td>~$2 / $12 · Flash lower</td><td>Long context</td></tr>
+    <tr><td>Grok 4.x</td><td>Alt takes / brainstorm</td><td>~$2 / $6</td><td>Optional</td></tr>
+  </table>
+  <p><strong>Suggested mix:</strong> Terra/Flash ~55% · Sol/Opus ~20% · Luna/Haiku ~25%</p>
+
+  <h2>7. Domain hosting</h2>
+  <table>
+    <tr><th>Item</th><th>Cost / notes</th></tr>
+    <tr><td>.com / .studio domain</td><td>$12–$40 / year</td></tr>
+    <tr><td>Vercel DNS + SSL</td><td>Included</td></tr>
+    <tr><td>Email</td><td>$0–$7 / user / mo</td></tr>
+  </table>
+  <ol>
+    <li>Buy domain → Vercel Project → Domains</li>
+    <li>Point A/CNAME per Vercel DNS</li>
+    <li>Enforce HTTPS; apex + www redirect</li>
+    <li>Map custom host to production</li>
+    <li>Update Electron / marketing links</li>
+    <li>Renewal reminder 30 days out</li>
+  </ol>
+
+  <h2>8. Video gen — hybrid · VFX · editing · generation</h2>
+  <table>
+    <tr><th>Engine</th><th>Role in SPS</th><th>~$ / sec cue</th><th>Use</th></tr>
+    <tr><td>Seedance 2.0</td><td>Primary I2V from First/Last frame</td><td>$0.24–$0.68</td><td>Hero motion</td></tr>
+    <tr><td>Kling 3.0</td><td>Coverage / action volume</td><td>$0.08–$0.17</td><td>Volume</td></tr>
+    <tr><td>Runway Gen-4 / 4.5</td><td>Controlled camera / edit</td><td>$0.05–$0.12</td><td>Precision</td></tr>
+    <tr><td>Veo 3.1</td><td>Audio-aware plates</td><td>$0.10–$0.40</td><td>Select scenes</td></tr>
+    <tr><td>Sora 2 / Pro</td><td>High-spec hero beats</td><td>$0.10–$0.70</td><td>Key moments</td></tr>
+    <tr><td>SeeDream / stills</td><td>Keyframes for conditioning</td><td>per image</td><td>Frame 0 / end</td></tr>
+  </table>
+  <blockquote><strong>Regen is the budget killer.</strong> Plan 2.5×–5× generated seconds vs final cut. Prove look with Promo Pack Manual Edit + AI Enhanced before mass gen.</blockquote>
+
+  <h2>9. Maintenance rhythm</h2>
+  <table>
+    <tr><th>Cadence</th><th>Action</th><th>Owner</th></tr>
+    <tr><td>Daily</td><td>Cloud sync health; no silent archive</td><td>Eng</td></tr>
+    <tr><td>Weekly</td><td>Promo + Compiler smoke; LLM quotas</td><td>Eng / Pipeline</td></tr>
+    <tr><td>Weekly</td><td>Vercel usage vs spend alert</td><td>Producer</td></tr>
+    <tr><td>Per deploy</td><td>Build green → prod → hard refresh</td><td>Eng</td></tr>
+    <tr><td>Per film</td><td>Freeze Matrix; export JSON + prompt ZIPs</td><td>AD</td></tr>
+    <tr><td>Monthly</td><td>Blob / DB backup; rotate tokens</td><td>Eng</td></tr>
+    <tr><td>Quarterly</td><td>Re-price APIs; update Admin models</td><td>Producer</td></tr>
+  </table>
+
+  <h2>10. One-page summary (hybrid)</h2>
+  <pre>Monthly ops (hybrid) .............. ~$320
+LLM / intelligence ................ ~$2,800
+Video generation .................. ~$45,000
+VFX · edit · finish ............... ~$38,000
+Domain · host extras .............. ~$400
+Contingency (20%) ................. ~$17,240
+──────────────────────────────────────────
+2:30 film envelope ................ ~$103,440
+Ops × 12 months ................... ~$3,840
+──────────────────────────────────────────
+Year (ops + one film) ............. ~$107,280</pre>
+
+  <hr />
+  <p><em>Not a vendor quote. Stage Production Studio owns the craft→prompt spine; video APIs and post finish the picture. Pedditi Labs · Aug 2026</em></p>
+
+  <script>
+    async function downloadMd() {
+      const res = await fetch('./SPS_2h30_Production_Budget_Guide.md');
+      const text = await res.text();
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'SPS_2h30_Production_Budget_Guide.md';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  </script>
+</body>
+</html>

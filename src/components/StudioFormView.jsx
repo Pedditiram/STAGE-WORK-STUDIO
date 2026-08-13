@@ -354,7 +354,9 @@ export default function StudioFormView({
   onUpdateShot,
   onAddShot,
   colorTheme = 'paper',
-  onFullEditorOpenChange
+  onFullEditorOpenChange,
+  genreKey = 'mythological',
+  projectTitle = ''
 }) {
   const currentShot = shots[activeShotIndex] || shots[0] || {};
   const [promptFormat, setPromptFormat] = useState(() => {
@@ -576,7 +578,12 @@ export default function StudioFormView({
     setIsEnhancingField(key);
     try {
       const currentVal = currentShot[key] || '';
-      const enhancedVal = await enhanceCraftSlotWithLLM(key || label, currentVal, currentShot);
+      const enhancedVal = await enhanceCraftSlotWithLLM(key || label, currentVal, {
+        ...(currentShot || {}),
+        genreKey,
+        projectTitle,
+        presetProfile: genreKey
+      });
       if (enhancedVal) handleFieldChange(key, enhancedVal);
     } catch (err) {
       console.error('AI Enhancement error:', err);
@@ -662,6 +669,8 @@ export default function StudioFormView({
                 embedded={true}
                 compact={false}
                 allSlots={SEEDANCE_SLOTS}
+                genreKey={genreKey}
+                projectTitle={projectTitle}
                 totalShotsCount={shots.length}
                 currentShotIndex={activeShotIndex}
                 onNavigateNextShot={() => onSelectShot && onSelectShot(activeShotIndex < shots.length - 1 ? activeShotIndex + 1 : 0)}
@@ -783,7 +792,7 @@ export default function StudioFormView({
                             : { backgroundColor: '#18181b', color: '#f59e0b', borderColor: '#27272a' }
                       }
                       className="px-2.5 py-1 rounded-xl border text-xs font-bold font-mono flex items-center gap-1.5 transition-all shadow-sm cursor-pointer hover:scale-105"
-                      title={showFavoritesOnly ? "Show All 24 Crafts" : "Show Only Favorited Crafts"}
+                      title={showFavoritesOnly ? `Show All ${SEEDANCE_SLOTS.length} Crafts` : "Show Only Favorited Crafts"}
                     >
                       <Star className={`w-3.5 h-3.5 ${showFavoritesOnly ? 'fill-black stroke-black font-black' : 'fill-amber-400 text-amber-500'}`} />
                       <span>{showFavoritesOnly ? 'Favorites Only' : 'Favorites'}</span>
@@ -806,7 +815,7 @@ export default function StudioFormView({
 
                 {/* Sub Row: Format Switcher (Left), Shot Position (Center), Copy Button (Right) */}
                 <div className="flex items-center justify-between gap-1.5 pt-1 flex-nowrap w-full">
-                  {/* Left: 24-Craft | Prose Toggle */}
+                  {/* Left: N-Craft | Prose Toggle */}
                   <div 
                     style={isPaperTheme ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' } : { backgroundColor: '#09090b', borderColor: '#27272a' }}
                     className="flex items-center gap-0.5 p-0.5 rounded-lg border shadow-sm shrink-0"
@@ -818,7 +827,7 @@ export default function StudioFormView({
                         promptFormat === 'crafts' ? 'bg-amber-500 text-black font-black shadow-sm' : isPaperTheme ? 'text-amber-950' : 'text-zinc-400'
                       }`}
                     >
-                      🎬 24-Craft
+                      {`🎬 ${SEEDANCE_SLOTS.length}-Craft`}
                     </button>
                     <button
                       type="button"

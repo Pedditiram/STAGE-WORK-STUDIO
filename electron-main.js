@@ -240,6 +240,23 @@ ipcMain.handle('dialog:saveFile', async (_, { defaultName, content }) => {
   return { success: false };
 });
 
+ipcMain.handle('dialog:saveBinary', async (_, { defaultName, data, filters, defaultDir }) => {
+  const downloads = app.getPath('downloads');
+  const baseDir = (defaultDir && fs.existsSync(defaultDir)) ? defaultDir : downloads;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: path.join(baseDir, defaultName || 'export.bin'),
+    filters: Array.isArray(filters) && filters.length
+      ? filters
+      : [{ name: 'All files', extensions: ['*'] }],
+  });
+  if (!result.canceled && result.filePath) {
+    const buf = Buffer.from(data instanceof Uint8Array ? data : new Uint8Array(data || []));
+    fs.writeFileSync(result.filePath, buf);
+    return { success: true, filePath: result.filePath };
+  }
+  return { success: false, canceled: true };
+});
+
 ipcMain.handle('dialog:openFile', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
