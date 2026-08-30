@@ -1,9 +1,9 @@
 {
   "name": "stage-production-studio",
-  "productName": "Stage Production Studio",
+  "productName": "Stage Work Studio",
   "private": true,
   "version": "1.0.0",
-  "description": "Pedditi Labs — Cinema 24-Craft AI Production Studio",
+  "description": "Stage Work Studio — AI Cinema Production OS.",
   "author": {
     "name": "Pedditi Ram",
     "email": "pedditiram@gmail.com"
@@ -21,7 +21,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:pdf-extract": "node scripts/test-pdf-extract.mjs",
-    "electron:dev": "concurrently -k \"cross-env NODE_ENV=development vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development ELECTRON_RUN_AS_NODE= electron .\"",
+    "test:sws-comfy": "node scripts/test-sws-comfy.mjs",
+    "electron:dev": "concurrently \"cross-env NODE_ENV=development vite\" \"wait-on tcp:5173 && env -u ELECTRON_RUN_AS_NODE NODE_ENV=development VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "electron:build": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js",
     "electron:build:dir": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js --dir",
     "electron:pack": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js --dmg",
@@ -29,8 +30,8 @@
   },
   "build": {
     "appId": "com.pedditilabs.stageproductionstudio",
-    "productName": "Stage Production Studio",
-    "copyright": "Copyright © 2026 Pedditi Labs",
+    "productName": "Stage Work Studio",
+    "copyright": "Copyright © 2026 Stage Work Studio",
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
@@ -49,7 +50,7 @@
           ]
         }
       ],
-      "icon": "build/icons/icon.icns",
+      "icon": "build/icon.icns",
       "darkModeSupport": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -57,7 +58,7 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "dmg": {
-      "title": "Stage Production Studio",
+      "title": "Stage Work Studio — AI Cinema Production OS",
       "background": null,
       "contents": [
         {
@@ -110,8 +111,9 @@
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^9.2.4",
     "cross-env": "^7.0.3",
-    "electron": "^36.9.5",
-    "electron-builder": "^26.15.3",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.7",
+    "esbuild": "^0.28.2",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.1.1",
