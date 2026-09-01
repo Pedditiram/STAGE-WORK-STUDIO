@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Sparkles, Copy, Check, Plus, 
   Film, Camera, User, Wand2, 
-  Star, Maximize2
+  Star, Maximize2, Download
 } from 'lucide-react';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
@@ -10,6 +10,27 @@ import SlotEditor from './SlotEditor';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import IntensityScaleSelector from './IntensityScaleSelector';
 import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
+import {
+  assertCanMutateContent,
+  isLifecycleLocked,
+  lifecycleExportReadiness
+} from '../utils/productionLifecycle';
+import LifecycleControls from './LifecycleControls';
+import { resolveShotSpine } from '../utils/productionSpine';
+import { resolveContinuityForShot } from '../utils/continuityState';
+import { CMD_TYPES, proposeAndValidate, approveLlmCommand, applyLlmCommand } from '../utils/llmCommandBus';
+import { exportDownloadText, assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
+import { matrixShotsToCsv, matrixShotsToPrintHtml } from '../utils/matrixExport';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import {
+  readActiveAssetRegistry,
+  linkShotToAssetRegistry
+} from '../utils/assetRegistry';
+import {
+  shotSpecSummary,
+  toggleShotCharAssetId,
+  toggleShotWorldAssetId
+} from '../utils/shotSpec';
 
 // Preset configurations for the 26 Crafts
 const CRAFT_PRESETS = {
@@ -93,69 +114,56 @@ const CRAFT_PRESETS = {
   editTransitionCut: ['Hard Match Cut', 'Smooth Dissolve Fade', 'Whip Pan Speed Cut', 'Invisible Match Action Cut']
 };
 
-// Unique vibrant color highlight styles for each of the crafts
 const CRAFT_COLOR_MAP = [
-  { key: 'sceneShotId', label: 'Shot ID', color: 'text-sky-300', bg: 'bg-sky-500/20 border-sky-400/50', category: 'Stage 1: Identity' },
-  { key: 'sceneSynopsis', label: 'Synopsis', color: 'text-amber-200', bg: 'bg-amber-500/20 border-amber-400/50', category: 'Stage 1: Identity' },
-  { key: 'shotDurationAndImages', label: 'Duration & Assets', color: 'text-blue-200', bg: 'bg-blue-400/20 border-blue-300/50', category: 'Stage 1: Identity' },
-  
-  { key: 'shotComposition', label: 'Framing', color: 'text-rose-300', bg: 'bg-rose-500/20 border-rose-400/50', category: 'Stage 2: Camera' },
-  { key: 'cameraMotionTag', label: 'Camera', color: 'text-orange-300', bg: 'bg-orange-500/20 border-orange-400/50', category: 'Stage 2: Camera' },
-  { key: 'lensAndFocalLength', label: 'Lens', color: 'text-yellow-200', bg: 'bg-yellow-500/20 border-yellow-400/50', category: 'Stage 2: Camera' },
-  { key: 'timeAndLightingEnv', label: 'Weather & Time Rig', color: 'text-amber-300', bg: 'bg-amber-500/20 border-amber-400/50', category: 'Stage 2: Camera' },
-  { key: 'directionalLightingAndHighlight', label: 'Light Angle & Highlight Rig', color: 'text-yellow-300', bg: 'bg-yellow-500/20 border-yellow-400/50', category: 'Stage 2: Camera' },
-  { key: 'subjectLightingTag', label: 'Subject Lighting', color: 'text-emerald-300', bg: 'bg-emerald-500/20 border-emerald-400/50', category: 'Stage 2: Camera' },
-  { key: 'subjectColorTag', label: 'Subject Color', color: 'text-teal-300', bg: 'bg-teal-500/20 border-teal-400/50', category: 'Stage 2: Camera' },
-  { key: 'backgroundLightingTag', label: 'BG Lighting', color: 'text-cyan-300', bg: 'bg-cyan-500/20 border-cyan-400/50', category: 'Stage 2: Camera' },
-  { key: 'backgroundColorTag', label: 'BG Color', color: 'text-indigo-300', bg: 'bg-[#6366F1]/20 border-indigo-400/50', category: 'Stage 2: Camera' },
-  { key: 'colorPaletteSlot', label: 'Palette', color: 'text-purple-300', bg: 'bg-purple-500/20 border-purple-400/50', category: 'Stage 2: Camera' },
-  
-  { key: 'characterIdAssetRef', label: 'Character Ref', color: 'text-pink-300', bg: 'bg-pink-500/20 border-pink-400/50', category: 'Stage 3: Performance' },
-  { key: 'coArtistInteraction', label: 'Co-Artist', color: 'text-fuchsia-300', bg: 'bg-fuchsia-500/20 border-fuchsia-400/50', category: 'Stage 3: Performance' },
-  { key: 'actionEnvContext', label: 'Environment', color: 'text-blue-300', bg: 'bg-blue-500/20 border-blue-400/50', category: 'Stage 3: Performance' },
-  { key: 'characterExpression', label: 'Expression', color: 'text-rose-200', bg: 'bg-rose-400/20 border-rose-300/50', category: 'Stage 3: Performance' },
-  { key: 'characterPsychologyState', label: 'Psychology & Mindstate', color: 'text-amber-300', bg: 'bg-amber-500/20 border-amber-400/50', category: 'Stage 3: Performance' },
-  { key: 'characterMannerismAndPosture', label: 'Mannerisms & Posture', color: 'text-purple-300', bg: 'bg-purple-500/20 border-purple-400/50', category: 'Stage 3: Performance' },
-  { key: 'characterPlacement', label: 'Placement', color: 'text-violet-300', bg: 'bg-violet-500/20 border-violet-400/50', category: 'Stage 3: Performance' },
-  { key: 'characterDialogue', label: 'Dialogue', color: 'text-emerald-200', bg: 'bg-emerald-400/20 border-emerald-300/50', category: 'Stage 3: Performance' },
-  { key: 'characterMovement', label: 'Action Performance', color: 'text-sky-200', bg: 'bg-sky-400/20 border-sky-300/50', category: 'Stage 3: Performance' },
-  { key: 'characterEyeLooks', label: 'Eye Look', color: 'text-purple-200', bg: 'bg-purple-400/20 border-purple-300/50', category: 'Stage 3: Performance' },
-  { key: 'makeupAndHairStyle', label: 'Makeup/Hair', color: 'text-pink-200', bg: 'bg-pink-400/20 border-pink-300/50', category: 'Stage 3: Performance' },
-  { key: 'stuntAndSafetyNotes', label: 'Stunts', color: 'text-red-300', bg: 'bg-red-500/20 border-red-400/50', category: 'Stage 3: Performance' },
-  
-  { key: 'atmosphereVolumetricsTag', label: 'Atmosphere', color: 'text-cyan-200', bg: 'bg-cyan-400/20 border-cyan-300/50', category: 'Stage 4: Audio & FX' },
-  { key: 'vfxCgiBreakdown', label: 'VFX/CGI', color: 'text-fuchsia-200', bg: 'bg-fuchsia-400/20 border-fuchsia-300/50', category: 'Stage 4: Audio & FX' },
-  { key: 'soundFxAndFoley', label: 'Audio/SFX', color: 'text-green-300', bg: 'bg-green-500/20 border-green-400/50', category: 'Stage 4: Audio & FX' },
-  { key: 'backgroundScoreMood', label: 'Score', color: 'text-rose-400', bg: 'bg-rose-600/20 border-rose-500/50', category: 'Stage 4: Audio & FX' },
-  { key: 'editTransitionCut', label: 'Cut/Transition', color: 'text-amber-300', bg: 'bg-amber-400/20 border-amber-300/50', category: 'Stage 4: Audio & FX' }
+  { key: 'sceneShotId', label: 'Shot ID', accent: '#1d4ed8', category: 'Stage 1: Identity' },
+  { key: 'sceneSynopsis', label: 'Synopsis', accent: '#92400e', category: 'Stage 1: Identity' },
+  { key: 'shotDurationAndImages', label: 'Duration & Assets', accent: '#1e40af', category: 'Stage 1: Identity' },
+  { key: 'shotComposition', label: 'Framing', accent: '#9f1239', category: 'Stage 2: Camera' },
+  { key: 'cameraMotionTag', label: 'Camera', accent: '#9a3412', category: 'Stage 2: Camera' },
+  { key: 'lensAndFocalLength', label: 'Lens', accent: '#854d0e', category: 'Stage 2: Camera' },
+  { key: 'timeAndLightingEnv', label: 'Weather & Time Rig', accent: '#b45309', category: 'Stage 2: Camera' },
+  { key: 'directionalLightingAndHighlight', label: 'Light Angle & Highlight Rig', accent: '#a16207', category: 'Stage 2: Camera' },
+  { key: 'subjectLightingTag', label: 'Subject Lighting', accent: '#047857', category: 'Stage 2: Camera' },
+  { key: 'subjectColorTag', label: 'Subject Color', accent: '#0f766e', category: 'Stage 2: Camera' },
+  { key: 'backgroundLightingTag', label: 'BG Lighting', accent: '#0e7490', category: 'Stage 2: Camera' },
+  { key: 'backgroundColorTag', label: 'BG Color', accent: '#4338ca', category: 'Stage 2: Camera' },
+  { key: 'colorPaletteSlot', label: 'Palette', accent: '#6d28d9', category: 'Stage 2: Camera' },
+  { key: 'characterIdAssetRef', label: 'Character Ref', accent: '#be185d', category: 'Stage 3: Performance' },
+  { key: 'coArtistInteraction', label: 'Co-Artist', accent: '#a21caf', category: 'Stage 3: Performance' },
+  { key: 'actionEnvContext', label: 'Environment', accent: '#1d4ed8', category: 'Stage 3: Performance' },
+  { key: 'characterExpression', label: 'Expression', accent: '#e11d48', category: 'Stage 3: Performance' },
+  { key: 'characterPsychologyState', label: 'Psychology & Mindstate', accent: '#b45309', category: 'Stage 3: Performance' },
+  { key: 'characterMannerismAndPosture', label: 'Mannerisms & Posture', accent: '#7e22ce', category: 'Stage 3: Performance' },
+  { key: 'characterPlacement', label: 'Placement', accent: '#6d28d9', category: 'Stage 3: Performance' },
+  { key: 'characterDialogue', label: 'Dialogue', accent: '#047857', category: 'Stage 3: Performance' },
+  { key: 'characterMovement', label: 'Action Performance', accent: '#0369a1', category: 'Stage 3: Performance' },
+  { key: 'characterEyeLooks', label: 'Eye Look', accent: '#7e22ce', category: 'Stage 3: Performance' },
+  { key: 'makeupAndHairStyle', label: 'Makeup/Hair', accent: '#be185d', category: 'Stage 3: Performance' },
+  { key: 'stuntAndSafetyNotes', label: 'Stunts', accent: '#b91c1c', category: 'Stage 3: Performance' },
+  { key: 'atmosphereVolumetricsTag', label: 'Atmosphere', accent: '#0e7490', category: 'Stage 4: Audio & FX' },
+  { key: 'vfxCgiBreakdown', label: 'VFX/CGI', accent: '#a21caf', category: 'Stage 4: Audio & FX' },
+  { key: 'soundFxAndFoley', label: 'Audio/SFX', accent: '#15803d', category: 'Stage 4: Audio & FX' },
+  { key: 'backgroundScoreMood', label: 'Score', accent: '#be123c', category: 'Stage 4: Audio & FX' },
+  { key: 'editTransitionCut', label: 'Cut/Transition', accent: '#92400e', category: 'Stage 4: Audio & FX' }
 ];
 
 // Form Section Card Component (Theme-Adaptive)
-const FormSection = ({ title, subtitle, icon: Icon, children, isPaperTheme }) => (
-  <div 
-    style={isPaperTheme ? { backgroundColor: '#ffffff', borderColor: '#fde68a' } : { backgroundColor: '#18181b', borderColor: '#27272a' }}
-    className="sps-studio-section rounded-2xl border p-5 shadow-lg space-y-4 font-mono transition-all"
-  >
-    <div 
-      style={isPaperTheme ? { borderColor: '#fef3c7' } : { borderColor: '#27272a' }}
-      className="flex items-center justify-between border-b pb-3 flex-wrap gap-2"
-    >
+const FormSection = ({ title, subtitle, icon: Icon, children }) => (
+  <div className="sps-studio-section rounded-[10px] border border-[var(--sps-border)] p-3 space-y-3 font-mono bg-[var(--sps-surface)]">
+    <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-1.5 flex-wrap gap-2">
       <div className="flex items-center gap-2.5">
-        <div 
-          style={isPaperTheme ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' } : { backgroundColor: '#09090b', borderColor: '#27272a' }}
-          className="p-2 rounded-xl border flex items-center justify-center shadow-sm"
-        >
-          <Icon className={`w-5 h-5 ${isPaperTheme ? 'text-amber-800' : 'text-amber-400'}`} />
+        <div className="sps-icon-btn pointer-events-none">
+          <Icon className="w-4 h-4" />
         </div>
         <div>
-          <h3 className={`text-sm font-black font-sans uppercase tracking-wider ${isPaperTheme ? 'text-amber-950' : 'text-white'}`}>
+          <h3 className="text-sm font-semibold font-sans uppercase tracking-wider text-[var(--sps-text)]">
             {title}
           </h3>
-          {subtitle && <p className={`text-xs font-mono font-medium ${isPaperTheme ? 'text-amber-800/80' : 'text-zinc-400'}`}>{subtitle}</p>}
+          {subtitle && <p className="text-xs font-mono font-medium text-[var(--sps-muted)]">{subtitle}</p>}
         </div>
       </div>
     </div>
-    <div className="space-y-4 pt-1">{children}</div>
+    <div className="space-y-3 pt-1">{children}</div>
   </div>
 );
 
@@ -197,97 +205,56 @@ const CraftField = ({
         e.stopPropagation();
         onCraftTap && onCraftTap(fieldKey, true);
       }}
-      style={
-        isHighlighted
-          ? isPaperTheme 
-            ? { backgroundColor: '#fef08a', borderColor: '#f59e0b', color: '#000000' }
-            : { backgroundColor: '#1e1b4b', borderColor: '#818cf8', color: '#ffffff' }
-          : isPaperTheme 
-            ? { backgroundColor: '#fffdf9', borderColor: '#fde68a' } 
-            : { backgroundColor: '#09090b', borderColor: '#27272a' }
-      }
-      className={`sps-craft-field space-y-2.5 p-4 rounded-xl border transition-all duration-300 shadow-sm cursor-pointer ${
-        isHighlighted 
-          ? 'ring-4 ring-amber-400 dark:ring-indigo-400 scale-[1.01] shadow-2xl' 
-          : 'hover:border-amber-400/60'
+      className={`sps-craft-field space-y-2.5 p-3 rounded-[10px] border cursor-pointer ${
+        isHighlighted ? 'is-on' : ''
       }`}
     >
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        {/* Label + Star Favorite Icon */}
-        <div className="flex items-center gap-2">
-          <label className={`text-xs font-black font-mono flex items-center gap-1.5 uppercase tracking-wide ${
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <label className={`text-[10px] font-semibold font-mono uppercase tracking-wide px-2 py-0.5 rounded-[7px] border truncate ${
             isHighlighted
-              ? 'text-black bg-amber-400 px-2.5 py-1 rounded-lg border border-amber-600 font-extrabold shadow-sm'
-              : isPaperTheme 
-                ? 'text-amber-950 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-300/80' 
-                : 'text-amber-400'
+              ? 'text-[var(--sps-on-gold)] bg-[var(--sps-gold)] border-[var(--sps-gold)]'
+              : 'text-[var(--sps-muted)] bg-[var(--sps-surface)] border-[var(--sps-border)]'
           }`}>
-            <span className="font-bold text-amber-600 dark:text-amber-400">⚡</span>
-            <span>{label}:</span>
+            <span>{label}</span>
           </label>
-
-          {/* ⭐ STAR FAVORITE ICON BUTTON */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               toggleFavoriteCraft(fieldKey);
             }}
-            className={`p-1 rounded-lg border transition-all cursor-pointer shadow-sm hover:scale-110 active:scale-95 ${
-              isFavorite 
-                ? 'bg-amber-400 text-black border-amber-500 shadow-sm' 
-                : isPaperTheme 
-                  ? 'bg-amber-100/60 text-amber-800 border-amber-300/60 hover:bg-amber-200' 
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-amber-400'
-            }`}
-            title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            className={`sps-icon-btn shrink-0 ${isFavorite ? 'is-on' : ''}`}
+            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-black stroke-black font-black' : 'stroke-[2]'}`} />
+            <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
           </button>
         </div>
-        
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            onClick={(e) => { 
-              e.stopPropagation(); 
+            onClick={(e) => {
+              e.stopPropagation();
               setHighlightedFieldKey(fieldKey);
-              setActiveModalSlotKey(fieldKey); 
+              setActiveModalSlotKey(fieldKey);
             }}
-            style={
-              isPaperTheme 
-                ? { backgroundColor: '#fef3c7', color: '#78350f', borderColor: '#fde68a' } 
-                : { backgroundColor: '#18181b', color: '#38bdf8', borderColor: '#0284c750' }
-            }
-            className="px-2.5 py-1 rounded-xl border text-xs font-bold font-mono flex items-center gap-1 transition-all cursor-pointer shadow-sm hover:scale-105"
-            title="Expand Craft Editor Window In-Place (Double-Click or Cmd+Space)"
+            className="sps-btn sps-btn-compact"
+            title="Expand editor (⌘Space)"
           >
-            <Maximize2 className="w-3 h-3" />
-            <span>Expand (⌘Space)</span>
+            <Maximize2 className="w-3.5 h-3.5" />
+            Expand
           </button>
-
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); handleEnhanceField(fieldKey, label); }}
             disabled={isEnhancingField === fieldKey}
-            style={
-              isPaperTheme 
-                ? { backgroundColor: '#f59e0b', color: '#ffffff', borderColor: '#d97706' } 
-                : { backgroundColor: '#18181b', color: '#f59e0b', borderColor: '#f59e0b50' }
-            }
-            className="px-3 py-1 rounded-xl border text-xs font-bold font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:brightness-110"
-            title="Enhance field using Pedditi Labs Cinema Intelligence Engine"
+            className="sps-btn sps-btn-compact sps-btn-primary"
+            title="AI enhance this craft"
           >
-            <Sparkles className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span className="font-bold">{isEnhancingField === fieldKey ? 'Enhancing...' : 'AI Enhance'}</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            {isEnhancingField === fieldKey ? '…' : 'Enhance'}
           </button>
-
-          <span 
-            style={isPaperTheme ? { backgroundColor: '#fef3c7', borderColor: '#fde68a', color: '#78350f' } : { backgroundColor: '#18181b', borderColor: '#27272a', color: '#d4d4d8' }}
-            className="text-xs font-mono font-bold px-2.5 py-1 rounded-xl border shadow-sm"
-          >
-            {value.length} chars
-          </span>
+          <span className="sps-count-pill">{value.length}</span>
         </div>
       </div>
 
@@ -304,14 +271,7 @@ const CraftField = ({
         value={value}
         onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
         placeholder={placeholder || `Enter ${label.toLowerCase()} text parameter... (Double-click or Cmd+Space to expand)`}
-        style={
-          isHighlighted
-            ? { backgroundColor: '#ffffff', color: '#000000', fontWeight: '900', borderColor: '#d97706' }
-            : isPaperTheme 
-              ? { backgroundColor: '#ffffff', color: '#000000', fontWeight: '900', borderColor: '#fcd34d' } 
-              : { backgroundColor: '#18181b', color: '#ffffff', fontWeight: '900', borderColor: '#27272a' }
-        }
-        className="w-full rounded-xl p-3 text-sm font-mono leading-relaxed transition-all shadow-inner focus:outline-none focus:ring-2 focus:ring-amber-500/80 font-black text-black"
+        className="w-full rounded-[7px] p-2.5 text-sm font-mono leading-relaxed focus:outline-none border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)]"
       />
 
       {presets.length > 0 && (
@@ -356,7 +316,8 @@ export default function StudioFormView({
   colorTheme = 'paper',
   onFullEditorOpenChange,
   genreKey = 'mythological',
-  projectTitle = ''
+  projectTitle = '',
+  onOpenLlmCommands
 }) {
   const currentShot = shots[activeShotIndex] || shots[0] || {};
   const [promptFormat, setPromptFormat] = useState(() => {
@@ -368,6 +329,62 @@ export default function StudioFormView({
   const [highlightedFieldKey, setHighlightedFieldKey] = useState('sceneShotId');
   const [activeModalSlotKey, setActiveModalSlotKey] = useState(null);
   const [shotNumberInput, setShotNumberInput] = useState(String(activeShotIndex + 1));
+
+  const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
+  const {
+    strict: formLifecycleStrict,
+    mode: formLifecycleMode
+  } = useExportLifecyclePref('form');
+  const exportBlocked = formLifecycleStrict && !exportLife.exportReady;
+  const roomId = resolveCollabRoomId();
+  const liveCount = useMemo(
+    () => (Array.isArray(shots) ? shots.filter((s) => s && !s.isArchived) : []).length,
+    [shots]
+  );
+  const formLifeNote = `${liveCount} live shots · form`;
+
+  const handleExportFormCsv = () => {
+    const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    exportDownloadText(`${slug}_form_matrix.csv`, matrixShotsToCsv(shots, SEEDANCE_SLOTS), {
+      projectTitle,
+      auditLabel: 'form_matrix_csv',
+      auditFormat: 'csv',
+      mime: 'text/csv;charset=utf-8',
+      lifecycleMode: formLifecycleMode,
+      shots,
+      roomId,
+      note: formLifeNote
+    });
+  };
+
+  const handleExportFormPdf = () => {
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'form_matrix_pdf',
+      format: 'pdf',
+      lifecycleMode: formLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.alert('Please allow popups to export PDF.');
+      return;
+    }
+    printWindow.document.write(matrixShotsToPrintHtml(shots, SEEDANCE_SLOTS, projectTitle));
+    printWindow.document.close();
+    const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    logExportSuccess({
+      projectTitle,
+      label: 'form_matrix_pdf',
+      format: 'pdf',
+      filename: `${slug}_form_matrix.pdf`,
+      roomId,
+      note: formLifeNote,
+      lifecycleMode: gate.advisory ? `${formLifecycleMode}+ok` : formLifecycleMode
+    });
+  };
 
   // Notify parent App when full editor view is open so top header strip can be hidden
   useEffect(() => {
@@ -544,7 +561,13 @@ export default function StudioFormView({
   // Handle updates to a specific field
   const handleFieldChange = (key, val) => {
     if (!onUpdateShot) return;
+    if (!assertCanMutateContent(currentShot).ok) return;
     onUpdateShot(activeShotIndex, { ...currentShot, [key]: val });
+  };
+
+  const handleLifecycleChange = (nextEntity) => {
+    if (!onUpdateShot || !nextEntity) return;
+    onUpdateShot(activeShotIndex, nextEntity);
   };
 
   const clickTimerRef = useRef(null);
@@ -573,8 +596,9 @@ export default function StudioFormView({
     }, 220);
   };
 
-  // Pedditi Labs AI Field Enhancer
+  // Stage Work Studio AI Field Enhancer — proposes via command bus (no silent SoT write)
   const handleEnhanceField = async (key, label) => {
+    if (!assertCanMutateContent(currentShot).ok) return;
     setIsEnhancingField(key);
     try {
       const currentVal = currentShot[key] || '';
@@ -584,7 +608,32 @@ export default function StudioFormView({
         projectTitle,
         presetProfile: genreKey
       });
-      if (enhancedVal) handleFieldChange(key, enhancedVal);
+      if (!enhancedVal) return;
+      const proposed = proposeAndValidate(
+        {
+          type: CMD_TYPES.PATCH_SHOT_CRAFT,
+          projectTitle,
+          payload: { shotIndex: activeShotIndex, craftKey: key, value: enhancedVal },
+          source: 'llm_enhance_craft',
+          reason: `Form enhance ${key}`,
+          preview: String(enhancedVal).slice(0, 120)
+        },
+        { shots, projectTitle }
+      );
+      if (!proposed.ok) {
+        window.alert(proposed.error || proposed.errors?.join('; ') || 'Proposal failed');
+        return;
+      }
+      if (onOpenLlmCommands) {
+        onOpenLlmCommands();
+        return;
+      }
+      if (window.confirm(`Apply LLM craft patch for ${key}?`)) {
+        approveLlmCommand(proposed.command.id, projectTitle);
+        applyLlmCommand(proposed.command.id, projectTitle, { shots, projectTitle }, {
+          updateShot: (i, s) => onUpdateShot?.(i, s)
+        });
+      }
     } catch (err) {
       console.error('AI Enhancement error:', err);
     } finally {
@@ -610,6 +659,31 @@ export default function StudioFormView({
   }, [currentShot, activeShotIndex, scenesList]);
 
   const currSceneIdx = scenesList.findIndex(sc => sc.sceneId === currentSceneId);
+
+  const spineNode = useMemo(
+    () => resolveShotSpine(currentShot, activeShotIndex, shots),
+    [currentShot, activeShotIndex, shots]
+  );
+
+  const continuityBundle = useMemo(
+    () =>
+      resolveContinuityForShot({
+        shot: currentShot,
+        shots,
+        shotIndex: activeShotIndex,
+        projectTitle
+      }),
+    [currentShot, shots, activeShotIndex, projectTitle]
+  );
+
+  const patchContinuityField = (charKey, field, value) => {
+    if (!assertCanMutateContent(currentShot).ok) return;
+    const prev = currentShot.continuityPatch && typeof currentShot.continuityPatch === 'object'
+      ? currentShot.continuityPatch
+      : {};
+    const charPatch = { ...(prev[charKey] || {}), [field]: value };
+    handleFieldChange('continuityPatch', { ...prev, [charKey]: charPatch });
+  };
 
   // Compile full 24-craft master prompt plain string for copying
   const compiledMasterPrompt = useMemo(() => {
@@ -646,17 +720,147 @@ export default function StudioFormView({
 
 
   return (
-    <div 
-      style={isPaperTheme ? { backgroundColor: '#FAF8F5', color: '#0f172a' } : { backgroundColor: '#09090b', color: '#ffffff' }}
-      className="sps-studio-form w-full h-full min-h-screen font-mono flex flex-col overflow-y-auto"
-    >
+    <div className="sps-studio-form w-full h-full min-h-0 flex flex-col overflow-hidden bg-[var(--sps-bg)] text-[var(--sps-text)]">
+      <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)]">
+        <span className="text-[10px] font-mono text-[var(--sps-muted)] uppercase tracking-wide">
+          Shot lifecycle
+        </span>
+        <LifecycleControls entity={currentShot} onChange={handleLifecycleChange} />
+        {isLifecycleLocked(currentShot) ? (
+          <span className="text-[10px] text-[var(--sps-gold)] font-mono">Craft frozen — unlock to revise</span>
+        ) : null}
+        {spineNode ? (
+          <span className="text-[10px] font-mono text-[var(--sps-muted)] ml-auto">
+            Act {spineNode.act} · Seq {spineNode.sequenceSeq} · {spineNode.sceneTag}
+          </span>
+        ) : null}
+      </div>
+      {(() => {
+        const registry = readActiveAssetRegistry();
+        const chars = registry?.characters || [];
+        const worlds = registry?.world || [];
+        const locked = isLifecycleLocked(currentShot);
+        const spec = shotSpecSummary(currentShot);
+        const boundChars = new Set(spec.charAssetIds || []);
+        const boundWorld = new Set(spec.worldAssetIds || []);
+        if (!chars.length && !worlds.length && !boundChars.size && !boundWorld.size) {
+          return (
+            <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)]">
+              <p className="text-[10px] text-[var(--sps-muted)] m-0">
+                Asset IDs — open Cast/World then Relink from Production dashboard to mint CHAR_/WORLD_ refs.
+              </p>
+            </div>
+          );
+        }
+        return (
+          <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)] space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">
+                Shot Spec · assets · crafts {spec.craftPct}%
+              </p>
+              <button
+                type="button"
+                className="sps-btn sps-btn-compact text-[9px] disabled:opacity-40"
+                disabled={locked || !onUpdateShot}
+                title="Infer CHAR_/WORLD_ from @tags on this shot"
+                onClick={() => {
+                  const reg = readActiveAssetRegistry();
+                  if (!reg) return;
+                  onUpdateShot(activeShotIndex, linkShotToAssetRegistry(currentShot, reg));
+                }}
+              >
+                Relink tags
+              </button>
+            </div>
+            {chars.length ? (
+              <div className="flex flex-wrap gap-1">
+                {chars.map((c) => {
+                  const on = boundChars.has(c.assetId);
+                  return (
+                    <button
+                      key={c.assetId}
+                      type="button"
+                      disabled={locked || !onUpdateShot}
+                      title={c.name || c.tag || c.assetId}
+                      className={`text-[9px] font-mono px-1.5 py-0.5 border rounded disabled:opacity-40 ${
+                        on
+                          ? 'border-[var(--sps-gold)] text-[var(--sps-gold)]'
+                          : 'border-[var(--sps-border)] text-[var(--sps-muted)]'
+                      }`}
+                      onClick={() =>
+                        onUpdateShot(activeShotIndex, toggleShotCharAssetId(currentShot, c.assetId))
+                      }
+                    >
+                      {c.assetId}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {worlds.length ? (
+              <div className="flex flex-wrap gap-1">
+                {worlds.map((w) => {
+                  const on = boundWorld.has(w.assetId);
+                  return (
+                    <button
+                      key={w.assetId}
+                      type="button"
+                      disabled={locked || !onUpdateShot}
+                      title={w.name || w.tag || w.assetId}
+                      className={`text-[9px] font-mono px-1.5 py-0.5 border rounded disabled:opacity-40 ${
+                        on
+                          ? 'border-cyan-500/70 text-cyan-400'
+                          : 'border-[var(--sps-border)] text-[var(--sps-muted)]'
+                      }`}
+                      onClick={() =>
+                        onUpdateShot(activeShotIndex, toggleShotWorldAssetId(currentShot, w.assetId))
+                      }
+                    >
+                      {w.assetId}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+      {continuityBundle.entries.length > 0 ? (
+        <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)] space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)]">Continuity state</p>
+          {continuityBundle.entries.map((entry) => (
+            <div key={entry.key} className="border border-[var(--sps-border)] rounded-[6px] p-2">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[11px] font-mono font-bold text-[var(--sps-gold)]">{entry.tag || entry.name}</span>
+                {entry.implicitChange ? (
+                  <span className="text-[9px] text-amber-400 font-mono">drift — patch below</span>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {['costume', 'injury', 'prop'].map((field) => (
+                  <div key={field}>
+                    <label className="text-[9px] text-[var(--sps-muted)] uppercase">{field}</label>
+                    <input
+                      type="text"
+                      value={entry.patch?.[field] ?? entry.state[field] ?? ''}
+                      disabled={isLifecycleLocked(currentShot)}
+                      onChange={(e) => patchContinuityField(entry.key, field, e.target.value)}
+                      className="w-full mt-0.5 text-[10px] font-mono border border-[var(--sps-border)] rounded px-1.5 py-1 bg-[var(--sps-bg)] disabled:opacity-50"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {/* MAIN TWO-COLUMN FORM WORKSPACE */}
-      <div className="sps-studio-form-grid flex-1 p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1920px] mx-auto w-full min-w-0">
+      <div className="sps-studio-form-grid flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 md:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3 w-full">
         {/* LEFT COLUMN: 24 CRAFT PRODUCTION FORM STAGES OR EXPANDED EDITOR (8 Cols) */}
         <div className="lg:col-span-8 space-y-6">
           {activeModalSlotKey ? (
             /* FULL TEXT & PRESET MANAGER WINDOW IN LEFT WORKSPACE */
-            <div className="rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-500/80 bg-zinc-950 font-mono">
+            <div className="rounded-[10px] overflow-hidden border border-[var(--sps-border)] bg-[var(--sps-surface)] font-mono">
               <SlotEditor
                 slotConfig={SEEDANCE_SLOTS.find(s => s.key === activeModalSlotKey) || {
                   key: activeModalSlotKey,
@@ -666,11 +870,15 @@ export default function StudioFormView({
                 value={currentShot[activeModalSlotKey] || ''}
                 onChange={(val) => handleFieldChange(activeModalSlotKey, val)}
                 shot={currentShot}
+                readOnly={isLifecycleLocked(currentShot)}
                 embedded={true}
                 compact={false}
                 allSlots={SEEDANCE_SLOTS}
                 genreKey={genreKey}
                 projectTitle={projectTitle}
+                shots={shots}
+                onOpenLlmCommands={onOpenLlmCommands}
+                onUpdateShot={onUpdateShot}
                 totalShotsCount={shots.length}
                 currentShotIndex={activeShotIndex}
                 onNavigateNextShot={() => onSelectShot && onSelectShot(activeShotIndex < shots.length - 1 ? activeShotIndex + 1 : 0)}
@@ -706,12 +914,12 @@ export default function StudioFormView({
           ) : (
             <>
               {/* STAGE 1: SHOT IDENTITY & SYNOPSIS */}
-              <FormSection title="Stage 1: Shot Identity & Scene Synopsis" subtitle="Set shot ID, narrative context, and temporal duration" icon={Film} isPaperTheme={isPaperTheme}>
+              <FormSection title="Stage 1: Shot Identity & Scene Synopsis" subtitle="Set shot ID, narrative context, and temporal duration" icon={Film}>
                 <CraftField fieldKey="sceneSynopsis" label="Scene Synopsis (LLM Auto vs Writer Manual)" placeholder="Enter complete scene context, location, atmospheric setup, and narrative goal..." rows={3} {...craftProps} />
               </FormSection>
 
               {/* STAGE 2: CINEMATOGRAPHY & CAMERA CRAFT */}
-              <FormSection title="Stage 2: Cinematography & Camera Craft" subtitle="Framing, lens choices, color palettes, and directional lighting" icon={Camera} isPaperTheme={isPaperTheme}>
+              <FormSection title="Stage 2: Cinematography & Camera Craft" subtitle="Framing, lens choices, color palettes, and directional lighting" icon={Camera}>
                 <div className="grid grid-cols-1 gap-4">
                   <CraftField fieldKey="shotComposition" label="Shot Composition & Framing" {...craftProps} />
                   <CraftField fieldKey="cameraMotionTag" label="Camera Motion & Rig" {...craftProps} />
@@ -727,7 +935,7 @@ export default function StudioFormView({
               </FormSection>
 
               {/* STAGE 3: CHARACTER & ACTION PERFORMANCE */}
-              <FormSection title="Stage 3: Character Performance & Action" subtitle="Character ref, expressions, dialogue, and stunt mechanics" icon={User} isPaperTheme={isPaperTheme}>
+              <FormSection title="Stage 3: Character Performance & Action" subtitle="Character ref, expressions, dialogue, and stunt mechanics" icon={User}>
                 <div className="grid grid-cols-1 gap-4">
                   <CraftField fieldKey="characterIdAssetRef" label="Character Asset Reference" {...craftProps} />
                   <CraftField fieldKey="coArtistInteraction" label="Co-Artist Interaction" {...craftProps} />
@@ -745,7 +953,7 @@ export default function StudioFormView({
               </FormSection>
 
               {/* STAGE 4: POST-PRODUCTION & SOUND */}
-              <FormSection title="Stage 4: Post-Production, VFX & Audio" subtitle="Volumetrics, CGI breakdown, audio SFX, and score" icon={Wand2} isPaperTheme={isPaperTheme}>
+              <FormSection title="Stage 4: Post-Production, VFX & Audio" subtitle="Volumetrics, CGI breakdown, audio SFX, and score" icon={Wand2}>
                 <div className="grid grid-cols-1 gap-4">
                   <CraftField fieldKey="atmosphereVolumetricsTag" label="Atmosphere & Volumetrics" {...craftProps} />
                   <CraftField fieldKey="vfxCgiBreakdown" label="VFX & CGI Breakdown" {...craftProps} />
@@ -760,165 +968,125 @@ export default function StudioFormView({
 
         {/* RIGHT COLUMN: STICKY LIVE COMPILED PROMPT CARD (4 Cols) */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="sticky top-6 space-y-5">
-            {/* LIVE MASTER PROMPT CONSOLE CARD */}
-            <div 
-              style={isPaperTheme ? { backgroundColor: '#ffffff', borderColor: '#fde68a' } : { backgroundColor: '#18181b', borderColor: '#f59e0b60' }}
-              className="rounded-2xl border p-4 shadow-xl space-y-3 font-mono overflow-hidden"
-            >
-              <div 
-                style={isPaperTheme ? { borderColor: '#fef3c7' } : { borderColor: '#27272a' }}
-                className="border-b pb-2.5 space-y-2"
-              >
-                {/* Title Left, Favorites Toggle & + Add Shot Button on the Right */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`font-black text-xs font-sans uppercase tracking-wider flex items-center gap-1.5 ${
-                    isPaperTheme ? 'text-amber-950' : 'text-amber-400'
-                  }`}>
-                    <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>Live Master Production Prompt</span>
+            <div className="sps-live-matrix-card rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-surface)] p-3 space-y-2 font-mono overflow-hidden">
+              <div className="border-b border-[var(--sps-border)] pb-2 space-y-2">
+                <div className="sps-compact-toolbar justify-between">
+                  <span className="min-w-0 font-black text-[11px] font-sans uppercase tracking-wider flex items-center gap-1.5 text-[var(--sps-text)]">
+                    <Sparkles className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
+                    <span className="truncate">Live prompt</span>
                   </span>
-
-                  <div className="flex items-center gap-2">
-                    {/* ⭐ SMALL STAR BUTTON TO TOGGLE SHOWING ONLY FAVORITES */}
+                  <div className="sps-compact-toolbar">
                     <button
                       type="button"
                       onClick={() => handleToggleFavoritesOnly()}
-                      style={
-                        showFavoritesOnly 
-                          ? { backgroundColor: '#f59e0b', color: '#000000', borderColor: '#d97706' } 
-                          : isPaperTheme 
-                            ? { backgroundColor: '#fef3c7', color: '#451a03', borderColor: '#fde68a' }
-                            : { backgroundColor: '#18181b', color: '#f59e0b', borderColor: '#27272a' }
-                      }
-                      className="px-2.5 py-1 rounded-xl border text-xs font-bold font-mono flex items-center gap-1.5 transition-all shadow-sm cursor-pointer hover:scale-105"
-                      title={showFavoritesOnly ? `Show All ${SEEDANCE_SLOTS.length} Crafts` : "Show Only Favorited Crafts"}
+                      className={`sps-icon-btn ${showFavoritesOnly ? 'is-on' : ''}`}
+                      title={showFavoritesOnly ? `Show all ${SEEDANCE_SLOTS.length} crafts` : 'Show favorites'}
                     >
-                      <Star className={`w-3.5 h-3.5 ${showFavoritesOnly ? 'fill-black stroke-black font-black' : 'fill-amber-400 text-amber-500'}`} />
-                      <span>{showFavoritesOnly ? 'Favorites Only' : 'Favorites'}</span>
+                      <Star className={`w-3.5 h-3.5 ${showFavoritesOnly ? 'fill-current' : ''}`} />
                     </button>
-
-                    {onAddShot && (
-                      <button
-                        type="button"
-                        onClick={onAddShot}
-                        style={{ backgroundColor: '#f59e0b', color: '#000000' }}
-                        className="px-3 py-1 rounded-xl font-black text-xs transition-all shadow-md flex items-center justify-center gap-1 cursor-pointer hover:bg-amber-400 hover:scale-105 uppercase font-sans tracking-wide shrink-0"
-                        title="Add New Shot"
-                      >
-                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>Add Shot</span>
+                    {onAddShot ? (
+                      <button type="button" onClick={onAddShot} className="sps-icon-btn is-on" title="Add shot">
+                        <Plus className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Sub Row: Format Switcher (Left), Shot Position (Center), Copy Button (Right) */}
-                <div className="flex items-center justify-between gap-1.5 pt-1 flex-nowrap w-full">
-                  {/* Left: N-Craft | Prose Toggle */}
-                  <div 
-                    style={isPaperTheme ? { backgroundColor: '#fef3c7', borderColor: '#fde68a' } : { backgroundColor: '#09090b', borderColor: '#27272a' }}
-                    className="flex items-center gap-0.5 p-0.5 rounded-lg border shadow-sm shrink-0"
-                  >
+                <div className="sps-compact-toolbar">
+                  <div className="flex items-center gap-0.5 p-0.5 rounded-[7px] border border-[var(--sps-border)] bg-[var(--sps-bg)]">
                     <button
                       type="button"
                       onClick={() => { setPromptFormat('crafts'); localStorage.setItem('sps_prompt_format', 'crafts'); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                        promptFormat === 'crafts' ? 'bg-amber-500 text-black font-black shadow-sm' : isPaperTheme ? 'text-amber-950' : 'text-zinc-400'
-                      }`}
+                      className={`sps-btn sps-btn-compact ${promptFormat === 'crafts' ? 'sps-btn-primary' : ''}`}
                     >
-                      {`🎬 ${SEEDANCE_SLOTS.length}-Craft`}
+                      Craft
                     </button>
                     <button
                       type="button"
                       onClick={() => { setPromptFormat('prose'); localStorage.setItem('sps_prompt_format', 'prose'); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                        promptFormat === 'prose' ? 'bg-amber-500 text-black font-black shadow-sm' : isPaperTheme ? 'text-amber-950' : 'text-zinc-400'
-                      }`}
+                      className={`sps-btn sps-btn-compact ${promptFormat === 'prose' ? 'sps-btn-primary' : ''}`}
                     >
-                      📜 Prose
+                      Prose
                     </button>
                   </div>
-
-                  {/* Center: Shot Position (SHOT [ 11 ] / 28) - NO ARROWS */}
-                  <div 
-                    style={isPaperTheme ? { backgroundColor: '#ffffff', borderColor: '#fcd34d' } : { backgroundColor: '#09090b', borderColor: '#27272a' }}
-                    className="flex items-center gap-1 px-2 py-0.5 border rounded-xl shadow-sm shrink-0"
-                    title="Shot Position"
-                  >
-                    <span className={`text-[10.5px] font-black font-sans uppercase tracking-wide ${isPaperTheme ? 'text-amber-950' : 'text-amber-400'}`}>Shot</span>
+                  <div className="flex items-center gap-1 px-1.5 h-7 border border-[var(--sps-border)] rounded-[7px] bg-[var(--sps-bg)]" title="Shot">
+                    <span className="text-[10px] font-black uppercase text-[var(--sps-text)]">Shot</span>
                     <input
                       type="number"
                       min="1"
                       max={shots.length}
                       value={shotNumberInput}
                       onChange={(e) => handleShotNumberChange(e.target.value)}
-                      style={isPaperTheme ? { backgroundColor: '#fef3c7', color: '#000000', borderColor: '#fcd34d' } : { backgroundColor: '#18181b', color: '#f59e0b', borderColor: '#27272a' }}
-                      className="w-8 text-center py-0.5 rounded-md border font-mono font-black text-xs focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-inner"
+                      className="w-7 text-center py-0 rounded border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] font-mono font-black text-[11px] focus:outline-none focus:border-[var(--sps-gold)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className={`text-[10.5px] font-mono font-bold opacity-80 ${isPaperTheme ? 'text-amber-900' : 'text-zinc-400'}`}>
-                      / {shots.length}
-                    </span>
+                    <span className="text-[10px] font-mono font-bold text-[var(--sps-muted)]">/{shots.length}</span>
                   </div>
-
-                  {/* Right: Copy Button */}
                   <button
                     type="button"
                     onClick={handleCopyPrompt}
-                    style={{ backgroundColor: '#f59e0b', color: '#000000' }}
-                    className="px-2.5 py-1 rounded-lg font-black text-xs font-mono flex items-center gap-1 shadow-md transition-all cursor-pointer hover:bg-amber-400 hover:scale-105 shrink-0"
-                    title="Copy Compiled Master Prompt"
+                    className="sps-icon-btn is-on"
+                    title={copyToast ? 'Copied' : 'Copy prompt'}
                   >
-                    {copyToast ? <Check className="w-3.5 h-3.5 text-black stroke-[3]" /> : <Copy className="w-3.5 h-3.5 text-black" />}
-                    <span>{copyToast ? 'Copied!' : 'Copy'}</span>
+                    {copyToast ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFormCsv}
+                    disabled={exportBlocked}
+                    className="sps-icon-btn disabled:opacity-40"
+                    title={exportBlocked ? exportLife.message : 'Export Form craft CSV (all shots)'}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFormPdf}
+                    disabled={exportBlocked}
+                    className="sps-btn text-[9px] h-7 px-2 disabled:opacity-40"
+                    title={exportBlocked ? exportLife.message : 'Print Form craft PDF'}
+                  >
+                    PDF
                   </button>
                 </div>
+                {exportBlocked ? (
+                  <p className="text-[9px] text-[var(--sps-gold)] m-0 leading-snug">
+                    {exportLife.message}
+                  </p>
+                ) : null}
               </div>
 
               {/* Live Compiled Prompt Text with Interactive Auto-Scroll & Permanent Highlight Sync */}
-              <div 
-                style={{ backgroundColor: '#09090b', borderColor: '#27272a' }}
-                className="sps-studio-preview p-3.5 rounded-xl border text-xs leading-relaxed max-h-[calc(100vh-10rem)] min-h-[520px] overflow-y-auto font-mono font-medium selection:bg-amber-400 selection:text-black shadow-inner"
-              >
+              <div className="sps-studio-preview sps-live-matrix p-2 rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg)] text-xs leading-relaxed max-h-[calc(100vh-10rem)] min-h-[520px] overflow-y-auto font-mono">
                 {promptFormat === 'crafts' ? (
-                  <div className="flex flex-wrap gap-2 leading-relaxed">
-                    {CRAFT_COLOR_MAP.map(({ key, label, color, bg }) => {
+                  <div className="sps-live-matrix-list">
+                    {CRAFT_COLOR_MAP.map(({ key, label, accent }) => {
                       const val = currentShot[key];
                       if (!val) return null;
-
-                      // When Favorites toggle is active, show only crafts NOT in favorites in this right console panel!
                       if (showFavoritesOnly && favoriteCraftKeys.includes(key)) return null;
-
                       const isSelectedBadge = highlightedFieldKey === key;
-
                       return (
-                        <span 
+                        <button
+                          type="button"
                           key={key}
                           onClick={() => handleCraftTap(key, false)}
                           onDoubleClick={() => handleCraftTap(key, true)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono shadow-sm transition-all cursor-pointer ${
-                            isSelectedBadge 
-                              ? 'ring-2 ring-amber-400 scale-105 font-black bg-amber-400 text-black border-amber-500 shadow-md' 
-                              : `${bg} hover:scale-105 hover:brightness-125`
-                          }`}
-                          title={`Click to focus & highlight ${label} (Double-click to expand Editor)`}
+                          className={`sps-live-matrix-row ${isSelectedBadge ? 'is-on' : ''}`}
+                          style={{ '--row-accent': accent }}
+                          title={`Click to focus ${label}. Double-click to expand editor.`}
                         >
-                          <span className={`font-black uppercase tracking-wider ${isSelectedBadge ? 'text-black' : color}`}>
-                            {label}:
-                          </span>
-                          <span className={`${isSelectedBadge ? 'text-black font-bold' : 'text-zinc-100 font-medium'}`}>{val}</span>
-                        </span>
+                          <span className="sps-live-matrix-k">{label}</span>
+                          <span className="sps-live-matrix-v">{val}</span>
+                        </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-amber-200 leading-relaxed font-mono">
-                    {compiledMasterPrompt || <span className="text-zinc-600 italic">No prompt parameters entered yet...</span>}
+                  <div className="sps-live-matrix-prose">
+                    {compiledMasterPrompt || <span className="italic text-[var(--sps-muted)]">No prompt parameters entered yet…</span>}
                   </div>
                 )}
               </div>
             </div>
-          </div>
         </div>
       </div>
 

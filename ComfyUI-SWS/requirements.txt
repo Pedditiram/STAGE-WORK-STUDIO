@@ -1,0 +1,2 @@
+# ComfyUI-SWS uses Python stdlib only (urllib, json, os, time).
+# ComfyUI already provides torch/PIL. Do not pip-install extra packages here.

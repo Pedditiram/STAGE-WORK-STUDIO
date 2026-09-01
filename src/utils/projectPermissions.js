@@ -10,11 +10,15 @@
  * Legacy roles Admin / "Director & Owner" map to Owner.
  */
 
+import { isGuestPlayTitle, getGuestPlayProject } from './guestPlayground';
+import { canUseSaasConsole } from './saasControl';
+
 export const PRIMARY_ADMIN_EMAILS = ['pedditiram@gmail.com'];
 
 /** Job-title designations only — never imply create/delete rights */
 export const STUDIO_DESIGNATIONS = [
   'Lead Director',
+  'Writer',
   'Executive Producer',
   'DOP / Cinematographer',
   'Lighting Specialist',
@@ -23,6 +27,39 @@ export const STUDIO_DESIGNATIONS = [
   'Co-Artist & Performer',
   'Production Assistant',
 ];
+
+/** Room each job title opens on login */
+export const DESIGNATION_HOME = {
+  'Lead Director': { view: 'spreadsheet' },
+  Writer: { view: 'screenplay' },
+  'Executive Producer': { view: 'spreadsheet' },
+  'DOP / Cinematographer': { view: 'form' },
+  'Lighting Specialist': { view: 'form' },
+  'Sound Engineer': { view: 'form' },
+  'Lead Editor': { view: 'spreadsheet' },
+  'Co-Artist & Performer': { view: 'spreadsheet', modal: 'cast' },
+  'Production Assistant': { view: 'spreadsheet' },
+};
+
+export function getHomeForDesignation(designation) {
+  const key = String(designation || '').trim();
+  return DESIGNATION_HOME[key] || { view: 'spreadsheet' };
+}
+
+export function getDesignationForEmail(email = getCurrentUserEmail()) {
+  const clean = normalizeEmail(email);
+  if (!clean || typeof window === 'undefined') return '';
+  if (PRIMARY_ADMIN_EMAILS.includes(clean)) return 'Lead Director';
+  try {
+    const users = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
+    const hit = (Array.isArray(users) ? users : []).find(
+      (u) => normalizeEmail(u?.email) === clean
+    );
+    return String(hit?.designation || '').trim();
+  } catch {
+    return '';
+  }
+}
 
 /** Studio access levels (single-select) */
 export const ACCESS_LEVELS = ['Viewer', 'Editor', 'Owner'];
@@ -45,8 +82,8 @@ export function normalizeEmail(email) {
 }
 
 /**
- * Guest / unauthenticated session — no studio library, editing, admin, or allotments.
- * Guests may only view Investor Deck & Studio Showcase (and login).
+ * Guest / unauthenticated session — no studio library writes, editing, admin, or allotments.
+ * When Guest Browse is on (Settings), guests may look through rooms read-only.
  */
 export function isGuestSession(email = getCurrentUserEmail()) {
   const clean = String(email || '').trim().toLowerCase();
@@ -60,6 +97,323 @@ export function isGuestSession(email = getCurrentUserEmail()) {
     return true;
   }
   return false;
+}
+
+export const GUEST_BROWSE_KEY = 'sps_guest_browse_enabled';
+export const GUEST_URL_KEY = 'sps_guest_url_enabled';
+export const GUEST_LOOK_SESSION_KEY = 'sps_guest_look_link';
+
+function guestQueryOn() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const v = String(q.get('guest') || q.get('look') || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
+  } catch {
+    return false;
+  }
+}
+
+/** Shareable look-only URL for this origin. */
+export function getGuestLookShareUrl() {
+  if (typeof window === 'undefined') return 'https://stage-production-studio.vercel.app/?guest=1';
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set('guest', '1');
+  return url.toString();
+}
+
+/** Public ?guest=1 switch — default ON. */
+export function isGuestUrlEnabled() {
+  if (typeof window === 'undefined') return true;
+  try {
+    const pub = sessionStorage.getItem('sps_guest_url_public');
+    if (pub === 'false') return false;
+    if (pub === 'true') return true;
+    const local = localStorage.getItem(GUEST_URL_KEY);
+    if (local === 'false') return false;
+    if (local === 'true') return true;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function setGuestUrlEnabled(on) {
+  if (typeof window === 'undefined') return false;
+  const next = Boolean(on);
+  try {
+    localStorage.setItem(GUEST_URL_KEY, next ? 'true' : 'false');
+    sessionStorage.setItem('sps_guest_url_public', next ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { urlEnabled: next } }));
+    fetch('/api/guest-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urlEnabled: next })
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+export async function hydrateGuestUrlFromServer() {
+  if (typeof window === 'undefined') return isGuestUrlEnabled();
+  try {
+    const res = await fetch('/api/guest-access', { cache: 'no-store' });
+    const data = await res.json();
+    if (typeof data?.urlEnabled === 'boolean') {
+      sessionStorage.setItem('sps_guest_url_public', data.urlEnabled ? 'true' : 'false');
+      window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { urlEnabled: data.urlEnabled } }));
+    }
+  } catch {
+    /* ignore */
+  }
+  return isGuestUrlEnabled();
+}
+
+/** If the visitor opened ?guest=1 / ?look=1 and Guest URL is on, pin look-only for this tab. */
+export function consumeGuestLookFromUrl() {
+  if (typeof window === 'undefined') return false;
+  if (!guestQueryOn() || !isGuestUrlEnabled()) return false;
+  try {
+    sessionStorage.setItem(GUEST_LOOK_SESSION_KEY, '1');
+    sessionStorage.setItem('sps_login_prompted', '1');
+    sessionStorage.setItem('sps_guest_look_session', '1');
+    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: true } }));
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+export function enterGuestLookSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(GUEST_LOOK_SESSION_KEY, '1');
+    sessionStorage.setItem('sps_login_prompted', '1');
+    sessionStorage.setItem('sps_guest_look_session', '1');
+    localStorage.removeItem('sps_authorized_user_email');
+    window.dispatchEvent(new Event('sps_collaborators_updated'));
+    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: true } }));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Owner Settings switch, share link, or this-tab guest look. */
+export function isGuestBrowseEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (guestQueryOn() && isGuestUrlEnabled()) return true;
+    if (sessionStorage.getItem(GUEST_LOOK_SESSION_KEY) === '1') return true;
+    if (sessionStorage.getItem('sps_guest_look_session') === '1') return true;
+    return localStorage.getItem(GUEST_BROWSE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setGuestBrowseEnabled(on) {
+  if (typeof window === 'undefined') return false;
+  const next = Boolean(on);
+  try {
+    localStorage.setItem(GUEST_BROWSE_KEY, next ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: next } }));
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+/** Guest who may walk rooms / open desks in look-only mode. */
+export function canGuestBrowseApp(email = getCurrentUserEmail()) {
+  return isGuestSession(email) && isGuestBrowseEnabled();
+}
+
+export const STUDIO_MODULE_KEYS = {
+  writer: 'sps_writer_console_enabled',
+  matrix: 'sps_matrix_console_enabled',
+  form: 'sps_form_console_enabled',
+  stage: 'sps_enable_canvas_tab',
+  cast: 'sps_cast_console_enabled',
+  world: 'sps_world_console_enabled',
+  compile: 'sps_compile_console_enabled',
+  generate: 'sps_generate_console_enabled',
+  budget: 'sps_budget_console_enabled',
+  promo: 'sps_promo_console_enabled',
+  campaign: 'sps_campaign_console_enabled',
+  storyboard: 'sps_storyboard_console_enabled',
+  pitch: 'sps_pitch_console_enabled',
+  reel: 'sps_reel_console_enabled'
+};
+
+export const BUDGET_CONSOLE_KEY = STUDIO_MODULE_KEYS.budget;
+
+export const CONSOLE_SWITCH_IDS = Object.keys(STUDIO_MODULE_KEYS);
+export const CONSOLE_SWITCH_LABELS = {
+  writer: 'Writer',
+  matrix: 'Matrix',
+  form: 'Form',
+  stage: '3D Stage',
+  cast: 'Characters',
+  world: 'World',
+  promo: 'Promo',
+  campaign: 'Campaign',
+  storyboard: 'Storyboard',
+  pitch: 'Pitch',
+  budget: 'Budget',
+  reel: 'Reel',
+  compile: 'Compile',
+  generate: 'Generate',
+};
+const PRESENTATION_MODE_KEY = 'sps_presentation_mode';
+
+function readStudioDefaultModule(id) {
+  const key = STUDIO_MODULE_KEYS[id];
+  if (!key || typeof window === 'undefined') return id !== 'stage';
+  try {
+    const v = localStorage.getItem(key);
+    if (id === 'stage') {
+      if (v == null || v === '') return false;
+      return v === 'true';
+    }
+    return v !== 'false';
+  } catch {
+    return id !== 'stage';
+  }
+}
+
+export function getStudioDefaultConsoleMap() {
+  return Object.fromEntries(CONSOLE_SWITCH_IDS.map((id) => [id, readStudioDefaultModule(id)]));
+}
+
+export function getUserConsoleMap(email = getCurrentUserEmail()) {
+  const profile = getCurrentUserProfile(email);
+  const custom = profile?.enabledConsoles;
+  const defaults = getStudioDefaultConsoleMap();
+  if (!custom || typeof custom !== 'object') return defaults;
+  const map = { ...defaults };
+  CONSOLE_SWITCH_IDS.forEach((id) => {
+    if (typeof custom[id] === 'boolean') map[id] = custom[id];
+  });
+  return map;
+}
+
+export function areAllConsolesOff(email = getCurrentUserEmail()) {
+  if (isPresentationMode()) return true;
+  return CONSOLE_SWITCH_IDS.every((id) => !isStudioModuleEnabled(id, email));
+}
+
+export function isPresentationMode() {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(PRESENTATION_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setPresentationMode(on) {
+  if (typeof window === 'undefined') return Boolean(on);
+  try {
+    localStorage.setItem(PRESENTATION_MODE_KEY, on ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { presentation: Boolean(on) } }));
+    window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { presentation: Boolean(on) } }));
+  } catch {
+    /* ignore */
+  }
+  return Boolean(on);
+}
+
+/** Real login must leave the reel and guest-look tab. */
+export function exitPresentationForWorkspace() {
+  try {
+    sessionStorage.removeItem(GUEST_LOOK_SESSION_KEY);
+    sessionStorage.removeItem('sps_guest_look_session');
+    sessionStorage.removeItem('sps_guest_look_link');
+  } catch {
+    /* ignore */
+  }
+  setPresentationMode(false);
+}
+
+export function isStudioModuleEnabled(id, email = getCurrentUserEmail()) {
+  if (isPresentationMode()) return false;
+  if (email && !canUseSaasConsole(id, email)) return false;
+  if (isGuestSession(email)) return readStudioDefaultModule(id);
+  const map = getUserConsoleMap(email);
+  if (typeof map[id] === 'boolean') return map[id];
+  return readStudioDefaultModule(id);
+}
+
+export function setStudioModuleEnabled(id, on, { silent = false } = {}) {
+  const key = STUDIO_MODULE_KEYS[id];
+  if (!key || typeof window === 'undefined') return false;
+  const next = Boolean(on);
+  try {
+    localStorage.setItem(key, next ? 'true' : 'false');
+    if (!silent) {
+      window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { id, enabled: next } }));
+      if (id === 'budget') {
+        window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { enabled: next } }));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+export function setUserConsoleEnabled(email, id, on) {
+  if (typeof window === 'undefined' || !STUDIO_MODULE_KEYS[id]) return false;
+  const clean = normalizeEmail(email);
+  if (!clean) return false;
+  const nextVal = Boolean(on);
+  try {
+    const users = getAuthorizedUsers();
+    const nextUsers = users.map((u) => {
+      if (normalizeEmail(u?.email) !== clean) return u;
+      const map = getUserConsoleMap(clean);
+      map[id] = nextVal;
+      const patch = { ...u, enabledConsoles: map };
+      if (id === 'budget') patch.budgetAccess = nextVal;
+      return patch;
+    });
+    localStorage.setItem('sps_authorized_phone_users', JSON.stringify(nextUsers));
+    window.dispatchEvent(new Event('sps_collaborators_updated'));
+    window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { id, enabled: nextVal, email: clean } }));
+    if (id === 'budget') {
+      window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { enabled: nextVal, email: clean } }));
+    }
+  } catch {
+    /* ignore */
+  }
+  return nextVal;
+}
+
+/** Master switch — default ON so Owner sees Budget next to Promo Pack. */
+export function isBudgetConsoleEnabled() {
+  return isStudioModuleEnabled('budget');
+}
+
+export function setBudgetConsoleEnabled(on) {
+  return setStudioModuleEnabled('budget', on);
+}
+
+/**
+ * Budget console: Settings must be ON, then Owner always, others only if budgetAccess is checked.
+ */
+export function canAccessBudgetConsole(email = getCurrentUserEmail()) {
+  if (!isStudioModuleEnabled('budget', email)) return false;
+  if (isGuestSession(email)) return false;
+  if (isStudioAdmin(email) || PRIMARY_ADMIN_EMAILS.includes(normalizeEmail(email))) return true;
+  const profile = getCurrentUserProfile(email);
+  return Boolean(profile?.budgetAccess);
+}
+
+/** True when this session must not mutate craft, library, or settings. */
+export function isLookOnlySession(email = getCurrentUserEmail()) {
+  return isGuestSession(email) || getAccessLevel(email) === 'Viewer';
 }
 
 /**
@@ -232,6 +586,9 @@ export function getAllottedProjectTitles(email = getCurrentUserEmail()) {
 }
 
 export function canAccessProject(projectTitle, email = getCurrentUserEmail()) {
+  if (isGuestSession(email)) {
+    return canGuestBrowseApp(email) && isGuestPlayTitle(projectTitle);
+  }
   if (isStudioOwner(email)) return true;
   const title = String(projectTitle || '').trim();
   if (!title) return false;
@@ -244,11 +601,13 @@ export function canAccessProject(projectTitle, email = getCurrentUserEmail()) {
  * Editors / Viewers (and all craft designations) cannot.
  */
 export function canCreateOrDeleteProjects(email = getCurrentUserEmail()) {
+  if (isGuestSession(email)) return false;
   return isStudioOwner(email);
 }
 
 /** Owner + Editor may edit allotted projects; Viewer is read-only. */
 export function canEditProjects(email = getCurrentUserEmail()) {
+  if (isGuestSession(email)) return canGuestBrowseApp(email);
   if (isStudioOwner(email)) return true;
   return getAccessLevel(email) === 'Editor';
 }
@@ -332,6 +691,9 @@ export function pruneAllottedProjectsToLibrary(users, projectLibrary = getLivePr
 }
 
 export function filterAccessibleProjects(projectLibrary, email = getCurrentUserEmail()) {
+  if (isGuestSession(email)) {
+    return canGuestBrowseApp(email) ? [getGuestPlayProject()] : [];
+  }
   const list = Array.isArray(projectLibrary) ? projectLibrary : [];
   if (isStudioOwner(email)) return list;
   return list.filter((p) => canAccessProject(p?.title, email));

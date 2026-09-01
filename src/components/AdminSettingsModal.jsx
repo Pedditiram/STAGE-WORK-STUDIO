@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink, FileText, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
-import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig } from '../services/dbService';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink, FileText, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
+import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig, subscribeToPresenceEmails } from '../services/dbService';
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
   getAllottedStorageFolderPath, setAllottedStorageFolderPath,
   exportAppSettingsToFile, importAppSettingsFromFile,
   saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
-import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary } from '../utils/projectPermissions';
+import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS } from '../utils/projectPermissions';
 import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import GoogleDrivePanel from './GoogleDrivePanel';
+import SaasAdminPanel from './SaasAdminPanel';
+import ByokKeysPanel from './ByokKeysPanel';
+import { runFactoryReset } from '../utils/factoryReset';
+import { studioApiUrl } from '../utils/runtimeEnv';
 
 /** Persist collaborators to localStorage synchronously, then notify other UI (not this modal). */
 function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
@@ -22,6 +27,263 @@ function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
     }
   }
   return secured;
+}
+
+function GuestBrowseSwitch() {
+  const [browseOn, setBrowseOn] = React.useState(() => {
+    try {
+      return localStorage.getItem('sps_guest_browse_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [urlOn, setUrlOn] = React.useState(() => isGuestUrlEnabled());
+  const [copied, setCopied] = React.useState(false);
+  const shareUrl = typeof window !== 'undefined'
+    ? getGuestLookShareUrl()
+    : 'https://stage-production-studio.vercel.app/?guest=1';
+
+  const Switch = ({ on, onToggle, title }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className={`relative w-12 h-7 rounded-full shrink-0 border transition-colors ${
+        on ? 'bg-cyan-500 border-cyan-400' : 'bg-zinc-800 border-zinc-600'
+      }`}
+      title={title}
+    >
+      <span
+        className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+          on ? 'left-5' : 'left-0.5'
+        }`}
+      />
+    </button>
+  );
+
+  return (
+    <div className="p-3 rounded-lg bg-zinc-950 border border-cyan-500/30 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold text-cyan-300 m-0 uppercase tracking-wide">Guest browse</p>
+          <p className="text-[11px] text-zinc-400 m-0 mt-1 leading-relaxed">
+            This device: look-only without signing in. No edits, saves, generate, or Settings.
+          </p>
+        </div>
+        <Switch
+          on={browseOn}
+          title={browseOn ? 'Guest browse on' : 'Guest browse off'}
+          onToggle={() => {
+            const next = !browseOn;
+            setGuestBrowseEnabled(next);
+            setBrowseOn(next);
+          }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold text-cyan-300 m-0 uppercase tracking-wide">Guest URL</p>
+          <p className="text-[11px] text-zinc-400 m-0 mt-1 leading-relaxed">
+            Public look-only link. When this is on, anyone with the URL can walk the rooms.
+          </p>
+        </div>
+        <Switch
+          on={urlOn}
+          title={urlOn ? 'Guest URL on' : 'Guest URL off'}
+          onToggle={() => {
+            const next = !urlOn;
+            setGuestUrlEnabled(next);
+            setUrlOn(next);
+          }}
+        />
+      </div>
+      <div className="flex gap-2 min-w-0">
+        <input
+          readOnly
+          value={shareUrl}
+          className={`flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-[10px] font-mono ${
+            urlOn ? 'text-cyan-300' : 'text-zinc-500'
+          }`}
+        />
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shrink-0 disabled:opacity-40"
+          disabled={!urlOn}
+          onClick={() => {
+            navigator.clipboard?.writeText(shareUrl);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConsoleSwitchThumb({ on, label, onToggle }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className={`relative w-12 h-7 rounded-full shrink-0 border transition-colors ${
+        on ? 'bg-amber-500 border-amber-400' : 'bg-zinc-800 border-zinc-600'
+      }`}
+      title={on ? `${label} on` : `${label} off`}
+    >
+      <span
+        className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+          on ? 'left-5' : 'left-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
+function UserConsoleChips({ email, map, onToggle }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 pt-1">
+      {CONSOLE_SWITCH_IDS.map((id) => {
+        const on = map[id] === true;
+        const label = CONSOLE_SWITCH_LABELS[id] || id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onToggle(id, !on)}
+            className={`text-[9.5px] font-mono px-2 py-0.5 rounded-full border font-bold ${
+              on
+                ? 'bg-amber-950/90 text-amber-200 border-amber-600/80'
+                : 'bg-zinc-900 text-zinc-500 border-zinc-700'
+            }`}
+            title={`${label} ${on ? 'on' : 'off'} for this user`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StudioRoomsSwitch({ onToggleCanvasTab, users = [] }) {
+  const rows = [
+    { id: 'writer', label: 'Writer', blurb: 'Screenplay console.' },
+    { id: 'matrix', label: 'Matrix', blurb: 'Shot spreadsheet.' },
+    { id: 'form', label: 'Form', blurb: 'Single-shot craft desk.' },
+    { id: 'stage', label: '3D Stage', blurb: 'Director canvas. Off by default.' },
+    { id: 'cast', label: 'Characters', blurb: 'Character bible.' },
+    { id: 'world', label: 'World', blurb: 'Locations and environment.' },
+    { id: 'promo', label: 'Promo Pack', blurb: 'Trailer, teaser, reels room.' },
+    { id: 'campaign', label: 'Campaign Kit', blurb: 'Posters, outdoor, social, research.' },
+    { id: 'storyboard', label: 'Storyboard', blurb: 'Shot frames with still prompts under each panel.' },
+    { id: 'pitch', label: 'Pitch Deck', blurb: 'Investor slide book.' },
+    { id: 'budget', label: 'Budget', blurb: 'Picture estimate. Grant users below.' },
+    { id: 'reel', label: 'Feature Reel', blurb: 'Takes playback desk.' },
+    { id: 'compile', label: 'Compile', blurb: 'Prompt compiler desk.' },
+    { id: 'generate', label: 'Generate', blurb: 'Image and video generate desk.' },
+  ];
+  const DEFAULT_TARGET = '__studio_default__';
+  const [target, setTarget] = React.useState(DEFAULT_TARGET);
+  const [on, setOn] = React.useState(() => getStudioDefaultConsoleMap());
+  const presentationOn = isPresentationMode();
+
+  const readMap = (who) => {
+    if (who === DEFAULT_TARGET) return getStudioDefaultConsoleMap();
+    return getUserConsoleMap(who);
+  };
+
+  const syncFromStorage = () => setOn(readMap(target));
+
+  React.useEffect(() => {
+    setOn(readMap(target));
+  }, [target, users]);
+
+  React.useEffect(() => {
+    window.addEventListener('sps_studio_modules_changed', syncFromStorage);
+    window.addEventListener('sps_collaborators_updated', syncFromStorage);
+    return () => {
+      window.removeEventListener('sps_studio_modules_changed', syncFromStorage);
+      window.removeEventListener('sps_collaborators_updated', syncFromStorage);
+    };
+  }, [target]);
+
+  const applyToggle = (id, next) => {
+    if (target === DEFAULT_TARGET) {
+      setStudioModuleEnabled(id, next);
+      if (id === 'stage') onToggleCanvasTab?.(next);
+    } else {
+      setUserConsoleEnabled(target, id, next);
+      if (id === 'stage' && getCurrentUserEmail() === String(target).toLowerCase()) {
+        onToggleCanvasTab?.(next);
+      }
+    }
+    setOn((prev) => ({ ...prev, [id]: next }));
+  };
+
+  return (
+    <div className="p-3 rounded-lg bg-zinc-950 border border-amber-500/30 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-amber-400/40 bg-amber-500/10">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold text-amber-300 m-0 uppercase tracking-wide">Presentation mode</p>
+          <p className="text-[10px] text-zinc-400 m-0 mt-0.5 leading-relaxed">
+            Parks rooms on this machine and plays the Stage Work Studio reel. Does not rewrite each user&apos;s console access.
+          </p>
+        </div>
+        <ConsoleSwitchThumb
+          on={presentationOn}
+          label="Presentation mode"
+          onToggle={() => {
+            const next = !presentationOn;
+            setPresentationMode(next);
+            if (next) onToggleCanvasTab?.(false);
+            else onToggleCanvasTab?.(isStudioModuleEnabled('stage'));
+            syncFromStorage();
+          }}
+        />
+      </div>
+      <p className="text-[11px] font-bold text-amber-300 m-0 uppercase tracking-wide">Console access</p>
+      <p className="text-[11px] text-zinc-400 m-0 leading-relaxed">
+        Pick a collaborator and switch rooms on or off for that person only. Studio default is what new users inherit until you customize them.
+      </p>
+      <label className="block space-y-1">
+        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Access for</span>
+        <select
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          className="w-full bg-zinc-900 border border-zinc-700 text-amber-200 text-[11px] font-mono rounded-lg px-2 py-1.5"
+        >
+          <option value={DEFAULT_TARGET}>Studio default (new users inherit)</option>
+          {(Array.isArray(users) ? users : []).map((u) => {
+            const email = String(u?.email || '').trim().toLowerCase();
+            if (!email) return null;
+            return (
+              <option key={email} value={email}>
+                {u.name || email} — {email}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+      {rows.map((row) => (
+        <div key={row.id} className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-zinc-200 m-0">{row.label}</p>
+            <p className="text-[10px] text-zinc-500 m-0 mt-0.5">{row.blurb}</p>
+          </div>
+          <ConsoleSwitchThumb
+            on={on[row.id] === true}
+            label={row.label}
+            onToggle={() => applyToggle(row.id, !on[row.id])}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function AdminSettingsModal({ 
@@ -44,6 +306,10 @@ export default function AdminSettingsModal({
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [resetSuccessMsg, setResetSuccessMsg] = useState('');
+  const [factoryResetOpen, setFactoryResetOpen] = useState(false);
+  const [factoryFlushSettings, setFactoryFlushSettings] = useState(false);
+  const [factoryResetBusy, setFactoryResetBusy] = useState(false);
+  const [factoryResetError, setFactoryResetError] = useState('');
 
   // Active category filter tab: 'all' | 'image' | 'video' | 'llm' | 'tokens' | 'cloud_collab' | 'security'
   const [activeCategoryTab, setActiveCategoryTab] = useState(initialCategoryTab || 'all');
@@ -235,7 +501,7 @@ export default function AdminSettingsModal({
     }
   }, [isOpen]);
 
-  // Authorized Admin Email for Stage Production Studio
+  // Authorized Admin Email for Stage Work Studio
   const [authorizedEmail, setAuthorizedEmail] = useState(() => {
     return localStorage.getItem('sps_authorized_admin_email') || 'pedditiram@gmail.com';
   });
@@ -328,7 +594,7 @@ export default function AdminSettingsModal({
 
     // Best-effort Resend delivery when SPS_RESEND_API_KEY is configured on Vercel
     try {
-      const res = await fetch('/api/send-otp', {
+      const res = await fetch(studioApiUrl('/api/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -515,6 +781,9 @@ export default function AdminSettingsModal({
   const [byteplusModelId, setByteplusModelId] = useState(() => {
     return localStorage.getItem('sps_byteplus_model_id') || 'seed-2-0-pro-260328';
   });
+  const [byteplusVideoModelId, setByteplusVideoModelId] = useState(() => {
+    return localStorage.getItem('sps_byteplus_video_model_id') || 'seedance-1-0-pro-250528';
+  });
   const [imageGenEngine, setImageGenEngine] = useState(() => {
     return localStorage.getItem('sps_image_gen_engine') || 'gemini_36_flash';
   });
@@ -668,6 +937,27 @@ export default function AdminSettingsModal({
     ];
   });
 
+  const [whatsappServer, setWhatsappServer] = useState({ configured: null, provider: 'none' });
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let cancelled = false;
+    fetch(studioApiUrl('/api/notify-whatsapp'))
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
+          setWhatsappServer({
+            configured: Boolean(data?.configured),
+            provider: data?.provider || 'none'
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWhatsappServer({ configured: false, provider: 'none' });
+      });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
   const [authorizedUsers, setAuthorizedUsers] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sps_authorized_phone_users');
@@ -723,6 +1013,20 @@ export default function AdminSettingsModal({
     });
   }, []);
 
+  const [onlineEmails, setOnlineEmails] = useState(() => new Set());
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const sessionEmail = (typeof window !== 'undefined'
+      ? (localStorage.getItem('sps_authorized_user_email') || '')
+      : '').trim().toLowerCase();
+    return subscribeToPresenceEmails((emails) => {
+      const next = new Set(emails || []);
+      if (sessionEmail) next.add(sessionEmail);
+      setOnlineEmails(next);
+    });
+  }, [isOpen]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_collaboration_activity_log', JSON.stringify(activityLog));
@@ -772,7 +1076,7 @@ export default function AdminSettingsModal({
     setOtpSuccessMsg(`✓ Unique 1-Time Security OTP ${newCode} generated for ${collaboratorName.trim()} (${email.trim()})!`);
 
     try {
-      const roomKey = roomId || 'SPS-CLOUD-8821';
+      const roomKey = roomId || 'sps_local_dev';
       const cleanMail = email.trim().toLowerCase();
       const savedOtpsRaw = localStorage.getItem('sps_issued_invite_otps');
       const issued = savedOtpsRaw ? JSON.parse(savedOtpsRaw) : {};
@@ -782,7 +1086,7 @@ export default function AdminSettingsModal({
     } catch (e) {}
 
     // Best-effort Resend when configured; in-UI OTP + mailto/share remain the fallback
-    fetch('/api/send-otp', {
+    fetch(studioApiUrl('/api/send-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -790,7 +1094,7 @@ export default function AdminSettingsModal({
         otp: newCode,
         purpose: 'invite',
         name: collaboratorName.trim(),
-        roomId: roomId || 'SPS-CLOUD-8821'
+        roomId: roomId || 'sps_local_dev'
       })
     })
       .then((r) => r.json().catch(() => ({})))
@@ -864,6 +1168,9 @@ export default function AdminSettingsModal({
         designation: userDesig,
         email: userMail,
         phone: userPhone,
+        whatsappPhone: userPhone,
+        whatsappNotify: Boolean(userPhone),
+        whatsappChatNotify: Boolean(userPhone),
         role: accessLevel,
         isStudioAdmin: isOwnerInvite,
         allottedProjects: isOwnerInvite
@@ -881,7 +1188,7 @@ export default function AdminSettingsModal({
         dateFormatted: todayFormatted,
         time: nowStr,
         user: `${userName} (${userPhone})`,
-        action: `Verified Security OTP (${inputOtp.trim()}) & received ${selectedRole} privileges as ${userDesig} on Room ${roomId || 'SPS-CLOUD-8821'}`,
+        action: `Verified Security OTP (${inputOtp.trim()}) & received ${selectedRole} privileges as ${userDesig} on Room ${roomId || 'sps_local_dev'}`,
         status: 'verified'
       };
       setActivityLog(prev => [newActivity, ...prev]);
@@ -1045,7 +1352,7 @@ export default function AdminSettingsModal({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `SPS_Audit_Log_${roomId || 'SPS-CLOUD-8821'}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `SPS_Audit_Log_${roomId || 'sps_local_dev'}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1084,10 +1391,12 @@ export default function AdminSettingsModal({
     localStorage.setItem('sps_byteplus_api_key', cleanKey);
     localStorage.setItem('sps_byteplus_endpoint_url', byteplusEndpointUrl.trim());
     localStorage.setItem('sps_byteplus_model_id', byteplusModelId.trim());
+    localStorage.setItem('sps_byteplus_video_model_id', byteplusVideoModelId.trim());
     localStorage.setItem('sps_image_gen_engine', 'byteplus_seedream');
     saveAppSettingToVault('sps_byteplus_api_key', cleanKey);
     saveAppSettingToVault('sps_byteplus_endpoint_url', byteplusEndpointUrl.trim());
     saveAppSettingToVault('sps_byteplus_model_id', byteplusModelId.trim());
+    saveAppSettingToVault('sps_byteplus_video_model_id', byteplusVideoModelId.trim());
     saveAppSettingToVault('sps_image_gen_engine', 'byteplus_seedream');
     setIsBytePlusSaved(true);
     setTimeout(() => setIsBytePlusSaved(false), 2500);
@@ -1137,10 +1446,10 @@ export default function AdminSettingsModal({
     handleSaveVideo();
     handleSaveLLM();
     localStorage.setItem('sps_current_target_model', targetModel);
-    localStorage.setItem('sps_enable_canvas_tab', showCanvasTab ? 'true' : 'false');
+    localStorage.setItem('sps_enable_canvas_tab', isStudioModuleEnabled('stage') ? 'true' : 'false');
     saveAppSettingToVault('sps_current_target_model', targetModel);
-    saveAppSettingToVault('sps_enable_canvas_tab', showCanvasTab ? 'true' : 'false');
-    if (onToggleCanvasTab) onToggleCanvasTab(showCanvasTab);
+    saveAppSettingToVault('sps_enable_canvas_tab', isStudioModuleEnabled('stage') ? 'true' : 'false');
+    if (onToggleCanvasTab) onToggleCanvasTab(isStudioModuleEnabled('stage'));
     setIsAllSaved(true);
     setTimeout(() => setIsAllSaved(false), 2500);
   };
@@ -1268,8 +1577,8 @@ export default function AdminSettingsModal({
     setLlmTestResult(null);
 
     const providerLabels = {
-      google_gemini: 'Gemini 3.6 Flash (High) (Pedditi Labs Engine)',
-      google_gemini_36_high: 'Gemini 3.6 Flash (High) (Pedditi Labs Engine)',
+      google_gemini: 'Gemini 3.6 Flash (High) (Stage Work Studio Engine)',
+      google_gemini_36_high: 'Gemini 3.6 Flash (High) (Stage Work Studio Engine)',
       google_gemini_36_med: 'Gemini 3.6 Flash (Medium)',
       google_gemini_36_low: 'Gemini 3.6 Flash (Low)',
       google_gemini_35_high: 'Gemini 3.5 Flash (High)',
@@ -1398,30 +1707,47 @@ export default function AdminSettingsModal({
     }
   };
 
+  const handleConfirmFactoryReset = async () => {
+    setFactoryResetBusy(true);
+    setFactoryResetError('');
+    try {
+      const result = await runFactoryReset({ flushSettings: factoryFlushSettings });
+      if (!result.ok) {
+        setFactoryResetError(result.details?.disk?.error || result.message || 'Factory reset failed.');
+        return;
+      }
+      setFactoryResetOpen(false);
+      // Hard reload so gallery / session / prefs rehydrate clean
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 250);
+    } catch (err) {
+      setFactoryResetError(err?.message || 'Factory reset failed.');
+    } finally {
+      setFactoryResetBusy(false);
+    }
+  };
+
   return (
-    <div className={`sps-modal-enter fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center ${isFullscreen ? 'p-0' : 'sps-modal-overlay p-4 max-md:p-0'}`}>
-      <div className={`sps-glass-shell border border-white/10 flex flex-col overflow-hidden transition-all duration-200 sps-modal-shell ${
-        isFullscreen
-          ? 'w-screen h-screen max-w-none max-h-none rounded-none inset-0 fixed z-50'
-          : 'w-full max-w-4xl max-h-[90vh] rounded-2xl max-md:h-[100dvh] max-md:max-h-[100dvh]'
-      }`} style={{ fontFamily: 'var(--sps-font)' }}>
+    <div className={`sps-overlay ${isFullscreen ? 'is-full' : ''}`}>
+      <div className="sps-shell sps-atelier-room sps-admin-settings">
         
         {/* Header */}
-        <div className="p-3 sm:p-4 px-4 sm:px-6 bg-gradient-to-r from-zinc-900/80 via-zinc-900/60 to-zinc-950/40 border-b border-white/[0.08] flex items-center justify-between gap-2 shrink-0">
+        <div className="sps-modal-head">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0">
+            <div className="sps-mark shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap" style={{ fontFamily: 'var(--sps-font-display)' }}>
+              <h3 className="flex items-center gap-2 flex-wrap">
                 <span className="truncate">Studio Settings</span>
                 {isAdminLoggedIn && (
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md shrink-0">
+                  <span className="sps-chip">
                     Admin Active
                   </span>
                 )}
               </h3>
-              <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden sm:block">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
+              <p className="truncate hidden sm:block">Control panel for Image Gen, Video Gen, AI Intelligence LLM & Admin Security</p>
             </div>
           </div>
 
@@ -1429,18 +1755,18 @@ export default function AdminSettingsModal({
             <button
               type="button"
               onClick={() => toggleFullscreenMode()}
-              className="sps-chrome-btn p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center gap-1.5 text-xs border border-zinc-700/60 bg-zinc-900/60 cursor-pointer"
+              className="sps-btn text-xs"
               title="⌘+Enter = 100% Fullscreen, ESC = Normal View"
             >
               {isFullscreen ? (
                 <>
-                  <Minimize2 className="w-4 h-4 text-amber-400" />
-                  <span className="text-amber-300 font-bold hidden sm:inline">Normal View (ESC)</span>
+                  <Minimize2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Normal View</span>
                 </>
               ) : (
                 <>
-                  <Maximize2 className="w-4 h-4 text-cyan-400" />
-                  <span className="text-zinc-300 font-bold hidden sm:inline">100% Fullscreen (⌘+Enter)</span>
+                  <Maximize2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Fullscreen</span>
                 </>
               )}
             </button>
@@ -1448,7 +1774,8 @@ export default function AdminSettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="sps-chrome-btn p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              className="sps-icon-btn"
+              aria-label="Close settings"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1712,15 +2039,15 @@ export default function AdminSettingsModal({
 
                   <button
                     type="button"
-                    onClick={() => setActiveCategoryTab('director_canvas')}
+                    onClick={() => setActiveCategoryTab('console_switcher')}
                     className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
-                      activeCategoryTab === 'director_canvas'
+                      activeCategoryTab === 'console_switcher' || activeCategoryTab === 'director_canvas'
                         ? 'bg-cyan-500 text-zinc-950 font-black shadow-[0_0_12px_rgba(6,182,212,0.5)] scale-105'
                         : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
                     }`}
                   >
                     <Video className="w-3.5 h-3.5 text-cyan-400" />
-                    2D/3D Canvas View
+                    Console Switcher
                   </button>
 
                   <button
@@ -1733,7 +2060,7 @@ export default function AdminSettingsModal({
                     }`}
                   >
                     <Cloud className="w-3 h-3 text-cyan-400" />
-                    {roomId || 'SPS-CLOUD-8821'}
+                    {roomId || 'sps_local_dev'}
                   </button>
 
                   <button
@@ -1751,6 +2078,32 @@ export default function AdminSettingsModal({
 
                   <button
                     type="button"
+                    onClick={() => setActiveCategoryTab('saas')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'saas'
+                        ? 'bg-amber-400 text-zinc-950 shadow'
+                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-800'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3 h-3 text-amber-400" />
+                    SaaS
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategoryTab('byok')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'byok'
+                        ? 'bg-cyan-500 text-zinc-950 shadow'
+                        : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
+                    }`}
+                  >
+                    <Key className="w-3 h-3 text-cyan-400" />
+                    API keys
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveCategoryTab('security')}
                     className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'security'
@@ -1760,6 +2113,19 @@ export default function AdminSettingsModal({
                   >
                     <Lock className="w-3 h-3" />
                     Admin Password
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategoryTab('factory')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'factory'
+                        ? 'bg-red-500 text-white shadow'
+                        : 'bg-zinc-900 text-red-300 hover:text-red-200 border border-zinc-800'
+                    }`}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Factory Reset
                   </button>
                 </div>
 
@@ -1771,6 +2137,13 @@ export default function AdminSettingsModal({
                   Lock / Logout
                 </button>
               </div>
+
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'saas') && (
+                <SaasAdminPanel />
+              )}
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'byok') && (
+                <ByokKeysPanel />
+              )}
 
               {/* ADMIN SECURITY & PASSWORD MANAGEMENT SECTION */}
               {(activeCategoryTab === 'all' || activeCategoryTab === 'security') && (
@@ -1809,6 +2182,8 @@ export default function AdminSettingsModal({
                       <span>{passChangeError}</span>
                     </div>
                   )}
+
+                  <GuestBrowseSwitch />
 
                   <form onSubmit={handleUpdateAdminCredentials} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
@@ -1856,36 +2231,8 @@ export default function AdminSettingsModal({
                   </form>
                 </div>
               )}
-              {(activeCategoryTab === 'all' || activeCategoryTab === 'director_canvas') && (
-                <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-2">
-                    <div className="flex items-center gap-2 font-mono text-xs font-bold text-white">
-                      <Video className="w-4 h-4 text-cyan-400" />
-                      <span>🎬 2D/3D Director Canvas View Tab:</span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextState = !showCanvasTab;
-                        setShowCanvasTab(nextState);
-                        localStorage.setItem('sps_enable_canvas_tab', nextState ? 'true' : 'false');
-                        if (onToggleCanvasTab) onToggleCanvasTab(nextState);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                        showCanvasTab
-                          ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-950/50'
-                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
-                      }`}
-                    >
-                      <span className={`w-2.5 h-2.5 rounded-full ${showCanvasTab ? 'bg-zinc-950 animate-pulse' : 'bg-zinc-500'}`} />
-                      {showCanvasTab ? '✓ ENABLED (Visible in Header)' : 'OFF (Hidden by Default)'}
-                    </button>
-                  </div>
-                  <p className="text-[11px] font-mono text-zinc-400">
-                    Toggle OFF to hide the 2D/3D Director Canvas tab from the main header and keep the workspace focused strictly on the Full Stage Matrix and Studio Form View.
-                  </p>
-                </div>
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'console_switcher' || activeCategoryTab === 'director_canvas') && (
+                <StudioRoomsSwitch onToggleCanvasTab={onToggleCanvasTab} users={authorizedUsers} />
               )}
 
               {/* ========================================================= */}
@@ -1904,7 +2251,7 @@ export default function AdminSettingsModal({
                         <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                           <span>Live API Credits & Detailed Tokens Dashboard</span>
                           <span className="px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 border border-purple-400/40 text-[10px] font-bold">
-                            Pedditi Labs Gemini Sync
+                            Gemini Sync
                           </span>
                         </h4>
                         <p className="text-[11px] text-zinc-300 font-bold mt-0.5">Real-time credit balance, prompt & completion tokens for active selected LLM engine</p>
@@ -2009,11 +2356,11 @@ export default function AdminSettingsModal({
                       <div className="p-3 rounded-xl bg-zinc-900 border-2 border-cyan-500/60 space-y-1.5 shadow-md">
                         <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
                           <span className="font-black text-cyan-300 text-sm truncate" title={getActiveModelDisplayName(llmProvider)}>{getActiveModelDisplayName(llmProvider)}</span>
-                          <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700 font-black">Active Default</span>
+                          <span className="sps-chip">Active Default</span>
                         </div>
-                        <div className="text-[11px] text-zinc-200 space-y-1 pt-1 font-bold">
-                          <div className="flex justify-between"><span>Prompt Tokens:</span><span className="text-white font-black">10,200</span></div>
-                          <div className="flex justify-between"><span>Completion Tokens:</span><span className="text-white font-black">4,000</span></div>
+                        <div className="text-[11px] text-[var(--sps-text)] space-y-1 pt-1 font-bold">
+                          <div className="flex justify-between"><span>Prompt Tokens:</span><span className="font-black">10,200</span></div>
+                          <div className="flex justify-between"><span>Completion Tokens:</span><span className="font-black">4,000</span></div>
                           <div className="flex justify-between border-t border-zinc-800 pt-1"><span className="text-amber-400 font-black">Est. Cost:</span><span className="text-amber-400 font-black text-sm">$0.035</span></div>
                         </div>
                       </div>
@@ -2053,11 +2400,11 @@ export default function AdminSettingsModal({
                     <button
                       type="button"
                       onClick={() => setIsDailyReportOpen(!isDailyReportOpen)}
-                      className="w-full p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-xs text-left transition-all cursor-pointer"
+                      className="sps-btn w-full justify-between text-xs text-left"
                     >
                       <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-400" />
-                        <span className="font-bold text-zinc-200">📊 Daily Credits & API Usage Report (Detailed Breakdown)</span>
+                        <Clock className="w-4 h-4" />
+                        <span>Daily Credits & API Usage Report (Detailed Breakdown)</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800 font-bold">
@@ -2204,18 +2551,18 @@ export default function AdminSettingsModal({
                             Select Active Google AI Studio Image Generation Model:
                           </label>
                           {useSameModelForImageGen && (
-                            <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/40">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            <span className="sps-chip flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
                               Auto-Synced with LLM
                             </span>
                           )}
                         </div>
 
                         {useSameModelForImageGen && (
-                          <div className="mb-2 p-2.5 px-3 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-mono text-xs font-bold flex items-center justify-between gap-2 shadow-sm">
+                          <div className="mb-2 p-2.5 px-3 rounded-lg border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] font-mono text-xs font-bold flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[3] shrink-0" />
-                              <span>🔒 Using your Google API key with <strong>Gemini 3.1 Flash Image</strong> (Nano Banana) for storyboard frames</span>
+                              <CheckCircle2 className="w-4 h-4 shrink-0 text-[var(--sps-gold)]" />
+                              <span>Using your Google API key with <strong>Gemini 3.1 Flash Image</strong> (Nano Banana) for storyboard frames</span>
                             </div>
                           </div>
                         )}
@@ -2224,9 +2571,14 @@ export default function AdminSettingsModal({
                           value={useSameModelForImageGen ? 'gemini-3.1-flash-image' : googleImageModel}
                           disabled={useSameModelForImageGen}
                           onChange={(e) => setGoogleImageModel(e.target.value)}
-                          className={`w-full bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 font-bold ${
-                            useSameModelForImageGen ? 'opacity-80 cursor-not-allowed bg-zinc-900/90 text-emerald-300 border-emerald-500/50' : ''
+                          className={`w-full rounded-lg px-3 py-2 text-xs font-bold focus:outline-none border ${
+                            useSameModelForImageGen ? 'opacity-90 cursor-not-allowed' : ''
                           }`}
+                          style={{
+                            background: 'var(--sps-surface)',
+                            color: 'var(--sps-text)',
+                            borderColor: 'var(--sps-border)',
+                          }}
                         >
                           <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash Image — Recommended (2K Storyboards)</option>
                           <option value="gemini-3.1-flash-lite-image">⚡ Gemini 3.1 Flash Lite Image — Fast Drafts</option>
@@ -2243,13 +2595,9 @@ export default function AdminSettingsModal({
                         type="button"
                         onClick={handleSaveGoogleAIStudio}
                         disabled={useSameModelForImageGen}
-                        className={`w-full py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all ${
-                          useSameModelForImageGen
-                            ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 cursor-not-allowed opacity-90'
-                            : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-110 text-zinc-950 cursor-pointer'
-                        }`}
+                        className={`sps-btn w-full text-xs ${useSameModelForImageGen ? '' : 'sps-btn-primary'}`}
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                         {useSameModelForImageGen
                           ? '✓ Auto-Active: Gemini 3.1 Flash Image for Storyboard Generation'
                           : isGoogleSaved || imageGenEngine === 'gemini_36_flash'
@@ -2340,6 +2688,16 @@ export default function AdminSettingsModal({
                             onChange={(e) => setByteplusModelId(e.target.value)}
                             placeholder="seed-2-0-pro-260328"
                             className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-amber-300 font-mono focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="text-[11px] font-mono text-zinc-400 block mb-1">Video model ID (Seedance):</label>
+                          <input
+                            type="text"
+                            value={byteplusVideoModelId}
+                            onChange={(e) => setByteplusVideoModelId(e.target.value)}
+                            placeholder="seedance-1-0-pro-250528"
+                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-violet-300 font-mono focus:outline-none focus:border-emerald-500"
                           />
                         </div>
                       </div>
@@ -2647,10 +3005,15 @@ export default function AdminSettingsModal({
                         <label className="text-[11px] font-mono text-zinc-400">Select LLM Engine Provider:</label>
 
                         {/* User Requested Checkmark Option: Use for Image Generation also */}
-                        <label className="flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-mono text-xs font-bold cursor-pointer hover:bg-emerald-900/90 transition-all shadow-sm select-none">
+                        <label className={`flex items-center gap-2 px-3 py-1 rounded-lg border font-mono text-xs font-bold select-none ${
+                          llmProvider === 'built_in'
+                            ? 'bg-zinc-950 border-zinc-700 text-zinc-500 cursor-not-allowed'
+                            : 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 cursor-pointer hover:bg-emerald-900/90 transition-all shadow-sm'
+                        }`}>
                           <input
                             type="checkbox"
-                            checked={useSameModelForImageGen}
+                            checked={llmProvider !== 'built_in' && useSameModelForImageGen}
+                            disabled={llmProvider === 'built_in'}
                             onChange={handleToggleSameModelForImageGen}
                             className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
                           />
@@ -2664,8 +3027,10 @@ export default function AdminSettingsModal({
                       <select
                         value={llmProvider}
                         onChange={(e) => {
-                          setLlmProvider(e.target.value);
-                          localStorage.setItem('sps_llm_provider', e.target.value);
+                          const next = e.target.value;
+                          setLlmProvider(next);
+                          localStorage.setItem('sps_llm_provider', next);
+                          if (next === 'built_in') return;
                           if (useSameModelForImageGen) {
                             setImageGenEngine('gemini_36_flash');
                             setGoogleImageModel('gemini-3.1-flash-image');
@@ -2692,7 +3057,7 @@ export default function AdminSettingsModal({
                       </select>
 
                       {/* Active Status Badge for Image Generation */}
-                      {useSameModelForImageGen && (
+                      {useSameModelForImageGen && llmProvider !== 'built_in' && (
                         <div className="mt-2.5 p-2.5 px-3 rounded-xl bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-mono text-xs font-bold flex items-center justify-between gap-2 shadow-md">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[3] shrink-0" />
@@ -2718,6 +3083,11 @@ export default function AdminSettingsModal({
                       </div>
                     </div>
 
+                    {llmProvider === 'built_in' && (
+                      <p className="text-[11px] font-mono text-zinc-400 m-0 leading-relaxed">
+                        Built-In parses screenplays offline (rule engine). It does not call Gemini. Image generate still uses your image engine below — not this LLM.
+                      </p>
+                    )}
                     {llmProvider !== 'built_in' && (
                       <div className="space-y-1">
                         <label className="text-[11px] font-mono text-zinc-400 flex items-center justify-between">
@@ -2794,6 +3164,8 @@ export default function AdminSettingsModal({
                     SECTION 4: REAL-TIME CLOUD COLLAB, PHONE SECURITY OTP & DATE-WISE USER TRACKING
                   </div>
 
+                  <GoogleDrivePanel compact={false} />
+
                   {/* Active Cloud Room Code & WhatsApp Share Bar */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3">
@@ -2803,7 +3175,7 @@ export default function AdminSettingsModal({
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="text-lg font-black text-amber-300 tracking-widest bg-zinc-950 px-3 py-1 rounded-lg border border-amber-500/30">
-                            {roomId || 'SPS-CLOUD-8821'}
+                            {roomId || 'sps_local_dev'}
                           </span>
                           <span className="text-xs text-zinc-400 flex items-center gap-1 font-bold">
                             <Wifi className="w-3.5 h-3.5 text-emerald-400" />
@@ -2816,8 +3188,8 @@ export default function AdminSettingsModal({
                         <button
                           type="button"
                           onClick={() => {
-                            const link = `${window.location.origin}?room=${roomId || 'SPS-CLOUD-8821'}`;
-                            const msg = `🎬 *STAGE PRODUCTION STUDIO - CLOUD ROOM INVITE*\nJoin my Active Production Cloud Room *${roomId || 'SPS-CLOUD-8821'}*\nLink: ${link}`;
+                            const link = `${window.location.origin}?room=${roomId || 'sps_local_dev'}`;
+                            const msg = `🎬 *STAGEWORKS — AI CINEMA PRODUCTION OS*\nJoin my Active Production Cloud Room *${roomId || 'sps_local_dev'}*\nLink: ${link}`;
                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                           }}
                           className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
@@ -2827,6 +3199,11 @@ export default function AdminSettingsModal({
                         </button>
                       </div>
                     </div>
+                    <p className="text-[10px] text-zinc-400 leading-relaxed">
+                      <span className="block mb-1 font-bold" style={{ color: 'var(--sps-warn)' }}>
+                        SMS and WhatsApp alerts are on hold. Numbers can still be saved; nothing is sent.
+                      </span>
+                    </p>
 
                     {/* Public Shareable URL Link */}
                     <div className="pt-1">
@@ -2835,13 +3212,13 @@ export default function AdminSettingsModal({
                         <input
                           type="text"
                           readOnly
-                          value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'SPS-CLOUD-8821'}`}
+                          value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'sps_local_dev'}`}
                           className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-cyan-300 font-mono select-all shadow-inner"
                         />
                         <button
                           type="button"
                           onClick={() => {
-                            const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'SPS-CLOUD-8821'}`;
+                            const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'sps_local_dev'}`;
                             if (typeof navigator !== 'undefined' && navigator.clipboard) {
                               navigator.clipboard.writeText(url);
                             }
@@ -2854,6 +3231,7 @@ export default function AdminSettingsModal({
                         </button>
                       </div>
                     </div>
+                  </div>
 
                     {/* Grant Collaborator Credentials Form */}
                     <div className="space-y-3 pt-1">
@@ -2907,6 +3285,18 @@ export default function AdminSettingsModal({
                                 className="w-full bg-zinc-950 border border-zinc-700 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
                                 required
                               />
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] text-zinc-300 font-bold block mb-1">WhatsApp number (optional):</label>
+                              <input
+                                type="tel"
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                placeholder="+91 98xxxxxxxx"
+                                className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                              />
+                              <p className="text-[10px] text-zinc-500 mt-1">If set, they can get a WhatsApp ping when a teammate comes online.</p>
                             </div>
 
                             <div>
@@ -2971,9 +3361,9 @@ export default function AdminSettingsModal({
                             <button
                               type="button"
                               onClick={() => {
-                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
-                                const subject = `🎬 STAGE PRODUCTION STUDIO - Authorized Access & 1-Time Authorization OTP`;
-                                const body = `Hello ${collaboratorName || 'Collaborator'},\n\nYou have been granted official collaboration access to Stage Production Studio.\n\n📌 Collaborator Credentials:\n👤 Name: ${collaboratorName || 'N/A'}\n💼 Designation: ${designation || 'Production Staff'}\n📧 Authorized Email: ${email}\n🔐 Access Role: ${selectedRole}\n🔑 Cloud Room ID: ${roomId || 'SPS-CLOUD-8821'}\n\n⚡ Your 1-Time Security Authorization OTP: ${generatedOtp}\n\n👉 Click link below to log in & unlock studio access:\n${inviteUrl}`;
+                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
+                                const subject = `Stage Work Studio — Authorized Access & 1-Time Authorization OTP`;
+                                const body = `Hello ${collaboratorName || 'Collaborator'},\n\nYou have been granted official collaboration access to Stage Work Studio — AI Cinema Production OS.\n\n📌 Collaborator Credentials:\n👤 Name: ${collaboratorName || 'N/A'}\n💼 Designation: ${designation || 'Production Staff'}\n📧 Authorized Email: ${email}\n🔐 Access Role: ${selectedRole}\n🔑 Cloud Room ID: ${roomId || 'sps_local_dev'}\n\n⚡ Your 1-Time Security Authorization OTP: ${generatedOtp}\n\n👉 Click link below to log in & unlock studio access:\n${inviteUrl}`;
                                 window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
                               }}
                               className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
@@ -2985,7 +3375,7 @@ export default function AdminSettingsModal({
                             <button
                               type="button"
                               onClick={() => {
-                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'SPS-CLOUD-8821'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
+                                const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
                                 if (typeof navigator !== 'undefined' && navigator.clipboard) {
                                   navigator.clipboard.writeText(inviteUrl);
                                 }
@@ -3024,7 +3414,6 @@ export default function AdminSettingsModal({
                         </p>
                       )}
                     </div>
-                  </div>
 
                   {/* Active Studio Collaborators List */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-3 shadow-md">
@@ -3051,8 +3440,8 @@ export default function AdminSettingsModal({
                         for (let i = 0; i < nameStr.length; i++) hash = nameStr.charCodeAt(i) + ((hash << 5) - hash);
                         const avatarGradient = USER_GRADIENTS[Math.abs(hash) % USER_GRADIENTS.length];
 
-                        // Real-time Online status check (Current active session or active collaborator)
-                        const isUserOnline = !isSuspended && (idx === 0 || user.email === 'pedditiram@gmail.com' || user.status === 'Active');
+                        const userEmail = String(user.email || '').trim().toLowerCase();
+                        const isUserOnline = !isSuspended && onlineEmails.has(userEmail);
 
                         return (
                           <div 
@@ -3131,7 +3520,105 @@ export default function AdminSettingsModal({
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
-                                  {user.email ? <span className="text-amber-300 font-bold">📧 {user.email}</span> : (user.phone && <span className="text-amber-300 font-bold">📱 {user.phone}</span>)}
+                                  {user.email ? (
+                                    <span className="inline-flex items-center gap-1 font-bold" style={{ color: 'var(--sps-text)' }}>
+                                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                                      {user.email}
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                <div className="rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-surface)] p-2 space-y-1.5">
+                                  <label className="text-[10px] font-bold flex items-center gap-1" style={{ color: 'var(--sps-muted)' }}>
+                                    <Phone className="w-3.5 h-3.5" />
+                                    Mobile number (WhatsApp)
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    value={user.whatsappPhone || user.phone || ''}
+                                    placeholder="+91 98xxxxxxxx"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setAuthorizedUsers((prev) =>
+                                        persistAuthorizedUsersAndNotify(
+                                          prev.map((u) => {
+                                            const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                            return match ? { ...u, phone: val, whatsappPhone: val } : u;
+                                          })
+                                        )
+                                      );
+                                    }}
+                                    className="w-full rounded-[var(--sps-radius-sm)] px-2 py-1.5 text-[11px] font-mono"
+                                  />
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold cursor-pointer" style={{ color: 'var(--sps-text)' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={user.whatsappNotify === true}
+                                        onChange={(e) => {
+                                          const on = e.target.checked;
+                                          setAuthorizedUsers((prev) =>
+                                            persistAuthorizedUsersAndNotify(
+                                              prev.map((u) => {
+                                                const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                                return match ? { ...u, whatsappNotify: on } : u;
+                                              })
+                                            )
+                                          );
+                                        }}
+                                      />
+                                      SMS / WhatsApp when teammate comes online
+                                    </label>
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold cursor-pointer" style={{ color: 'var(--sps-text)' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={user.whatsappChatNotify === true}
+                                        onChange={(e) => {
+                                          const on = e.target.checked;
+                                          setAuthorizedUsers((prev) =>
+                                            persistAuthorizedUsersAndNotify(
+                                              prev.map((u) => {
+                                                const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                                return match ? { ...u, whatsappChatNotify: on } : u;
+                                              })
+                                            )
+                                          );
+                                        }}
+                                      />
+                                      SMS / WhatsApp on studio messages
+                                    </label>
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold cursor-pointer" style={{ color: 'var(--sps-text)' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={user.budgetAccess === true || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
+                                        disabled={String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
+                                        onChange={(e) => {
+                                          const on = e.target.checked;
+                                          setUserConsoleEnabled(userEmail, 'budget', on);
+                                          setAuthorizedUsers((prev) =>
+                                            persistAuthorizedUsersAndNotify(
+                                              prev.map((u) => {
+                                                const match = (u.email && u.email === user.email) || (u.phone && u.phone === user.phone) || (u.name === user.name);
+                                                return match ? { ...u, budgetAccess: on } : u;
+                                              })
+                                            )
+                                          );
+                                        }}
+                                      />
+                                      Budget console (producer / investor)
+                                    </label>
+                                  </div>
+                                  <p className="text-[10px] font-bold m-0 pt-1" style={{ color: 'var(--sps-muted)' }}>
+                                    Console access for this user
+                                  </p>
+                                  <UserConsoleChips
+                                    email={userEmail}
+                                    map={getUserConsoleMap(userEmail)}
+                                    onToggle={(id, next) => {
+                                      setUserConsoleEnabled(userEmail, id, next);
+                                      setAuthorizedUsers(getAuthorizedUsers());
+                                    }}
+                                  />
                                 </div>
 
                                 {/* Visible Project Allotment Control & Live Allotted Badges */}
@@ -3609,11 +4096,121 @@ export default function AdminSettingsModal({
                 </button>
               </div>
 
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'factory') && (
+                <div className="p-4 rounded-xl bg-zinc-950 border border-red-500/40 space-y-3 shadow-md font-mono">
+                  <div className="flex items-center gap-2 border-b border-red-500/20 pb-2">
+                    <RotateCcw className="w-4 h-4 text-red-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Factory Reset
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Clears the in-app project gallery and session so the studio starts empty.
+                    Local film folders on disk (<span className="text-zinc-300">SWS PROJECTS / ASSETS · PROJECT · RENDERS</span>) are
+                    never deleted — re-import anytime with <span className="text-cyan-300">Open folder</span>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFactoryFlushSettings(false);
+                      setFactoryResetError('');
+                      setFactoryResetOpen(true);
+                    }}
+                    className="w-full py-2.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 border border-red-400/40"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Factory reset…
+                  </button>
+                </div>
+              )}
+
             </div>
           )}
 
         </div>
       </div>
+
+      {factoryResetOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sps-factory-reset-title"
+        >
+          <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-zinc-950 shadow-2xl p-5 space-y-4 font-mono">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="sps-factory-reset-title" className="text-sm font-bold text-white flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-red-400" />
+                  Factory reset
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">
+                  Flush projects from this app. Film project folders on disk stay intact.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={factoryResetBusy}
+                onClick={() => setFactoryResetOpen(false)}
+                className="text-zinc-500 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <ul className="text-[11px] text-zinc-300 space-y-1.5 list-disc pl-4">
+              <li>Empty the project gallery &amp; active session</li>
+              <li>Clear app vault mirrors (not film folders)</li>
+              <li className="text-emerald-400/90">Keep SWS PROJECTS folders &amp; saved files on disk</li>
+            </ul>
+
+            <label className="flex items-start gap-2.5 p-3 rounded-lg bg-zinc-900 border border-zinc-800 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-amber-500"
+                checked={factoryFlushSettings}
+                onChange={(e) => setFactoryFlushSettings(e.target.checked)}
+                disabled={factoryResetBusy}
+              />
+              <span className="text-[11px] text-zinc-200 leading-snug">
+                <strong className="text-amber-300">Also flush settings &amp; preferences</strong>
+                <span className="block text-zinc-500 mt-0.5">
+                  UI prefs, admin console switches, allotted paths, collaborators, and stored API keys.
+                  Device id is kept for SaaS.
+                </span>
+              </span>
+            </label>
+
+            {factoryResetError && (
+              <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{factoryResetError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={factoryResetBusy}
+                onClick={() => setFactoryResetOpen(false)}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold border border-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={factoryResetBusy}
+                onClick={handleConfirmFactoryReset}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {factoryResetBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                {factoryResetBusy ? 'Resetting…' : 'Reset app'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

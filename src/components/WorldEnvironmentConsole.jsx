@@ -1,11 +1,35 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Globe2, Sparkles, Plus, Trash2, Edit3, Check, Save,
-  Mountain, Trees, Box, CloudFog, Layers, Copy, Image as ImageIcon, LogOut
+  Mountain, Trees, Box, CloudFog, Layers, Copy, Image as ImageIcon, LogOut, Download, Archive
 } from 'lucide-react';
+import { assertExportAllowed, logExportSuccess, exportDownloadText, resolveCollabRoomId } from '../utils/exportGate';
+import {
+  worldPlatesToPrintHtml,
+  worldBibleToCsv,
+  buildWorldBibleZipFiles
+} from '../utils/worldBibleExport';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import { lifecycleExportReadiness } from '../utils/productionLifecycle';
+import { createZipArchive } from '../utils/zipUtils';
+import { saveExportBlob } from '../utils/saveExportFile';
 import { extractWorldEnvironmentAssetsWithLLM } from '../services/aiScriptParser';
+import { readLockedImageFile } from '../utils/continuitySpine';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
+import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
+import { GUEST_PLAY_WORLD } from '../utils/guestPlayground';
+import {
+  getActiveWorldAssets,
+  saveActiveWorldAssets
+} from '../utils/projectBibleVault';
+import {
+  assertCanMutateContent,
+  ensureLifecycle,
+  isLifecycleLocked,
+  ASSET_LOCKED_MUTABLE_KEYS
+} from '../utils/productionLifecycle';
+import LifecycleControls from './LifecycleControls';
 
 const ASSET_TYPES = [
   { id: 'location', label: 'Location / Set', icon: Mountain },
@@ -15,24 +39,23 @@ const ASSET_TYPES = [
   { id: 'atmosphere', label: 'Atmosphere', icon: CloudFog }
 ];
 
-const VAULT_KEY = 'sps_world_environment_vault';
 const INCLUDE_KEY = 'sps_include_world_in_prompt';
 
 export function getStoredWorldEnvironmentAssets() {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(VAULT_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (isGuestSession() && canGuestBrowseApp()) return GUEST_PLAY_WORLD.map((a) => ({ ...a }));
+    return getActiveWorldAssets();
   } catch (e) {
     return [];
   }
 }
 
-export function saveStoredWorldEnvironmentAssets(assets) {
+export function saveStoredWorldEnvironmentAssets(assets, { title = '', silent = false } = {}) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(VAULT_KEY, JSON.stringify(assets || []));
-    window.dispatchEvent(new CustomEvent('sps_world_vault_updated'));
+    if (isGuestSession()) return;
+    saveActiveWorldAssets(assets, { title, silent });
   } catch (e) {}
 }
 
@@ -49,7 +72,7 @@ function typeMeta(type) {
 }
 
 function blankAsset(index = 0) {
-  return {
+  return ensureLifecycle({
     id: `world_${Date.now()}_${index}`,
     tag: `@World_New_Asset_${index + 1}`,
     name: 'New World Asset',
@@ -63,8 +86,10 @@ function blankAsset(index = 0) {
     materials: '',
     lightingNotes: '',
     referenceImageUrl: '',
-    includeInPrompt: true
-  };
+    lockedPlate: { url: '', locked: false },
+    includeInPrompt: true,
+    lifecycleStatus: 'draft'
+  });
 }
 
 function cloneAssets(list) {
@@ -98,15 +123,20 @@ export default function WorldEnvironmentConsole({
 
   useEffect(() => {
     if (!isOpen) return;
-    const stored = getStoredWorldEnvironmentAssets();
-    const cloned = cloneAssets(stored);
-    snapshotRef.current = cloneAssets(stored);
-    setAssets(cloned);
-    setSelectedId(cloned[0]?.id || '');
-    setHasUnsaved(false);
-    setShowConfirmClose(false);
-    setIncludeInPrompt(localStorage.getItem(INCLUDE_KEY) !== 'false');
-  }, [isOpen]);
+    const reload = () => {
+      const stored = getStoredWorldEnvironmentAssets();
+      const cloned = cloneAssets(stored);
+      snapshotRef.current = cloneAssets(stored);
+      setAssets(cloned);
+      setSelectedId(cloned[0]?.id || '');
+      setHasUnsaved(false);
+      setShowConfirmClose(false);
+      setIncludeInPrompt(localStorage.getItem(INCLUDE_KEY) !== 'false');
+    };
+    reload();
+    window.addEventListener('sps_world_vault_updated', reload);
+    return () => window.removeEventListener('sps_world_vault_updated', reload);
+  }, [isOpen, projectTitle]);
 
   useEffect(() => {
     const found = assets.find((a) => a.id === selectedId) || assets[0] || null;
@@ -119,6 +149,79 @@ export default function WorldEnvironmentConsole({
     return assets.filter((a) => a.type === filterType);
   }, [assets, filterType]);
 
+  const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
+  const {
+    strict: worldLifecycleStrict,
+    mode: worldLifecycleMode
+  } = useExportLifecyclePref('world');
+  const worldExportBlocked = worldLifecycleStrict && !exportLife.exportReady;
+  const roomId = resolveCollabRoomId();
+  const worldSlug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+
+  const exportWorldCsv = () => {
+    const pack = filterType === 'all' ? assets : filtered;
+    if (!pack.length) {
+      flash('No world assets to export.');
+      return;
+    }
+    const lifeNote = `${pack.length} assets · ${pack.filter((a) => a?.referenceImageUrl || a?.lockedPlate?.url).length} plates${roomId ? ` · room:${roomId}` : ''}`;
+    exportDownloadText(`${worldSlug}_world.csv`, worldBibleToCsv(pack, projectTitle), {
+      projectTitle,
+      auditLabel: 'world_bible_csv',
+      auditFormat: 'csv',
+      mime: 'text/csv;charset=utf-8',
+      lifecycleMode: worldLifecycleMode,
+      shots,
+      roomId,
+      note: lifeNote
+    });
+  };
+
+  const exportWorldZip = async () => {
+    const pack = filterType === 'all' ? assets : filtered;
+    if (worldExportBlocked) {
+      assertExportAllowed({
+        projectTitle,
+        label: 'world_bible_zip',
+        format: 'zip',
+        lifecycleMode: worldLifecycleMode,
+        shots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'world_bible_zip',
+      format: 'zip',
+      lifecycleMode: worldLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
+    if (!pack.length) {
+      flash('No world assets to export.');
+      return;
+    }
+    const lifeNote = `${pack.length} assets · ${pack.filter((a) => a?.referenceImageUrl || a?.lockedPlate?.url).length} plates${roomId ? ` · room:${roomId}` : ''}`;
+    const files = buildWorldBibleZipFiles(pack, projectTitle, { roomId });
+    const blob = createZipArchive(files);
+    await saveExportBlob(blob, `${worldSlug}_world_bible.zip`, {
+      projectTitle,
+      shots,
+      lifecycleMode: worldLifecycleMode,
+      skipLifecycleCheck: true,
+      advisoryAlready: Boolean(gate.advisory),
+      auditLabel: 'world_bible_zip',
+      auditFormat: 'zip',
+      roomId,
+      note: lifeNote,
+      showAlert: false
+    });
+    flash('World bible ZIP saved.');
+  };
+
   const flash = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2400);
@@ -130,7 +233,7 @@ export default function WorldEnvironmentConsole({
   };
 
   const persistAndClose = (nextAssets) => {
-    saveStoredWorldEnvironmentAssets(nextAssets);
+    saveStoredWorldEnvironmentAssets(nextAssets, { title: projectTitle });
     snapshotRef.current = cloneAssets(nextAssets);
     setAssets(nextAssets);
     setHasUnsaved(false);
@@ -140,9 +243,9 @@ export default function WorldEnvironmentConsole({
 
   const handleSaveEditing = () => {
     if (!editing) return;
-    const next = commitEditingToAssets(assets, editing);
+    const next = commitEditingToAssets(assets, ensureLifecycle(editing));
     setAssets(next);
-    saveStoredWorldEnvironmentAssets(next);
+    saveStoredWorldEnvironmentAssets(next, { title: projectTitle });
     snapshotRef.current = cloneAssets(next);
     setHasUnsaved(false);
     flash('✓ World asset saved');
@@ -155,7 +258,7 @@ export default function WorldEnvironmentConsole({
 
   const handleCloseWithoutSave = () => {
     const snap = cloneAssets(snapshotRef.current);
-    saveStoredWorldEnvironmentAssets(snap);
+    saveStoredWorldEnvironmentAssets(snap, { title: projectTitle });
     setAssets(snap);
     setHasUnsaved(false);
     setShowConfirmClose(false);
@@ -203,7 +306,23 @@ export default function WorldEnvironmentConsole({
 
   const updateField = (key, value) => {
     if (!editing) return;
+    if (ASSET_LOCKED_MUTABLE_KEYS.includes(key)) {
+      setEditing((prev) => ({ ...prev, [key]: value }));
+      setHasUnsaved(true);
+      return;
+    }
+    if (!assertCanMutateContent(editing).ok) {
+      flash('Locked — unlock to edit this world asset.');
+      return;
+    }
     setEditing((prev) => ({ ...prev, [key]: value }));
+    setHasUnsaved(true);
+  };
+
+  const handleLifecycleChange = (nextEntity) => {
+    if (!nextEntity?.id) return;
+    setEditing(nextEntity);
+    setAssets((prev) => prev.map((a) => (a.id === nextEntity.id ? nextEntity : a)));
     setHasUnsaved(true);
   };
 
@@ -217,6 +336,11 @@ export default function WorldEnvironmentConsole({
   };
 
   const handleDelete = (id) => {
+    const target = assets.find((a) => a.id === id);
+    if (target && isLifecycleLocked(target)) {
+      flash('Unlock before deleting a locked world asset.');
+      return;
+    }
     const next = assets.filter((a) => a.id !== id);
     setAssets(next);
     setSelectedId(next[0]?.id || '');
@@ -255,25 +379,25 @@ export default function WorldEnvironmentConsole({
   const TypeIcon = typeMeta(editing?.type).icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md font-mono">
+    <div className="sps-overlay">
       <div
-        className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full max-w-5xl h-[88vh] max-h-[88vh] shadow-2xl flex flex-col overflow-hidden"
+        className="sps-shell sps-atelier-room"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 p-4 border-b border-zinc-800 bg-zinc-950/90 shrink-0 flex-wrap">
+        <div className="flex items-center justify-between gap-3 p-3 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] shrink-0 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 rounded-xl bg-emerald-950 text-emerald-300 border border-emerald-700 shrink-0">
-              <Globe2 className="w-5 h-5" />
+            <div className="sps-mark shrink-0">
+              <Globe2 className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-white font-sans flex items-center gap-2 flex-wrap">
-                World & Environment Console
-                <span className="text-[10px] bg-emerald-950 text-amber-300 border border-emerald-700 px-2 py-0.5 rounded font-mono">
+              <h3 className="text-base font-semibold text-[var(--sps-text)] font-sans flex items-center gap-2 flex-wrap m-0">
+                World
+                <span className="sps-chip text-[10px] normal-case tracking-normal">
                   {projectTitle || 'Current Project'}
                 </span>
               </h3>
-              <p className="text-xs text-zinc-400 truncate">
-                Locations, backgrounds, props & atmosphere plates — AI or writer prompts for image→video assets
+              <p className="text-xs text-[var(--sps-muted)] truncate">
+                Locations, plates and atmosphere — lock the place for the take
               </p>
             </div>
           </div>
@@ -293,11 +417,7 @@ export default function WorldEnvironmentConsole({
                 localStorage.setItem(INCLUDE_KEY, next ? 'true' : 'false');
                 flash(next ? '✓ World bible enabled in prompts' : 'World bible excluded from prompts');
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer ${
-                includeInPrompt
-                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500/70'
-                  : 'bg-zinc-900 text-zinc-500 border-zinc-700'
-              }`}
+              className={`sps-btn text-[10px] ${includeInPrompt ? 'sps-btn-primary' : ''}`}
               title="Include World & Environment bible in compiled prompts"
             >
               <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${includeInPrompt ? 'bg-emerald-500 border-emerald-300 text-black' : 'border-zinc-600'}`}>
@@ -310,7 +430,7 @@ export default function WorldEnvironmentConsole({
               type="button"
               onClick={handleExtract}
               disabled={isExtracting}
-              className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 text-white text-xs font-bold flex items-center gap-1.5 border border-emerald-400/40 cursor-pointer"
+              className="sps-btn sps-btn-primary text-[10px]"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isExtracting ? 'animate-spin' : ''}`} />
               {isExtracting ? 'Extracting…' : 'AI Extract from Shots'}
@@ -319,7 +439,7 @@ export default function WorldEnvironmentConsole({
             <button
               type="button"
               onClick={handleCreate}
-              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold flex items-center gap-1.5 border border-zinc-600 cursor-pointer"
+              className="sps-btn text-[10px]"
             >
               <Plus className="w-3.5 h-3.5 text-emerald-300" />
               New Asset
@@ -327,18 +447,87 @@ export default function WorldEnvironmentConsole({
 
             <button
               type="button"
-              onClick={handleSaveAndClose}
-              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-black flex items-center gap-1.5 border border-emerald-300 cursor-pointer shadow"
-              title="Save vault and close"
+              className="sps-btn text-[10px] disabled:opacity-40"
+              disabled={worldExportBlocked}
+              title={worldExportBlocked ? exportLife.message : 'Print world plates as PDF pack'}
+              onClick={() => {
+                if (worldExportBlocked) {
+                  assertExportAllowed({
+                    projectTitle,
+                    label: 'world_plate_pdf',
+                    format: 'pdf',
+                    lifecycleMode: worldLifecycleMode,
+                    shots,
+                    roomId,
+                    showAlert: true
+                  });
+                  return;
+                }
+                const gate = assertExportAllowed({
+                  projectTitle,
+                  label: 'world_plate_pdf',
+                  format: 'pdf',
+                  lifecycleMode: worldLifecycleMode,
+                  shots,
+                  roomId,
+                  showAlert: true
+                });
+                if (!gate.ok) return;
+                const pack = filterType === 'all' ? assets : filtered;
+                if (!pack.length) {
+                  flash('No world assets to print.');
+                  return;
+                }
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                  window.alert('Please allow popups to export PDF.');
+                  return;
+                }
+                printWindow.document.write(worldPlatesToPrintHtml(pack, projectTitle, { roomId }));
+                printWindow.document.close();
+                const lifeNote = `${pack.length} assets · ${
+                  pack.filter((a) => a?.referenceImageUrl || a?.lockedPlate?.url).length
+                } plates${roomId ? ` · room:${roomId}` : ''}`;
+                logExportSuccess({
+                  projectTitle,
+                  label: 'world_plate_pdf',
+                  format: 'pdf',
+                  filename: `${worldSlug}_world_plates.pdf`,
+                  roomId,
+                  note: lifeNote,
+                  lifecycleMode: gate.advisory ? `${worldLifecycleMode}+ok` : worldLifecycleMode
+                });
+                flash('Plate pack opened — save as PDF.');
+              }}
             >
-              <Save className="w-3.5 h-3.5" />
-              Save & Close
+              <Download className="w-3.5 h-3.5" />
+              Plate PDF
+            </button>
+            <button
+              type="button"
+              className="sps-btn text-[10px] disabled:opacity-40"
+              disabled={worldExportBlocked}
+              title={worldExportBlocked ? exportLife.message : 'Export world CSV'}
+              onClick={exportWorldCsv}
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              type="button"
+              className="sps-btn text-[10px] disabled:opacity-40"
+              disabled={worldExportBlocked}
+              title={worldExportBlocked ? exportLife.message : 'Download world bible ZIP'}
+              onClick={exportWorldZip}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              ZIP
             </button>
 
             <button
               type="button"
               onClick={handleRequestClose}
-              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 cursor-pointer"
+              className="sps-icon-btn"
               title="Close (Esc)"
             >
               <X className="w-4 h-4" />
@@ -347,13 +536,13 @@ export default function WorldEnvironmentConsole({
         </div>
 
         <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[240px_1fr]">
-          <aside className="border-r border-zinc-800 bg-zinc-950/70 overflow-y-auto p-3 space-y-3">
+          <aside className="sps-atelier-pane border-r border-[var(--sps-border)] overflow-y-auto p-3 space-y-3">
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
                 onClick={() => setFilterType('all')}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${
-                  filterType === 'all' ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+                className={`sps-cat-chip px-2 py-0.5 text-[10px] ${
+                  filterType === 'all' ? 'is-on' : ''
                 }`}
               >
                 All
@@ -363,8 +552,8 @@ export default function WorldEnvironmentConsole({
                   key={t.id}
                   type="button"
                   onClick={() => setFilterType(t.id)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${
-                    filterType === t.id ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+                  className={`sps-cat-chip px-2 py-0.5 text-[10px] ${
+                    filterType === t.id ? 'is-on' : ''
                   }`}
                 >
                   {t.label.split(' ')[0]}
@@ -391,18 +580,23 @@ export default function WorldEnvironmentConsole({
                       }
                       setSelectedId(asset.id);
                     }}
-                    className={`w-full text-left p-2.5 rounded-xl border transition-all ${
+                    className={`w-full text-left p-2.5 rounded-[10px] border transition-all ${
                       active
-                        ? 'bg-emerald-950/70 border-emerald-500/60 text-white'
-                        : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-zinc-600'
+                        ? 'bg-[var(--sps-row-active)] border-[var(--sps-gold)] text-[var(--sps-text)]'
+                        : 'bg-[var(--sps-surface)] border-[var(--sps-border)] text-[var(--sps-text)] hover:border-[var(--sps-gold)]'
                     }`}
                   >
                     <div className="flex items-start gap-2">
-                      <Icon className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <Icon className="w-4 h-4 text-[var(--sps-gold)] shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <div className="text-xs font-bold truncate">{asset.name}</div>
-                        <div className="text-[10px] text-zinc-500 font-mono truncate">{asset.tag}</div>
-                        <div className="text-[10px] text-emerald-500/80 uppercase tracking-wide mt-0.5">{asset.type}</div>
+                        <div className="text-[10px] text-[var(--sps-muted)] font-mono truncate">{asset.tag}</div>
+                        <div className="text-[10px] text-[var(--sps-gold)] uppercase tracking-wide mt-0.5">
+                          {asset.type}
+                          <span className="text-[var(--sps-muted)] ml-1 normal-case tracking-normal">
+                            · {String(asset.lifecycleStatus || 'draft')}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -411,16 +605,7 @@ export default function WorldEnvironmentConsole({
             )}
           </aside>
 
-          <section className="overflow-y-auto p-4 space-y-4 bg-[#0b1118]">
-            <CinematicReferencesPanel
-              sectionId="art"
-              genreKey={
-                (typeof window !== 'undefined' && localStorage.getItem('sps_preset_profile')) ||
-                'mythological'
-              }
-              projectTitle={projectTitle}
-              compact
-            />
+          <section className="sps-atelier-pane overflow-y-auto p-4 space-y-4">
             {!editing ? (
               <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
                 Select or create a world asset to edit prompts & plates.
@@ -428,12 +613,16 @@ export default function WorldEnvironmentConsole({
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <TypeIcon className="w-5 h-5 text-emerald-400" />
-                    <h4 className="text-sm font-bold text-white">{editing.name}</h4>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 font-mono">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <TypeIcon className="w-5 h-5 text-[var(--sps-gold)]" />
+                    <h4 className="text-sm font-bold text-[var(--sps-text)]">{editing.name}</h4>
+                    <span className="sps-count-pill font-mono">
                       {editing.tag}
                     </span>
+                    <LifecycleControls entity={editing} onChange={handleLifecycleChange} />
+                    {isLifecycleLocked(editing) ? (
+                      <span className="text-[10px] text-[var(--sps-gold)] font-mono">Locked</span>
+                    ) : null}
                     {hasUnsaved ? (
                       <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold">
                         Unsaved
@@ -441,10 +630,19 @@ export default function WorldEnvironmentConsole({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
+                    <CinematicReferencesPanel
+                      sectionId="art"
+                      genreKey={
+                        (typeof window !== 'undefined' && localStorage.getItem('sps_preset_profile')) ||
+                        'mythological'
+                      }
+                      projectTitle={projectTitle}
+                      compact
+                    />
                     <button
                       type="button"
                       onClick={handleSaveEditing}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      className="sps-btn sps-btn-primary text-[10px]"
                     >
                       <Save className="w-3.5 h-3.5" />
                       Save Asset
@@ -452,7 +650,8 @@ export default function WorldEnvironmentConsole({
                     <button
                       type="button"
                       onClick={() => handleDelete(editing.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-700/50 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      disabled={isLifecycleLocked(editing)}
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-700/50 text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Delete
@@ -466,7 +665,8 @@ export default function WorldEnvironmentConsole({
                     <input
                       value={editing.name || ''}
                       onChange={(e) => updateField('name', e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-400"
+                      disabled={isLifecycleLocked(editing)}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-400 disabled:opacity-50"
                     />
                   </div>
                   <div className="space-y-1">
@@ -474,7 +674,8 @@ export default function WorldEnvironmentConsole({
                     <input
                       value={editing.tag || ''}
                       onChange={(e) => updateField('tag', e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-400"
+                      disabled={isLifecycleLocked(editing)}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-400 disabled:opacity-50"
                     />
                   </div>
                   <div className="space-y-1">
@@ -608,19 +809,37 @@ export default function WorldEnvironmentConsole({
                   </div>
                   <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">{activePrompt || '—'}</p>
                   <div className="space-y-1 pt-1">
-                    <label className="text-[11px] font-bold text-zinc-400">Reference image URL (optional — after you generate the plate)</label>
+                    <label className="text-[11px] font-bold text-zinc-400">Locked location plate</label>
                     <input
-                      value={editing.referenceImageUrl || ''}
-                      onChange={(e) => updateField('referenceImageUrl', e.target.value)}
-                      placeholder="https://… or data:image/…"
-                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-cyan-200 font-mono focus:outline-none focus:border-cyan-400"
+                      value={editing.referenceImageUrl || editing.lockedPlate?.url || ''}
+                      onChange={(e) => {
+                        updateField('referenceImageUrl', e.target.value);
+                        updateField('lockedPlate', { url: e.target.value, locked: !!e.target.value });
+                      }}
+                      placeholder="Paste URL or upload below"
+                      className="w-full bg-zinc-900 border border-zinc-700 px-2.5 py-1.5 text-xs text-[var(--sps-text)] font-mono focus:outline-none"
                     />
+                    <label className="sps-btn text-[10px] cursor-pointer inline-flex">
+                      Upload plate
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const url = await readLockedImageFile(file);
+                          updateField('referenceImageUrl', url);
+                          updateField('lockedPlate', { url, locked: true });
+                        }}
+                      />
+                    </label>
                   </div>
-                  {editing.referenceImageUrl ? (
+                  {(editing.referenceImageUrl || editing.lockedPlate?.url) ? (
                     <img
-                      src={editing.referenceImageUrl}
+                      src={editing.referenceImageUrl || editing.lockedPlate?.url}
                       alt={editing.name}
-                      className="max-h-40 rounded-lg border border-zinc-700 object-cover"
+                      className="max-h-40 border border-zinc-700 object-cover"
                     />
                   ) : null}
                 </div>
@@ -639,15 +858,15 @@ export default function WorldEnvironmentConsole({
           </section>
         </div>
 
-        <div className="shrink-0 border-t border-zinc-800 px-4 py-3 bg-zinc-950/90 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-[11px] text-zinc-500">
-            {assets.length} world assets · Esc → Save & Close / Don&apos;t Save
+        <div className="shrink-0 border-t border-[var(--sps-border)] px-4 py-1.5 bg-[var(--sps-bg-elevated)] flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-[11px] text-[var(--sps-muted)]">
+            {assets.length} world assets · Esc closes
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleRequestClose}
-              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="sps-btn text-[10px]"
             >
               <LogOut className="w-3.5 h-3.5" />
               Close
@@ -655,7 +874,7 @@ export default function WorldEnvironmentConsole({
             <button
               type="button"
               onClick={handleSaveAndClose}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow"
+              className="sps-btn sps-btn-primary text-[10px]"
             >
               <Save className="w-3.5 h-3.5" />
               Save & Close

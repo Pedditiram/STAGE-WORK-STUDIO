@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   X, Folder, Plus, Copy, Check, Trash2, Edit3, Share2, History, Layers, 
-  RefreshCw, FileText, Download, ExternalLink, ShieldAlert, Sparkles, 
+  RefreshCw, Download, ExternalLink, ShieldAlert, Sparkles, 
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders, Maximize2,
-  User, Brain, Camera, Music2, Ratio, KeyRound, Play, AlertTriangle, Archive, RotateCcw
+  Brain, Camera, Music2, Ratio, KeyRound, Play, Archive, RotateCcw, ChevronDown,
+  LayoutGrid, PanelLeft, Settings, Lock, LogOut
 } from 'lucide-react';
 import { 
-  parseRawScriptToShots, extractTextFromPDF, 
   composeDirectorPsychologyWithLLM, composeHybridVisionMergeWithLLM,
   composeDoPVisionWithLLM, composeSoundVisionWithLLM,
-  composeHybridDoPVisionMergeWithLLM, composeHybridSoundVisionMergeWithLLM,
-  synthesizeFullAppElementsFromScript, getLastParseMeta,
-  PdfExtractError, isPdfBinaryGarbage, looksLikeUsableScriptText,
-  PDF_EXTRACT_MESSAGES
+  composeHybridDoPVisionMergeWithLLM, composeHybridSoundVisionMergeWithLLM
 } from '../services/aiScriptParser';
-import { GENRE_PRESET_PROFILES, getMergedGenreProfiles, detectScriptGenre, SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import { GENRE_PRESET_PROFILES, getMergedGenreProfiles } from '../constants/seedancePresets';
 import {
   saveDirectorPsychology
 } from '../utils/directorPsychologyStorage';
+import { saveDoPVision, saveSoundVision } from '../utils/departmentVisionStorage';
+import { directorPsychologyToPrintHtml, directorPsychologyToCsv, buildDirectorPsychologyZipFiles } from '../utils/directorPsychologyExport';
+import { assertExportAllowed, exportDownloadText, logExportSuccess } from '../utils/exportGate';
+import { createZipArchive } from '../utils/zipUtils';
+import { saveExportBlob } from '../utils/saveExportFile';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import {
   syncProjectLibraryToCloud,
   fetchProjectLibraryFromCloud,
@@ -32,13 +36,35 @@ import {
   healActiveProjectFromArchive
 } from '../services/dbService';
 import { 
-  saveProjectToVault, loadProjectsFromVault, getAllottedFolderPath, 
-  setAllottedFolderPath, exportProjectPackageToFile, importProjectPackageFromFile 
+  saveProjectToVault, loadProjectsFromVault, exportProjectPackageToFile, importProjectPackageFromFile,
+  loadProjectFromDiskByTitle, saveActiveWorkspaceToDisk,
+  saveProjectPoster, listProjectPostersFromDisk, posterApiUrl, ensureElectronPosterRefs
 } from '../services/projectDiskVault';
+import {
+  ASSET_ROOT_KEYS,
+  ASSET_ROOT_LABELS,
+  PROJECT_PATH_KEYS,
+  PROJECT_PATH_LABELS,
+  defaultAssetRootsUnder,
+  extractStudioRootFromAssetPath,
+  nestAssetRootsUnderProjectName,
+  normalizeAssetRoots,
+  sanitizeProjectFolderName,
+  stampAssetRootsIntoLibrary
+} from '../utils/projectAssetRoots';
+import {
+  pickDirectoryPath,
+  pickAndOpenProjectFolder,
+  saveProjectAssetRoots
+} from '../utils/projectAssetRootsClient';
+import { optimizePosterDataUrl } from '../utils/projectPosterImage';
+import ProjectDrivePanel from './ProjectDrivePanel';
+import { PinBarButton } from './HoverPinBar';
 import {
   getCurrentUserEmail,
   getCurrentUserProfile,
   isGuestSession,
+  canGuestBrowseApp,
   isStudioAdmin,
   canAccessProject,
   canCreateOrDeleteProjects,
@@ -47,43 +73,22 @@ import {
   ensurePrimaryAdminUser,
   sanitizeAuthorizedUsers
 } from '../utils/projectPermissions';
-import { saveStoredCharacterProfiles } from './CharacterBibleModal';
+import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
+import { safeLocalStorageSetItem } from '../utils/safeStorage';
+import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
+import { readOpenScreenplayText } from '../utils/screenplayInterop';
+import AiScriptBreakdownPanel from './AiScriptBreakdownPanel';
 
-/** Canonical craft count from Seedance slot matrix (not marketing copy). */
-const CRAFT_COUNT = SEEDANCE_SLOTS.length;
+const LIBRARY_VIEW_KEY = 'sps_project_library_view';
+const CONSOLE_TOOLBAR_PIN_KEY = 'sps_pin_project_console_toolbar';
 
-const SAMPLE_SCRIPTS = [
-  {
-    title: "Kara-Dhushan War (28 Shots)",
-    script: `PART ONE: Action Script - Kara-Dhushan War: Lord Rama vs. Demon Legion of Janasthana
-ACT I: The Dark Horizon — Demon Legion Arrives
-
-S01-A Aerial · EWS Slow push-in
-Vast Dandaka forest canopy, still and grey. Horizon blackens — fourteen thousand silhouettes crest the ridge. Sky dims to ash, sunlight throttled.
-
-S01-B Low-Angle · WS Crane rise
-Kara — obsidian chariot, tusked stallions. Dhushan flanking, serpent armour. War drums pulse green-black light through smoke. Ground shudders.
-
-S01-C MCU Intercut Quick cuts x3
-Demon eyes — glowing venom-green. Spears raised. Snarling mouths. Cut rapidly: armour, claws, skull banners flapping in unnatural wind.
-
-S01-D OTS Back · WS Static hold
-Over Rama's back — alone at forest's edge in saffron dhoti, divine blue skin. The demon tide approaches. He nocks an arrow — utterly still.`
-  },
-  {
-    title: "Cyberpunk Music Video Climax",
-    script: `EXT. NEO-TOKYO CONCERT STAGE - NIGHT
-
-Heavy rain falls through cyan and magenta neon light beams.
-ARIA (20s, neon blue hair, metallic jacket) grips the microphone stand with both hands.
-
-ARIA
-(singing with intense vocal passion)
-"The grid is failing... we turn up the amps tonight!"
-
-Camera pushes in with a slow dolly zoom. In the background, LEO (lead guitarist) leans back-to-back with Aria, striking a fierce guitar solo pose. Steam rises from stage floor vents as the backing crowd cheers in unison.`
+function readLibraryViewMode() {
+  try {
+    return localStorage.getItem(LIBRARY_VIEW_KEY) === 'gallery' ? 'gallery' : 'detail';
+  } catch {
+    return 'detail';
   }
-];
+}
 
 export default function ProjectConsoleModal({
   isOpen,
@@ -102,23 +107,26 @@ export default function ProjectConsoleModal({
   setPresetProfile,
   onExportProject,
   onImportProject,
-  initialTab = 'library',
+  initialTab,
+  initialVaultCategory = 'director',
   isAdminLoggedIn = false,
   onOpenInvestorDeck,
   onOpenLogin,
+  onOpenAdminSettings,
+  onLogout,
+  onOpenNavigatorShortcutHelp,
   onApplyShots
 }) {
   // Guests must never remain in Project Console — redirect to Investor Deck
   useEffect(() => {
     if (!isOpen) return;
     if (!isGuestSession()) return;
+    if (canGuestBrowseApp()) return;
     onClose?.();
     if (onOpenInvestorDeck) onOpenInvestorDeck();
     else if (onOpenLogin) onOpenLogin();
   }, [isOpen, onClose, onOpenInvestorDeck, onOpenLogin]);
 
-  const scriptFileInputRef = useRef(null);
-  const parseInFlightRef = useRef(false);
 
   const getProjectPosterStyle = (title = '') => {
     const tUpper = (title || '').toUpperCase();
@@ -207,7 +215,7 @@ export default function ProjectConsoleModal({
         description: 'Primary stage production master project',
         targetModel: targetModel || 'SPS Direct Cinema 2.0',
         aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-        roomId: roomId || 'SPS-CLOUD-8821',
+        roomId: roomIdForProject(currentProjectTitle || 'STAGE PRODUCTION STUDIO', roomId),
         lastModified: new Date().toLocaleDateString(),
         shots: shots,
         versions: [
@@ -223,6 +231,17 @@ export default function ProjectConsoleModal({
   });
 
   const [archivedProjects, setArchivedProjects] = useState(() => getArchivedProjects());
+  const [libraryHydrated, setLibraryHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setProjectLibrary((prev) => {
+      const migrated = migrateLegacyRoomInLibrary(prev);
+      const changed = migrated.some((p, i) => p?.roomId !== prev[i]?.roomId);
+      if (changed) safeLocalStorageSetItem('sps_project_library', JSON.stringify(migrated));
+      return changed ? migrated : prev;
+    });
+  }, [isOpen]);
 
   const [activeTab, setActiveTab] = useState(
     initialTab === 'genre' ? 'library' : (initialTab || 'library')
@@ -230,7 +249,20 @@ export default function ProjectConsoleModal({
   const [copiedLink, setCopiedLink] = useState(false);
   const importFileRef = React.useRef(null);
   const posterFileInputRef = React.useRef(null);
+  const posterDblTapRef = React.useRef({ id: null, t: 0 });
   const [targetPosterProjId, setTargetPosterProjId] = useState(null);
+  const [assetFoldersProjId, setAssetFoldersProjId] = useState(null);
+  const [libraryView, setLibraryView] = useState(readLibraryViewMode);
+
+  const setLibraryViewMode = (mode) => {
+    const next = mode === 'gallery' ? 'gallery' : 'detail';
+    setLibraryView(next);
+    try {
+      localStorage.setItem(LIBRARY_VIEW_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
 
   // 100% Native & UI Fullscreen Mode State & Browser API sync
   const [isVaultFullscreen, setIsVaultFullscreen] = useState(false);
@@ -281,7 +313,26 @@ export default function ProjectConsoleModal({
 
   // Selected project & active vault category ('director' | 'dop' | 'sound')
   const [selectedPsychologyProjId, setSelectedPsychologyProjId] = useState(null);
-  const [vaultCategory, setVaultCategory] = useState('director'); // 'director' | 'dop' | 'sound'
+  const [vaultCategory, setVaultCategory] = useState(initialVaultCategory === 'dop' || initialVaultCategory === 'sound' ? initialVaultCategory : 'director'); // 'director' | 'dop' | 'sound'
+  const {
+    strict: directorLifecycleStrict,
+    mode: directorLifecycleMode
+  } = useExportLifecyclePref('director');
+  const {
+    strict: dopLifecycleStrict,
+    mode: dopLifecycleMode
+  } = useExportLifecyclePref('dop');
+  const {
+    strict: soundLifecycleStrict,
+    mode: soundLifecycleMode
+  } = useExportLifecyclePref('sound');
+  const directorExportLife = useMemo(
+    () => lifecycleExportReadiness(shots, currentProjectTitle),
+    [shots, currentProjectTitle]
+  );
+  const directorExportBlocked = directorLifecycleStrict && !directorExportLife.exportReady;
+  const dopExportBlocked = dopLifecycleStrict && !directorExportLife.exportReady;
+  const soundExportBlocked = soundLifecycleStrict && !directorExportLife.exportReady;
 
   // Resolve current active target project for Vision Vault (allotted projects only for collaborators)
   const vaultVisibleLibrary = filterAccessibleProjects(projectLibrary, getCurrentUserEmail());
@@ -372,23 +423,243 @@ export default function ProjectConsoleModal({
   const [isSynthesizingPsychology, setIsSynthesizingPsychology] = useState(false);
   const [isMergingHybrid, setIsMergingHybrid] = useState(false);
 
-  // Save updated vault object for target project
-  const handleSavePsychologyObj = (updatedObj) => {
+  const exportVisionCategoryPdf = (category) => {
     if (!targetPsychologyProj) return;
+    const title = targetPsychologyProj.title || currentProjectTitle;
+    const pref =
+      category === 'dop'
+        ? { strict: dopLifecycleStrict, mode: dopLifecycleMode, blocked: dopExportBlocked, label: 'dop_vision_pdf' }
+        : category === 'sound'
+          ? { strict: soundLifecycleStrict, mode: soundLifecycleMode, blocked: soundExportBlocked, label: 'sound_vision_pdf' }
+          : {
+              strict: directorLifecycleStrict,
+              mode: directorLifecycleMode,
+              blocked: directorExportBlocked,
+              label: 'director_vision_pdf'
+            };
+    if (pref.blocked) {
+      assertExportAllowed({
+        projectTitle: title,
+        label: pref.label,
+        format: 'pdf',
+        lifecycleMode: pref.mode,
+        shots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle: title,
+      label: pref.label,
+      format: 'pdf',
+      lifecycleMode: pref.mode,
+      shots,
+      roomId,
+      showAlert: true
+    });
+    if (!gate.ok) return;
+
+    const vaultObj =
+      category === 'dop'
+        ? normalizeDoPData(targetPsychologyProj.dopVision, title)
+        : category === 'sound'
+          ? normalizeSoundData(targetPsychologyProj.soundVision, title)
+          : normalizePsychologyData(targetPsychologyProj.directorPsychology, title);
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.alert('Please allow popups to export PDF.');
+      return;
+    }
+    printWindow.document.write(
+      directorPsychologyToPrintHtml(vaultObj, {
+        projectTitle: title,
+        category,
+        activeStream: vaultObj.compilerActiveMode || vaultObj.activeVisionTab || 'hybrid',
+        roomId
+      })
+    );
+    printWindow.document.close();
+    const slug = String(title || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const roomTag = roomId ? `_${String(roomId).replace(/[^\w\-]+/g, '_').slice(0, 24)}` : '';
+    logExportSuccess({
+      projectTitle: title,
+      label: pref.label,
+      format: 'pdf',
+      filename: `${slug}_${category}_vision${roomTag}.pdf`,
+      roomId,
+      note: roomId ? `room:${roomId}` : '',
+      lifecycleMode: gate.advisory ? `${pref.mode}+ok` : pref.mode
+    });
+  };
+
+  const exportVisionCategoryZip = async (category = 'director') => {
+    if (!targetPsychologyProj) return;
+    const title = targetPsychologyProj.title || currentProjectTitle;
+    const pref =
+      category === 'dop'
+        ? { strict: dopLifecycleStrict, mode: dopLifecycleMode, blocked: dopExportBlocked, label: 'dop_vision_zip' }
+        : category === 'sound'
+          ? { strict: soundLifecycleStrict, mode: soundLifecycleMode, blocked: soundExportBlocked, label: 'sound_vision_zip' }
+          : {
+              strict: directorLifecycleStrict,
+              mode: directorLifecycleMode,
+              blocked: directorExportBlocked,
+              label: 'director_vision_zip'
+            };
+    if (pref.blocked) {
+      assertExportAllowed({
+        projectTitle: title,
+        label: pref.label,
+        format: 'zip',
+        lifecycleMode: pref.mode,
+        shots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle: title,
+      label: pref.label,
+      format: 'zip',
+      lifecycleMode: pref.mode,
+      shots,
+      roomId,
+      showAlert: true
+    });
+    if (!gate.ok) return;
+
+    const vaultObj =
+      category === 'dop'
+        ? normalizeDoPData(targetPsychologyProj.dopVision, title)
+        : category === 'sound'
+          ? normalizeSoundData(targetPsychologyProj.soundVision, title)
+          : normalizePsychologyData(targetPsychologyProj.directorPsychology, title);
+
+    const slug = String(title || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const roomTag = roomId ? `_${String(roomId).replace(/[^\w\-]+/g, '_').slice(0, 24)}` : '';
+    const files = buildDirectorPsychologyZipFiles(vaultObj, {
+      projectTitle: title,
+      category,
+      activeStream: vaultObj.compilerActiveMode || vaultObj.activeVisionTab || 'hybrid',
+      roomId
+    });
+    const blob = createZipArchive(files);
+    await saveExportBlob(blob, `${slug}_${category}_vision${roomTag}.zip`, {
+      projectTitle: title,
+      shots,
+      lifecycleMode: pref.mode,
+      skipLifecycleCheck: true,
+      advisoryAlready: Boolean(gate.advisory),
+      auditLabel: pref.label,
+      auditFormat: 'zip',
+      roomId,
+      note: roomId ? `room:${roomId} · ${category} vision` : `${category} vision`,
+      showAlert: false
+    });
+  };
+
+  const exportVisionCategoryCsv = (category = 'director') => {
+    if (!targetPsychologyProj) return;
+    const title = targetPsychologyProj.title || currentProjectTitle;
+    const pref =
+      category === 'dop'
+        ? { strict: dopLifecycleStrict, mode: dopLifecycleMode, blocked: dopExportBlocked, label: 'dop_vision_csv' }
+        : category === 'sound'
+          ? { strict: soundLifecycleStrict, mode: soundLifecycleMode, blocked: soundExportBlocked, label: 'sound_vision_csv' }
+          : {
+              strict: directorLifecycleStrict,
+              mode: directorLifecycleMode,
+              blocked: directorExportBlocked,
+              label: 'director_vision_csv'
+            };
+    if (pref.blocked) {
+      assertExportAllowed({
+        projectTitle: title,
+        label: pref.label,
+        format: 'csv',
+        lifecycleMode: pref.mode,
+        shots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const vaultObj =
+      category === 'dop'
+        ? normalizeDoPData(targetPsychologyProj.dopVision, title)
+        : category === 'sound'
+          ? normalizeSoundData(targetPsychologyProj.soundVision, title)
+          : normalizePsychologyData(targetPsychologyProj.directorPsychology, title);
+    const csv = directorPsychologyToCsv(vaultObj, {
+      projectTitle: title,
+      category,
+      activeStream: vaultObj.compilerActiveMode || vaultObj.activeVisionTab || 'hybrid',
+      roomId
+    });
+    const slug = String(title || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const roomTag = roomId ? `_${String(roomId).replace(/[^\w\-]+/g, '_').slice(0, 24)}` : '';
+    exportDownloadText(`${slug}_${category}_vision${roomTag}.csv`, csv, {
+      projectTitle: title,
+      auditLabel: pref.label,
+      auditFormat: 'csv',
+      lifecycleMode: pref.mode,
+      shots,
+      roomId,
+      note: roomId ? `room:${roomId} · ${category} vision` : `${category} vision`,
+      mime: 'text/csv;charset=utf-8'
+    });
+  };
+
+  // Save updated vault object for target project (P87 revision / conflict)
+  const handleSavePsychologyObj = (updatedObj, { force = false } = {}) => {
+    if (!targetPsychologyProj) return;
+    const expectedRevision =
+      updatedObj?.revision != null ? Number(updatedObj.revision) : Number(currentPsychologyObj?.revision) || 0;
+    // When editing in-memory object that already has bumped fields, pass prior revision
+    const priorRev = Number(currentPsychologyObj?.revision) || 0;
+    let saveResult = { ok: true, data: updatedObj };
+    if (typeof window !== 'undefined') {
+      if (activeVaultKey === 'directorPsychology') {
+        saveResult = saveDirectorPsychology(targetPsychologyProj.title, updatedObj, {
+          expectedRevision: force ? null : priorRev,
+          force
+        });
+      } else if (activeVaultKey === 'dopVision') {
+        saveResult = saveDoPVision(targetPsychologyProj.title, updatedObj, {
+          expectedRevision: force ? null : priorRev,
+          force
+        });
+      } else if (activeVaultKey === 'soundVision') {
+        saveResult = saveSoundVision(targetPsychologyProj.title, updatedObj, {
+          expectedRevision: force ? null : priorRev,
+          force
+        });
+      }
+      if (saveResult?.conflict) {
+        const overwrite = window.confirm(
+          `Department vision conflict (rev ${saveResult.revision}). Another save landed first. Overwrite with your version?`
+        );
+        if (!overwrite) return;
+        return handleSavePsychologyObj(updatedObj, { force: true });
+      }
+      if (saveResult?.ok === false && !saveResult?.conflict) {
+        window.alert(saveResult.error || 'Vision save failed');
+        return;
+      }
+    }
+    const persisted = saveResult?.data || updatedObj;
     setProjectLibrary(prev => {
       const updated = prev.map(p => {
         if (p.id === targetPsychologyProj.id) {
-          return { ...p, [activeVaultKey]: updatedObj };
+          return { ...p, [activeVaultKey]: persisted };
         }
         return p;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem('sps_project_library', JSON.stringify(updated));
-        if (activeVaultKey === 'directorPsychology') {
-          saveDirectorPsychology(targetPsychologyProj.title, updatedObj);
-        } else {
-          localStorage.setItem(`sps_${activeVaultKey}_${targetPsychologyProj.title}`, JSON.stringify(updatedObj));
-        }
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
       }
       return updated;
     });
@@ -416,7 +687,7 @@ export default function ProjectConsoleModal({
     } else if (vaultCategory === 'sound') {
       res = await composeSoundVisionWithLLM(targetPsychologyProj);
     } else {
-      const rawText = typeof window !== 'undefined' ? (localStorage.getItem('sps_current_screenplay_text') || '') : '';
+      const rawText = typeof window !== 'undefined' ? readOpenScreenplayText() : '';
       res = await composeDirectorPsychologyWithLLM(
         targetPsychologyProj.title, 
         targetPsychologyProj.shots || shots, 
@@ -481,34 +752,232 @@ export default function ProjectConsoleModal({
     }
   };
 
+  const handlePosterDoubleTap = (proj) => {
+    const projId = proj?.id;
+    if (!projId) return;
+    const now = Date.now();
+    const prev = posterDblTapRef.current;
+    if (prev.id === projId && now - prev.t < 450) {
+      posterDblTapRef.current = { id: null, t: 0 };
+      handleTriggerPosterUpload(projId);
+    } else {
+      posterDblTapRef.current = { id: projId, t: now };
+    }
+  };
+
   const handlePosterFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file || !targetPosterProjId) return;
+    const file = e.target.files?.[0];
+    const projId = targetPosterProjId;
+    if (!file || !projId) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target.result;
-      setProjectLibrary(prev => prev.map(p => {
-        if (p.id === targetPosterProjId) {
-          return { ...p, posterUrl: dataUrl };
-        }
-        return p;
-      }));
+    reader.onload = async (evt) => {
+      const dataUrl = String(evt.target?.result || '');
+      if (!dataUrl.startsWith('data:image/')) {
+        window.alert('Poster must be an image file (PNG, JPG, WebP).');
+        return;
+      }
+
+      let title = '';
+      let matched = null;
+      setProjectLibrary((prev) => {
+        matched = (Array.isArray(prev) ? prev : []).find((p) => p && p.id === projId) || null;
+        title = String(matched?.title || '').trim();
+        return prev;
+      });
+      if (!title) {
+        window.alert('Could not find that project to attach a poster.');
+        return;
+      }
+
+      let optimizedUrl = dataUrl;
+      try {
+        optimizedUrl = await optimizePosterDataUrl(dataUrl);
+      } catch (err) {
+        console.warn('Poster optimize failed, saving original', err);
+      }
+
+      // 1) Durable disk PNG (Electron-safe — not stuffed into giant project JSON)
+      const durableUrl = await saveProjectPoster({ title, id: projId, dataUrl: optimizedUrl });
+      if (!durableUrl) {
+        window.alert('Poster save failed. Keep Vite running (npm run electron:dev or npm run dev) and try again.');
+        return;
+      }
+
+      // 2) Local IDB cache for instant paint if API is briefly unavailable
+      const blobId = `poster_${String(projId).replace(/[^\w.-]+/g, '_').slice(0, 80)}`;
+      try {
+        await putImageDataUrl(blobId, optimizedUrl);
+      } catch {
+        /* optional */
+      }
+
+      const stamp = {
+        posterUrl: durableUrl,
+        posterFile: `${String(title).replace(/[^a-zA-Z0-9_-]/g, '_')}.png`,
+        lastModified: new Date().toLocaleDateString(),
+        lastModifiedIso: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      setProjectLibrary((prev) => {
+        const updated = (Array.isArray(prev) ? prev : []).map((p) => {
+          if (!p) return p;
+          if (p.id === projId || String(p.title || '').trim().toUpperCase() === title.toUpperCase()) {
+            return { ...p, ...stamp };
+          }
+          return p;
+        });
+        writeLocalProjectLibrary(updated);
+        return updated;
+      });
+    };
+    reader.onerror = () => {
+      window.alert('Could not read that image file.');
     };
     reader.readAsDataURL(file);
   };
-  const [allottedFolder, setAllottedFolder] = useState(() => getAllottedFolderPath());
 
-  const [isEditingFolder, setIsEditingFolder] = useState(false);
-  const [tempFolder, setTempFolder] = useState(allottedFolder);
+  const patchProjectAssetRoot = (projId, key, value) => {
+    setProjectLibrary((prev) =>
+      prev.map((p) => {
+        if (p.id !== projId) return p;
+        const assetRoots = normalizeAssetRoots({ ...(p.assetRoots || {}), [key]: value });
+        return { ...p, assetRoots };
+      })
+    );
+  };
 
-  const handleSaveAllottedFolder = () => {
-    const cleanPath = (tempFolder || '').trim();
-    if (cleanPath) {
-      setAllottedFolderPath(cleanPath);
-      setAllottedFolder(cleanPath);
+  const handleFillDefaultAssetRoots = async (proj) => {
+    let base = '';
+    const folderHint = sanitizeProjectFolderName(proj.title);
+    const picked = await pickDirectoryPath();
+    if (picked.ok && picked.path) {
+      base = picked.path;
+    } else {
+      const hint = extractStudioRootFromAssetPath(
+        proj.assetRoots?.subjects || proj.assetRoots?.projectSave || '',
+        proj.title
+      );
+      base = window.prompt(
+        `Paste studio root (e.g. Desktop/SWS PROJECTS).\nSWS will create:\n  ${folderHint}/ASSETS\n  ${folderHint}/RENDERS\n  ${folderHint}/PROJECT\nunder that root (not loose at the root).`,
+        hint || ''
+      );
     }
-    setIsEditingFolder(false);
+    if (!base) return;
+    // If user accidentally picked …/KARA_DUSHAN already, defaultAssetRootsUnder won't double-nest
+    const roots = nestAssetRootsUnderProjectName(defaultAssetRootsUnder(base, proj.title), proj.title);
+    setProjectLibrary((prev) =>
+      prev.map((p) => (p.id === proj.id ? { ...p, assetRoots: roots } : p))
+    );
+  };
+
+  const handleSaveProjectAssetRoots = async (proj) => {
+    const nested = nestAssetRootsUnderProjectName(proj.assetRoots, proj.title);
+    const roots = normalizeAssetRoots(nested);
+    try {
+      const result = await saveProjectAssetRoots(proj.title, roots, { shots: proj.shots || [] });
+      setProjectLibrary((prev) => {
+        const updated = prev.map((p) =>
+          p.id === proj.id ? { ...p, assetRoots: result.roots, projectVersion: result.roots.projectVersion } : p
+        );
+        try {
+          localStorage.setItem('sps_project_library', JSON.stringify(updated));
+        } catch {
+          /* ignore */
+        }
+        return updated;
+      });
+      const created = result.ensured?.created?.length || 0;
+      const folder = sanitizeProjectFolderName(proj.title);
+      const verNote = result.versioned?.ok
+        ? `\nVersion snapshot: ${result.versioned.filename || result.roots.projectVersion}`
+        : '';
+      const placeholderNote =
+        result.placeholders?.count
+          ? `\nPlaceholder PNGs: ${result.placeholders.count} new file(s) named from REFERENCES (overwrite with your art).`
+          : '';
+      window.alert(
+        `${created ? `Folders saved under ${folder}/. Created ${created} missing folder(s).` : `Folders saved under ${folder}/ (existing kept).`}${verNote}${placeholderNote}\n\nLayout:\n  …/${folder}/ASSETS\n  …/${folder}/RENDERS\n  …/${folder}/PROJECT`
+      );
+      setAssetFoldersProjId(null);
+    } catch (err) {
+      window.alert(err?.message || 'Could not save asset folders.');
+    }
+  };
+
+  const registerOpenedProjectFolder = async (importedProj, meta = {}) => {
+    const cleanTitle = (importedProj.title || 'IMPORTED PROJECT').trim().toUpperCase();
+    clearDeletedProjectTitles([importedProj.title]);
+    await saveProjectToVault(importedProj);
+    if (importedProj.assetRoots) {
+      stampAssetRootsIntoLibrary(importedProj.title, importedProj.assetRoots);
+    }
+    setProjectLibrary((prev) => {
+      const exists = prev.some((p) => p.title.trim().toUpperCase() === cleanTitle);
+      const updated = exists
+        ? prev.map((p) => (p.title.trim().toUpperCase() === cleanTitle ? { ...p, ...importedProj } : p))
+        : [...prev, importedProj];
+      writeLocalProjectLibrary(updated);
+      return updated;
+    });
+    window.dispatchEvent(new Event('sps_projects_updated'));
+    const shotsN = importedProj.shots?.length || 0;
+    const from = meta.sourceFile || meta.filmRoot || importedProj.openedFromFolder || '';
+    alert(
+      `📂 PROJECT FOLDER OPENED\n\n"${importedProj.title}" — ${shotsN} shot(s)\nAsset roots wired to disk.${from ? `\n\nSource: ${from}` : ''}`
+    );
+  };
+
+  const handleOpenProjectFolder = async () => {
+    if (!canCreateOrDeleteProjects()) {
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can open project folders.');
+      return;
+    }
+
+    const result = await pickAndOpenProjectFolder();
+    if (result?.canceled) return;
+
+    if (!result?.ok) {
+      if (result?.error === 'multiple_projects' && Array.isArray(result.candidates)) {
+        const labels = result.candidates.map((c, i) => `${i + 1}. ${c.titleGuess}`).join('\n');
+        const pick = window.prompt(`Several film folders found. Type the number to open:\n${labels}`, '1');
+        const idx = parseInt(String(pick || '').trim(), 10) - 1;
+        const chosen = result.candidates[idx];
+        if (!chosen?.filmRoot) return;
+        try {
+          let retry;
+          if (window.electronAPI?.openProjectFolder) {
+            retry = await window.electronAPI.openProjectFolder({ folderPath: chosen.filmRoot });
+          } else {
+            const res = await fetch('/api/open-project-folder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ folderPath: chosen.filmRoot })
+            });
+            const data = await res.json().catch(() => ({}));
+            retry = res.ok && data?.project ? { ok: true, ...data } : { ok: false, ...data };
+          }
+          if (!retry?.ok || !retry?.project) {
+            alert(`❌ OPEN FOLDER ERROR:\n${retry?.error || retry?.hint || 'Could not open folder'}`);
+            return;
+          }
+          await registerOpenedProjectFolder(retry.project, retry);
+        } catch (err) {
+          alert(`❌ OPEN FOLDER ERROR:\n${err?.message || err}`);
+        }
+        return;
+      }
+      alert(`❌ OPEN FOLDER ERROR:\n${result?.hint || result?.error || 'Could not open folder'}`);
+      return;
+    }
+
+    if (!result.project) {
+      alert('❌ No project JSON in PROJECT/Versions.\nSave the project once, or use Open backup for a .json file.');
+      return;
+    }
+
+    await registerOpenedProjectFolder(result.project, result);
   };
 
   const handleBackupFileImport = async (e) => {
@@ -531,7 +1000,7 @@ export default function ProjectConsoleModal({
         } else {
           updated = [...prev, importedProj];
         }
-        localStorage.setItem('sps_project_library', JSON.stringify(updated));
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
         return updated;
       });
       alert(`📥 PROJECT RESTORED SUCCESSFULLY:\nProject "${importedProj.title}" (${importedProj.shots?.length || 0} shots) imported into studio library & saved to persistent vault!`);
@@ -574,7 +1043,7 @@ export default function ProjectConsoleModal({
         }
         return p;
       });
-      localStorage.setItem('sps_project_library', JSON.stringify(updated));
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
       return updated;
     });
     setEditingProjectId(null);
@@ -584,59 +1053,13 @@ export default function ProjectConsoleModal({
   const [newVersionName, setNewVersionName] = useState('');
   const [versionSuccessMsg, setVersionSuccessMsg] = useState('');
 
-  // AI Script Breakdown State
-  const [rawScriptText, setRawScriptText] = useState('');
-  const [conceptPrompt, setConceptPrompt] = useState('Cyberpunk music video duet with heavy bass, rain, and neon reflections');
-  const [shotCountCount, setShotCountCount] = useState(5);
-  const [parsedPreview, setParsedPreview] = useState([]);
-  const [isGenerated, setIsGenerated] = useState(false);
-  const [isLoadingFile, setIsLoadingFile] = useState(false);
-  const [uploadedFileName, setUploadedFileName] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState(presetProfile || 'mythological');
-  const [parseProgress, setParseProgress] = useState(0);
-  const [parseStatusBanner, setParseStatusBanner] = useState('');
-  const [pdfFailure, setPdfFailure] = useState(null); // { code, message, fileName } | null
-  const hasUsableScriptText = Boolean(String(rawScriptText || '').trim());
-  const canRunParse = hasUsableScriptText && !isLoadingFile;
-
-  useEffect(() => {
-    let timer;
-    if (isLoadingFile) {
-      setParseProgress(10);
-      timer = setInterval(() => {
-        setParseProgress((prev) => {
-          if (prev >= 92) return 92;
-          const step = Math.floor(Math.random() * 12) + 6;
-          return Math.min(prev + step, 92);
-        });
-      }, 140);
-    } else {
-      // Ensure mid-parse % never sticks after loading ends (esp. PDF failures)
-      setParseProgress((prev) => (prev > 0 && prev < 100 ? 0 : prev));
-    }
-    return () => clearInterval(timer);
-  }, [isLoadingFile]);
-
-  const finishParseProgress = (opts = {}) => {
-    const { success = true } = opts;
-    if (!success) {
-      setParseProgress(0);
-      return;
-    }
-    setParseProgress(100);
-    setTimeout(() => setParseProgress(0), 700);
-  };
-
-  const alertLeavingProjectUnchanged = (message) => {
-    const msg = String(message || '').trim();
-    if (/Existing project was left unchanged\.?/i.test(msg)) {
-      alert(msg);
-      return;
-    }
-    alert(`${msg}\n\nExisting project was left unchanged.`);
-  };
 
   const [customProjectTitle, setCustomProjectTitle] = useState(currentProjectTitle || 'NEW CINEMA PROJECT');
+
+  useEffect(() => {
+    const t = String(currentProjectTitle || '').trim();
+    if (t) setCustomProjectTitle(t);
+  }, [currentProjectTitle]);
 
   // Custom & Edited Genre Profiles State
   const [customGenreProfiles, setCustomGenreProfiles] = useState(() => {
@@ -794,6 +1217,73 @@ export default function ProjectConsoleModal({
     });
   };
 
+  const mergeLibraryPreservingUnion = useCallback((incoming, prev) => {
+    const map = new Map();
+    const put = (p) => {
+      if (!p?.title) return;
+      const key = String(p.title).trim().toUpperCase();
+      const old = map.get(key);
+      if (!old) {
+        map.set(key, p);
+        return;
+      }
+      map.set(key, {
+        ...old,
+        ...p,
+        posterUrl: p.posterUrl || old.posterUrl,
+        shots:
+          Array.isArray(p.shots) && p.shots.length > 0
+            ? p.shots
+            : Array.isArray(old.shots)
+              ? old.shots
+              : []
+      });
+    };
+    (Array.isArray(prev) ? prev : []).forEach(put);
+    (Array.isArray(incoming) ? incoming : []).forEach(put);
+    return sanitizeLibraryTitles(filterOutDeletedProjects(Array.from(map.values())));
+  }, []);
+
+  // Disk vault hydrate — must complete before persisting library (prevents stale overwrite)
+  useEffect(() => {
+    if (!isOpen) {
+      setLibraryHydrated(false);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const merged = await hydrateProjectLibraryFromStores();
+        const withPosters = await ensureElectronPosterRefs(merged);
+        if (cancelled) return;
+        setProjectLibrary((prev) => mergeLibraryPreservingUnion(withPosters, prev));
+        writeLocalProjectLibrary(withPosters);
+      } catch (err) {
+        console.warn('Project library disk hydrate failed', err);
+      } finally {
+        if (!cancelled) setLibraryHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mergeLibraryPreservingUnion]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onProjectsUpdated = () => {
+      try {
+        const saved = readLocalProjectLibrary();
+        if (!Array.isArray(saved) || !saved.length) return;
+        setProjectLibrary((prev) => mergeLibraryPreservingUnion(saved, prev));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('sps_projects_updated', onProjectsUpdated);
+    return () => window.removeEventListener('sps_projects_updated', onProjectsUpdated);
+  }, [isOpen, mergeLibraryPreservingUnion]);
+
   // Sync tab if initialTab updates on open & fetch latest cloud projects
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -836,8 +1326,24 @@ export default function ProjectConsoleModal({
             (prev || []).forEach((p) => {
               if (!p?.title) return;
               const key = String(p.title).trim().toUpperCase();
-              if (!map.has(key)) return;
-              map.set(key, { ...p, ...map.get(key) });
+              const cloud = map.get(key);
+              if (!cloud) {
+                // Keep local-only projects (e.g. poster just saved, not yet on cloud)
+                map.set(key, p);
+                return;
+              }
+              map.set(key, {
+                ...p,
+                ...cloud,
+                // Prefer whichever side still has a poster
+                posterUrl: cloud.posterUrl || p.posterUrl,
+                shots:
+                  Array.isArray(cloud.shots) && cloud.shots.length > 0
+                    ? cloud.shots
+                    : Array.isArray(p.shots)
+                      ? p.shots
+                      : []
+              });
             });
 
             const activeKey = currentProjectTitle ? String(currentProjectTitle).trim().toUpperCase() : '';
@@ -858,7 +1364,7 @@ export default function ProjectConsoleModal({
                   description: `Cinema Production Studio Project`,
                   targetModel: 'SPS Direct Cinema 2.0',
                   aspectRatio: '2.39:1 Anamorphic',
-                  roomId: 'SPS-CLOUD-8821',
+                  roomId: roomIdForProject(currentProjectTitle),
                   lastModified: new Date().toLocaleDateString(),
                   shots: []
                 }
@@ -869,14 +1375,14 @@ export default function ProjectConsoleModal({
             let merged = filterOutDeletedProjects(Array.from(map.values()));
             if (currentProjectTitle) {
               merged.sort((a, b) => {
-                if (a.title === currentProjectTitle) return -1;
-                if (b.title === currentProjectTitle) return 1;
+                if (titlesMatch(a.title, currentProjectTitle)) return -1;
+                if (titlesMatch(b.title, currentProjectTitle)) return 1;
                 return 0;
               });
             }
             const sanitized = sanitizeLibraryTitles(merged);
             try {
-              localStorage.setItem('sps_project_library', JSON.stringify(sanitized));
+              writeLocalProjectLibrary(sanitized);
             } catch (e) {}
             return sanitized;
           });
@@ -897,26 +1403,177 @@ export default function ProjectConsoleModal({
   // Persist library changes locally & push to Cloud Database
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('sps_project_library', JSON.stringify(projectLibrary));
+    if (isGuestSession()) return;
+    if (!libraryHydrated) return;
+    writeLocalProjectLibrary(projectLibrary);
     // Defer past React commit so AdminSettingsModal listeners don't setState mid-render
     const t = setTimeout(() => {
       window.dispatchEvent(new Event('sps_projects_updated'));
-      syncProjectLibraryToCloud(projectLibrary);
+      // Never push huge data: posters to cloud — keep idb/http refs only
+      const forCloud = (Array.isArray(projectLibrary) ? projectLibrary : []).map((p) => {
+        const slim = slimProjectForLocalMirror(p);
+        if (slim?.posterUrl && String(slim.posterUrl).startsWith('idb:')) {
+          const rest = { ...slim };
+          delete rest.posterUrl;
+          return rest;
+        }
+        return slim;
+      });
+      syncProjectLibraryToCloud(forCloud);
     }, 0);
     return () => clearTimeout(t);
-  }, [projectLibrary]);
+  }, [projectLibrary, libraryHydrated]);
 
-  // Must be declared before any early return — hooks order must stay stable
-  const [lastFullElements, setLastFullElements] = useState(null);
+  // Restore posters from disk SoT whenever the console opens (localStorage index is slim)
+  useEffect(() => {
+    if (!isOpen || isGuestSession()) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const posterByTitle = new Map();
+
+        const vault = await loadProjectsFromVault();
+        if (Array.isArray(vault)) {
+          for (const vp of vault) {
+            if (!vp?.title || !vp.posterUrl) continue;
+            const key = String(vp.title).trim().toUpperCase();
+            let posterUrl = vp.posterUrl;
+            if (typeof posterUrl === 'string' && posterUrl.startsWith('data:') && posterUrl.length > 800) {
+              // Prefer durable API URL if a poster file exists; else cache in IDB
+              posterUrl = posterApiUrl(vp.title, Date.now());
+            }
+            posterByTitle.set(key, posterUrl);
+          }
+        }
+
+        const listed = await listProjectPostersFromDisk();
+        for (const row of listed) {
+          const key = String(row?.title || '').trim().toUpperCase();
+          if (!key || !row.posterUrl) continue;
+          // Disk PNG wins — always refresh cache-busted API URL
+          posterByTitle.set(key, `${row.posterUrl}${row.posterUrl.includes('?') ? '&' : '?'}v=${Date.now()}`);
+        }
+
+        if (cancelled || posterByTitle.size === 0) return;
+        setProjectLibrary((prev) => {
+          let changed = false;
+          const next = (Array.isArray(prev) ? prev : []).map((p) => {
+            if (!p?.title) return p;
+            const key = String(p.title).trim().toUpperCase();
+            const fromDisk = posterByTitle.get(key);
+            if (!fromDisk) return p;
+            const cur = typeof p.posterUrl === 'string' ? p.posterUrl : '';
+            if (cur.startsWith('/api/project-poster') && cur.includes(encodeURIComponent(String(p.title).trim()).slice(0, 12))) {
+              // still refresh to latest file
+              changed = true;
+              return { ...p, posterUrl: fromDisk };
+            }
+            if (isImageRef(cur) && resolveImageUrl(cur)) return p;
+            if (/^https?:\/\//i.test(cur)) return p;
+            if (cur.startsWith('data:') && cur.length > 40) return p;
+            changed = true;
+            return { ...p, posterUrl: fromDisk };
+          });
+          if (changed) writeLocalProjectLibrary(next);
+          return changed ? next : prev;
+        });
+      } catch (err) {
+        console.warn('Poster hydrate from disk failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
-  if (isGuestSession()) return null;
+  if (isGuestSession() && !canGuestBrowseApp()) return null;
 
   // EVALUATE CURRENT USER PERMISSIONS & ALLOTTED PROJECTS
   const currentUserEmail = getCurrentUserEmail();
   const currentUserProfile = getCurrentUserProfile(currentUserEmail);
   const isPrimaryOwner = canCreateOrDeleteProjects(currentUserEmail);
+  const guestLook = canGuestBrowseApp();
   const visibleProjectLibrary = filterAccessibleProjects(projectLibrary, currentUserEmail);
+  const libraryProjectsForDisplay = useMemo(() => {
+    const list = [...visibleProjectLibrary];
+    const activeTitle = String(currentProjectTitle || '').trim();
+    if (!activeTitle) return list;
+    return list.sort((a, b) => {
+      const aActive = titlesMatch(a?.title, activeTitle);
+      const bActive = titlesMatch(b?.title, activeTitle);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return 0;
+    });
+  }, [visibleProjectLibrary, currentProjectTitle]);
+
+  const assetFoldersProj = useMemo(
+    () => (Array.isArray(projectLibrary) ? projectLibrary : []).find((p) => p?.id === assetFoldersProjId) || null,
+    [projectLibrary, assetFoldersProjId]
+  );
+
+  const consoleScrollRef = useRef(null);
+  const lastConsoleScrollRef = useRef(0);
+  const [consoleToolbarHidden, setConsoleToolbarHidden] = useState(false);
+  const [consoleToolbarPinned, setConsoleToolbarPinned] = useState(() => {
+    try {
+      return localStorage.getItem(CONSOLE_TOOLBAR_PIN_KEY) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CONSOLE_TOOLBAR_PIN_KEY, consoleToolbarPinned ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  }, [consoleToolbarPinned]);
+
+  const handleConsoleScroll = useCallback((e) => {
+    if (consoleToolbarPinned) return;
+    const y = e.currentTarget.scrollTop;
+    const delta = y - lastConsoleScrollRef.current;
+    if (delta < -4) {
+      setConsoleToolbarHidden(false);
+    } else if (delta > 4) {
+      setConsoleToolbarHidden(true);
+    }
+    lastConsoleScrollRef.current = y;
+  }, [consoleToolbarPinned]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setConsoleToolbarHidden(false);
+      lastConsoleScrollRef.current = 0;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const root = consoleScrollRef.current;
+    if (!root || !isOpen) return undefined;
+    const onWheel = (e) => {
+      if (consoleToolbarPinned) return;
+      if (e.deltaY < -2) setConsoleToolbarHidden(false);
+      else if (e.deltaY > 2) setConsoleToolbarHidden(true);
+    };
+    root.addEventListener('wheel', onWheel, { passive: true });
+    return () => root.removeEventListener('wheel', onWheel);
+  }, [isOpen, consoleToolbarPinned]);
+
+  useEffect(() => {
+    if (!assetFoldersProjId) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setAssetFoldersProjId(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [assetFoldersProjId]);
   const allottedTitles = Array.isArray(currentUserProfile?.allottedProjects)
     ? currentUserProfile.allottedProjects.filter((t) => t && !String(t).toLowerCase().startsWith('all studio projects'))
     : [];
@@ -954,24 +1611,54 @@ export default function ProjectConsoleModal({
   };
 
   // 1. SWITCH PROJECT (WITH ENFORCED GUEST & ALLOTTED PERMISSION GUARD)
-  const applyProjectToStudio = (proj, { closeConsole = true } = {}) => {
-    if (isGuestSession()) {
+  const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
+    if (!proj?.title) return false;
+    if (isGuestSession() && !canGuestBrowseApp()) {
       alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from pedditiram@gmail.com.`);
       onClose?.();
       if (onOpenInvestorDeck) onOpenInvestorDeck();
       return false;
     }
 
-    if (!checkIsProjectAllotted(proj.title)) {
+    if (!guestLook && !checkIsProjectAllotted(proj.title)) {
       alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask the studio Owner (pedditiram@gmail.com) to allot this project to your profile in Admin Settings.`);
       return false;
     }
-    if (setProjectTitle) setProjectTitle(proj.title);
-    if (setTargetModel) setTargetModel(proj.targetModel);
-    if (setAspectRatio) setAspectRatio(proj.aspectRatio);
-    if (setShots) setShots(proj.shots);
-    if (setRoomId && proj.roomId) setRoomId(proj.roomId);
-    const genreKey = resolveProjectGenreKey(proj);
+    // Always prefer full disk copy so Electron + browser open the same Matrix
+    let openProj = proj;
+    try {
+      const diskFull = await loadProjectFromDiskByTitle(proj.title);
+      if (diskFull && Array.isArray(diskFull.shots) && diskFull.shots.length) {
+        openProj = { ...proj, ...diskFull, shots: diskFull.shots };
+      }
+    } catch {
+      /* use in-memory proj */
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+      const parked = writeWorkspaceOntoLibrary(saved, currentProjectTitle);
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(parked));
+    } catch {
+      /* ignore */
+    }
+    if (setProjectTitle) setProjectTitle(openProj.title);
+    if (setTargetModel) setTargetModel(openProj.targetModel);
+    if (setAspectRatio) setAspectRatio(openProj.aspectRatio);
+    if (setShots) setShots(Array.isArray(openProj.shots) ? openProj.shots : []);
+    if (setRoomId) setRoomId(roomIdForProject(openProj.title, openProj.roomId));
+    applyOpenWorkspace(openProj);
+    try {
+      localStorage.setItem('sps_current_project_title', openProj.title);
+      localStorage.setItem('sps_current_shots', JSON.stringify(openProj.shots || []));
+      localStorage.setItem('sps_current_room_id', roomIdForProject(openProj.title, openProj.roomId));
+    } catch {
+      /* ignore */
+    }
+    saveActiveWorkspaceToDisk({
+      title: openProj.title,
+      roomId: roomIdForProject(openProj.title, openProj.roomId)
+    }).catch(() => {});
+    const genreKey = resolveProjectGenreKey(openProj);
     if (setPresetProfile) setPresetProfile(genreKey);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sps_preset_profile', genreKey);
@@ -1081,228 +1768,6 @@ export default function ProjectConsoleModal({
     handleSwitchProject(newProjObj);
   };
 
-  const resetScriptFileInput = () => {
-    if (scriptFileInputRef.current) {
-      scriptFileInputRef.current.value = '';
-    }
-  };
-
-  const formatPdfFailureBanner = (code, message) => {
-    const label = code || 'extract failed';
-    return `⚠️ PDF: ${label} — ${message || PDF_EXTRACT_MESSAGES.PARSE_FAILED}`;
-  };
-
-  // 3. AI SCRIPT PARSING HANDLERS
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (parseInFlightRef.current || isLoadingFile) {
-      resetScriptFileInput();
-      return;
-    }
-
-    parseInFlightRef.current = true;
-    setIsLoadingFile(true);
-    setPdfFailure(null);
-    setParseStatusBanner('');
-    setUploadedFileName(file.name);
-    let parseSucceeded = false;
-
-    try {
-      let extractedText = '';
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-      if (isPdf) {
-        extractedText = await extractTextFromPDF(file);
-      } else {
-        extractedText = await file.text();
-      }
-
-      if (!extractedText || !String(extractedText).trim()) {
-        setUploadedFileName('');
-        setPdfFailure({
-          code: isPdf ? 'EMPTY' : 'EMPTY_FILE',
-          message: isPdf ? PDF_EXTRACT_MESSAGES.EMPTY : 'Could not extract text from that file. Existing project was left unchanged.',
-          fileName: file.name
-        });
-        setParseStatusBanner(
-          isPdf
-            ? formatPdfFailureBanner('EMPTY', PDF_EXTRACT_MESSAGES.EMPTY)
-            : '⚠️ No text in file — paste screenplay text or try a sample script. Existing project unchanged.'
-        );
-        alertLeavingProjectUnchanged(
-          isPdf ? PDF_EXTRACT_MESSAGES.EMPTY : 'Could not extract text from that file. Existing project was left unchanged.'
-        );
-        return;
-      }
-
-      if (isPdf && (isPdfBinaryGarbage(extractedText) || !looksLikeUsableScriptText(extractedText))) {
-        setUploadedFileName('');
-        setPdfFailure({
-          code: 'PDF_GARBAGE',
-          message: PDF_EXTRACT_MESSAGES.PDF_GARBAGE,
-          fileName: file.name
-        });
-        setParseStatusBanner(formatPdfFailureBanner('PDF_GARBAGE', PDF_EXTRACT_MESSAGES.PDF_GARBAGE));
-        alertLeavingProjectUnchanged(PDF_EXTRACT_MESSAGES.PDF_GARBAGE);
-        return;
-      }
-
-      setRawScriptText(extractedText);
-      setPdfFailure(null);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('sps_current_screenplay_text', extractedText);
-        localStorage.setItem('sps_live_screenplay_text', extractedText);
-        try {
-          window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'project_console' } }));
-        } catch (e) {}
-      }
-      const parsedShots = await parseRawScriptToShots(extractedText);
-      const meta = getLastParseMeta();
-      if (!parsedShots.length) {
-        alertLeavingProjectUnchanged(meta?.warning || 'Parse produced no shots. Existing project was left unchanged.');
-        setParseStatusBanner(meta?.warning || '⚠️ Parse produced no shots. Existing project unchanged.');
-        return;
-      }
-      setParsedPreview(parsedShots);
-      setIsGenerated(true);
-      if (meta?.warning) {
-        console.info('[AI Breakdown]', meta.warning);
-      }
-      setParseStatusBanner(
-        meta?.error === 'MISSING_API_KEY' || meta?.usedFallback
-          ? (meta.warning || 'Offline heuristic parse used.')
-          : (meta?.shotCount ? `✓ Parsed ${meta.shotCount} shots (${CRAFT_COUNT} crafts)` : '')
-      );
-
-      // AUTO-SYNTHESIZE ALL APP ELEMENTS (preview only — do NOT overwrite library shots until Apply)
-      let fullElements = null;
-      try {
-        fullElements = await synthesizeFullAppElementsFromScript(extractedText, file.name || currentProjectTitle || '', parsedShots);
-        setLastFullElements(fullElements);
-        if (fullElements?.characters && fullElements.characters.length > 0) {
-          try { saveStoredCharacterProfiles(fullElements.characters); } catch (e) {}
-        }
-      } catch (synthErr) {
-        console.warn('Post-parse synthesis skipped:', synthErr);
-        setLastFullElements({ shots: parsedShots });
-      }
-
-      const detected = fullElements?.detectedGenre || detectScriptGenre(file.name || currentProjectTitle || '', parsedShots, extractedText);
-      if (detected) {
-        if (typeof setSelectedGenre === 'function') setSelectedGenre(detected);
-        if (typeof setScriptGenre === 'function') setScriptGenre(detected);
-        if (typeof setPresetProfile === 'function') setPresetProfile(detected);
-        localStorage.setItem('sps_preset_profile', detected);
-        localStorage.setItem('sps_active_genre', detected);
-      }
-      parseSucceeded = true;
-      // Genre/vision preview only — shots applied via Apply button to avoid wiping project mid-preview
-    } catch (err) {
-      const isPdfErr = err instanceof PdfExtractError || err?.name === 'PdfExtractError';
-      const code = err?.code || (isPdfErr ? 'PARSE_FAILED' : 'PARSE_ERROR');
-      const message = err?.message || PDF_EXTRACT_MESSAGES.PARSE_FAILED;
-      // Do not wipe existing paste text / preview / project shots on failure
-      setUploadedFileName('');
-      if (isPdfErr) {
-        setPdfFailure({ code, message, fileName: file.name });
-        setParseStatusBanner(formatPdfFailureBanner(code, message));
-      } else {
-        setPdfFailure(null);
-        setParseStatusBanner(`⚠️ ${message}`);
-      }
-      alertLeavingProjectUnchanged(message);
-    } finally {
-      parseInFlightRef.current = false;
-      setIsLoadingFile(false);
-      finishParseProgress({ success: parseSucceeded });
-      resetScriptFileInput();
-    }
-  };
-
-  const handleParseScript = async () => {
-    if (parseInFlightRef.current || isLoadingFile) return;
-    if (!rawScriptText.trim()) {
-      alert('Paste screenplay text, upload a text-based PDF/TXT, or pick a sample script before parsing.');
-      setParseStatusBanner('⚠️ Parse disabled — no usable screenplay text yet.');
-      return;
-    }
-    parseInFlightRef.current = true;
-    setIsLoadingFile(true);
-    setPdfFailure(null);
-    let parseSucceeded = false;
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('sps_current_screenplay_text', rawScriptText);
-        localStorage.setItem('sps_live_screenplay_text', rawScriptText);
-        try {
-          window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'project_console_parse' } }));
-        } catch (e) {}
-      }
-      const parsedShots = await parseRawScriptToShots(rawScriptText);
-      const meta = getLastParseMeta();
-      if (!parsedShots.length) {
-        alertLeavingProjectUnchanged(meta?.warning || 'Parse produced no shots. Existing project was left unchanged.');
-        setParseStatusBanner(meta?.warning || '⚠️ Parse produced no shots. Existing project unchanged.');
-        return;
-      }
-      setParsedPreview(parsedShots);
-      setIsGenerated(true);
-      if (meta?.warning) {
-        console.info('[AI Breakdown]', meta.warning);
-      }
-      if (meta?.error === 'MISSING_API_KEY') {
-        setParseStatusBanner(meta.warning);
-      } else {
-        setParseStatusBanner(
-          meta?.usedFallback
-            ? meta.warning
-            : (meta?.shotCount ? `✓ Parsed ${meta.shotCount} shots (${CRAFT_COUNT} crafts)` : '')
-        );
-      }
-
-      let fullElements = null;
-      try {
-        fullElements = await synthesizeFullAppElementsFromScript(rawScriptText, currentProjectTitle || '', parsedShots);
-        setLastFullElements(fullElements);
-        if (fullElements?.characters && fullElements.characters.length > 0) {
-          try { saveStoredCharacterProfiles(fullElements.characters); } catch (e) {}
-        }
-      } catch (synthErr) {
-        console.warn('Post-parse synthesis skipped:', synthErr);
-        setLastFullElements({ shots: parsedShots });
-      }
-
-      const detected = fullElements?.detectedGenre || detectScriptGenre(currentProjectTitle || '', parsedShots, rawScriptText);
-      if (detected) {
-        if (typeof setSelectedGenre === 'function') setSelectedGenre(detected);
-        if (typeof setScriptGenre === 'function') setScriptGenre(detected);
-        if (typeof setPresetProfile === 'function') setPresetProfile(detected);
-        localStorage.setItem('sps_preset_profile', detected);
-        localStorage.setItem('sps_active_genre', detected);
-      }
-      parseSucceeded = true;
-      // Do not write shots into project library until user clicks Apply
-    } catch (err) {
-      alertLeavingProjectUnchanged(`Failed to parse script: ${err?.message || err}`);
-      setParseStatusBanner(`⚠️ Parse failed: ${err?.message || err}`);
-    } finally {
-      parseInFlightRef.current = false;
-      setIsLoadingFile(false);
-      finishParseProgress({ success: parseSucceeded });
-    }
-  };
-
-  const handleApplyAIShotsToCurrent = () => {
-    if (parsedPreview.length > 0) {
-      if (typeof onApplyShots === 'function') {
-        onApplyShots(parsedPreview, currentProjectTitle, lastFullElements);
-      } else if (setShots) {
-        setShots(parsedPreview);
-      }
-      onClose();
-    }
-  };
-
   // 4. DUPLICATE PROJECT (admin only — creates a new project)
   const handleDuplicateProject = (proj) => {
     if (!isPrimaryOwner) {
@@ -1360,7 +1825,7 @@ export default function ProjectConsoleModal({
 
       setProjectLibrary(updated);
       try {
-        localStorage.setItem('sps_project_library', JSON.stringify(updated));
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
         window.dispatchEvent(new Event('sps_projects_updated'));
         syncProjectLibraryToCloud(updated);
       } catch (e) {}
@@ -1450,39 +1915,31 @@ export default function ProjectConsoleModal({
   };
 
   return (
-    <div className={`sps-modal-enter fixed inset-0 z-50 flex items-center justify-center selection:bg-amber-400 selection:text-black transition-all ${
-      isVaultFullscreen ? 'p-0 bg-black' : 'sps-modal-overlay p-3 sm:p-5 bg-black/80 backdrop-blur-md'
-    }`} style={{ fontFamily: 'var(--sps-font)' }}>
-      <div className={`relative w-full text-slate-900 dark:text-white overflow-hidden flex flex-col transition-all sps-modal-shell sps-glass-shell ${
-        isVaultFullscreen
-          ? 'max-w-none w-screen h-screen rounded-none border-none p-0 bg-black'
-          : 'max-w-6xl rounded-3xl border border-slate-300/80 dark:border-white/10 h-[90vh] max-h-[94vh] max-md:h-[100dvh] max-md:max-h-[100dvh]'
-      }`}>
+    <div className={`sps-overlay sps-project-console-overlay is-full ${isVaultFullscreen ? 'is-full' : ''}`}>
+      <div className="sps-shell sps-atelier-room sps-project-console-shell">
         
-        {/* Single Ultra-Compact Merged Header & Navigation Bar (Hidden in Fullscreen Total Screen View) */}
         {!isVaultFullscreen && (
-          <div className="px-3 sm:px-5 py-3 border-b border-white/[0.08] bg-gradient-to-r from-slate-950 via-slate-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between shrink-0 gap-2.5">
-          {/* Left Side: Navigation Tabs */}
-          <div className="flex items-center gap-2.5 overflow-x-auto sps-header-scroll min-w-0 pb-0.5">
-            <div className="hidden sm:flex items-center gap-2 mr-1 shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-amber-500/10 border border-cyan-400/30 flex items-center justify-center">
-                <FolderKanban className="w-4 h-4 text-cyan-300" />
+          <>
+          <div
+            className={`sps-project-console-toolbar sps-modal-head sps-project-console-head flex-row items-center gap-2 ${
+              consoleToolbarHidden ? 'is-minimized' : ''
+            }`}
+          >
+          <div className="flex items-center gap-1.5 overflow-x-auto sps-header-scroll min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 mr-0.5 shrink-0">
+              <div className="w-7 h-7 border border-[var(--sps-border)] bg-[var(--sps-surface)] flex items-center justify-center shrink-0">
+                <FolderKanban className="w-3.5 h-3.5" style={{ color: 'var(--sps-gold)' }} />
               </div>
-              <div className="leading-tight">
-                <p className="text-[11px] font-bold text-white tracking-tight" style={{ fontFamily: 'var(--sps-font-display)' }}>Project Console</p>
-                <p className="text-[9px] text-zinc-500 font-medium">Library · per-project genre</p>
-              </div>
+              <h2 className="text-[13px] font-semibold tracking-tight m-0 shrink-0" style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}>
+                Projects
+              </h2>
             </div>
             <button
               type="button"
               onClick={() => setActiveTab('library')}
-              className={`sps-chrome-btn px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm shrink-0 ${
-                activeTab === 'library'
-                  ? 'bg-cyan-500 text-slate-950 shadow-[0_6px_20px_rgba(34,211,238,0.3)]'
-                  : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-              }`}
+              className={`sps-btn text-[10px] shrink-0 py-1 ${activeTab === 'library' ? 'sps-btn-primary' : ''}`}
             >
-              <Folder className="w-4 h-4" />
+              <Folder className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Library</span>
             </button>
             {isPrimaryOwner && (
@@ -1492,91 +1949,179 @@ export default function ProjectConsoleModal({
                   setArchivedProjects(getArchivedProjects());
                   setActiveTab('archive');
                 }}
-                className={`sps-chrome-btn px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm shrink-0 ${
-                  activeTab === 'archive'
-                    ? 'bg-amber-500 text-slate-950 shadow-[0_6px_20px_rgba(245,158,11,0.3)]'
-                    : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-                }`}
+                className={`sps-btn text-[10px] shrink-0 py-1 ${activeTab === 'archive' ? 'sps-btn-primary' : ''}`}
               >
-                <Archive className="w-4 h-4" />
+                <Archive className="w-3.5 h-3.5" />
                 <span className="whitespace-nowrap">Archive</span>
                 {archivedProjects.length > 0 && (
-                  <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-black/20 text-[10px] font-black">
+                  <span className="ml-0.5 px-1 py-0 text-[9px] font-black" style={{ background: 'color-mix(in srgb, var(--sps-text) 8%, transparent)' }}>
                     {archivedProjects.length}
                   </span>
                 )}
               </button>
             )}
+            {activeTab === 'library' && (
+              <div className="flex items-center shrink-0 border border-[var(--sps-border)]">
+                <button
+                  type="button"
+                  onClick={() => setLibraryViewMode('gallery')}
+                  className={`sps-btn text-[10px] shrink-0 py-1 ${libraryView === 'gallery' ? 'sps-btn-primary' : ''}`}
+                  title="Poster gallery — tap a poster to open"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="whitespace-nowrap">Gallery</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLibraryViewMode('detail')}
+                  className={`sps-btn text-[10px] shrink-0 py-1 ${libraryView === 'detail' ? 'sps-btn-primary' : ''}`}
+                  title="Detailed project cards"
+                >
+                  <PanelLeft className="w-3.5 h-3.5" />
+                  <span className="whitespace-nowrap">Detail</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Right Side: Profile Badge, Import Backup, + New Project, Close */}
-          <div className="flex items-center gap-2 min-w-0 overflow-x-auto sps-header-scroll">
-            {/* Logged-In User Profile Badge */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-cyan-200 text-xs font-semibold shadow-sm">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <User className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
-              <span className="truncate max-w-[150px]">
-                {currentUserProfile?.name || (currentUserEmail ? currentUserEmail.split('@')[0] : 'Pedditi Ram')}
-              </span>
-              <span className="text-[10px] text-zinc-500 font-medium hidden lg:inline truncate max-w-[160px]">
-                {currentUserEmail}
-              </span>
+          <div className="flex items-center gap-1 min-w-0 shrink-0">
+            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[10px] font-mono max-w-[9rem]" style={{ color: 'var(--sps-muted)' }} title={currentUserEmail || ''}>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="truncate">{currentUserEmail || 'Studio'}</span>
             </div>
 
-            {/* Import Backup File — admin only */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isGuestSession()) {
+                  onOpenLogin?.();
+                  return;
+                }
+                if (typeof onLogout === 'function') {
+                  onLogout();
+                  return;
+                }
+                onOpenLogin?.();
+              }}
+              className="sps-btn text-[10px] shrink-0 py-1 px-2"
+              title={isGuestSession() ? 'Sign in' : 'Log out / switch account'}
+              aria-label={isGuestSession() ? 'Sign in' : 'Log out'}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">{isGuestSession() ? 'Login' : 'Logout'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenNavigatorShortcutHelp?.()}
+              className="sps-icon-btn shrink-0 hidden md:inline-flex"
+              title="Navigator shortcut (Shift + Space)"
+              aria-label="Show navigator keyboard shortcut"
+            >
+              <kbd style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--sps-font-mono)', lineHeight: 1 }}>⇧␣</kbd>
+            </button>
+
             {isPrimaryOwner && (
-              <button
-                type="button"
-                onClick={() => importFileRef.current?.click()}
-                className="sps-chrome-btn px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer shrink-0 border border-cyan-400/30"
-                title="Import & Restore .sps / .json Project Backup File"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Import Backup</span>
-                <span className="sm:hidden">Import</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenProjectFolder}
+                  className="sps-btn text-[10px] shrink-0 py-1 px-2"
+                  title="Open project folder (ASSETS · PROJECT · RENDERS)"
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Open folder</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => importFileRef.current?.click()}
+                  className="sps-btn text-[10px] shrink-0 py-1 px-2 hidden xl:flex"
+                  title="Open backup file (.sps / .json)"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Open file</span>
+                </button>
+              </>
             )}
 
-            {/* + New Project Button — admin only */}
             {isPrimaryOwner ? (
               <button
                 type="button"
                 onClick={() => setActiveTab('create')}
-                className={`sps-chrome-btn px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer shrink-0 border ${
-                  activeTab === 'create'
-                    ? 'bg-amber-400 text-slate-950 border-amber-200/60 shadow-[0_8px_24px_rgba(245,158,11,0.28)]'
-                    : 'bg-white/[0.06] hover:bg-white/[0.1] text-white border-white/15'
-                }`}
+                className={`sps-btn text-[10px] shrink-0 py-1 px-2 ${activeTab === 'create' ? 'sps-btn-primary' : ''}`}
               >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span className="hidden sm:inline">New Project</span>
-                <span className="sm:hidden">New</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">New</span>
               </button>
-            ) : (
-              <div className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[10px] text-zinc-400 font-semibold shrink-0">
-                Allotted only
-              </div>
-            )}
+            ) : null}
+
+            <PinBarButton
+              pinned={consoleToolbarPinned}
+              onToggle={() => {
+                setConsoleToolbarPinned((v) => {
+                  const next = !v;
+                  if (next) setConsoleToolbarHidden(false);
+                  return next;
+                });
+              }}
+              label="Projects bar"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!isAdminLoggedIn) {
+                  onOpenLogin?.();
+                  return;
+                }
+                onOpenAdminSettings?.('all');
+              }}
+              className={`sps-icon-btn shrink-0 ${isAdminLoggedIn ? 'is-on' : ''}`}
+              title={isAdminLoggedIn ? 'Settings' : 'Sign in for settings'}
+              aria-label="Settings"
+            >
+              {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="sps-chrome-btn p-2.5 sm:p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 hover:text-white border border-white/10 cursor-pointer shrink-0"
-              title="Close Project Console"
+              className="sps-icon-btn shrink-0"
+              title="Close"
               aria-label="Close Project Console"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
+          </div>
+          {consoleToolbarHidden && !consoleToolbarPinned ? (
+            <button
+              type="button"
+              className="sps-project-console-toolbar-peek"
+              onClick={() => setConsoleToolbarHidden(false)}
+              title="Show toolbar"
+              aria-label="Show project console toolbar"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+              <span>Toolbar</span>
+            </button>
+          ) : null}
+          </>
         )}
 
-        {/* Modal Tab Content Area - Compact & Expanded to Fill Height */}
-        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 h-full bg-slate-50/50 dark:bg-zinc-950/60">
+        <div
+          ref={consoleScrollRef}
+          onScroll={handleConsoleScroll}
+          className={`sps-project-console-scroll flex-1 min-h-0 overflow-y-auto sps-atelier-pane sps-project-console-pane ${
+            activeTab === 'library' && libraryView === 'detail' ? 'sps-project-console-scroll-snap' : ''
+          } ${activeTab === 'library' && libraryView === 'gallery' ? 'sps-project-console-scroll-gallery' : ''} ${
+            consoleToolbarHidden ? 'is-toolbar-hidden' : ''
+          }`}
+        >
           
           {/* TAB 1: PROJECT LIBRARY */}
           {activeTab === 'library' && (
-            <div className="space-y-4">
+            <div className="space-y-2 sps-project-library">
               <input 
                 type="file" 
                 ref={importFileRef} 
@@ -1590,129 +2135,180 @@ export default function ProjectConsoleModal({
               {/* Hidden File Input for Custom Movie Poster Art Upload */}
               <input type="file" ref={posterFileInputRef} onChange={handlePosterFileChange} accept="image/*" className="hidden" />
 
-              {/* Project Cards Grid (Poster Design Layout - Horizontal 2-Column Split inside each card) */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pb-6">
-                {!isPrimaryOwner && (
-                  <div className="xl:col-span-2 px-4 py-2.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-100 text-[11px] font-mono flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      Showing <strong>{visibleProjectLibrary.length}</strong> allotted project{visibleProjectLibrary.length === 1 ? '' : 's'} for <strong>{currentUserEmail || 'your account'}</strong>
-                      {allottedTitles.length > 0 ? (
-                        <> — {allottedTitles.join(', ')}</>
-                      ) : null}
-                    </span>
-                    <span className="text-[10px] text-cyan-300/80">Other studio projects are hidden</span>
-                  </div>
-                )}
-                {visibleProjectLibrary.length === 0 && (
-                  <div className="xl:col-span-2 p-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono">
-                    No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Owner (pedditiram@gmail.com) to allot a project in Admin Settings.
-                  </div>
-                )}
-                {visibleProjectLibrary.map((proj, projIdx) => {
-                  const isActive = currentProjectTitle === proj.title;
+              {!isPrimaryOwner && (
+                <div className="sps-project-library-banner w-full px-4 py-2.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-100 text-[11px] font-mono flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Showing <strong>{visibleProjectLibrary.length}</strong> allotted project{visibleProjectLibrary.length === 1 ? '' : 's'} for <strong>{currentUserEmail || 'your account'}</strong>
+                    {allottedTitles.length > 0 ? (
+                      <> — {allottedTitles.join(', ')}</>
+                    ) : null}
+                  </span>
+                  <span className="text-[10px] text-cyan-300/80">Other studio projects are hidden</span>
+                </div>
+              )}
+              {visibleProjectLibrary.length === 0 && (
+                <div className="sps-project-library-banner w-full p-6 border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono">
+                  No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Owner (pedditiram@gmail.com) to allot a project in Admin Settings.
+                </div>
+              )}
+
+              {/* Project cards — gallery (posters) or detail (full cards) */}
+              {libraryView === 'gallery' ? (
+                <div className="sps-project-gallery-grid w-full">
+                  {libraryProjectsForDisplay.map((proj, projIdx) => {
+                    const isActive = titlesMatch(currentProjectTitle, proj.title);
+                    const poster = getProjectPosterStyle(proj.title);
+                    const posterSrc =
+                      resolveImageUrl(proj.posterUrl) ||
+                      (proj.posterUrl && !String(proj.posterUrl).startsWith('idb:') ? proj.posterUrl : '');
+                    const hasPoster = Boolean(posterSrc);
+
+                    return (
+                      <button
+                        key={proj.id || `gallery_${projIdx}`}
+                        type="button"
+                        className={`sps-project-gallery-cell ${isActive ? 'is-active' : ''}`}
+                        onClick={() => {
+                          if (isActive) onClose();
+                          else handleSwitchProject(proj);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          handlePosterDoubleTap(proj);
+                        }}
+                        title={`${proj.title} · ${isActive ? 'Open studio' : 'Switch project'} · double-tap poster to replace`}
+                      >
+                        {hasPoster ? (
+                          <img
+                            src={posterSrc}
+                            alt=""
+                            className="sps-project-gallery-img pointer-events-none"
+                            draggable={false}
+                            onError={(ev) => {
+                              const api = typeof window !== 'undefined' ? window.electronAPI : null;
+                              if (!api?.readPosterDataUrl || !proj.title) return;
+                              api.readPosterDataUrl(proj.title).then((res) => {
+                                if (res?.ok && res.dataUrl && ev?.target) {
+                                  ev.target.src = res.dataUrl;
+                                }
+                              }).catch(() => {});
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className={`sps-project-gallery-fallback bg-gradient-to-b ${poster.gradient} flex flex-col items-center justify-center ${
+                              isActive ? 'pt-7' : ''
+                            }`}
+                          >
+                            <span className="sps-project-gallery-fallback-icon">{poster.icon}</span>
+                            <span className="sps-project-gallery-fallback-hint">Double-tap to add poster</span>
+                          </div>
+                        )}
+                        {isActive ? (
+                          <span className="sps-project-gallery-active" aria-hidden="true">Active</span>
+                        ) : null}
+                        <span className="sps-project-gallery-label">{proj.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+              <div className="flex flex-col w-full sps-project-library-list">
+                {libraryProjectsForDisplay.map((proj, projIdx) => {
+                  const isActive = titlesMatch(currentProjectTitle, proj.title);
                   const isAllotted = checkIsProjectAllotted(proj.title);
                   const poster = getProjectPosterStyle(proj.title);
                   const projectGenreKey = resolveProjectGenreKey(proj);
-                  const projectGenreLabel = resolveProjectGenreLabel(proj);
+                  const posterSrc =
+                    resolveImageUrl(proj.posterUrl) ||
+                    (proj.posterUrl && !String(proj.posterUrl).startsWith('idb:') ? proj.posterUrl : '');
+                  const hasPoster = Boolean(posterSrc);
 
                   return (
                     <div
                       key={proj.id || `proj_${projIdx}`}
-                      className={`sps-project-tile relative rounded-3xl border flex flex-col sm:flex-row overflow-hidden group/card ${
+                      className={`sps-project-tile relative w-full border overflow-hidden group/card ${
                         isActive
-                          ? 'is-active border-cyan-400/80 dark:border-cyan-400/70 ring-1 ring-cyan-400/35 bg-white dark:bg-zinc-900'
+                          ? 'is-active'
                           : isAllotted
-                            ? 'bg-white dark:bg-zinc-900/90 border-slate-200 dark:border-zinc-800/90 hover:border-cyan-500/40'
-                            : 'bg-slate-100/80 dark:bg-zinc-950/60 border-slate-200 dark:border-zinc-800/60 opacity-85'
+                            ? ''
+                            : 'opacity-85'
                       }`}
                       style={{ animationDelay: `${Math.min(projIdx, 8) * 40}ms` }}
                     >
-                      {/* LEFT COLUMN: Dedicated 2:3 Ratio Cinema Poster Box */}
-                      <div 
-                        className={`relative w-full sm:w-48 h-64 sm:h-full min-h-[260px] bg-gradient-to-b ${poster.gradient} p-3 flex flex-col justify-between overflow-hidden border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-zinc-800 group/poster cursor-pointer shrink-0`}
-                        onClick={() => handleTriggerPosterUpload(proj.id)}
-                        title="Click to Upload Custom Movie Poster Art"
+                      {/* LEFT: full-height 4:5 poster column — double-tap to replace */}
+                      <div
+                        className={`sps-project-poster relative overflow-hidden border-b sm:border-b-0 sm:border-r border-[var(--sps-border)] cursor-pointer select-none ${
+                          hasPoster ? 'bg-[#161412]' : `bg-gradient-to-b ${poster.gradient} p-3 flex flex-col justify-between`
+                        }`}
+                        onClick={() => handlePosterDoubleTap(proj)}
+                        title="Double-tap to replace poster (4:5)"
                       >
-                        {proj.posterUrl ? (
-                          <img 
-                            src={proj.posterUrl} 
-                            alt={`${proj.title} Official Movie Poster`} 
-                            className="absolute inset-0 w-full h-full object-cover object-center group-hover/poster:scale-105 transition-transform duration-500" 
+                        {hasPoster ? (
+                          <img
+                            src={posterSrc}
+                            alt={`${proj.title} official movie poster`}
+                            className="sps-project-poster-img pointer-events-none"
+                            draggable={false}
+                            onError={(ev) => {
+                              const api = typeof window !== 'undefined' ? window.electronAPI : null;
+                              if (!api?.readPosterDataUrl || !proj.title) return;
+                              api.readPosterDataUrl(proj.title).then((res) => {
+                                if (res?.ok && res.dataUrl && ev?.target) {
+                                  ev.target.src = res.dataUrl;
+                                }
+                              }).catch(() => {});
+                            }}
                           />
                         ) : (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center select-none overflow-hidden">
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-500/20 via-transparent to-black pointer-events-none" />
-                            <div className="text-4xl mb-2 opacity-90 group-hover/poster:scale-110 transition-transform duration-300">
-                              {poster.icon}
+                          <>
+                            <div className="flex flex-col items-center justify-center flex-1 text-center p-2 pointer-events-none">
+                              <div className="text-4xl mb-2 opacity-90">
+                                {poster.icon}
+                              </div>
+                              <span className="text-[9px] text-amber-400 tracking-[0.2em] uppercase font-bold" style={{ fontFamily: 'var(--sps-font-mono)' }}>
+                                Official poster
+                              </span>
+                              <h3 className="text-base font-extrabold text-white tracking-tight uppercase max-w-xs drop-shadow-lg leading-tight mt-1 line-clamp-3" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                                {proj.title}
+                              </h3>
                             </div>
-                            <span className="text-[9px] text-amber-400 tracking-[0.2em] uppercase font-bold" style={{ fontFamily: 'var(--sps-font-mono)' }}>
-                              Official poster
-                            </span>
-                            <h3 className="text-base font-extrabold text-white tracking-tight uppercase max-w-xs drop-shadow-lg leading-tight mt-1 line-clamp-3" style={{ fontFamily: 'var(--sps-font-display)' }}>
-                              {proj.title}
-                            </h3>
-                          </div>
-                        )}
-
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/60 pointer-events-none" />
-
-                        <div className="flex items-center justify-between gap-1 z-10">
-                          {isActive ? (
-                            <span className="text-[10px] bg-cyan-400 text-slate-950 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-md flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-slate-950 stroke-[3]" /> Active
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-zinc-950/80 text-zinc-300 px-2 py-0.5 rounded-md border border-zinc-700 font-semibold">
-                              {proj.shots?.length || 0} shots
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover/poster:opacity-100 transition-opacity duration-300 flex items-center justify-center z-20 backdrop-blur-[2px] p-2 text-center">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTriggerPosterUpload(proj.id);
-                            }}
-                            className="sps-chrome-btn px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-[11px] shadow-xl flex items-center gap-1 cursor-pointer"
-                          >
-                            <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
-                            <span>{proj.posterUrl ? 'Change' : 'Upload'} Poster</span>
-                          </button>
-                        </div>
-
-                        <div className="z-10 mt-auto pt-2">
-                          <span className="text-[9px] text-zinc-300 tracking-widest uppercase font-bold block drop-shadow" style={{ fontFamily: 'var(--sps-font-mono)' }}>
-                            {poster.tagline}
-                          </span>
-                          <h4 className="text-base font-extrabold text-white tracking-tight truncate drop-shadow-md" style={{ fontFamily: 'var(--sps-font-display)' }}>
-                            {proj.title}
-                          </h4>
-                        </div>
-                      </div>
-
-                      {/* RIGHT COLUMN: Project Details & Action Buttons Panel */}
-                      <div className="p-4 bg-white dark:bg-zinc-900/90 flex-1 flex flex-col justify-between space-y-3 min-w-0">
-                        <div className="space-y-2.5">
-                          <div className="flex flex-col gap-1.5 min-w-0 rounded-2xl border border-slate-200/90 dark:border-white/[0.07] bg-slate-50/80 dark:bg-black/25 px-3 py-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <label className="text-[10px] uppercase tracking-[0.14em] font-bold text-slate-500 dark:text-zinc-500">
-                                Project genre
-                              </label>
-                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300/90 truncate max-w-[55%]" title={projectGenreLabel}>
-                                {projectGenreLabel}
+                            <div className="z-10 mt-auto pt-2 pointer-events-none">
+                              <span className="text-[9px] text-zinc-300 tracking-widest uppercase font-bold block drop-shadow" style={{ fontFamily: 'var(--sps-font-mono)' }}>
+                                {poster.tagline}
                               </span>
                             </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* RIGHT: metadata + action grid (poster left / controls right) */}
+                      <div className="sps-project-details p-3 sm:p-4 flex-1 flex flex-col justify-between gap-3 min-w-0">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {isActive ? (
+                              <span className="text-[10px] bg-cyan-400 text-slate-950 px-2 py-0.5 font-bold uppercase tracking-wider shadow-sm flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-slate-950 stroke-[3]" /> Active
+                              </span>
+                            ) : (
+                              <span className="sps-chip text-[10px] font-semibold">
+                                {proj.shots?.length || 0} shots
+                              </span>
+                            )}
+                          </div>
+                          <div className="sps-project-genre-box flex flex-col gap-1.5 min-w-0 border border-slate-200/90 dark:border-white/[0.07] bg-slate-50/80 dark:bg-black/25 px-3 py-2.5">
+                            <label className="text-[10px] uppercase tracking-[0.14em] font-bold text-slate-500 dark:text-zinc-500">
+                              Project genre
+                            </label>
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className={`text-[11px] px-2 py-1 rounded-lg font-bold border shrink-0 ${poster.badgeBg}`}>
+                              <span className={`text-[11px] px-2 py-1 font-bold border shrink-0 ${poster.badgeBg}`}>
                                 {poster.icon}
                               </span>
                               <select
                                 value={projectGenreKey}
                                 onChange={(e) => handleUpdateProjectGenre(proj.id, e.target.value)}
-                                disabled={!isPrimaryOwner && !checkIsProjectAllotted(proj.title)}
-                                className="sps-input-premium flex-1 min-w-0 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-[11px] font-semibold text-slate-800 dark:text-amber-200 rounded-xl px-2.5 py-1.5 focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                disabled={guestLook || (!isPrimaryOwner && !checkIsProjectAllotted(proj.title))}
+                                className="sps-input-premium flex-1 min-w-0 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-[11px] font-semibold text-slate-800 dark:text-amber-200 px-2.5 py-1.5 focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                 title={isPrimaryOwner || checkIsProjectAllotted(proj.title) ? 'Set cinema genre for this project' : 'Genre locked'}
                                 aria-label={`Genre for ${proj.title}`}
                               >
@@ -1745,8 +2341,8 @@ export default function ProjectConsoleModal({
                               <button type="button" onClick={() => setEditingProjectId(null)} className="sps-chrome-btn p-1.5 bg-slate-800 text-slate-300 rounded-lg"><X className="w-4 h-4" /></button>
                             </form>
                           ) : (
-                            <div className="flex items-center justify-between gap-1">
-                              <h4 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight truncate" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <h4 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight truncate min-w-0" style={{ fontFamily: 'var(--sps-font-display)' }}>
                                 {proj.title}
                               </h4>
                               <button
@@ -1760,21 +2356,45 @@ export default function ProjectConsoleModal({
                             </div>
                           )}
 
-                          <p className="text-xs text-slate-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                            {proj.description || 'Cinema Production Studio Project'}
+                          <p className="text-xs sm:text-[13px] text-slate-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                            {proj.description || `Cinema Production Studio Project with ${proj.shots?.length || 0} shots`}
                           </p>
 
                           <div className="flex flex-wrap items-center gap-1.5 text-[10px] pt-0.5">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 font-semibold text-slate-700 dark:text-zinc-300">
-                              <Ratio className="w-3 h-3 text-slate-400" /> {proj.aspectRatio}
+                            <span className="sps-chip inline-flex items-center gap-1">
+                              <Ratio className="w-3 h-3" /> {proj.aspectRatio}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 font-semibold text-cyan-700 dark:text-cyan-400">
+                            <span className="sps-chip inline-flex items-center gap-1">
                               <KeyRound className="w-3 h-3" /> {proj.roomId}
                             </span>
                           </div>
+
+                          {!guestLook && (isPrimaryOwner || checkIsProjectAllotted(proj.title)) ? (
+                            <button
+                              type="button"
+                              className="sps-btn text-[10px] w-full justify-start gap-1.5"
+                              onClick={() => setAssetFoldersProjId(proj.id)}
+                              title="ASSETS · RENDERS · PROJECT paths for this film"
+                            >
+                              <Folder className="w-3 h-3 shrink-0" />
+                              <span className="truncate">Asset folders</span>
+                            </button>
+                          ) : null}
+
+                          <ProjectDrivePanel
+                            project={{
+                              ...proj,
+                              shots: isActive ? shots : proj.shots || [],
+                              targetModel: isActive ? targetModel : proj.targetModel,
+                              aspectRatio: proj.aspectRatio,
+                              roomId: isActive ? roomId : proj.roomId,
+                            }}
+                            guestLook={guestLook}
+                          />
                         </div>
 
                         <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 space-y-2">
+                          {!guestLook && (
                           <button
                             type="button"
                             onClick={() => {
@@ -1784,15 +2404,15 @@ export default function ProjectConsoleModal({
                                 if (!ok) return;
                               }
                               setCustomProjectTitle(proj.title);
-                              setPdfFailure(null);
                               setActiveTab('ai_breakdown');
                             }}
-                            className="sps-chrome-btn w-full py-2 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 border border-amber-600/40 text-xs font-black tracking-wide flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                            className="sps-btn sps-btn-primary w-full justify-center"
                             title={`Run AI Script Breakdown for ${proj.title}`}
                           >
-                            <Wand2 className="w-4 h-4 text-zinc-950 shrink-0" />
+                            <Wand2 className="w-4 h-4 shrink-0" />
                             <span>AI Script Breakdown</span>
                           </button>
+                          )}
 
                           <div className="grid grid-cols-3 gap-1.5 pt-0.5">
                             <button
@@ -1802,7 +2422,7 @@ export default function ProjectConsoleModal({
                                 setVaultCategory('director');
                                 setActiveTab('director_psychology');
                               }}
-                              className="sps-chrome-btn py-1.5 px-1.5 rounded-xl bg-amber-950/90 hover:bg-amber-900 text-amber-200 border border-amber-500/40 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                              className="sps-btn text-[11px] justify-center"
                               title={`Open Director's Vision Vault for ${proj.title}`}
                             >
                               <Brain className="w-3.5 h-3.5 shrink-0" />
@@ -1816,7 +2436,7 @@ export default function ProjectConsoleModal({
                                 setVaultCategory('dop');
                                 setActiveTab('director_psychology');
                               }}
-                              className="sps-chrome-btn py-1.5 px-1.5 rounded-xl bg-cyan-950/90 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/40 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                              className="sps-btn text-[11px] justify-center"
                               title={`Open DoP Cinematography Vault for ${proj.title}`}
                             >
                               <Camera className="w-3.5 h-3.5 shrink-0" />
@@ -1830,7 +2450,7 @@ export default function ProjectConsoleModal({
                                 setVaultCategory('sound');
                                 setActiveTab('director_psychology');
                               }}
-                              className="sps-chrome-btn py-1.5 px-1.5 rounded-xl bg-sky-950/90 hover:bg-sky-900 text-sky-200 border border-sky-500/40 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                              className="sps-btn text-[11px] justify-center"
                               title={`Open Music Director & Sound Vault for ${proj.title}`}
                             >
                               <Music2 className="w-3.5 h-3.5 shrink-0" />
@@ -1844,13 +2464,9 @@ export default function ProjectConsoleModal({
                               if (!isActive) handleSwitchProject(proj);
                               onClose();
                             }}
-                            className={`sps-chrome-btn w-full py-2.5 px-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer ${
-                              isActive
-                                ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_10px_28px_rgba(34,211,238,0.28)] border border-cyan-300/50'
-                                : 'bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white border border-white/10'
-                            }`}
+                            className={`sps-btn w-full justify-center ${isActive ? 'sps-btn-primary' : ''}`}
                           >
-                            {isActive ? <Play className="w-4 h-4 fill-current" /> : <ArrowRight className="w-4 h-4 text-cyan-300" />}
+                            {isActive ? <Play className="w-4 h-4 fill-current" /> : <ArrowRight className="w-4 h-4" />}
                             <span>{isActive ? 'Open Active Studio' : 'Switch & Open Project'}</span>
                           </button>
 
@@ -1859,14 +2475,14 @@ export default function ProjectConsoleModal({
                               <button
                                 type="button"
                                 onClick={() => handleDuplicateProject(proj)}
-                                className="sps-chrome-btn py-1.5 px-2 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                                className="sps-btn text-[11px] justify-center"
                                 title="Duplicate Project"
                               >
                                 <Copy className="w-3.5 h-3.5" />
                                 <span>Copy</span>
                               </button>
                             ) : (
-                              <div className="py-1.5 px-2 rounded-xl bg-zinc-900/40 text-zinc-500 text-[11px] font-semibold text-center">
+                              <div className="py-1.5 px-2 rounded-[var(--sps-radius-sm)] text-[11px] font-semibold text-center" style={{ color: 'var(--sps-muted)', background: 'var(--sps-surface)' }}>
                                 Edit only
                               </div>
                             )}
@@ -1874,8 +2490,8 @@ export default function ProjectConsoleModal({
                             <button
                               type="button"
                               onClick={() => exportProjectPackageToFile(proj)}
-                              className="sps-chrome-btn py-1.5 px-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-800 dark:text-sky-300 border border-sky-500/30 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
-                              title="Save Backup File (.sps)"
+                              className="sps-btn text-[11px] justify-center"
+                              title="Download .sps backup file (not the same as Project save folder versioning)"
                             >
                               <Download className="w-3.5 h-3.5" />
                               <span>Backup</span>
@@ -1885,14 +2501,14 @@ export default function ProjectConsoleModal({
                               <button
                                 type="button"
                                 onClick={() => handleDeleteProject(proj.id)}
-                                className="sps-chrome-btn py-1.5 px-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                                className="sps-btn text-[11px] justify-center"
                                 title="Move project to Archive (can restore later)"
                               >
-                                <Archive className="w-3.5 h-3.5 text-red-400" />
+                                <Archive className="w-3.5 h-3.5" />
                                 <span>Archive</span>
                               </button>
                             ) : (
-                              <div className="py-1.5 px-2 rounded-xl bg-zinc-900/40 text-zinc-500 text-[11px] font-semibold text-center">
+                              <div className="py-1.5 px-2 rounded-[var(--sps-radius-sm)] text-[11px] font-semibold text-center" style={{ color: 'var(--sps-muted)', background: 'var(--sps-surface)' }}>
                                 Locked
                               </div>
                             )}
@@ -1903,6 +2519,7 @@ export default function ProjectConsoleModal({
                   );
                 })}
               </div>
+              )}
             </div>
           )}
 
@@ -1976,238 +2593,20 @@ export default function ProjectConsoleModal({
             </div>
           )}
 
-          {/* TAB 2: AI SCRIPT BREAKDOWN (50/50 DUAL PANE DASHBOARD) */}
+          {/* TAB 2: AI SCRIPT BREAKDOWN (mirrored in Writer) */}
           {activeTab === 'ai_breakdown' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full font-mono">
-              {/* LEFT PANE: Script Input & Controls */}
-              <div className="p-4 rounded-2xl bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 flex flex-col justify-between space-y-3 shadow-sm">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2.5">
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <Wand2 className="w-4 h-4 text-amber-500" />
-                        AI Screenplay Breakdown & Cinema Parser
-                      </h4>
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-500 mt-0.5 truncate">
-                        Target: {customProjectTitle || currentProjectTitle || 'Active project'}
-                      </p>
-                    </div>
-                    <label className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 shadow-md transition-all ${
-                      isLoadingFile
-                        ? 'bg-slate-400 text-white cursor-not-allowed opacity-60 pointer-events-none'
-                        : 'bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer'
-                    }`}>
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isLoadingFile ? 'Reading…' : 'Upload File'}</span>
-                      <input
-                        ref={scriptFileInputRef}
-                        type="file"
-                        accept=".pdf,.txt,.fountain,.fdx"
-                        onChange={handleFileUpload}
-                        disabled={isLoadingFile}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Sample Scripts Selector */}
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-bold shrink-0">Sample Scripts:</span>
-                    <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
-                      {SAMPLE_SCRIPTS.map((sample, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setRawScriptText(sample.script);
-                            setPdfFailure(null);
-                            setParseStatusBanner('');
-                            setUploadedFileName('');
-                          }}
-                          disabled={isLoadingFile}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 text-cyan-600 dark:text-cyan-300 text-[11px] font-bold shrink-0 hover:border-cyan-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          📄 {sample.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {pdfFailure && (
-                    <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-[11px] text-amber-950 dark:text-amber-100">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                        <div className="space-y-1 min-w-0">
-                          <p className="font-black">
-                            PDF extract failed{pdfFailure.code ? `: ${pdfFailure.code}` : ''}
-                            {pdfFailure.fileName ? ` (${pdfFailure.fileName})` : ''}
-                          </p>
-                          <p className="leading-relaxed opacity-90">{pdfFailure.message}</p>
-                          <ul className="list-disc pl-4 space-y-0.5 text-amber-900/90 dark:text-amber-100/90">
-                            <li>Use a <strong>text-based PDF</strong> or <strong>.TXT</strong> export (not a scan).</li>
-                            <li>Or <strong>paste</strong> screenplay text into the box below.</li>
-                            <li>Or load a <strong>Sample Script</strong> above to verify the parser.</li>
-                            <li>Scanned PDFs need <strong>external OCR</strong> first — not built into SPS.</li>
-                          </ul>
-                          <p className="font-semibold text-amber-800 dark:text-amber-200">
-                            Parse stays disabled until usable script text is present. Existing project shots were not changed.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <label className="text-[11px] text-slate-600 dark:text-zinc-400 font-bold block">Paste Screenplay Text:</label>
-                      {uploadedFileName ? (
-                        <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono truncate max-w-[50%]" title={uploadedFileName}>
-                          📎 {uploadedFileName}
-                        </span>
-                      ) : null}
-                    </div>
-                    <textarea
-                      rows={8}
-                      value={rawScriptText}
-                      onChange={(e) => {
-                        setRawScriptText(e.target.value);
-                        if (e.target.value.trim()) setPdfFailure(null);
-                      }}
-                      disabled={isLoadingFile}
-                      placeholder="Paste scene description, screenplay sluglines (INT/EXT), or shot list… Or upload a text PDF / TXT."
-                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-xl p-3 text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-cyan-500 leading-relaxed min-h-[160px] max-h-[260px] resize-y shadow-inner font-mono font-medium disabled:opacity-60"
-                    />
-                    {!hasUsableScriptText && !pdfFailure ? (
-                      <p className="text-[10px] text-slate-500 dark:text-zinc-500 mt-1">
-                        No script text yet — paste, upload TXT/text-PDF, or pick a sample. Parse stays off until then.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-zinc-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-500 dark:text-zinc-400">
-                      Engine: <strong className="text-cyan-600 dark:text-cyan-400 font-bold">Pedditi Labs ({CRAFT_COUNT} Crafts)</strong>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleParseScript}
-                      disabled={!canRunParse}
-                      title={
-                        isLoadingFile
-                          ? 'Parse in progress…'
-                          : (!hasUsableScriptText
-                            ? 'Paste or upload usable screenplay text first'
-                            : `Parse into ${CRAFT_COUNT}-craft shots`)
-                      }
-                      className={`px-4 py-2 rounded-xl font-black text-xs shadow-md flex items-center gap-1.5 transition-all ${
-                        canRunParse
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 text-zinc-950 cursor-pointer'
-                          : 'bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 cursor-not-allowed opacity-70 grayscale'
-                      }`}
-                    >
-                      {isLoadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 fill-current" />}
-                      <span>{isLoadingFile ? `Parsing (${parseProgress}%)...` : `⚡ Parse ${CRAFT_COUNT} Crafts Shots`}</span>
-                    </button>
-                  </div>
-
-                  {/* Dynamic Thin Progress Bar Animation with Percentages */}
-                  {(isLoadingFile || parseProgress > 0) && (
-                    <div className="w-full space-y-1 pt-1 animate-fadeIn">
-                      <div className="flex items-center justify-between text-xs font-mono text-cyan-600 dark:text-cyan-400 font-bold">
-                        <span className="flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                          Analyzing {CRAFT_COUNT} Crafts...
-                        </span>
-                        <span className="bg-cyan-500/10 text-cyan-500 px-2 py-0.5 rounded text-xs font-mono font-black">{parseProgress}%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden relative shadow-inner">
-                        <div 
-                          className="h-full bg-gradient-to-r from-cyan-500 via-amber-400 to-emerald-400 transition-all duration-200 ease-out rounded-full relative"
-                          style={{ width: `${parseProgress}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white/40 animate-pulse" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {parseStatusBanner && !isLoadingFile ? (
-                    <p className={`text-[10.5px] font-mono leading-relaxed pt-1 ${String(parseStatusBanner).startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
-                      {parseStatusBanner}
-                    </p>
-                  ) : null}
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('library')}
-                      className="text-[11px] font-bold text-slate-500 hover:text-cyan-600 dark:text-zinc-400 dark:hover:text-cyan-300 cursor-pointer"
-                    >
-                      ← Back to Library
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT PANE: Live Craft Generated Breakdown Panel */}
-              <div className="p-4 rounded-2xl bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 flex flex-col justify-between h-full shadow-sm">
-                {isGenerated && parsedPreview.length > 0 ? (
-                  <div className="space-y-3 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        Generated {parsedPreview.length} Shots ({CRAFT_COUNT} Crafts)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleApplyAIShotsToCurrent}
-                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md flex items-center gap-1 cursor-pointer transition-all"
-                      >
-                        <Check className="w-4 h-4 stroke-[3]" /> Apply to Studio
-                      </button>
-                    </div>
-
-                    <div className="space-y-2 overflow-y-auto flex-1 max-h-[360px] pr-1">
-                      {parsedPreview.map((s, idx) => (
-                        <div key={idx} className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs space-y-1.5 hover:border-cyan-500/50 transition-all">
-                          <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-1">
-                            <span className="font-black text-amber-600 dark:text-amber-300 font-mono">{s.sceneShotId}</span>
-                            <span className="text-slate-600 dark:text-zinc-400 font-mono font-medium">{s.shotComposition}</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                            <span className="text-cyan-600 dark:text-cyan-400 font-mono truncate">🎥 {s.cameraMotionTag}</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-mono truncate">💡 {s.subjectLightingTag}</span>
-                          </div>
-                          <p className="text-slate-700 dark:text-zinc-300 text-[11px] leading-snug line-clamp-2">
-                            {s.actionEnvContext || s.sceneSynopsis || '—'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-zinc-500">
-                      Apply opens Overwrite vs Merge if the project already has real shots. Preview never wipes the library by itself.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 flex-1 my-auto">
-                    <div className="p-3 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 animate-pulse">
-                      <Wand2 className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-1 max-w-sm">
-                      <h5 className="text-xs font-bold text-slate-900 dark:text-white">Live {CRAFT_COUNT}-Craft Breakdown Preview</h5>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400 leading-normal">
-                        Paste screenplay text on the left, upload a <strong>text-based</strong> PDF/TXT, or select a sample script, then click <strong>⚡ Parse {CRAFT_COUNT} Crafts Shots</strong>.
-                      </p>
-                      {pdfFailure ? (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold pt-2">
-                          Last upload failed ({pdfFailure.code || 'PDF'}). Recover with paste / TXT / sample — then Parse enables.
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <AiScriptBreakdownPanel
+              projectTitle={String(customProjectTitle || currentProjectTitle || '').trim()}
+              shots={shots}
+              onApplyShots={onApplyShots}
+              setShots={setShots}
+              setPresetProfile={setPresetProfile}
+              onApplied={onClose}
+              showBack
+              onBack={() => setActiveTab('library')}
+              eventSource="project_console"
+              className="h-full min-h-[28rem]"
+            />
           )}
 
           {/* Genre is per-project on library cards — global genre tab removed */}
@@ -2257,8 +2656,8 @@ export default function ProjectConsoleModal({
                     >
                       <option value="SPS Direct Cinema 2.0">SPS Direct Cinema 2.0</option>
                       <option value="SPS High Fidelity 1.0">SPS High Fidelity 1.0</option>
-                      <option value="Seedance 2.0">Seedance 2.0</option>
-                      <option value="SeeDream 1.0">SeeDream 1.0</option>
+                      <option value="Seedance 2.0">Studio Video</option>
+                      <option value="SeeDream 1.0">Studio Image</option>
                     </select>
                   </div>
 
@@ -2397,6 +2796,136 @@ export default function ProjectConsoleModal({
                   >
                     {isMergingHybrid ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                     <span>Merge Hybrid</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || directorExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      directorExportBlocked
+                        ? directorExportLife.message
+                        : 'Print Director psychology PDF'
+                    }
+                    onClick={() => exportVisionCategoryPdf('director')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Dir PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || directorExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      directorExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download Director vision ZIP · room:${roomId}`
+                          : 'Download Director vision ZIP (markdown + META)'
+                    }
+                    onClick={() => exportVisionCategoryZip('director')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Dir ZIP</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || directorExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      directorExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download Director vision CSV · room:${roomId}`
+                          : 'Download Director vision CSV (stream × field)'
+                    }
+                    onClick={() => exportVisionCategoryCsv('director')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Dir CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || dopExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-200 border border-cyan-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={dopExportBlocked ? directorExportLife.message : 'Print DoP vision PDF'}
+                    onClick={() => exportVisionCategoryPdf('dop')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>DoP PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || dopExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-200 border border-cyan-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      dopExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download DoP vision ZIP · room:${roomId}`
+                          : 'Download DoP vision ZIP (markdown + META)'
+                    }
+                    onClick={() => exportVisionCategoryZip('dop')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>DoP ZIP</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || dopExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-200 border border-cyan-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      dopExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download DoP vision CSV · room:${roomId}`
+                          : 'Download DoP vision CSV (stream × field)'
+                    }
+                    onClick={() => exportVisionCategoryCsv('dop')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>DoP CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || soundExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-purple-200 border border-purple-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={soundExportBlocked ? directorExportLife.message : (roomId ? `Print Sound vision PDF · room:${roomId}` : 'Print Sound vision PDF')}
+                    onClick={() => exportVisionCategoryPdf('sound')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Sound PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || soundExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-purple-200 border border-purple-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      soundExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download Sound vision ZIP · room:${roomId}`
+                          : 'Download Sound vision ZIP (markdown + META)'
+                    }
+                    onClick={() => exportVisionCategoryZip('sound')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Sound ZIP</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!targetPsychologyProj || soundExportBlocked}
+                    className="px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-purple-200 border border-purple-500/40 text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    title={
+                      soundExportBlocked
+                        ? directorExportLife.message
+                        : roomId
+                          ? `Download Sound vision CSV · room:${roomId}`
+                          : 'Download Sound vision CSV (stream × field)'
+                    }
+                    onClick={() => exportVisionCategoryCsv('sound')}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Sound CSV</span>
                   </button>
                 </div>
 
@@ -2620,68 +3149,121 @@ export default function ProjectConsoleModal({
 
         </div>
 
-        {/* Modal Bottom Footer Strip - Active Project + Storage Path & Edit Path (Hidden in Full Screen Mode) */}
-        {!isVaultFullscreen && (
-          <div className="p-2.5 px-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shrink-0 font-mono text-xs">
-            {/* Left: Active Project Pill */}
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-400 font-bold">Active Project:</span>
-              <span className="font-black text-cyan-400 uppercase tracking-wider bg-cyan-950/80 px-2.5 py-0.5 rounded-lg border border-cyan-800/60 shadow-sm">{currentProjectTitle}</span>
-            </div>
+      </div>
 
-            {/* Right: Storage Path & Edit Path */}
-            <div className="flex items-center gap-2.5 min-w-0 max-w-2xl">
-              <span className="text-zinc-400 font-bold shrink-0">Storage Path:</span>
-              {isEditingFolder ? (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={tempFolder}
-                    onChange={(e) => setTempFolder(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveAllottedFolder();
-                      if (e.key === 'Escape') setIsEditingFolder(false);
-                    }}
-                    className="px-2.5 py-0.5 rounded-lg bg-black border border-cyan-500/60 text-cyan-300 font-mono text-xs w-64 focus:outline-none"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveAllottedFolder}
-                    className="px-2.5 py-0.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingFolder(false)}
-                    className="px-2 py-0.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <span className="bg-black/70 text-cyan-300 font-mono text-[11px] px-2.5 py-1 rounded-lg border border-cyan-500/20 truncate">
-                  {allottedFolder}
-                </span>
-              )}
-
+      {/* Asset folders — per-project floating panel */}
+      {assetFoldersProj && (
+        <div
+          className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ComfyUI asset folders for ${assetFoldersProj.title}`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAssetFoldersProjId(null);
+          }}
+        >
+          <div
+            className="sps-asset-folders-popup bg-[var(--sps-bg-elevated)] border border-[var(--sps-border)] shadow-2xl max-w-xl w-full max-h-[min(90vh,720px)] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-[var(--sps-border)] flex items-center justify-between gap-3 bg-[var(--sps-surface)]">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white m-0 truncate" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                  {assetFoldersProj.title}
+                </h3>
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-zinc-500 m-0 mt-0.5">
+                  Asset folders · ASSETS RENDERS PROJECT
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  setTempFolder(allottedFolder);
-                  setIsEditingFolder(!isEditingFolder);
-                }}
-                className="px-3 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-cyan-300 border border-zinc-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
-                title="Change Allotted Storage Directory Path"
+                onClick={() => setAssetFoldersProjId(null)}
+                className="sps-chrome-btn p-1.5 shrink-0"
+                aria-label="Close asset folders"
               >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>{isEditingFolder ? 'Cancel' : 'Edit Path'}</span>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 space-y-3 text-[10px]">
+              <p className="m-0 text-[9px] uppercase tracking-widest text-slate-400">Look sheets (Image_1…9)</p>
+              {ASSET_ROOT_KEYS.map((key) => (
+                <label key={key} className="block text-slate-600 dark:text-zinc-400">
+                  {ASSET_ROOT_LABELS[key]}
+                  <input
+                    type="text"
+                    className="sps-input w-full mt-0.5 font-mono text-[11px]"
+                    value={String(assetFoldersProj.assetRoots?.[key] || '')}
+                    placeholder={`/Volumes/…/ASSETS/${key[0].toUpperCase()}${key.slice(1)}`}
+                    onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
+                  />
+                </label>
+              ))}
+              <p className="m-0 pt-1 text-[9px] uppercase tracking-widest text-slate-400">Renders & project</p>
+              {PROJECT_PATH_KEYS.map((key) => (
+                <label key={key} className="block text-slate-600 dark:text-zinc-400">
+                  {PROJECT_PATH_LABELS[key]}
+                  <input
+                    type="text"
+                    className="sps-input w-full mt-0.5 font-mono text-[11px]"
+                    value={String(assetFoldersProj.assetRoots?.[key] || '')}
+                    placeholder={
+                      key === 'rendersVideo'
+                        ? '/Volumes/…/RENDERS/Video'
+                        : key === 'rendersImage'
+                          ? '/Volumes/…/RENDERS/Image'
+                          : key === 'workflows'
+                            ? '/Volumes/…/PROJECT/Workflows'
+                            : '/Volumes/…/PROJECT/Versions'
+                    }
+                    onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
+                  />
+                </label>
+              ))}
+              <label className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 pt-0.5">
+                <input
+                  type="checkbox"
+                  checked={normalizeAssetRoots(assetFoldersProj.assetRoots).versioning}
+                  onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, 'versioning', e.target.checked)}
+                />
+                Version project saves
+                <span className="opacity-70">
+                  {normalizeAssetRoots(assetFoldersProj.assetRoots).versioning
+                    ? `(next v${String(normalizeAssetRoots(assetFoldersProj.assetRoots).projectVersion).padStart(3, '0')})`
+                    : '(off)'}
+                </span>
+              </label>
+              <p className="m-0 text-[9px] text-slate-500 dark:text-zinc-500 leading-snug">
+                Pick studio root (e.g. Desktop/SWS PROJECTS). Creates{' '}
+                <span className="font-mono">
+                  {sanitizeProjectFolderName(assetFoldersProj.title)}/ASSETS · RENDERS · PROJECT
+                </span>{' '}
+                — not loose folders at the studio root. Save rewrites old root-level paths under the project name.
+              </p>
+            </div>
+
+            <div className="px-4 py-3 border-t border-[var(--sps-border)] flex flex-wrap gap-2 bg-[var(--sps-surface)]">
+              <button
+                type="button"
+                className="sps-btn text-[10px]"
+                onClick={() => handleFillDefaultAssetRoots(assetFoldersProj)}
+              >
+                Fill under film root
+              </button>
+              <button
+                type="button"
+                className="sps-btn sps-btn-primary text-[10px]"
+                onClick={() => handleSaveProjectAssetRoots(assetFoldersProj)}
+              >
+                Save & create folders
+              </button>
+              <button type="button" className="sps-btn text-[10px] ml-auto" onClick={() => setAssetFoldersProjId(null)}>
+                Close
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* GENRE PROFILE CREATOR & EDITOR MODAL */}
       {isGenreEditorOpen && (
@@ -2821,6 +3403,7 @@ export default function ProjectConsoleModal({
           </div>
         </div>
       )}
+
     </div>
   );
 }

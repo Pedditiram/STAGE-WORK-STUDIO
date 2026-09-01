@@ -1,34 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  X, Copy, Download, Check, Sparkles, FolderDown, CheckCircle2, Archive, BookOpen,
+  Maximize2, Minimize2, ExternalLink
+} from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { createZipArchive } from '../utils/zipUtils';
 import { loadDirectorPsychology } from '../utils/directorPsychologyStorage';
-import SaveCloseConfirmModal from './SaveCloseConfirmModal';
-import { 
-  X, Copy, Download, Check, Sparkles, Code, FileSpreadsheet, FileText, 
-  Cpu, Image as ImageIcon, Disc, Film, FolderDown, FileCode, CheckCircle2, Grid, Archive, BookOpen,
-  Maximize2, Minimize2, ExternalLink
-} from 'lucide-react';
 import { parseSceneAndShotID, formatShotIdForPrompt, formatShotFilename } from '../utils/sceneShotUtils';
 import { compileMasterCinemaCompilerPrompt } from '../utils/compileMasterCinemaPrompt';
+import { getStoredCharacterProfiles } from './CharacterBibleModal';
+import { applyShotBridge, blockingFlags, continuityFlagsForShot } from '../utils/continuitySpine';
+import { assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
+import { lifecycleExportReadiness } from '../utils/productionLifecycle';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import { compilerPromptsToPrintHtml } from '../utils/compilerExport';
 
 export default function PromptCompilerModal({
   isOpen,
   onClose,
   shots,
   onUpdateShot: _onUpdateShot, // retained for API compat; crafts are read-only — edit via Form
-  activeTargetModel = "Stage Production Studio",
+  activeTargetModel = "Stage Work Studio",
   projectTitle,
   onOpenWriterSynopsis,
   onEditShotInForm,
 }) {
-  const [formatMode, setFormatMode] = useState('seedance_tagged'); // Default to SPS Standard Tagged
+  const [formatMode, setFormatMode] = useState('comfyui_seedance');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'single'
   const [copied, setCopied] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState(null);
   const [editingShotIdx, setEditingShotIdx] = useState(null);
   const [activeCraftKey, setActiveCraftKey] = useState(null);
-  const [isEscConfirmOpen, setIsEscConfirmOpen] = useState(false);
+
+  const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
+  const {
+    strict: compilerLifecycleStrict,
+    mode: compilerLifecycleMode
+  } = useExportLifecyclePref('compiler');
+  const exportBlocked = compilerLifecycleStrict && !exportLife.exportReady;
+
+  const compilerExportOpts = useMemo(
+    () => ({
+      projectTitle,
+      lifecycleMode: compilerLifecycleMode,
+      shots,
+      showAlert: true,
+      roomId: resolveCollabRoomId()
+    }),
+    [projectTitle, shots, compilerLifecycleMode]
+  );
+  const compilerLifeNote = `${(shots || []).filter((s) => s && !s.isArchived).length} shots · ${
+    compilerLifecycleMode
+  }`;
 
   const [scriptSynopsisSource, setScriptSynopsisSource] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -102,12 +126,12 @@ export default function PromptCompilerModal({
         if (isFullscreen) {
           toggleFullscreenMode(false);
         } else {
-          setIsEscConfirmOpen(true);
+          onClose?.();
         }
       } else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) {
         e.preventDefault();
         setFocusedShotIdx((prev) => {
-          const nextIdx = Math.min(prev + 1, shots.length - 1);
+          const nextIdx = Math.min(prev + 1, shotList.length - 1);
           const elem = document.getElementById(`compiler-shot-card-${nextIdx}`);
           if (elem) {
             elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -129,7 +153,7 @@ export default function PromptCompilerModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isFullscreen, shots]);
+  }, [isOpen, isFullscreen, shots, onClose]);
 
   // Sync native fullscreen exit
   useEffect(() => {
@@ -157,32 +181,51 @@ const SmartFormattedPromptViewer = ({ content }) => {
 
   const lines = String(content).split('\n');
 
-  // Strip leading emoji characters to avoid duplicate emoji rendering in badge UI
-  const stripLeadingEmoji = (str) => {
-    return str
-      .replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{200D}\u{FE0F}\u{26A1}\u{2699}\u{2728}\s]+/u, '')
-      .trim();
+  const headingClass = (trimmed) => {
+    const t = trimmed.replace(/^SEEDANCE 2\.5\s*[—–-]?\s*/i, '').trim();
+    if (/^VIDEO PROMPT/i.test(t) || /^SEEDANCE/i.test(trimmed)) return 'sps-prompt-h sps-prompt-h--title';
+    if (/^INTENT$/i.test(t)) return 'sps-prompt-h sps-prompt-h--intent';
+    if (/^REFERENCES$/i.test(t)) return 'sps-prompt-h sps-prompt-h--refs';
+    if (/^SUBJECT/i.test(t)) return 'sps-prompt-h sps-prompt-h--subject';
+    if (/^SCENE$/i.test(t) || /^SCENE /i.test(t)) return 'sps-prompt-h sps-prompt-h--scene';
+    if (/^STYLE$/i.test(t)) return 'sps-prompt-h sps-prompt-h--style';
+    if (/^CAMERA/i.test(t) || /CAMERA KINEMATICS/i.test(t)) return 'sps-prompt-h sps-prompt-h--camera';
+    if (/^AUDIO$/i.test(t)) return 'sps-prompt-h sps-prompt-h--audio';
+    if (/^SEQUENCE$/i.test(t) || /MOTION & ACTION/i.test(t)) return 'sps-prompt-h sps-prompt-h--seq';
+    if (/^CONSTRAINTS$/i.test(t) || /CONDITIONING BINDINGS/i.test(t)) return 'sps-prompt-h sps-prompt-h--lock';
+    if (/FIRST FRAME|BEAT 1|FRAME 0/i.test(t)) return 'sps-prompt-h sps-prompt-h--frame';
+    if (/LAST FRAME|BEAT 3|FRAME N/i.test(t)) return 'sps-prompt-h sps-prompt-h--lock';
+    if (/VIDEO GENERATION|BEAT 2/i.test(t)) return 'sps-prompt-h sps-prompt-h--title';
+    if (/^CHARACTER BIBLE|^Script Synopsis|^Scene Synopsis|^Character Bible|^PROMPT:|^Prompt:|^Extract/i.test(t)) {
+      return 'sps-prompt-h sps-prompt-h--seq';
+    }
+    return null;
+  };
+
+  const displayHeading = (trimmed) => {
+    if (/^SEEDANCE/i.test(trimmed) || /^VIDEO PROMPT/i.test(trimmed)) return 'Video prompt';
+    return trimmed.replace(/^\[|\]$/g, '').replace(/^=+\s*|\s*=+$/g, '').trim();
   };
 
   const renderKeyValueLine = (line) => {
     if (line.includes(' | ')) {
       const parts = line.split(' | ');
       return (
-        <div className="flex flex-wrap gap-2 py-1 font-mono text-xs">
+        <div className="flex flex-wrap">
           {parts.map((p, pIdx) => {
             const eqIdx = p.indexOf('=');
             if (eqIdx !== -1) {
               const k = p.slice(0, eqIdx).trim();
               const v = p.slice(eqIdx + 1).trim();
               return (
-                <span key={pIdx} className="bg-slate-100 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700/90 px-2.5 py-1 rounded-lg text-[11px] shadow-sm">
-                  <span className="text-cyan-800 dark:text-cyan-300 font-bold">{k}</span>
-                  <span className="text-slate-500 dark:text-zinc-400 mx-1.5 font-bold">=</span>
-                  <span className="text-amber-800 dark:text-amber-300 font-bold">{v}</span>
+                <span key={pIdx} className="sps-prompt-chip">
+                  <span className="sps-prompt-k">{k}</span>
+                  <span className="sps-prompt-eq">=</span>
+                  <span className="sps-prompt-v">{v}</span>
                 </span>
               );
             }
-            return <span key={pIdx} className="text-slate-900 dark:text-zinc-100 font-medium">{p}</span>;
+            return <span key={pIdx} className="sps-prompt-body">{p}</span>;
           })}
         </div>
       );
@@ -193,10 +236,10 @@ const SmartFormattedPromptViewer = ({ content }) => {
       const k = line.slice(0, eqIdx).trim();
       const v = line.slice(eqIdx + 1).trim();
       return (
-        <div className="py-1 font-mono text-xs flex flex-wrap items-baseline gap-2 pl-2.5 border-l-2 border-cyan-600 dark:border-cyan-500/50 my-1 bg-cyan-50 dark:bg-cyan-950/40 rounded-r-lg">
-          <span className="text-cyan-800 dark:text-cyan-300 font-bold shrink-0">{k}</span>
-          <span className="text-slate-500 dark:text-zinc-400 font-bold">=</span>
-          <span className="text-slate-900 dark:text-zinc-100 font-semibold">{v}</span>
+        <div className="sps-prompt-body">
+          <span className="sps-prompt-k">{k}</span>
+          <span className="sps-prompt-eq">=</span>
+          <span className="sps-prompt-v">{v}</span>
         </div>
       );
     }
@@ -208,19 +251,19 @@ const SmartFormattedPromptViewer = ({ content }) => {
         const k = trimmed.slice(0, colonIdx).trim();
         const v = trimmed.slice(colonIdx + 1).trim();
         return (
-          <div className="py-1.5 font-mono text-xs flex items-start gap-2.5 pl-3 border-l-2 border-purple-600 dark:border-purple-500/60 my-1 bg-purple-50 dark:bg-purple-950/50 rounded-r-xl">
-            <span className="text-purple-700 dark:text-purple-300 text-sm leading-none shrink-0 mt-0.5">•</span>
+          <div className="sps-prompt-bullet">
+            <span>·</span>
             <div>
-              <span className="text-purple-900 dark:text-purple-200 font-bold tracking-wide">{k}: </span>
-              <span className="text-slate-900 dark:text-zinc-100 leading-relaxed font-semibold">{v}</span>
+              <span className="sps-prompt-k">{k}: </span>
+              <span className="sps-prompt-v">{v}</span>
             </div>
           </div>
         );
       }
       return (
-        <div className="py-1 font-mono text-xs flex items-start gap-2 pl-3">
-          <span className="text-amber-700 dark:text-amber-400 font-bold">•</span>
-          <span className="text-slate-900 dark:text-zinc-100 font-semibold">{trimmed}</span>
+        <div className="sps-prompt-bullet">
+          <span>·</span>
+          <span className="sps-prompt-body">{trimmed}</span>
         </div>
       );
     }
@@ -229,108 +272,45 @@ const SmartFormattedPromptViewer = ({ content }) => {
     if (colonMatch && !line.startsWith('http') && !line.startsWith('===') && !line.startsWith('[')) {
       const [, k, v] = colonMatch;
       return (
-        <div className="py-0.5 font-mono text-xs leading-relaxed">
-          <span className="text-amber-800 dark:text-amber-400 font-bold">{k}: </span>
-          <span className="text-slate-900 dark:text-zinc-100 font-semibold">{v}</span>
+        <div className="sps-prompt-body">
+          <span className="sps-prompt-k">{k}: </span>
+          <span className="sps-prompt-v">{v}</span>
         </div>
       );
     }
 
-    return <div className="py-0.5 font-mono text-xs text-slate-950 dark:text-zinc-100 font-semibold leading-relaxed select-all">{line}</div>;
+    return <div className="sps-prompt-body select-all">{line}</div>;
   };
 
   return (
-    <div className="space-y-1.5 select-all font-mono bg-white dark:bg-zinc-950 p-4.5 rounded-2xl text-slate-950 dark:text-zinc-100 border border-slate-300 dark:border-zinc-800 shadow-md">
+    <div className="sps-prompt select-all">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
-
-        if (!trimmed) {
-          return <div key={idx} className="h-2" />;
-        }
+        if (!trimmed) return <div key={idx} className="h-2" />;
 
         if (trimmed.startsWith('===')) {
-          const cleanTitle = trimmed.replace(/^=+\s*/, '').replace(/\s*=+$/, '');
           return (
-            <div 
-              key={idx} 
-              className="my-4 py-3 px-4 bg-slate-100 dark:bg-gradient-to-r dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-l-4 border-cyan-600 dark:border-cyan-400 rounded-r-2xl shadow-md flex items-center justify-between font-sans border-y border-r border-slate-300 dark:border-zinc-800"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 dark:bg-cyan-400 animate-pulse shadow-sm" />
-                <span className="text-cyan-900 dark:text-cyan-300 font-black text-xs sm:text-sm uppercase tracking-wider">
-                  {cleanTitle}
-                </span>
-              </div>
+            <div key={idx} className="sps-prompt-h sps-prompt-h--title">
+              {displayHeading(trimmed)}
             </div>
           );
         }
 
-        if (trimmed.includes('[FIRST FRAME') || trimmed.includes('[FRAME 0') || trimmed.includes('BEAT 1')) {
+        if (/^Shot\s/i.test(trimmed) && idx < 4) {
+          return <div key={idx} className="sps-prompt-meta">{trimmed}</div>;
+        }
+
+        const hClass = headingClass(trimmed);
+        if (hClass) {
           return (
-            <div 
-              key={idx} 
-              className="mt-3.5 mb-2 px-3.5 py-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-500/60 text-emerald-900 dark:text-emerald-300 font-sans font-black text-xs flex items-center gap-2.5 shadow-sm"
-            >
-              <span className="text-base">🖼️</span>
-              <span className="tracking-wide text-emerald-950 dark:text-emerald-200">{stripLeadingEmoji(trimmed)}</span>
+            <div key={idx} className={hClass}>
+              {displayHeading(trimmed)}
             </div>
           );
         }
 
-        if (trimmed.includes('[LAST FRAME') || trimmed.includes('[FRAME N') || trimmed.includes('BEAT 3')) {
-          return (
-            <div 
-              key={idx} 
-              className="mt-3.5 mb-2 px-3.5 py-2.5 rounded-xl bg-amber-100 dark:bg-amber-950 border border-amber-300 dark:border-amber-500/60 text-amber-900 dark:text-amber-300 font-sans font-black text-xs flex items-center gap-2.5 shadow-sm"
-            >
-              <span className="text-base">🏁</span>
-              <span className="tracking-wide text-amber-950 dark:text-amber-200">{stripLeadingEmoji(trimmed)}</span>
-            </div>
-          );
-        }
-
-        if (trimmed.includes('[DYNAMIC VIDEO GENERATION') || trimmed.includes('[VIDEO GENERATION')) {
-          return (
-            <div 
-              key={idx} 
-              className="mt-4 mb-2.5 px-4 py-2.5 rounded-xl bg-cyan-900 dark:bg-gradient-to-r dark:from-cyan-950 dark:via-blue-950 dark:to-indigo-950 border border-cyan-700 dark:border-cyan-400/60 text-white font-sans font-extrabold text-xs flex items-center gap-2.5 shadow-md"
-            >
-              <span className="text-lg">🎥</span>
-              <span className="tracking-wide text-white dark:text-cyan-100">{stripLeadingEmoji(trimmed)}</span>
-            </div>
-          );
-        }
-
-        if (
-          trimmed.startsWith('Script Synopsis:') || 
-          trimmed.startsWith('Scene Synopsis:') ||
-          trimmed.startsWith('Character Bible:') ||
-          trimmed.startsWith('CHARACTER BIBLE') ||
-          trimmed.startsWith('Extract of Character Bible')
-        ) {
-          return (
-            <div key={idx} className="mt-4 mb-2 px-3.5 py-2.5 rounded-xl bg-purple-100 dark:bg-purple-950 border border-purple-300 dark:border-purple-500/60 text-purple-950 dark:text-purple-200 font-sans font-bold text-xs flex items-center gap-2.5 shadow-sm">
-              <span className="text-base">📖</span>
-              <span className="tracking-wide text-purple-950 dark:text-purple-100">{stripLeadingEmoji(trimmed)}</span>
-            </div>
-          );
-        }
-
-        if (
-          trimmed.includes('MOTION & ACTION PROGRESSION') || 
-          trimmed.includes('CAMERA KINEMATICS') || 
-          trimmed.includes('ATMOSPHERE & DYNAMICS') || 
-          trimmed.includes('CONDITIONING BINDINGS') ||
-          trimmed.startsWith('Extract PROMPT') ||
-          trimmed.startsWith('Prompt:') ||
-          trimmed.startsWith('PROMPT:') ||
-          trimmed.startsWith('Character ID:')
-        ) {
-          return (
-            <div key={idx} className="mt-4 mb-1.5 pt-2.5 border-t border-slate-300 dark:border-zinc-800 text-amber-800 dark:text-amber-400 font-sans font-black text-xs uppercase tracking-wider flex items-center gap-2">
-              <span className="text-amber-800 dark:text-amber-300">{stripLeadingEmoji(trimmed)}</span>
-            </div>
-          );
+        if (/^Image_\d+/i.test(trimmed) || trimmed.includes('identity / look lock')) {
+          return <div key={idx} className="sps-prompt-ref">{trimmed}</div>;
         }
 
         return <div key={idx}>{renderKeyValueLine(line)}</div>;
@@ -340,6 +320,8 @@ const SmartFormattedPromptViewer = ({ content }) => {
 };
 
   if (!isOpen) return null;
+
+  const shotList = Array.isArray(shots) ? shots.filter((s) => s && !s.isArchived) : [];
 
   const compileTaggedFormat = (shot) => {
     const muted = shot?.mutedSlots || {};
@@ -384,26 +366,23 @@ const SmartFormattedPromptViewer = ({ content }) => {
     // Inject character Bible backstory & persona dynamics if tag is present
     let characterBibleNotes = '';
     try {
-      const storedCharsStr = localStorage.getItem('sps_character_bible_vault');
-      if (storedCharsStr) {
-        const charProfiles = JSON.parse(storedCharsStr);
-        if (Array.isArray(charProfiles)) {
-          charProfiles.forEach(char => {
-            if (char.tag && (shot.characterIdAssetRef || '').includes(char.tag)) {
-              const traits = [];
-              if (char.backstory) traits.push(`Story: ${char.backstory}`);
-              if (char.characterConnections) traits.push(`Connections: ${char.characterConnections}`);
-              if (char.shotPurpose) traits.push(`Shot Purpose: ${char.shotPurpose}`);
-              if (char.mannerism) traits.push(`Mannerism: ${char.mannerism}`);
-              if (char.walkingStyle) traits.push(`Gait/Walking: ${char.walkingStyle}`);
-              if (char.dialogueDelivery) traits.push(`Delivery: ${char.dialogueDelivery}`);
-              if (char.uniqueVoice) traits.push(`Voice: ${char.uniqueVoice}`);
-              if (traits.length > 0) {
-                characterBibleNotes += ` [${char.tag} Character Persona & Shot Purpose: ${traits.join(' | ')}]`;
-              }
+      const charProfiles = getStoredCharacterProfiles();
+      if (Array.isArray(charProfiles)) {
+        charProfiles.forEach(char => {
+          if (char.tag && (shot.characterIdAssetRef || '').includes(char.tag)) {
+            const traits = [];
+            if (char.backstory) traits.push(`Story: ${char.backstory}`);
+            if (char.characterConnections) traits.push(`Connections: ${char.characterConnections}`);
+            if (char.shotPurpose) traits.push(`Shot Purpose: ${char.shotPurpose}`);
+            if (char.mannerism) traits.push(`Mannerism: ${char.mannerism}`);
+            if (char.walkingStyle) traits.push(`Gait/Walking: ${char.walkingStyle}`);
+            if (char.dialogueDelivery) traits.push(`Delivery: ${char.dialogueDelivery}`);
+            if (char.uniqueVoice) traits.push(`Voice: ${char.uniqueVoice}`);
+            if (traits.length > 0) {
+              characterBibleNotes += ` [${char.tag} Character Persona & Shot Purpose: ${traits.join(' | ')}]`;
             }
-          });
-        }
+          }
+        });
       }
     } catch (e) {}
 
@@ -431,10 +410,12 @@ ${promptNarrative.trim()}`;
   };
 
   const compileComfyUISeedanceFormat = (shot, shotIdx) => {
-    const { masterCinemaPrompt } = compileMasterCinemaCompilerPrompt(shot, shotIdx, {
+    const bridged = applyShotBridge(shot, shotList, shotIdx);
+    const { masterCinemaPrompt } = compileMasterCinemaCompilerPrompt(bridged, shotIdx, {
       projectTitle,
       scriptSynopsisSource,
-      writerCustomScriptSynopsis
+      writerCustomScriptSynopsis,
+      shots: shotList
     });
     return masterCinemaPrompt;
   };
@@ -498,7 +479,7 @@ ${promptNarrative.trim()}`;
 
   const compileMiniMaxFormat = (shot) => {
     const parts = [];
-    parts.push(`[MiniMax Engine]`);
+    parts.push(`[Video Engine]`);
     if (shot.cameraMotionTag) parts.push(`Camera Movement: ${shot.cameraMotionTag.replace(/\[|\]/g, '')}.`);
     if (shot.shotComposition) parts.push(`Framing: ${shot.shotComposition}.`);
     if (shot.characterIdAssetRef) parts.push(`Subject: ${shot.characterIdAssetRef}.`);
@@ -510,7 +491,7 @@ ${promptNarrative.trim()}`;
 
   const compileBytePlusFormat = (shot) => {
     const parts = [];
-    parts.push(`[BytePlus Engine]`);
+    parts.push(`[Video Engine]`);
     if (shot.shotComposition) parts.push(`--shot_type "${shot.shotComposition}"`);
     if (shot.cameraMotionTag) parts.push(`--camera_motion "${shot.cameraMotionTag}"`);
     if (shot.characterIdAssetRef) parts.push(`--main_subject "${shot.characterIdAssetRef}"`);
@@ -664,21 +645,23 @@ Script Summary: Act 1-3 narrative sequence depicting the epic conflict of ${proj
     // 2. CHARACTER BIBLE (PER PERSONA PROFILE & TRAITS)
     let charBibleBlock = '';
     try {
-      const stored = localStorage.getItem('sps_character_bible_vault');
-      if (stored) {
-        const profiles = JSON.parse(stored);
-        if (Array.isArray(profiles)) {
-          profiles.forEach(c => {
-            if (c.tag && (shot.characterIdAssetRef || '').includes(c.tag)) {
-              charBibleBlock += `[CHARACTER BIBLE PROFILE - ${c.name} (${c.tag})]\n`;
-              charBibleBlock += `• Character Backstory: ${c.backstory || 'N/A'}\n`;
-              charBibleBlock += `• Mannerisms & Body Ticks: ${c.mannerism || 'N/A'}\n`;
-              charBibleBlock += `• Walking Style & Gait: ${c.walkingStyle || 'N/A'}\n`;
-              charBibleBlock += `• Dialogue Style & Voice: ${c.uniqueVoice || 'N/A'} | ${c.dialogueDelivery || 'N/A'}\n`;
-              charBibleBlock += `• Signature Outfit & Props: ${c.outfit || 'N/A'}\n\n`;
-            }
-          });
-        }
+      const profiles = getStoredCharacterProfiles();
+      if (Array.isArray(profiles)) {
+        profiles.forEach(c => {
+          if (c.tag && (shot.characterIdAssetRef || '').includes(c.tag)) {
+            charBibleBlock += `[CHARACTER BIBLE PROFILE - ${c.name} (${c.tag})]\n`;
+            charBibleBlock += `• Character Backstory: ${c.backstory || 'N/A'}\n`;
+            charBibleBlock += `• Mannerisms & Body Ticks: ${c.mannerism || 'N/A'}\n`;
+            charBibleBlock += `• Walking Style & Gait: ${c.walkingStyle || 'N/A'}\n`;
+            charBibleBlock += `• Dialogue Style & Voice: ${c.uniqueVoice || 'N/A'} | ${c.dialogueDelivery || 'N/A'}\n`;
+            charBibleBlock += `• Signature Outfit & Props: ${c.outfit || 'N/A'}\n`;
+            if (c.wardrobeElements) charBibleBlock += `• Wardrobe Elements: ${c.wardrobeElements}\n`;
+            if (c.accessories) charBibleBlock += `• Accessories: ${c.accessories}\n`;
+            if (c.colorPalette) charBibleBlock += `• Costume Palette: ${c.colorPalette}\n`;
+            if (c.costumeDetails) charBibleBlock += `• Costume Details: ${c.costumeDetails}\n`;
+            charBibleBlock += `\n`;
+          }
+        });
       }
     } catch (e) {}
 
@@ -711,51 +694,44 @@ ${mainPrompt}`;
   };
 
   const getShotPromptText = (shot, idx) => {
-    if (formatMode === 'character_story_vault') return compileCharacterStoryVaultFormat(shot, idx);
-    if (formatMode === 'comfyui_seedance') return compileComfyUISeedanceFormat(shot, idx);
-    if (formatMode === 'engine_optimized') return compileComfyUISeedanceFormat(shot, idx);
-    if (formatMode === 'first_last_frame') return compileFirstLastFrameFormat(shot, idx);
-    if (formatMode === 'seedream_beat_breakdown') return compileSeeDreamBeatBreakdown(shot, idx);
-    if (formatMode === 'seedream_image') return compileSeeDreamFormat(shot);
-    if (formatMode === 'natural_language') return compileSeedanceDirectFormat(shot, idx);
-    if (formatMode === 'json') return JSON.stringify(shot, null, 2);
-    return compileComfyUISeedanceFormat(shot, idx);
+    try {
+      if (formatMode === 'first_last_frame') return compileFirstLastFrameFormat(shot, idx);
+      if (formatMode === 'seedream_beat_breakdown') return compileSeeDreamBeatBreakdown(shot, idx);
+      if (formatMode === 'json') return JSON.stringify(shot, null, 2);
+      return compileComfyUISeedanceFormat(shot, idx);
+    } catch (err) {
+      console.warn('Prompt compile failed', err);
+      return `Shot ${idx + 1}: could not compile. Check crafts in Form.`;
+    }
   };
 
-  // STRICT SHORT FILENAME ONLY (SC01_SH01.txt, SC09_SH28.txt...)
+  const shotPromptTexts = shotList.map((shot, idx) => getShotPromptText(shot, idx));
+
+  const compiledOutput = (() => {
+    if (formatMode === 'character_story_vault') {
+      return shotList.map((shot, idx) => compileCharacterStoryVaultFormat(shot, idx)).join('\n\n' + '='.repeat(70) + '\n\n');
+    }
+    if (formatMode === 'json') return JSON.stringify(shotList, null, 2);
+    if (formatMode === 'csv') {
+      const headers = SEEDANCE_SLOTS.map(s => `"${s.label.replace(/"/g, '""')}"`).join(',');
+      const rows = shotList.map(shot =>
+        SEEDANCE_SLOTS.map(s => `"${(shot[s.key] || '').replace(/"/g, '""')}"`).join(',')
+      ).join('\n');
+      return `${headers}\n${rows}`;
+    }
+    if (formatMode === 'seedream_image') {
+      return shotList.map((shot, idx) =>
+        `=== HIGH-RES IMAGE GENERATION PROMPT (SHOT #${idx + 1} - ${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileSeeDreamFormat(shot)}`
+      ).join('\n\n');
+    }
+    const sep = formatMode === 'first_last_frame' || formatMode === 'seedream_beat_breakdown' ? 80 : 60;
+    return shotPromptTexts.join('\n\n' + '='.repeat(sep) + '\n\n');
+  })();
+
   const getShotFilename = (shot, idx) => {
     const ext = formatMode === 'json' ? 'json' : (formatMode === 'csv' ? 'csv' : 'txt');
     return formatShotFilename(shot, idx, ext);
   };
-
-  let compiledOutput = '';
-  if (formatMode === 'character_story_vault') {
-    compiledOutput = shots.map((shot, idx) => compileCharacterStoryVaultFormat(shot, idx)).join('\n\n' + '='.repeat(70) + '\n\n');
-  } else if (formatMode === 'comfyui_seedance') {
-    compiledOutput = shots.map((shot, idx) => compileComfyUISeedanceFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
-  } else if (formatMode === 'engine_optimized') {
-    compiledOutput = shots.map((shot, idx) => compileComfyUISeedanceFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
-  } else if (formatMode === 'first_last_frame') {
-    compiledOutput = shots.map((shot, idx) => compileFirstLastFrameFormat(shot, idx)).join('\n\n' + '='.repeat(80) + '\n\n');
-  } else if (formatMode === 'seedream_beat_breakdown') {
-    compiledOutput = shots.map((shot, idx) => compileSeeDreamBeatBreakdown(shot, idx)).join('\n\n' + '='.repeat(80) + '\n\n');
-  } else if (formatMode === 'seedream_image') {
-    compiledOutput = shots.map((shot, idx) => 
-      `=== HIGH-RES IMAGE GENERATION PROMPT (SHOT #${idx + 1} - ${shot.sceneShotId || 'SC01_SH01'}) ===\n${compileSeeDreamFormat(shot)}`
-    ).join('\n\n');
-  } else if (formatMode === 'seedance_tagged') {
-    compiledOutput = shots.map((shot, idx) => compileSeedanceDirectFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
-  } else if (formatMode === 'natural_language') {
-    compiledOutput = shots.map((shot, idx) => compileSeedanceDirectFormat(shot, idx)).join('\n\n' + '='.repeat(60) + '\n\n');
-  } else if (formatMode === 'json') {
-    compiledOutput = JSON.stringify(shots, null, 2);
-  } else if (formatMode === 'csv') {
-    const headers = SEEDANCE_SLOTS.map(s => `"${s.label.replace(/"/g, '""')}"`).join(',');
-    const rows = shots.map(shot => 
-      SEEDANCE_SLOTS.map(s => `"${(shot[s.key] || '').replace(/"/g, '""')}"`).join(',')
-    ).join('\n');
-    compiledOutput = `${headers}\n${rows}`;
-  }
 
   const handleCopyAll = () => {
     navigator.clipboard.writeText(compiledOutput);
@@ -770,6 +746,12 @@ ${mainPrompt}`;
   };
 
   const downloadSingleTxtFile = (filename, content) => {
+    const gate = assertExportAllowed({
+      ...compilerExportOpts,
+      label: 'compiler_shot_txt',
+      format: String(filename || '').split('.').pop() || 'txt'
+    });
+    if (!gate.ok) return;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -779,14 +761,37 @@ ${mainPrompt}`;
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    logExportSuccess({
+      projectTitle,
+      label: 'compiler_shot_txt',
+      format: String(filename || '').split('.').pop() || 'txt',
+      filename,
+      roomId: compilerExportOpts.roomId,
+      note: compilerLifeNote,
+      lifecycleMode: gate.advisory ? `${compilerLifecycleMode}+ok` : compilerLifecycleMode
+    });
   };
 
   // Clean ZIP Package Downloader
   const handleDownloadZipPackage = () => {
-    const zipFiles = shots.map((shot, idx) => ({
+    if (exportBlocked) {
+      assertExportAllowed({ ...compilerExportOpts, label: 'compiler_zip', format: 'zip' });
+      return;
+    }
+    const gate = assertExportAllowed({ ...compilerExportOpts, label: 'compiler_zip', format: 'zip' });
+    if (!gate.ok) return;
+    const zipFiles = shotList.map((shot, idx) => ({
       name: getShotFilename(shot, idx), // STRICT SHORT NAME: SC01_SH01.txt
-      content: getShotPromptText(shot, idx)
+      content: shotPromptTexts[idx] || getShotPromptText(shot, idx)
     }));
+
+    const continuity = shotList.map((shot, idx) => {
+      const flags = continuityFlagsForShot(shot, shotList, idx);
+      const name = getShotFilename(shot, idx).replace(/\.txt$/i, '');
+      if (!flags.length) return `${name}: OK`;
+      return `${name}: ${flags.map((f) => `${f.block ? 'BLOCK' : 'WARN'} ${f.label}`).join('; ')}`;
+    });
+    zipFiles.push({ name: 'CONTINUITY.txt', content: continuity.join('\n') });
 
     const rawTitle = projectTitle || (typeof window !== 'undefined' ? localStorage.getItem('sps_project_title') : '') || 'sps_project';
     const cleanTitle = String(rawTitle)
@@ -807,6 +812,15 @@ ${mainPrompt}`;
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
+    logExportSuccess({
+      projectTitle,
+      label: 'compiler_zip',
+      format: 'zip',
+      filename: zipFilename,
+      roomId: compilerExportOpts.roomId,
+      note: `${compilerLifeNote} · ${zipFiles.length} files`,
+      lifecycleMode: gate.advisory ? `${compilerLifecycleMode}+ok` : compilerLifecycleMode
+    });
     setExportSuccessMsg(`🟢 Downloaded "${zipFilename}" containing clean short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
     setTimeout(() => setExportSuccessMsg(null), 5000);
   };
@@ -822,7 +836,11 @@ ${mainPrompt}`;
 
   // Batch Individual Short Files Download (SC01_SH01.txt, SC01_SH02.txt...)
   const handleExportAllIndividualFiles = () => {
-    shots.forEach((shot, i) => {
+    if (exportBlocked) {
+      assertExportAllowed({ ...compilerExportOpts, label: 'compiler_batch_txt', format: 'txt' });
+      return;
+    }
+    shotList.forEach((shot, i) => {
       setTimeout(() => {
         const filename = getShotFilename(shot, i); // STRICT SHORT NAME: SC01_SH01.txt
         const content = getShotPromptText(shot, i);
@@ -830,7 +848,7 @@ ${mainPrompt}`;
       }, i * 350);
     });
 
-    setExportSuccessMsg(`🟢 Downloading ${shots.length} short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
+    setExportSuccessMsg(`🟢 Downloading ${shotList.length} short files (SC01_SH01.txt, SC01_SH02.txt...)!`);
     setTimeout(() => setExportSuccessMsg(null), 4000);
   };
 
@@ -839,41 +857,78 @@ ${mainPrompt}`;
     downloadSingleTxtFile(`full_script.${ext}`, compiledOutput);
   };
 
+  const handleExportPrintPack = () => {
+    if (exportBlocked) {
+      assertExportAllowed({ ...compilerExportOpts, label: 'compiler_print_pdf', format: 'pdf' });
+      return;
+    }
+    const gate = assertExportAllowed({
+      ...compilerExportOpts,
+      label: 'compiler_print_pdf',
+      format: 'pdf'
+    });
+    if (!gate.ok) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.alert('Please allow popups to export PDF.');
+      return;
+    }
+    const printShots = shotList.map((shot, idx) => {
+      const parsed = parseSceneAndShotID(shot, idx);
+      return {
+        id: parsed.formattedId || shot.sceneShotId || `SH_${idx + 1}`,
+        filename: getShotFilename(shot, idx),
+        promptText: shotPromptTexts[idx] || getShotPromptText(shot, idx)
+      };
+    });
+    printWindow.document.write(
+      compilerPromptsToPrintHtml({
+        projectTitle,
+        formatLabel: getFormatModeLabel(formatMode),
+        shots: printShots
+      })
+    );
+    printWindow.document.close();
+    const slug = String(projectTitle || 'project')
+      .replace(/[^\w\-]+/g, '_')
+      .slice(0, 40);
+    logExportSuccess({
+      projectTitle,
+      label: 'compiler_print_pdf',
+      format: 'pdf',
+      filename: `${slug}_compiler_print.pdf`,
+      roomId: compilerExportOpts.roomId,
+      note: compilerLifeNote,
+      lifecycleMode: gate.advisory ? `${compilerLifecycleMode}+ok` : compilerLifecycleMode
+    });
+    setExportSuccessMsg('🟢 Print pack opened — save as PDF from the print dialog.');
+    setTimeout(() => setExportSuccessMsg(null), 4000);
+  };
+
   const getFormatModeLabel = (mode) => {
     switch (mode) {
-      case 'comfyui_seedance': return 'Master Cinema Prompt';
-      case 'seedance_tagged': return 'SPS Standard Tagging';
-      case 'engine_optimized': return 'Target Syntax';
-      case 'first_last_frame': return 'First & Last Frame';
-      case 'seedream_beat_breakdown': return 'Beat Breakdown';
-      case 'natural_language': return 'Narrative Prose';
+      case 'comfyui_seedance': return 'Video prompt';
+      case 'seedance_tagged': return 'Studio tagging';
+      case 'engine_optimized': return 'Target syntax';
+      case 'first_last_frame': return 'First & last frame';
+      case 'seedream_beat_breakdown': return 'Beat breakdown';
+      case 'natural_language': return 'Narrative';
       case 'json': return 'JSON';
       case 'csv': return 'CSV';
-      default: return 'Master Cinema Prompt';
+      default: return 'Video prompt';
     }
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center transition-all ${isFullscreen ? 'p-0 bg-black' : 'p-4 bg-black/75 backdrop-blur-md'}`}>
-      <div className={`relative w-full bg-slate-50 dark:bg-zinc-950 text-slate-950 dark:text-white border border-slate-300 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col transition-all ${
-        isFullscreen ? 'h-full max-w-none max-h-none rounded-none border-0' : 'max-w-5xl rounded-2xl max-h-[92vh]'
-      }`}>
+    <div className={`sps-overlay ${isFullscreen ? 'is-full' : ''}`}>
+      <div className="sps-shell">
         {/* Modal Header */}
         {isFullscreen ? (
-          <div className="p-3 px-6 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span className="text-sm font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
-                📖 Focus Reader View
-                <span className="text-xs bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded font-mono font-bold">
-                  {getFormatModeLabel(formatMode)} • {shots.length} Shots
-                </span>
-                <span className="text-[11px] bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded font-mono font-bold hidden sm:inline-flex items-center gap-1" title="Keyboard Shortcut: Press Cmd + Down Arrow to shift to next shot">
-                  ⌨️ ⌘+↓ Next Shot
-                </span>
-              </span>
+          <div className="sps-modal-head">
+            <div>
+              <h2>Focus reader</h2>
+              <p>{getFormatModeLabel(formatMode)} · {shotList.length} shots · ⌘↓ next shot</p>
             </div>
-
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -882,65 +937,37 @@ ${mainPrompt}`;
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 }}
-                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow"
+                className="sps-btn sps-btn-primary text-xs"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied All!' : 'Copy All Text'}</span>
+                {copied ? 'Copied' : 'Copy all'}
               </button>
-
-              <button
-                type="button"
-                onClick={() => toggleFullscreenMode(false)}
-                className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 text-amber-700 dark:text-amber-400 border border-slate-300 dark:border-zinc-700 font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow transition-all"
-                title="Exit Fullscreen (ESC)"
-              >
-                <Minimize2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>ESC - normal view</span>
+              <button type="button" onClick={() => toggleFullscreenMode(false)} className="sps-btn text-xs" title="Exit Fullscreen (ESC)">
+                <Minimize2 className="w-3.5 h-3.5" />
+                Exit
               </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1.5 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Close Window"
-              >
+              <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
         ) : (
-          <div className="p-4 px-5 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-amber-500">
-                <Sparkles className="w-5 h-5 text-cyan-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  Stage Production Studio Compiler
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-zinc-400">
-                  Generate individual TXT prompt files or export multi-shot production scripts.
-                </p>
-              </div>
+          <div className="sps-modal-head">
+            <div>
+              <h2>Prompt Compiler</h2>
+              <p>AI Cinema Production OS — one video prompt per shot.</p>
             </div>
-
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => toggleFullscreenMode(true)}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 text-amber-800 dark:text-amber-300 border border-slate-300 dark:border-zinc-700 font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow transition-all"
-                title="Fullscreen Focus Reader View (⌘ + Enter)"
+                className="sps-btn text-xs"
+                title="Fullscreen (⌘ + Enter)"
               >
-                <Maximize2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                <span>cmd+enter - full screen</span>
+                <Maximize2 className="w-4 h-4" />
+                Full screen
               </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-2 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Close window"
-              >
+              <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -949,301 +976,154 @@ ${mainPrompt}`;
 
         {/* Success Toast Notification */}
         {exportSuccessMsg && (
-          <div className="bg-emerald-950/90 border-b border-emerald-500/40 p-2.5 px-5 text-emerald-200 text-xs font-mono flex items-center gap-2 animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="px-5 py-2 text-xs flex items-center gap-2 border-b border-[var(--sps-border)] text-[var(--sps-success)]">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{exportSuccessMsg}</span>
           </div>
         )}
+        {shotList.some((s, i) => continuityFlagsForShot(s, shotList, i).length > 0) && (
+          <div className="px-5 py-2 text-[11px] border-b border-[var(--sps-border)] text-[var(--sps-gold)]">
+            {shotList.some((s, i) => blockingFlags(continuityFlagsForShot(s, shotList, i)).length > 0)
+              ? 'Blocking continuity on this reel — lock look sheets and previous last frames before Generate. Compile still includes BRIDGE + LOOK SHEET lines.'
+              : 'Continuity warnings on this reel — lock plates / lighting if you need a clean cut. Prompts still include BRIDGE + LOOK SHEET lines.'}
+          </div>
+        )}
+        {exportBlocked ? (
+          <div className="px-5 py-2 text-[11px] border-b border-[var(--sps-border)] text-[var(--sps-gold)]">
+            {exportLife.message}
+          </div>
+        ) : null}
 
         {/* Format Selector Tabs & Toolbars (Hidden in Distraction-Free Fullscreen Reader Mode) */}
         {!isFullscreen && (
           <>
-            <div className="p-3 px-4 bg-slate-100/90 dark:bg-zinc-900/40 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/80 dark:bg-zinc-950 p-1 rounded-xl border border-slate-300 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('comfyui_seedance')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'comfyui_seedance'
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-950 font-extrabold shadow-[0_0_15px_rgba(16,185,129,0.5)]'
-                      : 'text-emerald-400 hover:text-white bg-emerald-950/40 border border-emerald-500/30'
-                  }`}
-                >
-                  <Cpu className="w-3.5 h-3.5" />
-                  🎛️ Master Cinema Prompt
+            <div className="px-4 py-3 border-b border-[var(--sps-border)] flex flex-wrap items-center gap-2 bg-[var(--sps-surface)]/60">
+              <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compile format">
+                <button type="button" role="tab" aria-selected={formatMode === 'comfyui_seedance'} onClick={() => setFormatMode('comfyui_seedance')}>
+                  Video
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('character_story_vault')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'character_story_vault'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold shadow-[0_0_15px_rgba(147,51,234,0.5)] border border-purple-400/50'
-                      : 'text-purple-300 hover:text-white bg-purple-950/40 border border-purple-500/30'
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-purple-300" />
-                  🎭 Character & Story
+                <button type="button" role="tab" aria-selected={formatMode === 'first_last_frame'} onClick={() => setFormatMode('first_last_frame')}>
+                  First / Last
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('seedance_tagged')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'seedance_tagged'
-                      ? 'bg-cyan-500 text-slate-950 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.4)]'
-                      : 'text-zinc-300 hover:text-white'
-                  }`}
-                >
-                  <Code className="w-3.5 h-3.5" />
-                  SPS Direct Cinema
+                <button type="button" role="tab" aria-selected={formatMode === 'seedream_beat_breakdown'} onClick={() => setFormatMode('seedream_beat_breakdown')}>
+                  Beats
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('first_last_frame')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'first_last_frame'
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold shadow-lg'
-                      : 'text-cyan-300 hover:text-white bg-cyan-950/40 border border-cyan-500/30'
-                  }`}
-                >
-                  <Film className="w-3.5 h-3.5 text-cyan-300" />
-                  🎬 First & Last Frame
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('seedream_beat_breakdown')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'seedream_beat_breakdown'
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-zinc-950 font-black shadow-lg'
-                      : 'text-amber-300 hover:text-white bg-amber-950/40 border border-amber-500/30'
-                  }`}
-                >
-                  <Disc className="w-3.5 h-3.5 text-amber-950 fill-zinc-950" />
-                  🥁 Beat Breakdown
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('natural_language')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'natural_language'
-                      ? 'bg-cyan-600 text-white font-bold shadow'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  Narrative Prose
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('json')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'json'
-                      ? 'bg-cyan-600 text-white font-bold shadow'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Code className="w-3.5 h-3.5 text-amber-400" />
+                <button type="button" role="tab" aria-selected={formatMode === 'json'} onClick={() => setFormatMode('json')}>
                   JSON
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFormatMode('csv')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                    formatMode === 'csv'
-                      ? 'bg-cyan-600 text-white font-bold shadow'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <button type="button" role="tab" aria-selected={formatMode === 'csv'} onClick={() => setFormatMode('csv')}>
                   CSV
                 </button>
               </div>
-
-              {/* Action Bar: View Mode & Direct Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-slate-200 dark:bg-zinc-950 p-1 rounded-xl border border-slate-300 dark:border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('cards')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
-                        viewMode === 'cards' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-cyan-300 font-bold shadow-sm' : 'text-slate-700 dark:text-zinc-400 hover:text-slate-950 dark:hover:text-white'
-                      }`}
-                      title="View Individual Shot Cards with Local TXT Generator"
-                    >
-                      <Grid className="w-3.5 h-3.5" />
-                      <span>Cards View</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('single')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1 transition-all ${
-                        viewMode === 'single' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-cyan-300 font-bold shadow-sm' : 'text-slate-700 dark:text-zinc-400 hover:text-slate-950 dark:hover:text-white'
-                      }`}
-                      title="View Full Single Document Text"
-                    >
-                      <FileCode className="w-3.5 h-3.5" />
-                      <span>Full Script</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* DIRECT ACTION BUTTONS */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadZipPackage}
-                    className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-900 dark:text-cyan-300 text-xs font-bold font-mono flex items-center gap-1.5 border border-slate-300 dark:border-zinc-700 transition-all cursor-pointer shadow-sm"
-                    title={`Download all ${shots.length} prompts in a ZIP folder containing individual TXT files`}
-                  >
-                    <Archive className="w-4 h-4 text-cyan-400" />
-                    <span>📦 Download ZIP Folder</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExportAllIndividualFiles}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-lg border border-emerald-400/40 transition-all cursor-pointer shrink-0"
-                    title={`Save all ${shots.length} prompts as short individual TXT files (SC01_SH01.txt, SC01_SH02.txt...)`}
-                  >
-                    <FolderDown className="w-4 h-4 text-emerald-200" />
-                    <span>⚡ Save All TXT Files</span>
-                  </button>
-                </div>
+              <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compiler view">
+                <button type="button" role="tab" aria-selected={viewMode === 'cards'} onClick={() => setViewMode('cards')}>Cards</button>
+                <button type="button" role="tab" aria-selected={viewMode === 'single'} onClick={() => setViewMode('single')}>Full script</button>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportPrintPack}
+                  disabled={exportBlocked}
+                  className="sps-btn text-xs disabled:opacity-40"
+                  title={exportBlocked ? exportLife.message : 'Print compiled prompts as PDF pack'}
+                >
+                  <Download className="w-4 h-4" />
+                  Print PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadZipPackage}
+                  disabled={exportBlocked}
+                  className="sps-btn text-xs disabled:opacity-40"
+                  title={exportBlocked ? exportLife.message : `Download all ${shotList.length} prompts as ZIP`}
+                >
+                  <Archive className="w-4 h-4" />
+                  ZIP
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportAllIndividualFiles}
+                  disabled={exportBlocked}
+                  className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
+                  title={exportBlocked ? exportLife.message : `Save ${shotList.length} TXT files`}
+                >
+                  <FolderDown className="w-4 h-4" />
+                  Save TXT
+                </button>
               </div>
             </div>
 
-            {/* SCRIPT SYNOPSIS STATUS (read-only — Writer Console owns edits) */}
-            {(() => {
-              const isWriterCustom = scriptSynopsisSource === 'writer_custom';
-              const activeSynopsisText = isWriterCustom
-                ? (writerCustomScriptSynopsis || '').trim()
-                : (extractedMasterStory || '').trim();
-              const preview = activeSynopsisText
-                ? (activeSynopsisText.length > 120 ? `${activeSynopsisText.slice(0, 120)}…` : activeSynopsisText)
-                : 'No synopsis set yet — edit in Writer Console.';
-              return (
-                <div className="p-3 px-4 bg-slate-50 dark:bg-zinc-950/80 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
-                  <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                    <span className="text-amber-800 dark:text-amber-300 font-bold flex items-center gap-1.5 shrink-0">
-                      <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      Script Synopsis:
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold shrink-0 ${
-                        isWriterCustom
-                          ? 'bg-purple-600/90 text-white'
-                          : 'bg-amber-500/90 text-slate-950'
-                      }`}
-                    >
-                      {isWriterCustom ? '✍️ Writer Custom' : '🤖 LLM Auto-Generated'}
-                    </span>
-                    <span
-                      className="text-slate-600 dark:text-zinc-400 truncate min-w-0 max-w-xl"
-                      title={activeSynopsisText || undefined}
-                    >
-                      {preview}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onOpenWriterSynopsis?.()}
-                    className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 border border-purple-400/40 transition-all cursor-pointer shrink-0 shadow-sm"
-                    title="Edit synopsis in Writer Console"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Edit in Writer Console</span>
-                  </button>
-                </div>
-              );
-            })()}
           </>
         )}
 
         {/* Modal Output Body */}
-        <div className="p-5 flex-1 overflow-y-auto bg-slate-100 dark:bg-zinc-950">
-          {viewMode === 'cards' ? (
+        <div className="sps-modal-body p-5 flex-1 overflow-y-auto">
+          {shotList.length === 0 ? (
+            <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center gap-2 px-6">
+              <Sparkles className="w-8 h-8 text-[var(--sps-accent)]" />
+              <p className="text-sm font-semibold">No shots to compile</p>
+              <p className="text-xs text-[var(--sps-muted)] max-w-sm">
+                Add shots in Matrix or Form, then open Compiler.
+              </p>
+            </div>
+          ) : viewMode === 'cards' ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs font-mono text-slate-600 dark:text-zinc-400 pb-1 border-b border-slate-200 dark:border-zinc-800/80">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                  Showing {shots.length} Individual Shot Prompts ({getFormatModeLabel(formatMode)} Format)
-                </span>
-                <span className="text-slate-600 dark:text-zinc-400 font-mono text-[11px]">
-                  Filenames: <span className="text-emerald-700 dark:text-emerald-400 font-bold">SC01_SH01.txt, SC01_SH02.txt...</span>
-                </span>
+              <div className="flex items-center justify-between text-xs text-[var(--sps-muted)] pb-1">
+                <span>{shotList.length} shots · {getFormatModeLabel(formatMode)}</span>
+                <span>Files: SC01_SH01.txt …</span>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {shots.map((shot, idx) => {
+                {shotList.map((shot, idx) => {
                   const filename = getShotFilename(shot, idx); // STRICT SHORT FILENAME (e.g. SC01_SH01.txt)
-                  const promptText = getShotPromptText(shot, idx);
+                  const promptText = shotPromptTexts[idx] || getShotPromptText(shot, idx);
                   const isCopiedSingle = copiedIndex === idx;
 
                   return (
                     <div 
                       key={idx}
                       id={`compiler-shot-card-${idx}`}
-                      className={`bg-white dark:bg-zinc-900 border rounded-2xl p-5 shadow-sm transition-all space-y-3 ${
-                        focusedShotIdx === idx ? 'ring-2 ring-cyan-500 border-cyan-500' : 'border-slate-300 dark:border-zinc-800'
-                      }`}
+                      className={`sps-compiler-card ${focusedShotIdx === idx ? 'is-focus' : ''}`}
                     >
-                      {/* Box Header */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 dark:bg-zinc-950 p-3 rounded-xl border border-slate-200 dark:border-zinc-800">
-                        <div className="flex items-center gap-2 truncate max-w-xl">
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 font-mono text-xs font-bold flex items-center gap-1.5 shrink-0">
-                            <FileCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                            {filename}
-                          </span>
-                          <span className="text-slate-900 dark:text-zinc-200 font-extrabold font-mono text-xs shrink-0">
-                            Shot #{idx + 1}
-                          </span>
-                          <span className="text-slate-600 dark:text-zinc-400 text-xs truncate font-sans font-medium">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="sps-chip text-[11px] shrink-0">{filename}</span>
+                          <span className="text-xs font-semibold shrink-0">Shot {idx + 1}</span>
+                          <span className="text-xs text-[var(--sps-muted)] truncate">
                             {shot.shotComposition || 'Medium Shot'}
                           </span>
                         </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
                             onClick={() => setEditingShotIdx(idx)}
-                            className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-500/20 dark:hover:bg-amber-500/40 text-amber-900 dark:text-amber-300 text-xs font-mono font-bold flex items-center gap-1 transition-all border border-amber-300 dark:border-amber-500/40 cursor-pointer shadow-sm"
-                            title={`View crafts for shot #${idx + 1} (${filename}) — edit values in Form`}
+                            className="sps-btn text-xs"
+                            title={`View crafts for shot ${idx + 1}`}
                           >
-                            <BookOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            <span>View Crafts</span>
+                            <BookOpen className="w-3.5 h-3.5" />
+                            Crafts
                           </button>
-
                           <button
                             type="button"
                             onClick={() => handleCopySingle(promptText, idx)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-900 dark:text-zinc-200 text-xs font-mono font-bold flex items-center gap-1 transition-all border border-slate-300 dark:border-zinc-700"
+                            className="sps-btn text-xs"
                           >
-                            {isCopiedSingle ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
-                            <span>{isCopiedSingle ? 'Copied!' : 'Copy'}</span>
+                            {isCopiedSingle ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            {isCopiedSingle ? 'Copied' : 'Copy'}
                           </button>
-
                           <button
                             type="button"
                             onClick={() => generateAndSaveSingleShotFile(shot, idx)}
-                            className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow border border-cyan-400/40 cursor-pointer"
-                            title={`Generate & save ${filename}`}
+                            disabled={exportBlocked}
+                            className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
+                            title={exportBlocked ? exportLife.message : `Save ${filename}`}
                           >
-                            <Download className="w-3.5 h-3.5 text-cyan-100" />
-                            <span>⚡ Generate {filename}</span>
+                            <Download className="w-3.5 h-3.5" />
+                            {filename}
                           </button>
                         </div>
                       </div>
-
-                      {/* Prompt Content Box with Smart Typography */}
-                      <div className="w-full p-4 rounded-xl bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800/90 shadow-sm overflow-x-auto">
-                        <SmartFormattedPromptViewer content={promptText} />
-                      </div>
+                      <SmartFormattedPromptViewer content={promptText} />
                     </div>
                   );
                 })}
@@ -1251,29 +1131,26 @@ ${mainPrompt}`;
             </div>
           ) : (
             <div className="h-full flex flex-col space-y-3">
-              <div className="flex items-center justify-between text-xs font-mono text-slate-600 dark:text-zinc-400">
-                <span>Single Document Script View ({shots.length} Shots)</span>
+              <div className="flex items-center justify-between text-xs text-[var(--sps-muted)]">
+                <span>Full script · {shotList.length} shots</span>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopyAll}
-                    className="px-3 py-1 rounded bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-900 dark:text-zinc-200 text-xs font-bold border border-slate-300 dark:border-zinc-700 flex items-center gap-1.5 transition-colors shadow-sm"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
-                    {copied ? 'Copied All!' : 'Copy All Text'}
+                  <button type="button" onClick={handleCopyAll} className="sps-btn text-xs">
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? 'Copied' : 'Copy all'}
                   </button>
                   <button
                     type="button"
                     onClick={handleDownloadFullDoc}
-                    className="px-3 py-1 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition-all"
+                    disabled={exportBlocked}
+                    className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
+                    title={exportBlocked ? exportLife.message : 'Download full compiled output'}
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Download Full Script
+                    Download
                   </button>
                 </div>
               </div>
-
-              <div className="w-full flex-1 p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-300 dark:border-zinc-800/90 shadow-sm overflow-y-auto max-h-[75vh]">
+              <div className="sps-compiler-card flex-1 overflow-y-auto max-h-[75vh]">
                 <SmartFormattedPromptViewer content={compiledOutput} />
               </div>
             </div>
@@ -1283,8 +1160,8 @@ ${mainPrompt}`;
 
       {/* PINNED 25 CRAFTS BREAKDOWN POPUP WORKSPACE */}
       {editingShotIdx !== null && (
-        <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 font-mono">
-          <div className="bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-amber-500/50 rounded-2xl w-full max-w-[96vw] h-[92vh] flex flex-col shadow-2xl overflow-hidden font-mono text-slate-950 dark:text-white">
+        <div className="sps-overlay is-full" style={{ zIndex: 120 }}>
+          <div className="sps-shell">
             {/* Popup Header Bar */}
             <div className="p-3.5 px-5 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-2.5">
@@ -1295,7 +1172,7 @@ ${mainPrompt}`;
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <span>{`Full ${SEEDANCE_SLOTS.length} Crafts Breakdown for Shot #${editingShotIdx + 1}`}</span>
                     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-cyan-800 dark:text-cyan-300 border border-slate-300 dark:border-zinc-700 text-xs font-bold">
-                      {getShotFilename(shots[editingShotIdx], editingShotIdx)}
+                      {getShotFilename(shotList[editingShotIdx], editingShotIdx)}
                     </span>
                   </h3>
                   <p className="text-[11px] text-slate-600 dark:text-zinc-400 font-medium">
@@ -1314,7 +1191,7 @@ ${mainPrompt}`;
                     setActiveCraftKey(null);
                     onClose?.();
                   }}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-md border border-cyan-400/40 transition-all cursor-pointer"
+                  className="sps-btn sps-btn-primary text-xs"
                   title="Open this shot in Form view to edit crafts"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -1392,7 +1269,7 @@ ${mainPrompt}`;
                 <div className="p-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 space-y-3 bg-zinc-950">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
                     {SEEDANCE_SLOTS.map((slot, sIdx) => {
-                      const currentVal = shots[editingShotIdx]?.[slot.key] || '';
+                      const currentVal = shotList[editingShotIdx]?.[slot.key] || '';
                       const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
 
                       return (
@@ -1447,7 +1324,7 @@ ${mainPrompt}`;
                       <div className="space-y-1.5">
                         {SEEDANCE_SLOTS.map((slot, sIdx) => {
                           const isSelected = activeCraftKey === slot.key;
-                          const currentVal = shots[editingShotIdx]?.[slot.key] || '';
+                          const currentVal = shotList[editingShotIdx]?.[slot.key] || '';
                           const numStr = sIdx + 1 < 10 ? '0' + (sIdx + 1) : String(sIdx + 1);
 
                           return (
@@ -1494,7 +1371,7 @@ ${mainPrompt}`;
                         {(() => {
                           const slotConfig = SEEDANCE_SLOTS.find(s => s.key === activeCraftKey);
                           if (!slotConfig) return null;
-                          const craftValue = shots[editingShotIdx]?.[activeCraftKey] || '';
+                          const craftValue = shotList[editingShotIdx]?.[activeCraftKey] || '';
                           const craftIdx = SEEDANCE_SLOTS.findIndex(s => s.key === activeCraftKey);
                           const numStr = craftIdx + 1 < 10 ? '0' + (craftIdx + 1) : String(craftIdx + 1);
 
@@ -1578,9 +1455,9 @@ ${mainPrompt}`;
             </div>
 
             {/* Popup Footer */}
-            <div className="p-3 px-5 border-t border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
+            <div className="py-1.5 px-4 border-t border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
               <span className="text-xs text-zinc-400 font-mono">
-                Shot #{editingShotIdx + 1} • {shots[editingShotIdx]?.shotComposition || 'Medium Shot'}
+                Shot #{editingShotIdx + 1} • {shotList[editingShotIdx]?.shotComposition || 'Medium Shot'}
               </span>
 
               <div className="flex items-center gap-2">
@@ -1610,20 +1487,6 @@ ${mainPrompt}`;
           </div>
         </div>
       )}
-
-      <SaveCloseConfirmModal
-        isOpen={isEscConfirmOpen}
-        title="Save & Exit Prompt Compiler"
-        onSaveAndClose={() => {
-          setIsEscConfirmOpen(false);
-          onClose();
-        }}
-        onCloseWithoutSave={() => {
-          setIsEscConfirmOpen(false);
-          onClose();
-        }}
-        onCancel={() => setIsEscConfirmOpen(false)}
-      />
     </div>
   );
 }

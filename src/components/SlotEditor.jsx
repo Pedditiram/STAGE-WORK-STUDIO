@@ -3,13 +3,15 @@ import { Sparkles, Maximize2, Minimize2, X, Trash2, Star, Plus, Sliders, Chevron
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
+import { assertCanMutateContent } from '../utils/productionLifecycle';
+import { CMD_TYPES, proposeAndValidate, approveLlmCommand, applyLlmCommand } from '../utils/llmCommandBus';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import IntensityScaleSelector from './IntensityScaleSelector';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
 
-export default function SlotEditor({ 
+function SlotEditor({ 
   slotConfig, 
   value, 
   onChange, 
@@ -35,11 +37,16 @@ export default function SlotEditor({
   onNavigatePrevScene,
   onJumpToScene,
   isMuted = false,
+  readOnly = false,
   onToggleMute,
   colorTheme = 'paper',
   genreKey = 'mythological',
-  projectTitle = ''
+  projectTitle = '',
+  shots = [],
+  onOpenLlmCommands,
+  onUpdateShot
 }) {
+  const inputLocked = isMuted || readOnly;
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [newPresetInput, setNewPresetInput] = useState('');
@@ -109,7 +116,7 @@ export default function SlotEditor({
           return (
             <React.Fragment key={craft.key}>
               {isActive ? (
-                <mark className="bg-[#FFEE00] text-black font-black px-2 py-0.5 rounded shadow border border-amber-500 inline-block mx-0.5 my-0.5 animate-pulse font-mono text-xs scale-105">
+                <mark className="bg-[var(--sps-row-active)] text-[var(--sps-text)] font-semibold px-2 py-0.5 rounded border border-[var(--sps-gold)] inline-block mx-0.5 my-0.5 font-mono text-xs">
                   {craft.prefix}{displayStr}
                 </mark>
               ) : (
@@ -169,16 +176,33 @@ export default function SlotEditor({
 
   const isModalActive = Boolean(isForcePopupOpen || isPopupOpen);
   const initialValueOnOpenRef = React.useRef(value);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
 
   useEffect(() => {
     if (isModalActive) {
       initialValueOnOpenRef.current = value;
     }
-  }, [isModalActive]);
+  }, [isModalActive, activeConfig.key, currentShotIndex]);
 
   const handleCloseModal = () => {
     setIsPopupOpen(false);
+    setIsEscConfirmOpen(false);
     if (onCloseForcePopup) onCloseForcePopup();
+  };
+
+  const isCraftDirty = () => String(valueRef.current ?? '') !== String(initialValueOnOpenRef.current ?? '');
+
+  const requestCloseEditor = () => {
+    if (isFullscreen) {
+      toggleFullscreenMode(false);
+      return;
+    }
+    if (isCraftDirty()) {
+      setIsEscConfirmOpen(true);
+      return;
+    }
+    handleCloseModal();
   };
 
   const handleOpenModal = () => {
@@ -259,11 +283,7 @@ export default function SlotEditor({
           handleCloseModal();
           return;
         }
-        if (key === 'Escape' && isFullscreen) {
-          toggleFullscreenMode(false);
-        } else {
-          setIsEscConfirmOpen(true);
-        }
+        requestCloseEditor();
         return;
       }
 
@@ -428,6 +448,7 @@ export default function SlotEditor({
   };
 
   const handleCustomInput = (e) => {
+    if (inputLocked) return;
     if (onSelectSlot) onSelectSlot(slotConfig.key);
     onChange(e.target.value);
   };
@@ -437,22 +458,47 @@ export default function SlotEditor({
   };
 
   const handleAIEnhanceCraft = async () => {
+    if (!assertCanMutateContent(shot).ok) return;
     try {
       setIsEnhancingCraft(true);
       const enhancedStr = await enhanceCraftSlotWithLLM(activeConfig.key, value, {
+        ...(shot || {}),
         sceneShotId: currentSceneId || shot?.sceneShotId,
         actionEnvContext: shot?.actionEnvContext || value,
         genreKey,
         projectTitle,
         presetProfile: genreKey
       });
-      if (enhancedStr) {
-        onChange(enhancedStr);
-        setSavedToast('⚡ Enhanced with Pedditi Labs Engine!');
+      if (!enhancedStr) return;
+      const proposed = proposeAndValidate(
+        {
+          type: CMD_TYPES.PATCH_SHOT_CRAFT,
+          projectTitle,
+          payload: { shotIndex: currentShotIndex, craftKey: activeConfig.key, value: enhancedStr },
+          source: 'llm_enhance_craft',
+          reason: `Slot enhance ${activeConfig.key}`,
+          preview: String(enhancedStr).slice(0, 120)
+        },
+        { shots, projectTitle }
+      );
+      if (!proposed.ok) {
+        window.alert(proposed.error || proposed.errors?.join('; ') || 'Proposal failed');
+        return;
+      }
+      if (onOpenLlmCommands) {
+        onOpenLlmCommands();
+        return;
+      }
+      if (window.confirm(`Apply LLM craft patch for ${activeConfig.key}?`)) {
+        approveLlmCommand(proposed.command.id, projectTitle);
+        applyLlmCommand(proposed.command.id, projectTitle, { shots, projectTitle }, {
+          updateShot: (i, s) => onUpdateShot?.(i, s)
+        });
+        setSavedToast('⚡ Craft patch applied');
         setTimeout(() => setSavedToast(false), 2500);
       }
     } catch (e) {
-      console.warn("Craft AI enhance error:", e);
+      console.warn('Craft AI enhance error:', e);
     } finally {
       setIsEnhancingCraft(false);
     }
@@ -464,26 +510,24 @@ export default function SlotEditor({
 
     const cardContent = (
       <div 
-        className={`bg-zinc-950 border border-zinc-800 text-white shadow-2xl space-y-3.5 flex flex-col font-mono transition-all ${
+        className={`sps-matrix-craft space-y-3.5 flex flex-col font-mono transition-all bg-[var(--sps-surface)] text-[var(--sps-text)] border border-[var(--sps-border)] ${
           embedded 
-            ? 'h-full max-h-full border-cyan-500/40 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 p-4 rounded-2xl' 
+            ? 'h-full max-h-full overflow-y-auto p-3 rounded-[10px]' 
             : isFullscreen
               ? 'h-full w-full max-w-none max-h-none rounded-none border-0 p-6 overflow-hidden'
-              : 'w-full max-w-5xl max-h-[92vh] rounded-2xl p-5 overflow-hidden'
+              : 'w-full max-w-5xl max-h-[92vh] rounded-[10px] p-5 overflow-hidden'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="overflow-y-auto space-y-3 flex-1 pr-1">
 
-          {/* THE SINGLE, MAXIMUM-EXPANDED CHROME YELLOW SLOT EDITING BOX */}
-          <div className="w-full space-y-2.5 p-3.5 rounded-2xl bg-[#FFEE00] border-2 border-amber-500 shadow-xl font-mono text-black">
-            <div className="flex items-center justify-between border-b border-black/20 pb-2 flex-wrap gap-2">
-              <span className="font-black text-black text-xs font-mono uppercase tracking-wider flex items-center gap-1.5 shrink-0">
-                ⚡ ACTIVE CRAFT PARAMETER: {activeConfig.label || activeConfig.key}
+          <div className="w-full space-y-2.5 p-3 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-bg)] font-mono text-[var(--sps-text)]">
+            <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-2 gap-2">
+              <span className="font-semibold text-[11px] font-sans uppercase tracking-wider text-[var(--sps-text)] min-w-0 truncate">
+                Active · {activeConfig.label || activeConfig.key}
               </span>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Auto Synopsis Button (if sceneSynopsis) */}
+              <div className="flex items-center gap-1 shrink-0">
                 {activeConfig.key === 'sceneSynopsis' && (
                   <button
                     type="button"
@@ -491,42 +535,43 @@ export default function SlotEditor({
                       const autoVal = shot.sceneSynopsis || `Scene Location & Context: ${shot.actionEnvContext || 'Dramatic environment'}. Featuring ${shot.characterIdAssetRef || 'primary subject'}. Action: ${shot.characterMovement || 'Dynamic performance'}.`;
                       onChange(autoVal);
                     }}
-                    className="px-2.5 py-1 rounded-xl bg-black/10 hover:bg-black/20 text-black border border-black/30 text-xs font-bold font-mono flex items-center gap-1 cursor-pointer transition-all shrink-0"
-                    title="Load LLM Auto-Extracted Scene Synopsis"
+                    className="sps-btn sps-btn-compact"
+                    title="Load writer / LLM synopsis"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-black" />
-                    <span>🤖 Auto Synopsis</span>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Synopsis
                   </button>
                 )}
-
-                {/* Pedditi Labs AI Enhance Button */}
                 <button
                   type="button"
                   onClick={handleAIEnhanceCraft}
                   disabled={isEnhancingCraft}
-                  className="px-3 py-1 rounded-xl bg-black text-amber-300 hover:bg-zinc-900 border border-black text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0"
-                  title="Enhance Craft Parameter using Pedditi Labs Cinema Intelligence Engine"
+                  className="sps-btn sps-btn-compact sps-btn-primary"
+                  title="Enhance this craft"
                 >
-                  <Sparkles className={`w-3.5 h-3.5 text-amber-400 ${isEnhancingCraft ? 'animate-spin' : ''}`} />
-                  <span className="font-bold">{isEnhancingCraft ? 'Enhancing...' : '⚡ Pedditi Labs AI Enhance'}</span>
+                  <Sparkles className={`w-3.5 h-3.5 ${isEnhancingCraft ? 'animate-spin' : ''}`} />
+                  {isEnhancingCraft ? '…' : 'Enhance'}
                 </button>
-
-                {/* Character Counter */}
-                <span className="text-xs text-black font-black bg-amber-300/80 px-2.5 py-1 rounded-xl border border-black/30 shadow-sm shrink-0">
-                  {(value || '').length} chars
-                </span>
-
-                {/* Close Button */}
+                <span className="sps-count-pill">{(value || '').length}</span>
+                <CinematicReferencesPanel
+                  genreKey={genreKey}
+                  craftKey={activeConfig.key}
+                  projectTitle={projectTitle}
+                  onInsert={(item) => {
+                    const next = value && String(value).trim() ? `${value.trim()} · ${item}` : item;
+                    onChange(next);
+                  }}
+                />
                 <button
                   type="button"
                   onClick={() => {
                     if (onCloseForcePopup) onCloseForcePopup();
                     handleCloseModal();
                   }}
-                  className="p-1 rounded-xl bg-black/10 hover:bg-black/20 text-black border border-black/30 transition-all cursor-pointer shrink-0"
-                  title="Close expanded craft view"
+                  className="sps-icon-btn"
+                  title="Close"
                 >
-                  <X className="w-4 h-4 text-black" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -548,21 +593,10 @@ export default function SlotEditor({
               onChange={handleCustomInput}
               onFocus={handleFocus}
               autoFocus
-              placeholder={`Enter complete ${(activeConfig.label || '').toLowerCase()} parameter text...`}
-              style={{ backgroundColor: '#FFEE00', color: '#000000', fontWeight: '900' }}
-              className="w-full bg-[#FFEE00] text-black border border-amber-600/40 rounded-xl p-3 text-sm font-mono leading-relaxed resize-y font-black shadow-inner focus:outline-none focus:ring-2 focus:ring-amber-600 placeholder:text-black/60"
+              placeholder={`Enter ${(activeConfig.label || '').toLowerCase()}…`}
+              className="w-full rounded-[7px] p-2.5 text-sm font-mono leading-relaxed resize-y font-medium border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] focus:outline-none focus:border-[var(--sps-gold)]"
             />
           </div>
-
-          <CinematicReferencesPanel
-            genreKey={genreKey}
-            craftKey={activeConfig.key}
-            projectTitle={projectTitle}
-            onInsert={(item) => {
-              const next = value && String(value).trim() ? `${value.trim()} · ${item}` : item;
-              onChange(next);
-            }}
-          />
 
           {/* CRAFT #25: FIXED MULTI-MODAL ASSET SLOTS (image_1..9, video_1..3, audio_1..3) */}
           {activeConfig.key === 'characterIdMatrix' && (() => {
@@ -610,7 +644,7 @@ export default function SlotEditor({
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5 font-mono">
                     <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-                    Fixed ComfyUI Seedance 2.0 Multi-Modal Asset Slots:
+                    Reference image slots:
                   </h4>
                   <span className="text-[10px] text-cyan-400 font-mono">15 Fixed Slots (image_1..9, video_1..3, audio_1..3)</span>
                 </div>
@@ -1144,15 +1178,15 @@ export default function SlotEditor({
 
         <input
           type="text"
-          disabled={isMuted}
+          disabled={inputLocked}
           value={value || ''}
           onChange={handleCustomInput}
           onFocus={handleFocus}
           onDoubleClick={handleOpenModal}
-          placeholder={isMuted ? `[MUTED] ${slotConfig.label}` : `Type ${slotConfig.label}...`}
-          title={isMuted ? `[MUTED SLOT] ${slotConfig.label} is currently disabled` : (value ? `Full Text:\n${value}\n\n(Double-click or click 🔍 to manage favorites & presets)` : `Type ${slotConfig.label}`)}
+          placeholder={isMuted ? `[MUTED] ${slotConfig.label}` : readOnly ? `[LOCKED] ${slotConfig.label}` : `Type ${slotConfig.label}...`}
+          title={isMuted ? `[MUTED SLOT] ${slotConfig.label} is currently disabled` : readOnly ? `Locked shot — unlock to edit ${slotConfig.label}` : (value ? `Full Text:\n${value}\n\n(Double-click or click 🔍 to manage favorites & presets)` : `Type ${slotConfig.label}`)}
           className={`w-full border rounded-md px-2 py-1 text-xs focus:outline-none font-mono truncate shadow-inner cursor-pointer ${
-            isMuted 
+            inputLocked 
               ? 'bg-zinc-900 text-zinc-500 border-red-900/40 line-through cursor-not-allowed' 
               : isPaperTheme
                 ? 'bg-white text-slate-900 border-amber-300 focus:border-amber-500 font-bold placeholder:text-zinc-400'
@@ -1243,3 +1277,5 @@ export default function SlotEditor({
     </div>
   );
 }
+
+export default React.memo(SlotEditor);

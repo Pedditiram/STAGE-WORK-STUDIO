@@ -1,7 +1,19 @@
 /**
- * Pure JavaScript zero-dependency ZIP archive builder for text files.
- * Generates valid PKZip archives downloadable directly in all browsers (Chrome, Safari, Firefox, Edge).
+ * ZIP archive for text and binary files (images as Uint8Array or data URLs).
  */
+function toBytes(content) {
+  if (content instanceof Uint8Array) return content;
+  if (typeof content === 'string' && content.startsWith('data:')) {
+    const comma = content.indexOf(',');
+    const b64 = comma >= 0 ? content.slice(comma + 1) : '';
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  return new TextEncoder().encode(content == null ? '' : String(content));
+}
+
 export function createZipArchive(files = []) {
   const fileEntries = [];
   let currentOffset = 0;
@@ -10,7 +22,7 @@ export function createZipArchive(files = []) {
 
   for (const file of files) {
     const filenameBytes = encoder.encode(file.name);
-    const contentBytes = encoder.encode(file.content);
+    const contentBytes = toBytes(file.content);
 
     // CRC32 calculation
     let crc = 0xFFFFFFFF;

@@ -99,15 +99,14 @@ export default function IntensityScaleSelector({ value = '', onChange, craftKey 
   const activePct = currentMatch ? currentMatch[1] : null;
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap my-1 font-mono text-[11px]">
-      <span className={`font-black uppercase tracking-wider text-[10px] flex items-center gap-1 select-none ${
-        isPaperTheme ? 'text-amber-950 font-bold' : 'text-amber-400'
-      }`}>
-        <span>🔥</span> Intensity Scale:
+    <div className="sps-compact-toolbar my-1">
+      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--sps-muted)] select-none">
+        Intensity
       </span>
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className="sps-compact-toolbar">
         {scales.map((s) => {
           const isSelected = activePct === s.pct;
+          const short = s.pct.replace('%', '');
           return (
             <button
               key={s.pct}
@@ -115,19 +114,12 @@ export default function IntensityScaleSelector({ value = '', onChange, craftKey 
               onClick={(e) => {
                 e.stopPropagation();
                 if (!onChange) return;
-                const updated = applyIntensityToField(value, s.label, s.pct);
-                onChange(updated);
+                onChange(applyIntensityToField(value, s.label, s.pct));
               }}
-              className={`px-2 py-0.5 rounded-lg border font-bold transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 text-[10.5px] ${
-                isSelected 
-                  ? 'bg-amber-400 text-black border-amber-600 font-extrabold ring-2 ring-amber-400/80 scale-105 shadow-md'
-                  : isPaperTheme 
-                    ? 'bg-amber-100/90 text-amber-950 border-amber-300 hover:bg-amber-200' 
-                    : s.bg
-              }`}
-              title={`Set ${craftKey || 'craft'} intensity to ${s.label} (${s.pct})`}
+              className={`sps-btn sps-btn-compact ${isSelected ? 'sps-btn-primary' : ''}`}
+              title={`${s.label} (${s.pct})`}
             >
-              {s.label} ({s.pct})
+              {short}
             </button>
           );
         })}

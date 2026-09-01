@@ -9,6 +9,8 @@ import {
   resetStudioBrain,
   hydrateStudioBrainFromDisk
 } from '../services/studioBrain';
+import { exportCreativeAuditCsv, resolveActiveProjectTitle } from '../utils/creativeAuditLog';
+import { resolveCollabRoomId } from '../utils/exportGate';
 
 /**
  * Studio Brain panel — local pipeline intelligence that grows with projects.
@@ -31,6 +33,18 @@ export default function StudioBrainModal({ isOpen, onClose }) {
     window.addEventListener('sps_studio_brain_updated', onUp);
     return () => window.removeEventListener('sps_studio_brain_updated', onUp);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose?.();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -81,19 +95,18 @@ export default function StudioBrainModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm">
+    <div className="sps-overlay" style={{ zIndex: 90 }}>
       <div
-        className="force-dark w-full max-w-2xl max-h-[88vh] rounded-2xl border border-zinc-700 bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden shadow-2xl"
-        data-force-dark="true"
+        className="sps-shell sps-shell-md"
       >
         <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/95 flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0">
-            <h2 className="text-sm font-black uppercase tracking-wide text-cyan-300 flex items-center gap-2">
+            <h2 className="text-sm font-semibold tracking-tight flex items-center gap-2" style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}>
               <Brain className="w-4 h-4" />
               Studio Brain
             </h2>
-            <p className="text-[11px] text-zinc-500 truncate">
-              Learns your pipeline · survives LLM credit gaps · saved on this device
+            <p className="text-[11px] text-zinc-300 truncate">
+              AI Cinema Production OS · learns your pipeline · saved on this device
             </p>
           </div>
           <button
@@ -166,6 +179,20 @@ export default function StudioBrainModal({ isOpen, onClose }) {
               <Download className="w-3.5 h-3.5" />
               Save to disk
             </button>
+
+            <button
+              type="button"
+              className="sps-btn text-xs inline-flex items-center gap-1.5"
+              title="Download creative audit CSV for the active project"
+              onClick={() => {
+                const title = resolveActiveProjectTitle();
+                const ok = exportCreativeAuditCsv(title, { roomId: resolveCollabRoomId() });
+                flash(ok ? 'Downloaded creative audit CSV' : 'Audit CSV blocked');
+              }}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Audit CSV
+            </button>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -195,10 +222,10 @@ export default function StudioBrainModal({ isOpen, onClose }) {
 
           <div className="grid sm:grid-cols-2 gap-3">
             <div className="rounded-xl border border-zinc-800 overflow-hidden">
-              <div className="px-3 py-2 bg-zinc-900 text-[10px] font-black uppercase text-zinc-500">Top craft banks</div>
+              <div className="px-3 py-2 bg-zinc-900 text-[10px] font-black uppercase text-zinc-400">Top craft banks</div>
               <ul className="divide-y divide-zinc-800/80 max-h-40 overflow-y-auto">
                 {topCrafts.length === 0 && (
-                  <li className="px-3 py-2 text-[11px] text-zinc-500">No phrases yet — train from library or keep editing shots.</li>
+                  <li className="px-3 py-2 text-[11px] text-zinc-400">No phrases yet — train from library or keep editing shots.</li>
                 )}
                 {topCrafts.map((c) => (
                   <li key={c.key} className="px-3 py-1.5 text-[11px] flex justify-between gap-2">
@@ -209,15 +236,15 @@ export default function StudioBrainModal({ isOpen, onClose }) {
               </ul>
             </div>
             <div className="rounded-xl border border-zinc-800 overflow-hidden">
-              <div className="px-3 py-2 bg-zinc-900 text-[10px] font-black uppercase text-zinc-500">Characters remembered</div>
+              <div className="px-3 py-2 bg-zinc-900 text-[10px] font-black uppercase text-zinc-400">Characters remembered</div>
               <ul className="divide-y divide-zinc-800/80 max-h-40 overflow-y-auto">
                 {topChars.length === 0 && (
-                  <li className="px-3 py-2 text-[11px] text-zinc-500">Characters appear here after Matrix shots include them.</li>
+                  <li className="px-3 py-2 text-[11px] text-zinc-400">Characters appear here after Matrix shots include them.</li>
                 )}
                 {topChars.map((c) => (
                   <li key={c.name} className="px-3 py-1.5 text-[11px] flex justify-between gap-2">
                     <span className="text-cyan-300 truncate">{c.name}</span>
-                    <span className="text-zinc-500 shrink-0">×{c.count}</span>
+                    <span className="text-zinc-400 shrink-0">×{c.count}</span>
                   </li>
                 ))}
               </ul>

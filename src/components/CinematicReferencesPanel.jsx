@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Copy, Check, Film, Clapperboard, Aperture, Palette, ScrollText } from 'lucide-react';
 import {
   getCinematicReferences,
@@ -15,9 +15,14 @@ const ICONS = {
   screenplays: ScrollText
 };
 
+function shortLabel(item) {
+  const s = String(item || '');
+  const cut = s.split('—')[0].split(' - ')[0].trim();
+  return cut.length > 28 ? `${cut.slice(0, 26)}…` : cut;
+}
+
 /**
- * Compact reference library panel — genre + craft aware.
- * Click a chip to insert into the craft field; Copy all for LLM paste.
+ * Small refs button. Opens a compact popover — used in craft, Cast, World, Writer.
  */
 export default function CinematicReferencesPanel({
   genreKey = 'mythological',
@@ -29,7 +34,8 @@ export default function CinematicReferencesPanel({
   className = ''
 }) {
   const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(!compact);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
 
   const refs = useMemo(
     () =>
@@ -38,10 +44,19 @@ export default function CinematicReferencesPanel({
         craftKey,
         projectTitle,
         sectionId,
-        limitPerCategory: compact ? 4 : 6
+        limitPerCategory: compact ? 4 : 5
       }),
     [genreKey, craftKey, projectTitle, sectionId, compact]
   );
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
 
   if (!hasAnyReferences(refs)) return null;
 
@@ -56,77 +71,66 @@ export default function CinematicReferencesPanel({
   };
 
   return (
-    <div
-      className={`rounded-xl border border-violet-500/35 bg-violet-950/25 ${compact ? 'p-2.5' : 'p-3'} ${className}`}
-      data-force-dark="true"
-    >
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-left cursor-pointer min-w-0"
-        >
-          <BookOpen className="w-3.5 h-3.5 text-violet-300 shrink-0" />
-          <span className="text-[10px] font-black uppercase tracking-wide text-violet-200 truncate">
-            Cinematic references
-            {refs.craftKey ? ` · craft` : refs.sectionTitle ? ` · section` : ''}
-          </span>
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-950/80 border border-violet-800/50 text-violet-300/90 shrink-0">
-            {refs.genreLabel}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={handleCopyAll}
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1 cursor-pointer shrink-0"
-          title="Copy reference block for LLM / notes"
-        >
-          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-          {copied ? 'Copied' : 'Copy for LLM'}
-        </button>
-      </div>
-
-      {refs.why ? (
-        <p className="text-[10px] text-zinc-400 leading-snug mb-2">{refs.why}</p>
-      ) : null}
-
-      {open && (
-        <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
-          {REFERENCE_CATEGORIES.map((cat) => {
-            const items = refs[cat.id] || [];
-            if (!items.length) return null;
-            const Icon = ICONS[cat.id] || BookOpen;
-            return (
-              <div key={cat.id}>
-                <p className="text-[9px] font-black uppercase tracking-wide text-zinc-500 mb-1 flex items-center gap-1">
-                  <Icon className="w-3 h-3" />
-                  {cat.label}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {items.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      title={onInsert ? 'Click to insert into craft field' : item}
-                      onClick={() => {
-                        if (onInsert) onInsert(item);
-                      }}
-                      className={`text-left text-[10px] leading-snug px-1.5 py-1 rounded-md border border-zinc-700/80 bg-zinc-950/70 text-zinc-300 ${
-                        onInsert ? 'hover:border-violet-400/60 hover:text-violet-100 cursor-pointer' : 'cursor-default'
-                      }`}
-                    >
-                      {item.length > 90 ? `${item.slice(0, 87)}…` : item}
-                    </button>
-                  ))}
+    <div ref={wrapRef} className={`relative inline-flex shrink-0 ${className}`}>
+      <button
+        type="button"
+        className={`sps-icon-btn ${open ? 'is-on' : ''}`}
+        title="Cinematic references"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <BookOpen className="w-3.5 h-3.5" />
+      </button>
+      {open ? (
+        <div className="sps-refs-pop absolute right-0 top-[calc(100%+6px)] z-[80] w-[min(18rem,70vw)] rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-surface)] p-2 shadow-[var(--sps-shadow-lift)]">
+          <div className="flex items-center justify-between gap-1 mb-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-wide text-[var(--sps-muted)] truncate">
+              {refs.genreLabel}
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyAll}
+              className="sps-icon-btn"
+              title="Copy for LLM"
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {REFERENCE_CATEGORIES.map((cat) => {
+              const items = refs[cat.id] || [];
+              if (!items.length) return null;
+              const Icon = ICONS[cat.id] || BookOpen;
+              return (
+                <div key={cat.id}>
+                  <p className="text-[8px] font-bold uppercase tracking-wide text-[var(--sps-muted)] mb-0.5 flex items-center gap-1 m-0">
+                    <Icon className="w-2.5 h-2.5" />
+                    {cat.label}
+                  </p>
+                  <div className="flex flex-wrap gap-0.5">
+                    {items.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        title={item}
+                        onClick={() => {
+                          if (onInsert) {
+                            onInsert(item);
+                            setOpen(false);
+                          }
+                        }}
+                        className="sps-btn sps-btn-compact text-[9px] max-w-full"
+                      >
+                        {shortLabel(item)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-          <p className="text-[9px] text-zinc-600 leading-snug pt-1">
-            Taste anchors only — match light, scale, staging grammar. Do not copy plots into prompts.
-          </p>
+              );
+            })}
+          </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

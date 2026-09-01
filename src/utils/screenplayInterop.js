@@ -40,11 +40,13 @@ export function downloadTextFile(filename, contents, mime = 'text/plain;charset=
 export function exportFountain(scriptText, meta = {}) {
   const title = meta.title || 'Untitled Screenplay';
   const body = normalizeToFountain(scriptText);
+  const room = String(meta.roomId || '').trim();
   const header = [
     `Title: ${title}`,
     meta.author ? `Author: ${meta.author}` : null,
     meta.draft ? `Draft date: ${meta.draft}` : `Draft date: ${new Date().toISOString().slice(0, 10)}`,
-    `Contact: Stage Production Studio`,
+    room ? `Room: ${room}` : null,
+    `Contact: Stage Work Studio — AI Cinema Production OS`,
     '',
     ''
   ]
@@ -79,11 +81,63 @@ ${paragraphs}
   <TitlePage>
     <Content>
       <Paragraph Type="Title"><Text>${title}</Text></Paragraph>
-      <Paragraph Type="Center"><Text>Stage Production Studio</Text></Paragraph>
+      <Paragraph Type="Center"><Text>Stage Work Studio — AI Cinema Production OS</Text></Paragraph>
     </Content>
   </TitlePage>
 </FinalDraft>
 `;
+}
+
+/**
+ * Writer merge pack ZIP — Fountain + TXT + FDX + META for overwrite/merge handoff.
+ */
+export function buildWriterMergeZipFiles(
+  scriptText = '',
+  {
+    projectTitle = 'screenplay',
+    roomId = '',
+    liveShotCount = 0,
+    mergeMode = 'pack'
+  } = {}
+) {
+  const title = String(projectTitle || 'screenplay').trim() || 'screenplay';
+  const stem = title.replace(/[^\w\-]+/g, '_').slice(0, 40) || 'screenplay';
+  const fountain = exportFountain(scriptText, { title, roomId });
+  const txt = exportPlainTxt(scriptText);
+  const fdx = exportFdx(scriptText, { title });
+  const lines = String(scriptText || '').split('\n').length;
+  return [
+    { name: `${stem}.fountain`, content: fountain },
+    { name: `${stem}.txt`, content: txt },
+    { name: `${stem}.fdx`, content: fdx },
+    {
+      name: 'META.txt',
+      content: [
+        `Project: ${title}`,
+        `Mode: ${mergeMode}`,
+        `Lines: ${lines}`,
+        `Live matrix shots: ${liveShotCount}`,
+        `Room: ${roomId || '—'}`,
+        `Exported: ${new Date().toISOString()}`,
+        '',
+        'Use Fountain/TXT/FDX for Writer re-import or merge apply review.'
+      ].join('\n')
+    },
+    {
+      name: 'README.md',
+      content: [
+        `# ${title} — Writer merge pack`,
+        '',
+        `- Fountain: \`${stem}.fountain\``,
+        `- Plain text: \`${stem}.txt\``,
+        `- Final Draft: \`${stem}.fdx\``,
+        `- Live Matrix shots at export: ${liveShotCount}`,
+        roomId ? `- Collab room: ${roomId}` : '- Collab room: —',
+        '',
+        'Re-import into Writer, then choose overwrite or merge when applying to Matrix.'
+      ].join('\n')
+    }
+  ];
 }
 
 function toFdxType(type) {
@@ -335,6 +389,84 @@ export function purgeScreenplayArchiveEntry(id) {
 
 export function persistLiveScreenplay(text) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('sps_live_screenplay_text', text);
-  localStorage.setItem('sps_current_screenplay_text', text);
+  try {
+    const email = String(localStorage.getItem('sps_authorized_user_email') || '').trim();
+    if (!email) {
+      sessionStorage.setItem('sps_guest_play_screenplay', text);
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  writeOpenScreenplayText(text, { silent: true });
+}
+
+/** P103 — Canonical open-screenplay SoT (legacy live/current are write-through mirrors). */
+export const OPEN_SCREENPLAY_SOT_KEY = 'sps_open_screenplay_text';
+export const LEGACY_LIVE_SCREENPLAY_KEY = 'sps_live_screenplay_text';
+export const LEGACY_CURRENT_SCREENPLAY_KEY = 'sps_current_screenplay_text';
+
+function readLegacyScreenplayPair() {
+  try {
+    const live = String(localStorage.getItem(LEGACY_LIVE_SCREENPLAY_KEY) || '');
+    const current = String(localStorage.getItem(LEGACY_CURRENT_SCREENPLAY_KEY) || '');
+    if (live && current && live !== current) {
+      return live.length >= current.length ? live : current;
+    }
+    return live || current || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Prefer SoT key; migrate from live/current once if needed. */
+export function readOpenScreenplayText() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const sot = String(localStorage.getItem(OPEN_SCREENPLAY_SOT_KEY) || '');
+    if (sot) return sot;
+    const legacy = readLegacyScreenplayPair();
+    if (legacy) {
+      writeOpenScreenplayText(legacy, { silent: true });
+      return legacy;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+/** Write SoT + keep legacy mirrors in sync for older readers. */
+export function writeOpenScreenplayText(text, { silent = false } = {}) {
+  if (typeof window === 'undefined') return;
+  const payload = String(text || '');
+  try {
+    localStorage.setItem(OPEN_SCREENPLAY_SOT_KEY, payload);
+    localStorage.setItem(LEGACY_LIVE_SCREENPLAY_KEY, payload);
+    localStorage.setItem(LEGACY_CURRENT_SCREENPLAY_KEY, payload);
+    if (!silent) {
+      window.dispatchEvent(
+        new CustomEvent('sps_screenplay_updated', { detail: { source: 'open_screenplay_write' } })
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Migrate dual keys → SoT; safe on every boot. */
+export function syncOpenScreenplayStores() {
+  return readOpenScreenplayText();
+}
+
+/** True when SoT exists (or was just migrated). */
+export function migrateOpenScreenplayToSoT() {
+  if (typeof window === 'undefined') return { ok: false, migrated: false };
+  try {
+    const before = String(localStorage.getItem(OPEN_SCREENPLAY_SOT_KEY) || '');
+    const text = readOpenScreenplayText();
+    return { ok: true, migrated: !before && Boolean(text), length: text.length };
+  } catch {
+    return { ok: false, migrated: false };
+  }
 }

@@ -1,4 +1,5 @@
 import { getAllottedStorageFolderPath } from './appSettingsDiskVault';
+import { offloadVaultMap, resolveVaultMap } from '../utils/imageBlobStore';
 
 /**
  * CANVAS LOCAL STORAGE FOLDER VAULT SERVICE
@@ -15,7 +16,7 @@ export function getStoredCanvasVaultImages() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') return resolveVaultMap(parsed);
     }
   } catch (e) {
     console.warn("Error reading canvas images from local storage folder vault:", e);
@@ -28,8 +29,14 @@ export function saveCanvasVaultImage(key, imageUrl) {
   try {
     const current = getStoredCanvasVaultImages();
     const updated = { ...current, [key]: imageUrl };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new Event('sps_canvas_vault_updated'));
+    offloadVaultMap(updated).then((slim) => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+        window.dispatchEvent(new Event('sps_canvas_vault_updated'));
+      } catch (err) {
+        console.warn("Error saving image to local storage folder vault:", err);
+      }
+    });
   } catch (e) {
     console.warn("Error saving image to local storage folder vault:", e);
   }
@@ -49,8 +56,14 @@ export function saveAllCanvasVaultImages(imagesMap) {
   try {
     const current = getStoredCanvasVaultImages();
     const updated = { ...current, ...imagesMap };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new Event('sps_canvas_vault_updated'));
+    offloadVaultMap(updated).then((slim) => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+        window.dispatchEvent(new Event('sps_canvas_vault_updated'));
+      } catch (err) {
+        console.warn("Error saving images map to canvas vault:", err);
+      }
+    });
   } catch (e) {
     console.warn("Error saving images map to canvas vault:", e);
   }

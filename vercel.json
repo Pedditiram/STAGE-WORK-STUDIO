@@ -16,23 +16,19 @@
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, If-None-Match" }
       ]
     },
     {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
-        { "key": "Pragma", "value": "no-cache" },
-        { "key": "CDN-Cache-Control", "value": "no-store" }
+        { "key": "Cache-Control", "value": "public, max-age=120, must-revalidate" }
       ]
     },
     {
       "source": "/",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
-        { "key": "Pragma", "value": "no-cache" },
-        { "key": "CDN-Cache-Control", "value": "no-store" }
+        { "key": "Cache-Control", "value": "public, max-age=120, must-revalidate" }
       ]
     },
     {

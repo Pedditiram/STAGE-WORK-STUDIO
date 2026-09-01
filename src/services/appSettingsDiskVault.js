@@ -157,7 +157,9 @@ export const getFullAppSettingsPackage = () => {
     'sps_current_project_title',
     'sps_current_target_model',
     'sps_current_aspect_ratio',
-    'sps_is_admin_logged_in'
+    'sps_is_admin_logged_in',
+    'sps_guest_browse_enabled',
+    'sps_guest_url_enabled'
   ];
 
   const settingsData = {};

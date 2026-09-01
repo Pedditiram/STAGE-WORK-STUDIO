@@ -8,7 +8,7 @@
  * - If CSC_LINK (+ CSC_KEY_PASSWORD) or CSC_NAME is set, electron-builder signs with that identity.
  * - Otherwise the build is ad-hoc / unsigned — Gatekeeper will warn on first open.
  * - Paid Apple Developer ID is NOT required for local/dir builds; notarization is optional.
- * - Open unsigned builds via: right-click → Open, or `xattr -cr "Stage Production Studio.app"`.
+ * - Open unsigned builds via: right-click → Open, or `xattr -cr "Stage Work Studio.app"`.
  */
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -105,6 +105,24 @@ try {
 
 safeRestore();
 console.log('Electron build complete.');
+
+// Ad-hoc resign so Finder/LaunchServices can open unsigned local builds
+if (process.platform === 'darwin' && !hasSigningIdentity) {
+  const appPath = path.join(root, 'release', 'mac-arm64', 'Stage Work Studio.app');
+  if (fs.existsSync(appPath)) {
+    const sign = spawnSync('codesign', ['--force', '--deep', '--sign', '-', appPath], {
+      cwd: root,
+      stdio: 'inherit',
+    });
+    if (sign.status === 0) {
+      spawnSync('xattr', ['-cr', appPath], { cwd: root, stdio: 'ignore' });
+      console.log('[electron-build] Ad-hoc codesign applied:', appPath);
+    } else {
+      console.warn('[electron-build] Ad-hoc codesign failed — open via: right-click → Open');
+    }
+  }
+}
+
 if (!hasSigningIdentity) {
   console.log(
     '[electron-build] Residual: unsigned app — users may see a Gatekeeper warning until a Developer ID is configured.'

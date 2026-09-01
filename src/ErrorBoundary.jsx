@@ -11,7 +11,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Stage Production Studio Error Boundary caught an error:", error, errorInfo);
+    console.error("Stage Work Studio Error Boundary caught an error:", error, errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -27,10 +27,9 @@ export default class ErrorBoundary extends React.Component {
       return (
         <div className="h-screen w-full bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
           <div className="max-w-md w-full bg-zinc-900 border border-red-500/50 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center mx-auto text-2xl font-mono font-bold">
-              ⚠️
-            </div>
-            <h2 className="text-lg font-bold text-white font-mono">Stage Production Studio</h2>
+            <img src="./favicon.svg" alt="" className="w-12 h-12 rounded-xl mx-auto" />
+            <h2 className="text-lg font-bold text-white font-mono">Stage Work Studio</h2>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 font-mono">AI Cinema Production OS</p>
             <p className="text-xs text-zinc-400 leading-relaxed font-mono">
               A runtime initialization error occurred. Click below to reset local state and restore default production studio configuration.
             </p>

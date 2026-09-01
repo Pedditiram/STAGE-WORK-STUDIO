@@ -1,6 +1,6 @@
 # Stage Production Studio — Brand Book
 
-**Pedditi Labs · Stage Production Studio**  
+**StageWorks**  
 Owner contact: [pedditiram@gmail.com](mailto:pedditiram@gmail.com)  
 Living expression: in-app **Investor Deck & Studio Showcase**
 
@@ -10,7 +10,7 @@ Living expression: in-app **Investor Deck & Studio Showcase**
 
 **Stage Production Studio** is cinema craft intelligence for directors who refuse to compromise the frame. It turns screenplay text into a production-ready **24-craft shot matrix**, with cloud rooms where Directors, DPs, and Editors co-author without overwrite chaos — then compiles prompt-ready keyframes for modern AI video pipelines.
 
-**Pedditi Labs** is the maker mark: disciplined, cinematic, craft-first. Not “another AI writing tool.” Not purple SaaS. A director’s table that happens to ship as software.
+**StageWorks** is cinema craft software: disciplined, cinematic, craft-first. Not “another AI writing tool.” Not purple SaaS. A director’s table that happens to ship as software.
 
 ### Positioning line
 > Cinema craft intelligence for the modern slate.
@@ -33,13 +33,12 @@ No separate SVG logo file is required. Use the **typographic lockup** already in
 
 | Element | Treatment |
 |--------|-----------|
-| Product | **Stage Production Studio** — `Syne` (display), bold/extrabold |
-| Maker | **Pedditi Labs** — `Outfit`, uppercase or small caps tracking, cyan or muted slate |
+| Product | **StageWorks** — `Syne` (display), bold/extrabold |
 | Icon mark | Film glyph in cyan→sky→blue gradient disc (header / splash / deck) |
 
 ### Lockup rules
 1. Product name is the **hero-level signal** on pitch surfaces — never demote it to nav-only.
-2. Pedditi Labs sits **above or beside** as maker mark (eyebrow), never louder than the product.
+2. Do not add a separate maker mark or company eyebrow above the product name.
 3. Prefer dark stage fields for lockups; paper mode uses deep slate on light panels.
 4. Do not stretch, outline, or add purple/glow “AI” treatments.
 5. Minimum clear space: roughly the height of the capital “S” around the wordmark.

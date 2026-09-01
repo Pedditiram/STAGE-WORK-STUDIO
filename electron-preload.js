@@ -32,11 +32,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Open file via native Open Dialog
-  openFile: () =>
-    ipcRenderer.invoke('dialog:openFile'),
+  openFile: () => ipcRenderer.invoke('dialog:openFile'),
+
+  // Shared disk vault — same projects/ + settings/ folders as Vite localhost
+  listProjectsFromDisk: () => ipcRenderer.invoke('vault:listProjects'),
+  saveProjectToDisk: (project) => ipcRenderer.invoke('vault:saveProject', project),
+  savePosterToDisk: (payload) => ipcRenderer.invoke('vault:savePoster', payload),
+  listPostersFromDisk: () => ipcRenderer.invoke('vault:listPosters'),
+  readPosterDataUrl: (title) => ipcRenderer.invoke('vault:readPosterDataUrl', title),
+  openPosterFolder: (payload) => ipcRenderer.invoke('vault:openPosterFolder', payload),
+  getActiveWorkspaceFromDisk: () => ipcRenderer.invoke('vault:getActiveWorkspace'),
+  setActiveWorkspaceOnDisk: (workspace) => ipcRenderer.invoke('vault:setActiveWorkspace', workspace),
+  getVaultRoots: () => ipcRenderer.invoke('vault:getRoots'),
+  factoryReset: (payload) => ipcRenderer.invoke('vault:factoryReset', payload || {}),
+  getUiPrefsFromDisk: () => ipcRenderer.invoke('vault:getUiPrefs'),
+  setUiPrefsOnDisk: (prefs) => ipcRenderer.invoke('vault:setUiPrefs', prefs),
+  ensureDirs: (dirs) => ipcRenderer.invoke('vault:ensureDirs', dirs),
+  resolveComfyAssets: (requests) => ipcRenderer.invoke('vault:resolveComfyAssets', requests),
+  pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory'),
+  openProjectFolder: (payload) => ipcRenderer.invoke('vault:openProjectFolder', payload || {}),
+  saveProjectVersion: (payload) => ipcRenderer.invoke('vault:saveProjectVersion', payload),
+  saveTextFiles: (payload) => ipcRenderer.invoke('vault:saveTextFiles', payload),
+  ensurePlaceholderPngs: (payload) => ipcRenderer.invoke('vault:ensurePlaceholderPngs', payload),
+  discoverFilmAssetRoots: (payload) => ipcRenderer.invoke('vault:discoverFilmAssetRoots', payload),
+
+  // ComfyUI proxy (packaged Electron — no browser Origin CSRF 403)
+  comfyFetch: (payload) => ipcRenderer.invoke('comfy:fetch', payload),
 
   // Check if running inside Electron
   isElectron: true,
+
+  // Mirror mode: standard window frame — same UI chrome as localhost
+  mirrorLocalhost: true,
 
   // Platform info
   platform: process.platform,

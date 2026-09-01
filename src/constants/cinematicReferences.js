@@ -349,7 +349,7 @@ export const APP_SECTION_REFERENCES = {
     title: 'Prompt Compiler',
     movies: ['Any locked lookbook film for the project'],
     directors: ['One hero director + one DoP for the whole compile'],
-    why: 'One style DNA block across Script Synopsis → Prompt keeps Seedance/SeeDream coherent.'
+    why: 'One style DNA block across Script Synopsis → Prompt keeps video and image engines coherent.'
   }
 };
 

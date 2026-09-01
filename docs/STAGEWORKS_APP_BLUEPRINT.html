@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stage Work Studio — App Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #07090f;
+      --elev: #0e1219;
+      --surface: #141a24;
+      --text: #e8edf5;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --sky: #38bdf8;
+      --amber: #f59e0b;
+      --line: rgba(148,163,184,0.22);
+      --display: Syne, sans-serif;
+      --sans: Outfit, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    @page { size: A4; margin: 14mm 12mm; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+    body {
+      background:
+        radial-gradient(900px 420px at 8% -8%, rgba(34,211,238,0.12), transparent 50%),
+        radial-gradient(700px 360px at 100% 0%, rgba(245,158,11,0.08), transparent 48%),
+        var(--bg);
+    }
+    .sheet { max-width: 980px; margin: 0 auto; padding: 2rem 1.4rem 3rem; }
+    .print-bar {
+      position: sticky; top: 0; z-index: 5;
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+      padding: 0.7rem 0 1rem; background: linear-gradient(var(--bg), transparent);
+    }
+    .print-bar button {
+      border: 0; border-radius: 10px; padding: 0.55rem 1rem;
+      background: linear-gradient(90deg, #22d3ee, #f59e0b); color: #07090f;
+      font-weight: 700; font-size: 0.8rem; cursor: pointer;
+    }
+    .muted { color: var(--muted); }
+    .eyebrow { letter-spacing: 0.22em; text-transform: uppercase; font-size: 0.68rem; color: var(--amber); font-weight: 700; margin: 0 0 0.4rem; }
+    h1 { font-family: var(--display); font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1; margin: 0 0 0.6rem; }
+    h2 { font-family: var(--display); font-size: 1.15rem; color: var(--cyan); margin: 2rem 0 0.7rem; }
+    h3 { font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); margin: 0 0 0.45rem; }
+    p, li { font-size: 0.9rem; line-height: 1.5; }
+    .lead { color: var(--muted); max-width: 40rem; margin: 0 0 1.4rem; }
+    .card {
+      background: rgba(20,26,36,0.88);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.7rem; }
+    @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    .hub {
+      text-align: center;
+      border: 1px solid rgba(34,211,238,0.45);
+      background: linear-gradient(180deg, rgba(34,211,238,0.12), rgba(20,26,36,0.9));
+      padding: 0.9rem;
+      border-radius: 16px;
+      margin: 0 auto 1rem;
+      max-width: 22rem;
+    }
+    .hub strong { font-family: var(--display); display: block; font-size: 1.15rem; }
+    .mind {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.65rem;
+    }
+    @media (max-width: 800px) { .mind { grid-template-columns: 1fr 1fr; } }
+    .mind .node h3 { margin-bottom: 0.35rem; }
+    .mind ul { margin: 0; padding-left: 1.05rem; }
+    .mind li { font-size: 0.78rem; color: var(--muted); }
+    .flow {
+      display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.4rem;
+    }
+    .flow .step {
+      flex: 1 1 7.2rem;
+      min-width: 7rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.55rem 0.6rem;
+      font-size: 0.75rem;
+    }
+    .flow .step b { display: block; color: var(--cyan); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    .arrow { align-self: center; color: var(--amber); font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th, td { border-bottom: 1px solid var(--line); padding: 0.42rem 0.35rem; text-align: left; vertical-align: top; }
+    th { color: var(--cyan); font-weight: 600; }
+    .note { font-size: 0.78rem; color: var(--muted); }
+    footer { margin-top: 2rem; font-size: 0.72rem; color: var(--muted); }
+    @media print {
+      .print-bar { display: none; }
+      body { background: #fff; color: #111; }
+      .sheet { padding: 0; max-width: none; }
+      .card, .hub, .flow .step { background: #fff; border-color: #ccc; }
+      h1, .hub strong { color: #111; }
+      h2, .hub, th, .flow .step b { color: #0e7490; }
+      h3 { color: #b45309; }
+      .muted, .lead, .mind li, p, li, td, footer { color: #334155; }
+      .eyebrow { color: #b45309; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="print-bar">
+      <span class="muted" style="font-size:0.8rem">Open this file → Print → Save as PDF</span>
+      <button type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+
+    <p class="eyebrow">Stage Work Studio · App paperwork</p>
+    <h1>Blueprint of the cinema OS</h1>
+    <p class="lead">
+      One picture of why the app exists, what each room does, and how a film moves from a two-line brief or PDF
+      to Matrix shots, cast, world, compile, and generate — without mixing projects.
+    </p>
+
+    <div class="card">
+      <h3>Why it exists</h3>
+      <p>
+        <strong>Stage Work Studio</strong> (StageWorks) is a director’s table, not a chatbot. Cloud owns account, license,
+        device, and paid APIs. The computer stays the user’s — the studio never deletes their files.
+        Owner <strong>pedditiram@gmail.com</strong> is always Enterprise.
+      </p>
+      <p class="note">
+        Positioning: cinema craft intelligence for the modern slate — script → 26-craft shot matrix → locked looks →
+        still/video takes. Local Vite: <code>http://127.0.0.1:5173</code>.
+      </p>
+    </div>
+
+    <h2>1. Mind map — the whole studio</h2>
+    <div class="hub">
+      <span class="eyebrow">Centre</span>
+      <strong>Active project</strong>
+      <span class="muted" style="font-size:0.8rem">One title at a time · own shots, Writer, Cast, World, room</span>
+    </div>
+    <div class="mind">
+      <div class="card node">
+        <h3>Access</h3>
+        <ul>
+          <li>Login / device / heartbeat</li>
+          <li>Plans trial → Enterprise</li>
+          <li>Allotted projects for team</li>
+          <li>BYOK keys vs studio credits</li>
+        </ul>
+      </div>
+      <div class="card node">
+        <h3>Project Console</h3>
+        <ul>
+          <li>Library, new, archive</li>
+          <li>Parse PDF / two-line brief</li>
+          <li>Apply shots to this title only</li>
+          <li>Director / DoP / Sound vaults</li>
+        </ul>
+      </div>
+      <div class="card node">
+        <h3>Story rooms</h3>
+        <ul>
+          <li>Writer — pages + synopsis</li>
+          <li>Matrix — shot grid</li>
+          <li>Form — one-shot craft desk</li>
+          <li>Character — profiles + ref sheets</li>
+          <li>World — locations / plates</li>
+        </ul>
+      </div>
+      <div class="card node">
+        <h3>Picture rooms</h3>
+        <ul>
+          <li>Compile — cinema prompts</li>
+          <li>Generate — still | video take</li>
+          <li>Storyboard / Reel</li>
+          <li>3D Stage (optional)</li>
+          <li>Promo / Campaign / Pitch / Budget</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. Production spine (how work actually moves)</h2>
+    <div class="flow">
+      <div class="step"><b>1. Open film</b>Correct title in Project Console (e.g. MVK, not another card).</div>
+      <span class="arrow">→</span>
+      <div class="step"><b>2. Ingest</b>Two-line brief or PDF. Parse expands coverage + dialogue on shots.</div>
+      <span class="arrow">→</span>
+      <div class="step"><b>3. Apply</b>Writes Matrix for that title only. Parks Writer / Cast extras on the project.</div>
+      <span class="arrow">→</span>
+      <div class="step"><b>4. Bibles</b>Extract people from Matrix. Ref sheets = prompts from their shots. World plates.</div>
+      <span class="arrow">→</span>
+      <div class="step"><b>5. Flavour</b>Director / DoP / Sound after parse. Mood (Director frequency) enters Compile.</div>
+      <span class="arrow">→</span>
+      <div class="step"><b>6. Picture</b>Compile prompt → Generate still → last frame → video. Reel lists clips.</div>
+    </div>
+    <p class="note">Parse does not read Director/DoP boxes. Compile/Generate read Matrix crafts + a short Director mood line.</p>
+
+    <h2>3. Room brief</h2>
+    <table>
+      <thead>
+        <tr><th>Room</th><th>Exists to</th><th>Main functions</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Project Console</td>
+          <td>Keep films separate and ingest story</td>
+          <td>Library, parse, Apply, Director/DoP/Sound, genre, allotments</td>
+        </tr>
+        <tr>
+          <td>Writer</td>
+          <td>Hold the living screenplay</td>
+          <td>Pages, synopsis, Telugu/English dictate, feeds extract</td>
+        </tr>
+        <tr>
+          <td>Matrix / Form</td>
+          <td>Be the shot authority</td>
+          <td>26-craft rows; Form edits one shot; continuity last-frame bind</td>
+        </tr>
+        <tr>
+          <td>Character</td>
+          <td>Lock people, not stock warriors</td>
+          <td>Extract profiles; copy profile; ref sheets from that person’s shots; lock face/body stills</td>
+        </tr>
+        <tr>
+          <td>World</td>
+          <td>Lock place</td>
+          <td>Locations, plates, props used in compile</td>
+        </tr>
+        <tr>
+          <td>Compile</td>
+          <td>Speak to image/video models</td>
+          <td>Per-shot master cinema prompt + refs</td>
+        </tr>
+        <tr>
+          <td>Generate</td>
+          <td>Take desk (not a node graph)</td>
+          <td>Still | Video; poll Seedance; save clip on the shot</td>
+        </tr>
+        <tr>
+          <td>Storyboard / Reel / Promo</td>
+          <td>Show the cut and sell it</td>
+          <td>Boards, feature reel, campaign / pitch / budget</td>
+        </tr>
+        <tr>
+          <td>Settings / SaaS</td>
+          <td>Keys, credits, team</td>
+          <td>Gemini, BytePlus, BYOK, Stripe packs, console flags</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. What stays on the film vs what is global</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Per project (must not leak)</h3>
+        <p>Title, shots, Writer text, Cast, World, Director/DoP/Sound, genre, generate clips, own collab room (<code>sps_mvk</code> style — not one shared room for every film).</p>
+      </div>
+      <div class="card">
+        <h3>Account / studio</h3>
+        <p>Login, plan, device, API keys, credit ledger, which consoles a user may open. Keys are not sent to the backend in BYOK mode.</p>
+      </div>
+    </div>
+
+    <h2>5. Cloud vs local</h2>
+    <div class="grid-3">
+      <div class="card"><h3>Local OS</h3><p>Edit Matrix, Writer, Cast. Disk vault + browser cache. Never remote-wipe the machine.</p></div>
+      <div class="card"><h3>Cloud authority</h3><p>License, session, managed generate (<code>/api/generate-image</code>, <code>/api/generate-video</code>), library sync.</p></div>
+      <div class="card"><h3>Team</h3><p>Owner creates films. Editors work allotted titles. One invite <code>?room=</code> per film.</p></div>
+    </div>
+
+    <h2>6. Production habits (so work is not lost)</h2>
+    <ul>
+      <li>Parse and <strong>Apply only while the correct title is active</strong>.</li>
+      <li>After a large parse, check header title + shot count, then reload once.</li>
+      <li>Do not use “Clear local cache” unless the app will not start — that wipes local drafts.</li>
+      <li>Director/DoP flavour: fill <em>after</em> Apply; set Human / AI / Hybrid <strong>USE</strong> before Compile.</li>
+    </ul>
+
+    <footer>
+      Stage Work Studio · App Blueprint · For internal production paperwork · Print this page to PDF ·
+      Contact pedditiram@gmail.com
+    </footer>
+  </div>
+</body>
+</html>

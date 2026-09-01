@@ -1,6 +1,8 @@
 /**
  * Converts a 15-slot shot object into natural narrative cinema prose description.
  */
+import { getActiveCharacterProfiles } from './projectBibleVault';
+
 export function compileNarrativeProse(shot) {
   if (!shot) return '';
   const muted = shot.mutedSlots || {};
@@ -22,24 +24,21 @@ export function compileNarrativeProse(shot) {
   // Subject ID & Placement with Character & Story lookup BEFORE character ID
   let characterStoryNote = '';
   try {
-    const stored = localStorage.getItem('sps_character_bible_vault');
-    if (stored) {
-      const charProfiles = JSON.parse(stored);
-      if (Array.isArray(charProfiles)) {
-        charProfiles.forEach(c => {
-          if (c.tag && (shot.characterIdAssetRef || '').includes(c.tag)) {
-            const traits = [];
-            if (c.backstory) traits.push(`Story: ${c.backstory}`);
-            if (c.characterConnections) traits.push(`Connections: ${c.characterConnections}`);
-            if (c.shotPurpose) traits.push(`Purpose: ${c.shotPurpose}`);
-            if (c.mannerism) traits.push(`Mannerism: ${c.mannerism}`);
-            if (c.walkingStyle) traits.push(`Gait: ${c.walkingStyle}`);
-            if (traits.length > 0) {
-              characterStoryNote += `[Character & Story: ${traits.join(' | ')}] `;
-            }
+    const charProfiles = getActiveCharacterProfiles();
+    if (Array.isArray(charProfiles)) {
+      charProfiles.forEach(c => {
+        if (c.tag && (shot.characterIdAssetRef || '').includes(c.tag)) {
+          const traits = [];
+          if (c.backstory) traits.push(`Story: ${c.backstory}`);
+          if (c.characterConnections) traits.push(`Connections: ${c.characterConnections}`);
+          if (c.shotPurpose) traits.push(`Purpose: ${c.shotPurpose}`);
+          if (c.mannerism) traits.push(`Mannerism: ${c.mannerism}`);
+          if (c.walkingStyle) traits.push(`Gait: ${c.walkingStyle}`);
+          if (traits.length > 0) {
+            characterStoryNote += `[Character & Story: ${traits.join(' | ')}] `;
           }
-        });
-      }
+        }
+      });
     }
   } catch (e) {}
 

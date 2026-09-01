@@ -24,3 +24,14 @@ dist-ssr
 *.sw?
 .vercel
 .env*
+
+# Local Electron builds (do not commit or upload to Vercel)
+release/
+release-old/
+*.electron-bak
+.index.html.electron-bak
+
+# Local vaults (may contain API keys and film data)
+storage/
+tmp-*.json
+

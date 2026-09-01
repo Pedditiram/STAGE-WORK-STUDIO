@@ -2,6 +2,9 @@
  * Mannequin joint poses + keyframe baking from Matrix / Master Cinema craft tags.
  */
 
+import { evalCameraMove } from './stageCameraMove';
+import { bakeCharacterMove } from './stageCharacterMove';
+
 function clamp(n, lo, hi) {
   const x = Number(n);
   if (!Number.isFinite(x)) return lo;
@@ -13,6 +16,13 @@ export const POSE_JOINT_META = [
   { key: 'chest', label: 'Chest', min: -0.5, max: 0.5 },
   { key: 'headX', label: 'Head tilt', min: -0.7, max: 0.7 },
   { key: 'headY', label: 'Head turn', min: -1.2, max: 1.2 },
+  { key: 'eyeX', label: 'Eye tilt', min: -0.45, max: 0.45 },
+  { key: 'eyeY', label: 'Eye turn', min: -0.55, max: 0.55 },
+  { key: 'brow', label: 'Brow', min: -1, max: 1 },
+  { key: 'eyeOpen', label: 'Eye open', min: 0.35, max: 1.3 },
+  { key: 'mouthOpen', label: 'Mouth open', min: 0, max: 1 },
+  { key: 'mouthSmile', label: 'Smile', min: -0.6, max: 1 },
+  { key: 'jaw', label: 'Jaw', min: 0, max: 0.4 },
   { key: 'upperArmLX', label: 'L arm raise', min: -2.2, max: 1.2 },
   { key: 'upperArmLZ', label: 'L arm swing', min: -1.4, max: 1.4 },
   { key: 'lowerArmL', label: 'L elbow', min: 0, max: 2.2 },
@@ -31,6 +41,13 @@ export function defaultPose() {
     chest: 0,
     headX: 0,
     headY: 0,
+    eyeX: 0,
+    eyeY: 0,
+    brow: 0,
+    eyeOpen: 1,
+    mouthOpen: 0,
+    mouthSmile: 0,
+    jaw: 0,
     upperArmLX: 0.15,
     upperArmLZ: 0.25,
     lowerArmL: 0.2,
@@ -264,39 +281,7 @@ export function poseFromShot(shot = {}, humanIndex = 0, explicitPose) {
 }
 
 function evalCameraPose(camPlan, t, durationSec) {
-  const u = durationSec > 0 ? Math.min(1, Math.max(0, t / durationSec)) : 0;
-  const anim = camPlan.animation || { type: 'static' };
-  const look = camPlan.lookAt || [0, 1.2, 0];
-  const base = camPlan.position || [-2, 1.4, 3];
-
-  if (anim.type === 'orbit') {
-    const radius = anim.radius ?? (Math.hypot(base[0], base[2]) || 3.4);
-    const height = anim.height ?? base[1];
-    const revs = anim.revolutions ?? 0.35;
-    const startAng = Math.atan2(base[2], base[0]);
-    const ang = startAng + revs * Math.PI * 2 * u;
-    return {
-      position: [Math.cos(ang) * radius, height, Math.sin(ang) * radius],
-      lookAt: [...look],
-      rotation: [0, 0, 0]
-    };
-  }
-
-  if (anim.type === 'dolly' || anim.type === 'crane' || anim.type === 'pan') {
-    const from = anim.from || base;
-    const to = anim.to || base;
-    return {
-      position: [
-        from[0] + (to[0] - from[0]) * u,
-        from[1] + (to[1] - from[1]) * u,
-        from[2] + (to[2] - from[2]) * u
-      ],
-      lookAt: [...look],
-      rotation: [0, 0, 0]
-    };
-  }
-
-  return { position: [...base], lookAt: [...look], rotation: [0, 0, 0] };
+  return evalCameraMove(camPlan, t, durationSec);
 }
 
 /** Sample camera animation into editable keyframes (drives motion path). */
@@ -316,76 +301,9 @@ export function bakeCameraKeyframes(camPlan, durationSec = 5, steps = 5) {
   return keys;
 }
 
-/** Walk / approach path for mannequins from prompt motion words. */
-export function bakeHumanKeyframes(human, durationSec = 5, shot = {}) {
-  const dur = clamp(durationSec, 1, 30);
-  const poseName = inferPoseNameFromShot(shot);
-  const start = human.position || [0, 0, 0];
-  const rotY = human.rotationY || 0;
-  const basePose = normalizePose(human.pose);
-
-  if (poseName !== 'walk' && !/walk|run|approach|cross|move toward/.test(
-    String(shot.characterMovement || '').toLowerCase()
-  )) {
-    // Static blocking — still seed start/end so path tools work when user edits
-    return [
-      {
-        t: 0,
-        position: [...start],
-        rotation: [0, rotY, 0],
-        pose: { ...basePose }
-      },
-      {
-        t: dur,
-        position: [...start],
-        rotation: [0, rotY, 0],
-        pose: { ...basePose }
-      }
-    ];
-  }
-
-  const dist = 1.6;
-  const end = [
-    start[0] + Math.sin(rotY) * dist,
-    start[1] || 0,
-    start[2] + Math.cos(rotY) * dist
-  ];
-
-  const walkA = normalizePose(POSE_PRESETS.walk());
-  const walkB = normalizePose({
-    ...POSE_PRESETS.walk(),
-    thighLX: 0.45,
-    shinL: 0.15,
-    thighRX: -0.55,
-    shinR: 0.45,
-    upperArmLZ: 0.55,
-    upperArmRZ: -0.55
-  });
-
-  return [
-    { t: 0, position: [...start], rotation: [0, rotY, 0], pose: { ...walkA } },
-    {
-      t: dur * 0.33,
-      position: [
-        start[0] + (end[0] - start[0]) * 0.33,
-        0,
-        start[2] + (end[2] - start[2]) * 0.33
-      ],
-      rotation: [0, rotY, 0],
-      pose: { ...walkB }
-    },
-    {
-      t: dur * 0.66,
-      position: [
-        start[0] + (end[0] - start[0]) * 0.66,
-        0,
-        start[2] + (end[2] - start[2]) * 0.66
-      ],
-      rotation: [0, rotY, 0],
-      pose: { ...walkA }
-    },
-    { t: dur, position: [...end], rotation: [0, rotY, 0], pose: { ...walkB } }
-  ];
+/** Walk / approach path for mannequins — Stage character-move baker. */
+export function bakeHumanKeyframes(human, durationSec = 5, shot = {}, humans = [], ctx = {}) {
+  return bakeCharacterMove(human, humans, durationSec, shot, ctx);
 }
 
 export { evalCameraPose as evalCameraPoseUtil };

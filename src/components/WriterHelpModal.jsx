@@ -38,42 +38,35 @@ export default function WriterHelpModal({ isOpen, onClose }) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm">
-      <div
-        className="force-dark w-full max-w-4xl h-[88vh] max-h-[900px] rounded-2xl border border-zinc-700 bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden shadow-2xl"
-        data-force-dark="true"
-      >
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/95 flex items-center justify-between gap-2 shrink-0">
+    <div className="sps-overlay" style={{ zIndex: 85 }}>
+      <div className="sps-shell sps-atelier-room sps-guide-blue">
+        <div className="sps-modal-head">
           <div className="min-w-0">
-            <h2 className="text-sm font-black uppercase tracking-wide text-amber-300 flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              Writer Console Help
+            <h2 className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--sps-gold)' }} />
+              Writer Help & App Guide
             </h2>
-            <p className="text-[11px] text-zinc-500 truncate">
+            <p>
               Industry muscle memory · studio-exclusive power · craft digest
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 cursor-pointer"
+            className="sps-icon-btn"
             aria-label="Close help"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex border-b border-zinc-800 shrink-0 overflow-x-auto">
+        <div className="flex border-b border-[var(--sps-border)] shrink-0 overflow-x-auto bg-[var(--sps-bg)] px-2">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                tab === t.id
-                  ? 'text-amber-300 border-b-2 border-amber-400 bg-amber-950/20'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
+              className={`sps-btn text-[11px] m-1.5 shrink-0 ${tab === t.id ? 'sps-btn-primary' : ''}`}
             >
               <t.icon className="w-3.5 h-3.5" />
               {t.label}
@@ -81,7 +74,7 @@ export default function WriterHelpModal({ isOpen, onClose }) {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sps-atelier-pane">
           {tab === 'shortcuts' && (
             <>
               <p className="text-[12px] text-zinc-400 leading-relaxed">
@@ -169,7 +162,7 @@ export default function WriterHelpModal({ isOpen, onClose }) {
           {tab === 'compare' && (
             <>
               <p className="text-[12px] text-zinc-400 leading-relaxed">
-                Stage Production Studio Writer Console keeps Final Draft / WriterDuet formatting habits — then adds
+                Stage Work Studio Writer Console — AI Cinema Production OS — keeps Final Draft / WriterDuet formatting habits — then adds
                 production Intel, Matrix sync, scene-locked co-write, and revision compare that those tools don’t ship
                 as one system.
               </p>

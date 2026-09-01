@@ -1,19 +1,29 @@
 /**
- * Stage Production Studio — Master Cinema Compiler prompt
- * (Script Synopsis → Scene Synopsis → Director Psychology → Character/World Bible → Character ID → Prompt)
- * Shared by Prompt Compiler and Promo Pack.
+ * Stage Production Studio — Seedance 2.5 video prompt compiler.
+ * Lean formula: Subject + Action + Scene + Style + Camera + Audio
+ * (No full script dumps, bible novels, or psychology essays.)
  */
 
 import { parseSceneAndShotID } from './sceneShotUtils';
+import {
+  bridgeLine,
+  continuityStateLines,
+  lookSheetLines,
+  videoJobSlots
+} from './continuitySpine';
 import { loadDirectorPsychology } from './directorPsychologyStorage';
+import {
+  loadDoPVision,
+  loadSoundVision,
+  resolveCompilerVisionFields
+} from './departmentVisionStorage';
 import {
   getStoredWorldEnvironmentAssets,
   getActiveWorldAssetPrompt
 } from '../components/WorldEnvironmentConsole';
-import {
-  getCinematicReferences,
-  formatReferencesForLLM
-} from '../constants/cinematicReferences';
+import { readActiveAssetRegistry, resolveRegistryCharacters, resolveRegistryWorldAssets } from './assetRegistry';
+import { getActiveCharacterProfiles } from './projectBibleVault';
+import { referenceNameToAssetFilename } from './projectAssetRoots';
 
 const SUBJECT_ROLE_LABELS = [
   'Lead Subject',
@@ -27,9 +37,24 @@ const SUBJECT_ROLE_LABELS = [
   'VFX & Special FX'
 ];
 
+function clip(str, max = 160) {
+  const t = String(str || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\[|\]/g, '')
+    .trim();
+  if (!t) return '';
+  return t.length > max ? `${t.slice(0, max - 1).trim()}…` : t;
+}
+
+function cleanTag(str) {
+  return String(str || '')
+    .replace(/\[|\]|CharID:\s*/gi, '')
+    .trim();
+}
+
 function sanitizeSubjectNameTag(str) {
   if (!str) return '';
-  let cleaned = str.replace(/\[|\]|CharID:\s*|@/gi, '').trim();
+  let cleaned = cleanTag(str).replace(/@/g, '');
   if (cleaned.includes(';')) cleaned = cleaned.split(';')[0].trim();
   if (cleaned.includes('|')) cleaned = cleaned.split('|')[0].trim();
   cleaned = cleaned.replace(
@@ -41,247 +66,33 @@ function sanitizeSubjectNameTag(str) {
   return cleaned.trim();
 }
 
-function resolveScriptSynopsis({
-  scriptSynopsisSource = 'auto_llm',
-  writerCustomScriptSynopsis = ''
-} = {}) {
-  const includeStory =
-    typeof window === 'undefined' || localStorage.getItem('sps_include_story_in_prompt') !== 'false';
-  if (!includeStory) return '[Excluded by User Checkmark Toggle]';
-
-  if (scriptSynopsisSource === 'writer_custom' && String(writerCustomScriptSynopsis || '').trim()) {
-    return String(writerCustomScriptSynopsis).trim();
-  }
-
-  if (typeof window !== 'undefined') {
-    const source =
-      scriptSynopsisSource || localStorage.getItem('sps_script_synopsis_source') || 'auto_llm';
-    const writerCustom =
-      writerCustomScriptSynopsis || localStorage.getItem('sps_writer_custom_script_synopsis') || '';
-
-    if (source === 'writer_custom' && writerCustom.trim()) {
-      return writerCustom.trim();
-    }
-
-    const fullScriptCandidates = [
-      localStorage.getItem('sps_extracted_master_story'),
-      localStorage.getItem('sps_master_script_story'),
-      localStorage.getItem('sps_current_screenplay_text'),
-      localStorage.getItem('sps_narrative_prose_story'),
-      localStorage.getItem('sps_extracted_script_story')
-    ];
-
-    for (const cand of fullScriptCandidates) {
-      if (cand && cand.trim() && !cand.startsWith('Complete master script story arc and thematic overview')) {
-        return cand.trim();
-      }
-    }
-
-    try {
-      const projLib = localStorage.getItem('sps_project_library');
-      if (projLib) {
-        const projects = JSON.parse(projLib);
-        if (Array.isArray(projects) && projects[0]) {
-          const p = projects[0];
-          const fromProj = p.scriptText || p.masterStory || p.narrativeProse || p.description || '';
-          if (fromProj.trim()) return fromProj.trim();
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return `Master Script Synopsis: The narrative arc follows the central protagonists through high-stakes dramatic conflicts, emotional character transformations, and pivotal turning points as events unfold in the story world.`;
+function durationToSec(duration) {
+  const m = String(duration || '').match(/(\d+(?:\.\d+)?)/);
+  return m ? Math.max(1, Math.round(parseFloat(m[1]))) : 4;
 }
 
-function resolveSceneSynopsis(shot, shotIdx, shotId, env) {
-  const includeStory =
-    typeof window === 'undefined' || localStorage.getItem('sps_include_story_in_prompt') !== 'false';
-  if (!includeStory) return '[Excluded by User Checkmark Toggle]';
-
-  if (shot.sceneSynopsis && String(shot.sceneSynopsis).trim()) {
-    return String(shot.sceneSynopsis).trim();
-  }
-
-  const sceneParts = [];
-  sceneParts.push(`Scene Location & Context: ${env}`);
-  if (shot.characterIdAssetRef) {
-    sceneParts.push(`Featured Subject: ${String(shot.characterIdAssetRef).replace(/\[|\]/g, '')}`);
-  }
-  if (shot.characterMovement) {
-    sceneParts.push(`Action Performance: ${shot.characterMovement}`);
-  }
-  if (shot.characterExpression) {
-    sceneParts.push(`Facial Expression: ${shot.characterExpression}`);
-  }
-  if (shot.coArtistInteraction) {
-    sceneParts.push(`Co-Artist Interaction: ${String(shot.coArtistInteraction).replace(/\[|\]/g, '')}`);
-  }
-  if (shot.characterDialogue) {
-    sceneParts.push(`Dialogue Sync: "${String(shot.characterDialogue).replace(/"/g, '')}"`);
-  }
-  return `Shot #${shotIdx + 1} (${shotId}) Beat — ${sceneParts.join(' | ')}`;
-}
-
-function buildCharacterBible(shot) {
-  const includeChars =
-    typeof window === 'undefined' || localStorage.getItem('sps_include_characters_in_prompt') !== 'false';
-  if (!includeChars) {
-    return {
-      block: `[Character Bible Vault Excluded by User Checkmark Toggle]`,
-      storyNote: ''
-    };
-  }
-
-  let characterBibleVaultBlock = '';
-  let characterStoryNote = '';
-  try {
-    const storedCharsStr = localStorage.getItem('sps_character_bible_vault');
-    if (storedCharsStr) {
-      const charProfiles = JSON.parse(storedCharsStr);
-      if (Array.isArray(charProfiles) && charProfiles.length > 0) {
-        const matchCharacter = (char, refText) => {
-          if (!refText) return false;
-          const refLower = refText.toLowerCase();
-          const tagLower = (char.tag || '').toLowerCase().replace(/@/g, '').trim();
-          const nameLower = (char.name || '').toLowerCase().trim();
-          const idLower = (char.id || '').toLowerCase().trim();
-          if (tagLower && refLower.includes(tagLower)) return true;
-          if (nameLower && refLower.includes(nameLower)) return true;
-          if (idLower && refLower.includes(idLower)) return true;
-          const tokens = [
-            ...nameLower.split(/\s+/),
-            ...tagLower.split(/\s+/),
-            ...idLower.split(/[\s_]+/)
-          ].filter((t) => t.length >= 3 && t !== 'hero' && t !== 'asset' && t !== 'char');
-          return tokens.some((t) => refLower.includes(t));
-        };
-
-        const refText = `
-          ${shot.characterIdAssetRef || ''}
-          ${shot.coArtistInteraction || ''}
-          ${shot.characterIdMatrix || ''}
-          ${shot.shotDurationAndImages || ''}
-        `;
-
-        const matchingChars = charProfiles.filter((char) => matchCharacter(char, refText));
-        const targetChars = matchingChars.length > 0 ? matchingChars : charProfiles;
-
-        targetChars.forEach((char) => {
-          const traits = [];
-          if (char.backstory) traits.push(`Story: ${char.backstory}`);
-          if (char.characterConnections) traits.push(`Connections: ${char.characterConnections}`);
-          if (char.shotPurpose) traits.push(`Purpose: ${char.shotPurpose}`);
-          if (char.mannerism) traits.push(`Mannerism: ${char.mannerism}`);
-          if (char.walkingStyle) traits.push(`Gait: ${char.walkingStyle}`);
-          if (traits.length > 0) {
-            characterStoryNote += `[${char.name || char.tag} Persona & Purpose: ${traits.join(' | ')}] `;
-          }
-
-          characterBibleVaultBlock += `CHARACTER BIBLE PROFILE — ${char.name || char.tag} (${char.tag || '@CharID'}) :\n`;
-          if (char.backstory) characterBibleVaultBlock += `  • Deep Backstory & Motivation: ${char.backstory}\n`;
-          if (char.characterConnections) {
-            characterBibleVaultBlock += `  • Character Connections: ${char.characterConnections}\n`;
-          }
-          if (char.shotPurpose) characterBibleVaultBlock += `  • Shot Presence Purpose: ${char.shotPurpose}\n`;
-          if (char.mannerism) characterBibleVaultBlock += `  • Mannerisms & Gesture: ${char.mannerism}\n`;
-          if (char.walkingStyle) characterBibleVaultBlock += `  • Gait / Movement Style: ${char.walkingStyle}\n`;
-          if (char.uniqueVoice) {
-            characterBibleVaultBlock += `  • Voice Cadence & Delivery: ${char.uniqueVoice} | ${char.dialogueDelivery || ''}\n\n`;
-          }
-        });
-      }
+function resolveDuration(shot, fallbackSec) {
+  let duration = fallbackSec ? `${fallbackSec}s` : '4s';
+  if (shot.shotDurationAndImages) {
+    const match = String(shot.shotDurationAndImages).match(
+      /(?:Duration:\s*|Duration\s*=|\b)(\d+(?:\.\d+)?\s*s|\d+\s*sec|\d+\s*seconds?)/i
+    );
+    if (match) {
+      duration = match[1].trim().replace(/\s+/g, '');
+      if (!/s$/i.test(duration)) duration = `${duration}s`;
+    } else if (typeof shot.shotDurationAndImages === 'string' && shot.shotDurationAndImages.trim()) {
+      const firstToken = shot.shotDurationAndImages.trim().split('|')[0].trim();
+      duration = firstToken.startsWith('Duration:')
+        ? firstToken.replace(/Duration:\s*/i, '').trim()
+        : firstToken;
     }
-  } catch {
-    /* ignore */
   }
-
-  if (!characterBibleVaultBlock.trim()) {
-    characterBibleVaultBlock =
-      `[No Character Bible profiles extracted in vault yet. Open Character Vault tab to add profiles.]`;
-  }
-
-  return { block: characterBibleVaultBlock, storyNote: characterStoryNote };
+  return duration;
 }
 
-function buildWorldBible(shot) {
-  const includeWorld =
-    typeof window === 'undefined' || localStorage.getItem('sps_include_world_in_prompt') !== 'false';
-  if (!includeWorld) {
-    return `[World & Environment Bible Excluded by User Checkmark Toggle]`;
-  }
-
-  let worldEnvironmentVaultBlock = '';
-  try {
-    const worldAssets = getStoredWorldEnvironmentAssets().filter((a) => a && a.includeInPrompt !== false);
-    if (worldAssets.length > 0) {
-      const envRef =
-        `${shot.actionEnvContext || ''} ${shot.timeAndLightingEnv || ''} ${shot.atmosphereVolumetricsTag || ''}`.toLowerCase();
-      const matched = worldAssets.filter((asset) => {
-        const hay = `${asset.name || ''} ${asset.tag || ''} ${asset.description || ''} ${asset.type || ''}`.toLowerCase();
-        if (!envRef.trim()) return true;
-        const tokens = hay.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-        return (
-          tokens.some((t) => envRef.includes(t)) ||
-          envRef.includes(String(asset.tag || '').replace(/@/g, '').toLowerCase())
-        );
-      });
-      const targets = matched.length > 0 ? matched : worldAssets.slice(0, 8);
-      targets.forEach((asset) => {
-        const platePrompt = getActiveWorldAssetPrompt(asset);
-        worldEnvironmentVaultBlock += `WORLD ASSET — ${asset.name || asset.tag} (${asset.tag || '@World'}) [${asset.type || 'location'}] :\n`;
-        if (asset.description) worldEnvironmentVaultBlock += `  • Visual Bible: ${asset.description}\n`;
-        if (asset.weather) worldEnvironmentVaultBlock += `  • Weather: ${asset.weather}\n`;
-        if (asset.timeOfDay) worldEnvironmentVaultBlock += `  • Time of Day: ${asset.timeOfDay}\n`;
-        if (asset.materials) worldEnvironmentVaultBlock += `  • Materials: ${asset.materials}\n`;
-        if (asset.lightingNotes) worldEnvironmentVaultBlock += `  • Plate Lighting: ${asset.lightingNotes}\n`;
-        if (platePrompt) {
-          worldEnvironmentVaultBlock += `  • Asset Image Prompt (${asset.promptSource === 'writer_custom' ? 'Writer' : 'AI'}): ${platePrompt}\n`;
-        }
-        if (asset.referenceImageUrl) {
-          worldEnvironmentVaultBlock += `  • Reference Plate URL: ${asset.referenceImageUrl}\n`;
-        }
-        worldEnvironmentVaultBlock += '\n';
-      });
-    }
-  } catch {
-    /* ignore */
-  }
-
-  if (!worldEnvironmentVaultBlock.trim()) {
-    return `[No World & Environment assets in vault yet. Open World Console (globe) to extract or add plates.]`;
-  }
-  return worldEnvironmentVaultBlock;
-}
-
-function buildDirectorPsychology(projectTitle) {
-  if (typeof window === 'undefined') return '';
-  try {
-    const savedPsych = loadDirectorPsychology(projectTitle);
-    if (!savedPsych) return '';
-    const parsedPsych = JSON.parse(savedPsych);
-    if (!parsedPsych) return '';
-    const activeStreamKey = parsedPsych.compilerActiveMode || 'hybrid';
-    let targetVision = parsedPsych[activeStreamKey] || parsedPsych.hybrid || parsedPsych.human || parsedPsych;
-    if (!targetVision?.corePhilosophicalIdea && parsedPsych.corePhilosophicalIdea) {
-      targetVision = parsedPsych;
-    }
-    if (!targetVision?.corePhilosophicalIdea) return '';
-    return `DIRECTOR'S CORE SCRIPT PSYCHOLOGY & THEMATIC VISION [${activeStreamKey.toUpperCase()} STREAM] :
-  • Underlying Core Idea & Soul: ${targetVision.corePhilosophicalIdea}
-  • Director's Belief of Success: ${targetVision.directorBeliefOfSuccess || 'N/A'}
-  • Subconscious Emotional Frequency: ${targetVision.emotionalFrequencyTarget || 'N/A'}
-  • Directorial Production Rules: ${targetVision.directorialRules || 'N/A'}`;
-  } catch {
-    return '';
-  }
-}
-
-function buildSubjectsLines(shot) {
+function buildSubjectsMap(shot) {
   const subjectsMap = new Map();
   const rawMatrixStr = shot.characterIdMatrix || '';
-
   const shotTextContext = `
     ${shot.characterIdAssetRef || ''}
     ${shot.coArtistInteraction || ''}
@@ -306,81 +117,305 @@ function buildSubjectsLines(shot) {
             num === 6 ||
             cleanVal === 'scene' ||
             cleanVal === 'crowd' ||
-            cleanVal === 'environment' ||
-            cleanVal === 'forest trail';
-          const isMentionedInShot =
+            cleanVal === 'environment';
+          const isMentioned =
             shotTextContext.includes(cleanVal) ||
             cleanVal.split(/\s+/).some((token) => token.length >= 4 && shotTextContext.includes(token));
-          if (isMentionedInShot || isGenericEnv) {
-            subjectsMap.set(num, val);
-          }
+          if (isMentioned || isGenericEnv) subjectsMap.set(num, val);
         }
       }
     });
   }
 
   const rawImagesStr = shot.shotDurationAndImages || '';
-  const pairMatches = Array.from(rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g));
-  if (pairMatches.length > 0) {
-    for (const match of pairMatches) {
-      const imgNum = parseInt(match[1], 10);
-      if (!subjectsMap.has(imgNum)) {
-        const tag = match[2].replace('@', '').toLowerCase();
-        let cleanName = tag.split('_')[0];
-        if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
-        if (shotTextContext.includes(cleanName) || imgNum >= 5) {
-          subjectsMap.set(imgNum, cleanName);
-        }
+  for (const match of rawImagesStr.matchAll(/Image_(\d+):\s*(@[A-Za-z0-9_]+)/g)) {
+    const imgNum = parseInt(match[1], 10);
+    if (!subjectsMap.has(imgNum)) {
+      const tag = match[2].replace('@', '').toLowerCase();
+      let cleanName = tag.split('_')[0];
+      if (cleanName === 'rooster' || cleanName === 'arena') cleanName = tag.replace(/_/g, ' ');
+      if (shotTextContext.includes(cleanName) || imgNum >= 5) {
+        subjectsMap.set(imgNum, cleanName);
       }
     }
   }
 
   if (!subjectsMap.has(1) && shot.characterIdAssetRef) {
-    const cleanRef = String(shot.characterIdAssetRef)
-      .replace(/\[|\]|CharID:\s*|@/g, '')
-      .trim()
-      .split('_')[0];
-    if (cleanRef) subjectsMap.set(1, cleanRef);
+    subjectsMap.set(1, cleanTag(shot.characterIdAssetRef).split('_')[0]);
   }
-
   if (!subjectsMap.has(2) && shot.coArtistInteraction) {
-    const cleanCo = String(shot.coArtistInteraction)
-      .replace(/\[|\]|CharID:\s*|@/g, '')
-      .trim()
-      .split('_')[0];
-    if (cleanCo) subjectsMap.set(2, cleanCo);
+    subjectsMap.set(2, cleanTag(shot.coArtistInteraction).split('_')[0]);
   }
 
-  const subjectsLines = [];
-  for (let i = 1; i <= 9; i++) {
-    const rawVal = subjectsMap.get(i) || '';
-    const cleanVal = sanitizeSubjectNameTag(rawVal);
-    const role = SUBJECT_ROLE_LABELS[i - 1];
-    subjectsLines.push(`Image_${i} (${role}) = ${cleanVal}`);
-  }
-  return subjectsLines;
+  return subjectsMap;
 }
 
-function resolveDuration(shot, fallbackSec) {
-  let duration = fallbackSec ? `${fallbackSec}s` : '4s';
-  if (shot.shotDurationAndImages) {
-    const match = String(shot.shotDurationAndImages).match(
-      /(?:Duration:\s*|Duration\s*=|\b)(\d+(?:\.\d+)?\s*s|\d+\s*sec|\d+\s*seconds?)/i
-    );
-    if (match) {
-      duration = match[1].trim();
-    } else if (typeof shot.shotDurationAndImages === 'string' && shot.shotDurationAndImages.trim()) {
-      const firstToken = shot.shotDurationAndImages.trim().split('|')[0].trim();
-      duration = firstToken.startsWith('Duration:')
-        ? firstToken.replace('Duration:', '').trim()
-        : firstToken;
+/** One-line visual locks for characters actually in the shot (no backstory essays). */
+function buildCharacterVisualLocks(shot) {
+  const includeChars =
+    typeof window === 'undefined' || localStorage.getItem('sps_include_characters_in_prompt') !== 'false';
+  if (!includeChars || typeof window === 'undefined') return [];
+
+  try {
+    const registry = readActiveAssetRegistry();
+    const assetIds = Array.isArray(shot?.charAssetIds) ? shot.charAssetIds : [];
+    if (registry && assetIds.length) {
+      const charProfiles = getActiveCharacterProfiles();
+      return resolveRegistryCharacters(registry, assetIds)
+        .slice(0, 3)
+        .map((entry) => {
+          const full = Array.isArray(charProfiles)
+            ? charProfiles.find(
+                (c) =>
+                  c.assetId === entry.assetId ||
+                  c.id === entry.legacyId ||
+                  (c.tag && entry.tag && c.tag.toLowerCase() === entry.tag.toLowerCase())
+              )
+            : null;
+          const char = full || entry;
+          const bits = [];
+          if (char.mannerism) bits.push(clip(char.mannerism, 80));
+          if (char.walkingStyle) bits.push(`gait: ${clip(char.walkingStyle, 60)}`);
+          if (!bits.length && char.shotPurpose) bits.push(clip(char.shotPurpose, 80));
+          const label = char.tag || char.name || entry.assetId || 'Character';
+          return bits.length ? `${label} (${entry.assetId}): ${bits.join('; ')}` : `${label} (${entry.assetId})`;
+        })
+        .filter(Boolean);
     }
+
+    const charProfiles = getActiveCharacterProfiles();
+    if (!Array.isArray(charProfiles) || charProfiles.length === 0) return [];
+
+    const refText = `
+      ${shot.characterIdAssetRef || ''}
+      ${shot.coArtistInteraction || ''}
+      ${shot.characterIdMatrix || ''}
+      ${shot.shotDurationAndImages || ''}
+    `.toLowerCase();
+
+    const matchCharacter = (char) => {
+      const tag = (char.tag || '').toLowerCase().replace(/@/g, '').trim();
+      const name = (char.name || '').toLowerCase().trim();
+      const id = (char.id || '').toLowerCase().trim();
+      const assetId = (char.assetId || '').toLowerCase().trim();
+      if (assetId && refText.includes(assetId)) return true;
+      if (tag && refText.includes(tag)) return true;
+      if (name && refText.includes(name)) return true;
+      if (id && refText.includes(id)) return true;
+      return false;
+    };
+
+    return charProfiles
+      .filter(matchCharacter)
+      .slice(0, 3)
+      .map((char) => {
+        const bits = [];
+        if (char.mannerism) bits.push(clip(char.mannerism, 80));
+        if (char.walkingStyle) bits.push(`gait: ${clip(char.walkingStyle, 60)}`);
+        if (!bits.length && char.shotPurpose) bits.push(clip(char.shotPurpose, 80));
+        const label = char.tag || char.name || 'Character';
+        const idSuffix = char.assetId ? ` (${char.assetId})` : '';
+        return bits.length ? `${label}${idSuffix}: ${bits.join('; ')}` : '';
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
   }
-  return duration;
+}
+
+/** Short environment lock from World vault (no URLs / plate essays). */
+function buildWorldLock(shot) {
+  const includeWorld =
+    typeof window === 'undefined' || localStorage.getItem('sps_include_world_in_prompt') !== 'false';
+  if (!includeWorld) return '';
+
+  try {
+    const registry = readActiveAssetRegistry();
+    const assetIds = Array.isArray(shot?.worldAssetIds) ? shot.worldAssetIds : [];
+    if (registry && assetIds.length) {
+      const worldAssets = getStoredWorldEnvironmentAssets().filter((a) => a && a.includeInPrompt !== false);
+      const entry = resolveRegistryWorldAssets(registry, assetIds)[0];
+      if (entry) {
+        const asset =
+          worldAssets.find(
+            (a) =>
+              a.assetId === entry.assetId ||
+              a.id === entry.legacyId ||
+              (a.tag && entry.tag && a.tag.toLowerCase() === entry.tag.toLowerCase())
+          ) || entry;
+        const bits = [];
+        if (asset.description) bits.push(clip(asset.description, 120));
+        if (asset.weather) bits.push(clip(asset.weather, 40));
+        if (asset.timeOfDay) bits.push(clip(asset.timeOfDay, 40));
+        const plate = getActiveWorldAssetPrompt(asset);
+        if (plate && plate.length <= 100) bits.push(clip(plate, 100));
+        const label = asset.name || asset.tag || entry.assetId;
+        return bits.length ? `${label} (${entry.assetId}): ${bits.join(' · ')}` : `${label} (${entry.assetId})`;
+      }
+    }
+
+    const worldAssets = getStoredWorldEnvironmentAssets().filter((a) => a && a.includeInPrompt !== false);
+    if (!worldAssets.length) return '';
+
+    const envRef =
+      `${shot.actionEnvContext || ''} ${shot.timeAndLightingEnv || ''} ${shot.atmosphereVolumetricsTag || ''}`.toLowerCase();
+    const matched = worldAssets.filter((asset) => {
+      const hay = `${asset.name || ''} ${asset.tag || ''} ${asset.description || ''} ${asset.type || ''}`.toLowerCase();
+      if (!envRef.trim()) return true;
+      const tokens = hay.split(/[^a-z0-9\u0C00-\u0C7F]+/).filter((t) => t.length >= 4);
+      return (
+        tokens.some((t) => envRef.includes(t)) ||
+        envRef.includes(String(asset.tag || '').replace(/@/g, '').toLowerCase())
+      );
+    });
+    const asset = (matched[0] || worldAssets[0]);
+    if (!asset) return '';
+
+    const bits = [];
+    if (asset.description) bits.push(clip(asset.description, 120));
+    if (asset.weather) bits.push(clip(asset.weather, 40));
+    if (asset.timeOfDay) bits.push(clip(asset.timeOfDay, 40));
+    // Prefer short active plate line only if tiny
+    const plate = getActiveWorldAssetPrompt(asset);
+    if (plate && plate.length <= 100) bits.push(clip(plate, 100));
+    return bits.length ? `${asset.name || asset.tag}: ${bits.join(' · ')}` : '';
+  } catch {
+    return '';
+  }
+}
+
+function buildMoodHint(projectTitle) {
+  if (typeof window === 'undefined') return '';
+  try {
+    const savedPsych = loadDirectorPsychology(projectTitle);
+    if (!savedPsych) return '';
+    const parsed = JSON.parse(savedPsych);
+    if (!parsed) return '';
+    const vision = resolveCompilerVisionFields(parsed);
+    const mood =
+      vision?.emotionalFrequencyTarget ||
+      parsed.emotionalFrequencyTarget ||
+      vision?.corePhilosophicalIdea ||
+      '';
+    return clip(mood, 90);
+  } catch {
+    return '';
+  }
+}
+
+function includeDoPInPrompt() {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem('sps_include_dop_in_prompt') !== 'false';
+}
+
+function includeSoundInPrompt() {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem('sps_include_sound_in_prompt') !== 'false';
+}
+
+function buildDoPHint(projectTitle) {
+  if (!includeDoPInPrompt()) return { camera: '', look: '', lens: '' };
+  try {
+    const raw = loadDoPVision(projectTitle);
+    if (!raw) return { camera: '', look: '', lens: '' };
+    const parsed = JSON.parse(raw);
+    const v = resolveCompilerVisionFields(parsed);
+    if (!v) return { camera: '', look: '', lens: '' };
+    return {
+      camera: clip(v.cameraMovementEnergy, 90),
+      look: clip([v.lightingPhilosophy, v.colorScienceTexture].filter(Boolean).join('; '), 140),
+      lens: clip(v.lensAspectRules, 100)
+    };
+  } catch {
+    return { camera: '', look: '', lens: '' };
+  }
+}
+
+function buildSoundHint(projectTitle) {
+  if (!includeSoundInPrompt()) {
+    return { score: '', foley: '', rhythm: '', dialogue: '' };
+  }
+  try {
+    const raw = loadSoundVision(projectTitle);
+    if (!raw) return { score: '', foley: '', rhythm: '', dialogue: '' };
+    const parsed = JSON.parse(raw);
+    const v = resolveCompilerVisionFields(parsed);
+    if (!v) return { score: '', foley: '', rhythm: '', dialogue: '' };
+    return {
+      score: clip(v.musicalMotifScore, 90),
+      foley: clip(v.foleySoundEnvironment, 90),
+      rhythm: clip(v.rhythmTempoSync, 100),
+      dialogue: clip(v.vocalDialogueResonance, 70)
+    };
+  } catch {
+    return { score: '', foley: '', rhythm: '', dialogue: '' };
+  }
+}
+
+function buildPerformanceLine(shot) {
+  const parts = [];
+  if (shot.characterMovement) parts.push(clip(shot.characterMovement, 140));
+  if (shot.characterExpression) {
+    parts.push(`expression: ${clip(shot.characterExpression, 80)}`);
+  }
+  if (shot.characterMannerismAndPosture) {
+    parts.push(`posture: ${clip(shot.characterMannerismAndPosture, 80)}`);
+  }
+  if (shot.characterEyeLooks) parts.push(`gaze: ${clip(shot.characterEyeLooks, 60)}`);
+  if (shot.characterPlacement) parts.push(`placement: ${clip(shot.characterPlacement, 60)}`);
+  // Emotion → visible performance (Seedance prefers this over abstract labels)
+  if (shot.characterPsychologyState && !shot.characterExpression) {
+    parts.push(`performance: ${clip(shot.characterPsychologyState, 80)}`);
+  }
+  return parts.join('. ');
+}
+
+function buildAudioBlock(shot, projectTitle = '') {
+  const lines = [];
+  const sound = buildSoundHint(projectTitle);
+  const dialogue = clip(shot.characterDialogue, 200);
+  if (sound.foley) lines.push(`<${sound.foley}>`);
+  if (dialogue) {
+    const looksTelugu = /[\u0C00-\u0C7F]/.test(dialogue);
+    lines.push(
+      looksTelugu
+        ? `Dialogue language: Telugu, natural dramatic delivery`
+        : `Dialogue language: match the line, natural cinematic delivery`
+    );
+    if (sound.dialogue) lines.push(`Delivery: ${sound.dialogue}`);
+    lines.push(`{${dialogue.replace(/^["']|["']$/g, '')}}`);
+  } else if (sound.dialogue) {
+    lines.push(`Delivery: ${sound.dialogue}`);
+  }
+  if (sound.score) lines.push(`Score motif: ${sound.score}`);
+  if (sound.rhythm) lines.push(clip(sound.rhythm, 100));
+  const atmo = clip(String(shot.atmosphereVolumetricsTag || '').replace(/\[|\]/g, ''), 100);
+  if (atmo) lines.push(`<${atmo}>`);
+  return lines.join('\n');
+}
+
+function buildSequence(shot, duration, framing, motion, performance) {
+  const sec = durationToSec(duration);
+  const action = performance || clip(shot.characterMovement, 120) || 'holds presence in frame';
+  const cam = clip(motion, 80) || 'locked / subtle move';
+  const mid = Math.max(1, Math.floor(sec / 2));
+
+  if (sec <= 5) {
+    return [
+      `0–${sec}s: ${action}. Camera: ${framing}, ${cam}.`,
+      `End state: clear readable pose; subject identity stable; action completed.`
+    ].join('\n');
+  }
+
+  return [
+    `0–${mid}s: establish subject and start action — ${clip(action, 100)}. Camera: ${framing}, ${cam}.`,
+    `${mid}–${sec}s: complete the beat; intensify performance / reaction.`,
+    `End state: decisive final pose; framing holds; no identity drift.`
+  ].join('\n');
 }
 
 /**
- * Full Compiler-framed Master Cinema prompt for one Matrix shot.
+ * Seedance 2.5–framed video prompt for one Matrix shot.
  */
 export function compileMasterCinemaCompilerPrompt(
   shot = {},
@@ -389,106 +424,172 @@ export function compileMasterCinemaCompilerPrompt(
     projectTitle = 'Project',
     scriptSynopsisSource,
     writerCustomScriptSynopsis,
-    durationOverrideSec = null
+    durationOverrideSec = null,
+    promoContext = null,
+    shots = null
   } = {}
 ) {
   const parsedId = parseSceneAndShotID(shot, shotIdx);
-  const shotId = parsedId.shortId;
   const scShNumber = parsedId.formattedId;
-  const framing = shot.shotComposition || 'Medium Shot';
-  const motion = String(shot.cameraMotionTag || 'Tracking Shot')
-    .replace(/\[Camera:\s*/g, '')
-    .replace(/\]/g, '');
-  const lighting = String(shot.subjectLightingTag || 'Golden Hour').replace(/\[|\]/g, '');
-  const color = String(shot.subjectColorTag || 'Vibrant Cinema').replace(/\[|\]/g, '');
-  const env = shot.actionEnvContext || 'Dramatic stage environment';
-  const bgLighting = String(shot.backgroundLightingTag || 'Ambient Fill').replace(/\[|\]/g, '');
-  const bgColor = String(shot.backgroundColorTag || 'Muted Slate').replace(/\[|\]/g, '');
-
+  const framing = clip(shot.shotComposition || 'Medium Shot', 60);
+  const motion = clip(
+    String(shot.cameraMotionTag || 'Tracking Shot')
+      .replace(/\[Camera:\s*/g, '')
+      .replace(/\]/g, ''),
+    80
+  );
+  const lighting = clip(String(shot.subjectLightingTag || '').replace(/\[|\]/g, ''), 70);
+  const color = clip(String(shot.subjectColorTag || '').replace(/\[|\]/g, ''), 70);
+  const bgLighting = clip(String(shot.backgroundLightingTag || '').replace(/\[|\]/g, ''), 60);
+  const bgColor = clip(String(shot.backgroundColorTag || '').replace(/\[|\]/g, ''), 60);
+  const env = clip(shot.actionEnvContext || 'Dramatic cinematic environment', 180);
+  const timeWeather = clip(shot.timeAndLightingEnv, 100);
+  const dirLight = clip(shot.directionalLightingAndHighlight, 100);
   const duration = resolveDuration(shot, durationOverrideSec);
-  const scriptSynopsis = resolveScriptSynopsis({ scriptSynopsisSource, writerCustomScriptSynopsis });
-  const sceneSynopsis = resolveSceneSynopsis(shot, shotIdx, shotId, env);
-  const { block: characterBibleVaultBlock, storyNote: characterStoryNote } = buildCharacterBible(shot);
-  const worldEnvironmentVaultBlock = buildWorldBible(shot);
-  const directorPsychologyBlock = buildDirectorPsychology(projectTitle);
-  const subjectsLines = buildSubjectsLines(shot);
 
-  let cinematicReferencesBlock = '';
-  try {
-    const refs = getCinematicReferences({
-      genreKey:
-        (typeof window !== 'undefined' && localStorage.getItem('sps_preset_profile')) ||
-        'mythological',
-      projectTitle,
-      sectionId: 'compiler',
-      limitPerCategory: 4
+  const subjectsMap = buildSubjectsMap(shot);
+  const jobSlots = Array.isArray(shots) ? videoJobSlots(shot, shots, shotIdx) : [];
+  const referenceLines = [];
+  if (jobSlots.length) {
+    jobSlots.forEach((s) => {
+      referenceLines.push(`Image_${s.n} (${s.role}): attach ${s.file} — identity / look lock`);
     });
-    const formatted = formatReferencesForLLM(refs, { maxItems: 3 });
-    if (formatted) {
-      cinematicReferencesBlock = `CINEMATIC REFERENCES (STYLE DNA — TASTE ANCHORS ONLY) :
-${formatted}`;
+  } else {
+    for (let i = 1; i <= 9; i++) {
+      const rawVal = subjectsMap.get(i);
+      if (!rawVal) continue;
+      const name = sanitizeSubjectNameTag(rawVal);
+      if (!name) continue;
+      const file = referenceNameToAssetFilename(name);
+      referenceLines.push(
+        `Image_${i} (${SUBJECT_ROLE_LABELS[i - 1]}): ${name} — save as ${file || 'subject.png'}`
+      );
     }
-  } catch {
-    cinematicReferencesBlock = '';
   }
 
-  let mainPrompt = `A cinematic ${framing.toLowerCase()} (${scShNumber}). Duration: ${duration}. `;
-  if (env) mainPrompt += `Environment: ${env}. `;
-  if (shot.timeAndLightingEnv) mainPrompt += `Weather & Time Setup: ${shot.timeAndLightingEnv}. `;
-  if (shot.directionalLightingAndHighlight) {
-    mainPrompt += `Directional Light & Highlight Rig: ${shot.directionalLightingAndHighlight}. `;
+  const lead = sanitizeSubjectNameTag(subjectsMap.get(1) || shot.characterIdAssetRef || 'Lead subject');
+  const co = sanitizeSubjectNameTag(subjectsMap.get(2) || shot.coArtistInteraction || '');
+  const performance = buildPerformanceLine(shot);
+  const charLocks = buildCharacterVisualLocks(shot);
+  const worldLock = buildWorldLock(shot);
+  const mood = buildMoodHint(projectTitle);
+  const dop = buildDoPHint(projectTitle);
+  const soundHint = buildSoundHint(projectTitle);
+  const audio = buildAudioBlock(shot, projectTitle);
+
+  const subjectActionParts = [];
+  subjectActionParts.push(lead || 'Lead subject');
+  if (co) subjectActionParts.push(`with ${co}`);
+  if (performance) subjectActionParts.push(performance);
+  else subjectActionParts.push('holds cinematic presence');
+  const subjectAction = subjectActionParts.join(' — ');
+
+  const sceneParts = [env];
+  if (timeWeather) sceneParts.push(timeWeather);
+  if (worldLock) sceneParts.push(worldLock);
+
+  const styleParts = [];
+  if (lighting) styleParts.push(`subject light: ${lighting}`);
+  if (color) styleParts.push(`grade: ${color}`);
+  if (bgLighting) styleParts.push(`bg light: ${bgLighting}`);
+  if (bgColor) styleParts.push(`bg grade: ${bgColor}`);
+  if (dirLight) styleParts.push(dirLight);
+  if (mood) styleParts.push(`mood: ${mood}`);
+  if (dop.look) styleParts.push(`DoP look: ${dop.look}`);
+  styleParts.push('photoreal cinematic, coherent continuity');
+
+  const sequence = buildSequence(shot, duration, framing, motion, performance);
+
+  const constraintParts = [
+    'Keep Image reference identities stable for the full clip',
+    'One clear primary action — no montage clutter',
+    'No on-screen UI, logos, or burned-in subtitles unless requested'
+  ];
+  if (promoContext?.vertical) {
+    constraintParts.push('Frame 9:16; keep faces and action in the vertical safe area');
+    constraintParts.push('Promo pacing — start in motion; land a readable end pose');
+  } else if (promoContext) {
+    constraintParts.push('Promo beat — one event, theatrical continuity, hard end state');
   }
-  if (characterStoryNote) mainPrompt += `${characterStoryNote.trim()}. `;
-  if (shot.characterIdAssetRef) mainPrompt += `Featuring ${shot.characterIdAssetRef}. `;
-  if (shot.coArtistInteraction) mainPrompt += `Co-artist interaction: ${shot.coArtistInteraction}. `;
-  if (motion) mainPrompt += `Camera moves with ${motion}. `;
-  if (lighting) mainPrompt += `Subject lighting: ${lighting}. `;
-  if (color) mainPrompt += `Subject color grading: ${color}. `;
-  if (bgLighting) mainPrompt += `Background lighting: ${bgLighting}. `;
-  if (bgColor) mainPrompt += `Background color grading: ${bgColor}. `;
-  if (shot.atmosphereVolumetricsTag) {
-    mainPrompt += `Atmosphere: ${String(shot.atmosphereVolumetricsTag).replace(/\[|\]/g, '')}. `;
-  }
-  if (shot.characterMovement) mainPrompt += `Action performance: ${shot.characterMovement}. `;
-  if (shot.characterPsychologyState) mainPrompt += `Psychological Mindstate: ${shot.characterPsychologyState}. `;
-  if (shot.characterMannerismAndPosture) {
-    mainPrompt += `Mannerisms & Posture: ${shot.characterMannerismAndPosture}. `;
-  }
-  if (shot.characterExpression) mainPrompt += `Facial expression: ${shot.characterExpression}. `;
-  if (shot.characterPlacement) mainPrompt += `Placement: ${shot.characterPlacement}. `;
-  if (shot.characterEyeLooks) mainPrompt += `Eye gaze: ${shot.characterEyeLooks}. `;
-  if (shot.characterDialogue) mainPrompt += `Vocal sync: ${shot.characterDialogue}. `;
+  if (charLocks.length) constraintParts.unshift(...charLocks.map((l) => `Lock ${l}`));
+  lookSheetLines(shot, shots, shotIdx).forEach((line) => constraintParts.unshift(line));
+  continuityStateLines(shot, shots, shotIdx, { projectTitle }).forEach((line) =>
+    constraintParts.unshift(line)
+  );
+  const bridgedNote = Array.isArray(shots) ? bridgeLine(shot, shots, shotIdx) : '';
+  if (bridgedNote) constraintParts.unshift(bridgedNote);
 
-  const master = `======================================================================
-Script Synopsis:
-${scriptSynopsis.trim()}
+  // Compact narrative paragraph (also used as imagePrompt / 3D stage context)
+  const mainPrompt = [
+    `${subjectAction}.`,
+    `Scene: ${sceneParts.join('. ')}.`,
+    `Camera: ${framing}; ${motion}.`,
+    `Look: ${styleParts.join('; ')}.`,
+    audio ? `Audio: ${audio.replace(/\n/g, ' ')}` : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
 
-Scene Synopsis:
-${sceneSynopsis.trim()}
+  const promoLine = promoContext
+    ? `${promoContext.kind || 'Promo'} · ${promoContext.segment || 'Beat'}${promoContext.aspect ? ` · ${promoContext.aspect}` : ''}`
+    : '';
+  const intent = promoContext
+    ? `Promo clip — ${promoLine}. One continuous cinematic beat. Prioritize identity lock, clear action, and a hard end pose.`
+    : `Generate one continuous cinematic video clip for this shot. Prioritize subject identity, clear action, and camera continuity.`;
+  const cameraLine = promoContext?.vertical
+    ? `${framing}. Movement: ${motion}${dop.camera ? `; DoP: ${dop.camera}` : ''}. Aspect: 9:16 vertical.`
+    : `${framing}. Movement: ${motion}${dop.camera ? `; DoP motion: ${dop.camera}` : ''}${dop.lens ? `. Lens: ${dop.lens}` : ''}.`;
 
-${directorPsychologyBlock ? directorPsychologyBlock.trim() + '\n\n' : ''}${cinematicReferencesBlock ? cinematicReferencesBlock.trim() + '\n\n' : ''}Character Bible:
-${characterBibleVaultBlock.trim()}
+  const master = `VIDEO PROMPT
+Shot ${scShNumber} · ${duration} · ${projectTitle}${promoLine ? `\n${promoLine}` : ''}
 
-World & Environment Bible:
-${worldEnvironmentVaultBlock.trim()}
+INTENT
+${intent}
 
-Character ID:
-${subjectsLines.join('\n')}
+${referenceLines.length ? `REFERENCES\n${referenceLines.join('\n')}\n\n` : ''}SUBJECT + ACTION
+${subjectAction}
 
-Prompt:
-SHOT NUMBER: ${scShNumber} | DURATION: ${duration}
+SCENE
+${sceneParts.join('\n')}
 
-${mainPrompt.trim()}
-======================================================================`;
+STYLE
+${styleParts.join('; ')}
+
+CAMERA
+${cameraLine}
+
+SEQUENCE
+${sequence}
+
+${audio ? `AUDIO\n${audio}\n` : ''}CONSTRAINTS
+${constraintParts.map((c) => `• ${c}`).join('\n')}
+`.trim();
+
+  // Keep lightweight fields for promo / UI compatibility (not dumped into master)
+  const sceneSynopsis = clip(
+    [env, performance, shot.characterDialogue].filter(Boolean).join(' · '),
+    220
+  );
+  const scriptSynopsis =
+    typeof window !== 'undefined' && localStorage.getItem('sps_include_story_in_prompt') === 'false'
+      ? ''
+      : clip(
+          (scriptSynopsisSource === 'writer_custom' && writerCustomScriptSynopsis) ||
+            (typeof window !== 'undefined' && localStorage.getItem('sps_extracted_master_story')) ||
+            '',
+          180
+        );
 
   return {
     masterCinemaPrompt: master,
     scriptSynopsis,
     sceneSynopsis,
-    directorPsychologyBlock,
-    characterBible: characterBibleVaultBlock,
-    worldBible: worldEnvironmentVaultBlock,
-    characterIdBlock: subjectsLines.join('\n'),
+    directorPsychologyBlock: mood ? `Mood: ${mood}` : '',
+    dopVisionBlock: dop.look ? `DoP: ${dop.look}${dop.camera ? ` · ${dop.camera}` : ''}` : '',
+    soundVisionBlock: [soundHint.score, soundHint.foley].filter(Boolean).join(' · '),
+    characterBible: charLocks.join('\n'),
+    worldBible: worldLock,
+    characterIdBlock: referenceLines.join('\n'),
     mainPrompt: mainPrompt.trim(),
     scShNumber,
     duration,
@@ -504,7 +605,6 @@ export function mergePromoBeatOntoShot(shot, beat = {}) {
   if (beat.camera) base.cameraMotionTag = beat.camera;
   if (beat.dialogue) base.characterDialogue = beat.dialogue;
   if (beat.action) {
-    // Prefer as movement if env already rich; else env context
     if (base.actionEnvContext && String(base.actionEnvContext).length > 40) {
       base.characterMovement = beat.action;
     } else {

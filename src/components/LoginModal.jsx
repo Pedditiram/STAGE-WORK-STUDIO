@@ -1,9 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Film, Zap, Shield, ArrowRight } from 'lucide-react';
-import { getCurrentUserEmail, isStudioAdmin, markCollaboratorSession, PRIMARY_ADMIN_EMAILS, normalizeEmail } from '../utils/projectPermissions';
+import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles } from 'lucide-react';
+import {
+  getCurrentUserEmail,
+  isStudioAdmin,
+  markCollaboratorSession,
+  PRIMARY_ADMIN_EMAILS,
+  normalizeEmail,
+  getDesignationForEmail,
+  getHomeForDesignation,
+  enterGuestLookSession,
+  exitPresentationForWorkspace,
+  setPresentationMode
+} from '../utils/projectPermissions';
+import { registerThisDevice, getDeviceId } from '../utils/saasControl';
+import StageWorksMark from './StageWorksMark';
+import { CATEGORY, PRODUCT } from '../constants/brand';
 
-export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
-  const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin'
+export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpenAppDemo }) {
+  const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin' | 'guest'
   const [emailInput, setEmailInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [adminIdInput, setAdminIdInput] = useState('');
@@ -25,14 +39,65 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
 
   if (!isOpen) return null;
 
+  const finishGuestSession = (message) => {
+    if (setIsAdminLoggedIn) setIsAdminLoggedIn(false);
+    try {
+      sessionStorage.setItem('sps_login_prompted', '1');
+    } catch {
+      /* ignore */
+    }
+    setSuccessMsg(message);
+    setTimeout(() => onClose(), 350);
+  };
+
+  const startGuestLook = () => {
+    setErrorMsg('');
+    enterGuestLookSession();
+    finishGuestSession('Guest look mode — browse only, nothing saves.');
+  };
+
+  const startPresentation = () => {
+    setErrorMsg('');
+    enterGuestLookSession();
+    setPresentationMode(true);
+    finishGuestSession('Presentation mode — Stage Work Studio reel.');
+  };
+
+  const startAppDemo = () => {
+    setErrorMsg('');
+    enterGuestLookSession();
+    setPresentationMode(true);
+    finishGuestSession('App demo — guided studio tour.');
+    window.setTimeout(() => onOpenAppDemo?.(), 400);
+  };
+
   const completeLogin = (email, message) => {
     const clean = normalizeEmail(email);
+    const gate = registerThisDevice(clean);
+    if (!gate.ok) {
+      setErrorMsg(gate.error || 'License or device blocked.');
+      return;
+    }
+    exitPresentationForWorkspace();
     markCollaboratorSession(clean);
     const admin = isStudioAdmin(clean);
     if (setIsAdminLoggedIn) setIsAdminLoggedIn(admin);
     try {
       sessionStorage.setItem('sps_session_authed', '1');
       sessionStorage.setItem('sps_login_prompted', '1');
+      // Always land in Project Console after workspace login
+      const home = {
+        open: 'projects',
+        tab: 'library',
+        view: getHomeForDesignation(getDesignationForEmail(clean))?.view || 'spreadsheet'
+      };
+      sessionStorage.setItem('sps_login_home', JSON.stringify(home));
+      window.dispatchEvent(new CustomEvent('sps_login_home', { detail: home }));
+      fetch('/api/saas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', email: clean, deviceId: getDeviceId() }),
+      }).catch(() => {});
     } catch {
       /* ignore */
     }
@@ -89,7 +154,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
       }
 
       if (cleanEmail.includes('varshini')) {
-        // Ensure profile exists with empty/default allotments preserved if already set
         if (!authorizedUsers.some(u => (u.email || '').toLowerCase().includes('varshini'))) {
           authorizedUsers.unshift({
             name: 'Pedditi Varshini',
@@ -132,7 +196,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
         return;
       }
 
-      // Unknown email without a valid invite OTP cannot sign in
       setErrorMsg('Email not authorized. Ask the studio Owner for an invite OTP or allotment.');
     }
   };
@@ -155,8 +218,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
     const storedPass = localStorage.getItem('sps_custom_admin_password') || '';
     const customConfigured = Boolean(storedId && storedPass && isStrongAdminPassword(storedPass));
 
-    // Production: only accept a strong custom password (no admin/admin123 / email-only / any-password bypasses).
-    // Owner lockout escape: use Gmail tab with pedditiram@gmail.com, then set a strong password in Admin Settings.
     if (
       customConfigured &&
       idInput.toLowerCase() === storedId.toLowerCase() &&
@@ -168,12 +229,12 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
 
     if (!customConfigured) {
       setErrorMsg(
-        'No strong Admin password is configured. Sign in via Gmail as pedditiram@gmail.com (Owner), then set a strong password in Admin Settings.'
+        'No strong Admin password is configured. Sign in via Email / Gmail as pedditiram@gmail.com (Owner), then set a strong password in Admin Settings.'
       );
       return;
     }
 
-    setErrorMsg('Invalid Admin ID or Password. Owner recovery: Gmail login as pedditiram@gmail.com.');
+    setErrorMsg('Invalid Admin ID or Password. Owner recovery: Email / Gmail as pedditiram@gmail.com.');
   };
 
   const fillQuickAccount = (email) => {
@@ -182,115 +243,64 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
   };
 
   return (
-    <div className="sps-modal-enter fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
-      {/* Atmospheric wash behind panel */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-70"
-        style={{
-          background: `
-            radial-gradient(ellipse 70% 50% at 50% 20%, rgba(34, 211, 238, 0.14), transparent 55%),
-            radial-gradient(ellipse 40% 30% at 80% 80%, rgba(245, 158, 11, 0.08), transparent 50%)
-          `,
-        }}
-      />
-
-      <div
-        className="sps-login-shell relative w-full max-w-md max-h-[min(100dvh,100%)] sm:max-h-[90dvh] overflow-y-auto text-white border border-cyan-400/25 rounded-t-[1.75rem] sm:rounded-3xl shadow-[0_28px_90px_rgba(0,0,0,0.65)] text-xs text-left pb-[env(safe-area-inset-bottom,0px)]"
-        style={{ fontFamily: 'var(--sps-font)' }}
-      >
-        {/* Cinematic header — brand first */}
-        <div className="p-5 sm:p-6 border-b border-white/[0.08] relative overflow-hidden">
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: 'linear-gradient(135deg, rgba(8,145,178,0.18) 0%, transparent 50%, rgba(245,158,11,0.08) 100%)',
-            }}
-          />
-          <div className="absolute -right-6 -top-6 opacity-[0.07] pointer-events-none">
-            <Film className="w-36 h-36 text-cyan-300 rotate-12" />
-          </div>
-
-          <div className="flex items-start justify-between relative z-10 gap-3">
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative shrink-0">
-                <div
-                  className="absolute -inset-2 rounded-2xl opacity-60 blur-xl"
-                  style={{ background: 'radial-gradient(circle, rgba(34,211,238,0.4), transparent 70%)' }}
-                />
-                <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-950 to-black border border-cyan-400/35 flex items-center justify-center shadow-lg">
-                  <Film className="w-5 h-5 text-cyan-300" />
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p
-                  className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80 font-semibold mb-1"
-                  style={{ fontFamily: 'var(--sps-font-mono)' }}
-                >
-                  Pedditi Labs
-                </p>
-                <h3
-                  className="text-lg sm:text-xl font-extrabold text-white tracking-tight leading-tight"
-                  style={{ fontFamily: 'var(--sps-font-display)' }}
-                >
-                  Stage Production Studio
-                </h3>
-                <p className="text-[12px] text-slate-400 mt-1 font-medium">
-                  Director & collaborator portal
-                </p>
-              </div>
+    <div className="sps-overlay" style={{ zIndex: 100 }}>
+      <div className="sps-shell sps-shell-md" style={{ height: 'auto', maxHeight: 'min(92dvh, 40rem)', alignSelf: 'center' }}>
+        <div className="sps-modal-head">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="sps-mark shrink-0 overflow-hidden p-0">
+              <StageWorksMark size={32} className="w-8 h-8 object-cover" />
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="sps-chrome-btn p-2.5 sm:p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-white/10 shrink-0"
-              aria-label="Close login"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="min-w-0">
+              <h2>{PRODUCT}</h2>
+              <p>{CATEGORY}</p>
+            </div>
           </div>
+          <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close login">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Mode tabs */}
-        <div className="p-2.5 border-b border-white/[0.06] flex items-center gap-2 bg-black/20">
+        <div className="sps-tabs mx-4 mt-3 flex-wrap" role="tablist" aria-label="Login as">
           <button
             type="button"
+            role="tab"
+            aria-selected={loginMode === 'gmail'}
             onClick={() => { setLoginMode('gmail'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`sps-chrome-btn flex-1 py-3 sm:py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 cursor-pointer text-xs min-h-[2.75rem] ${
-              loginMode === 'gmail'
-                ? 'bg-cyan-500 text-slate-950 shadow-[0_8px_28px_rgba(34,211,238,0.28)] border border-cyan-300/50'
-                : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.06] border border-white/5'
-            }`}
           >
-            <Mail className={`w-4 h-4 shrink-0 ${loginMode === 'gmail' ? 'text-slate-950' : 'text-cyan-300'}`} />
-            <span className="truncate">Gmail / Email</span>
+            <Mail className="w-4 h-4 shrink-0" />
+            Email / Gmail
           </button>
-
           <button
             type="button"
+            role="tab"
+            aria-selected={loginMode === 'admin'}
             onClick={() => { setLoginMode('admin'); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`sps-chrome-btn flex-1 py-3 sm:py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 cursor-pointer text-xs min-h-[2.75rem] ${
-              loginMode === 'admin'
-                ? 'bg-amber-400 text-slate-950 shadow-[0_8px_28px_rgba(245,158,11,0.28)] border border-amber-200/60'
-                : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.06] border border-white/5'
-            }`}
           >
-            <ShieldCheck className={`w-4 h-4 shrink-0 ${loginMode === 'admin' ? 'text-slate-950' : 'text-amber-300'}`} />
-            <span className="truncate">Studio Admin</span>
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            Studio Admin
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={loginMode === 'guest'}
+            onClick={() => { setLoginMode('guest'); setErrorMsg(''); setSuccessMsg(''); }}
+          >
+            <Eye className="w-4 h-4 shrink-0" />
+            Guest
           </button>
         </div>
 
-        {/* Form body */}
-        <div className="p-5 sm:p-6 space-y-4">
+        <div className="sps-modal-body p-5 space-y-4">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/40 text-red-200 text-xs font-semibold flex items-center gap-2 sps-panel-enter">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+            <div className="sps-panel p-3 text-xs font-semibold flex items-center gap-2" style={{ borderColor: 'var(--sps-warn)' }}>
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 text-xs font-semibold flex items-center gap-2 sps-panel-enter">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <div className="sps-panel p-3 text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: 'var(--sps-gold)' }} />
               <span>{successMsg}</span>
             </div>
           )}
@@ -305,53 +315,51 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                     setErrorMsg('');
                     setSuccessMsg('');
                     localStorage.removeItem('sps_user_manually_logged_out');
-                    completeLogin(rememberedEmail, `Continuing as ${rememberedEmail}`);
+                    completeLogin(
+                      rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
+                        ? 'pedditiram@gmail.com'
+                        : rememberedEmail,
+                      `Continuing as ${rememberedEmail}`
+                    );
                   }}
-                  className="sps-chrome-btn w-full py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/18 border border-cyan-400/35 text-cyan-100 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                  className="sps-btn w-full"
                 >
-                  <UserCheck className="w-4 h-4 text-cyan-300" />
+                  <UserCheck className="w-4 h-4" />
                   <span className="truncate">Continue as {rememberedEmail}</span>
                 </button>
               )}
 
               <div>
-                <label className="text-[11px] text-cyan-200/90 font-semibold flex items-center gap-1.5 mb-1.5">
-                  <User className="w-3.5 h-3.5 text-cyan-400" />
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <User className="w-3.5 h-3.5" />
                   Collaborator email
                 </label>
                 <input
                   type="email"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="e.g. pedditivarshini@gmail.com"
-                  className="sps-input-premium w-full bg-black/35 border border-white/10 text-amber-200 font-semibold rounded-xl px-3.5 py-2.5 text-xs focus:outline-none"
+                  placeholder="collaborator@email.com"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[10px] text-slate-500 font-semibold block uppercase tracking-wider">Quick accounts</span>
+                <span className="text-[10px] font-semibold block uppercase tracking-wider" style={{ color: 'var(--sps-muted)' }}>Quick accounts</span>
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => fillQuickAccount('pedditiram@gmail.com')}
-                    className="sps-chrome-btn px-2.5 py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/70 text-cyan-200 border border-cyan-700/50 text-[10px] font-semibold transition-all cursor-pointer"
+                    className="sps-btn text-[10px]"
                   >
-                    pedditiram@gmail.com · Owner
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillQuickAccount('pedditivarshini@gmail.com')}
-                    className="sps-chrome-btn px-2.5 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/70 text-emerald-200 border border-emerald-700/50 text-[10px] font-semibold transition-all cursor-pointer"
-                  >
-                    pedditivarshini@gmail.com
+                    pedditiram@gmail.com
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-400 font-semibold block mb-1.5">
-                  Invite OTP <span className="text-slate-600 font-normal">(optional)</span>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  Invite OTP <span className="font-normal">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -359,24 +367,25 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   placeholder="6-digit code"
-                  className="sps-input-premium w-full bg-black/35 border border-white/10 text-cyan-200 font-mono tracking-[0.35em] text-center rounded-xl px-3.5 py-2.5 text-xs focus:outline-none font-bold"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs text-center tracking-[0.35em] font-semibold"
                   style={{ fontFamily: 'var(--sps-font-mono)' }}
                 />
               </div>
 
               <button
                 type="submit"
-                className="sps-chrome-btn group w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-cyan-600 hover:brightness-110 text-slate-950 font-bold text-xs shadow-[0_12px_32px_rgba(6,182,212,0.32)] flex items-center justify-center gap-2 cursor-pointer"
+                className="sps-btn sps-btn-primary w-full"
+                style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
               >
                 <span>Launch studio workspace</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </form>
-          ) : (
+          ) : loginMode === 'admin' ? (
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
-                <label className="text-[11px] text-amber-200 font-semibold flex items-center gap-1.5 mb-1.5">
-                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <Shield className="w-3.5 h-3.5" />
                   Admin owner ID
                 </label>
                 <input
@@ -384,14 +393,14 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                   value={adminIdInput}
                   onChange={(e) => setAdminIdInput(e.target.value)}
                   placeholder="Custom Admin ID"
-                  className="sps-input-premium w-full bg-black/35 border border-white/10 text-amber-200 font-semibold rounded-xl px-3.5 py-2.5 text-xs focus:outline-none"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-300 font-semibold flex items-center gap-1.5 mb-1.5">
-                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <Lock className="w-3.5 h-3.5" />
                   Admin password
                 </label>
                 <input
@@ -399,37 +408,76 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn }) {
                   value={adminPasswordInput}
                   onChange={(e) => setAdminPasswordInput(e.target.value)}
                   placeholder="Strong custom password"
-                  className="sps-input-premium w-full bg-black/35 border border-white/10 text-white rounded-xl px-3.5 py-2.5 text-xs focus:outline-none"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
                   style={{ fontFamily: 'var(--sps-font-mono)' }}
                   required
                 />
-                <p className="mt-1.5 text-[10px] text-slate-500 leading-relaxed">
-                  Owner lockout escape: use the Gmail tab with <span className="text-cyan-300/80">pedditiram@gmail.com</span>.
+                <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
+                  Owner lockout escape: use Email / Gmail with pedditiram@gmail.com.
                   Weak defaults (admin / admin123) are disabled in production.
                 </p>
               </div>
 
               <button
                 type="submit"
-                className="sps-chrome-btn group w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:brightness-110 text-slate-950 font-bold text-xs shadow-[0_12px_32px_rgba(245,158,11,0.28)] flex items-center justify-center gap-2 cursor-pointer"
+                className="sps-btn sps-btn-primary w-full"
               >
                 <Lock className="w-4 h-4" />
                 <span>Authenticate as studio admin</span>
               </button>
             </form>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
+                No account required. Look through the studio, play the presentation reel, or take the guided demo.
+                Nothing saves until you sign in with Email or Studio Admin.
+              </p>
+
+              <button
+                type="button"
+                onClick={startGuestLook}
+                className="sps-btn sps-btn-primary w-full"
+                style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
+                title="Browse rooms without editing or saving"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Continue as guest</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={startPresentation}
+                className="sps-btn w-full"
+                title="Park consoles and play the Stage Work Studio reel"
+              >
+                <Clapperboard className="w-4 h-4" />
+                <span>Presentation mode</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={startAppDemo}
+                className="sps-btn w-full"
+                title="Guided walkthrough of Writer, Matrix, Generate, and more"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>App demo tour</span>
+              </button>
+            </div>
           )}
 
-          <div className="pt-3 border-t border-white/[0.06] flex items-center justify-around text-[10px] text-slate-500 font-semibold">
-            <span className="flex items-center gap-1 text-cyan-300/70">
-              <Zap className="w-3 h-3 text-cyan-400" /> Real-time sync
+          <div className="pt-3 border-t flex items-center justify-around text-[10px] font-semibold" style={{ borderColor: 'var(--sps-border)', color: 'var(--sps-muted)' }}>
+            <span className="flex items-center gap-1">
+              <Zap className="w-3 h-3" /> Real-time sync
             </span>
-            <span className="text-slate-700">·</span>
-            <span className="flex items-center gap-1 text-emerald-300/70">
-              <Shield className="w-3 h-3 text-emerald-400" /> Studio vault
+            <span>·</span>
+            <span className="flex items-center gap-1">
+              <Shield className="w-3 h-3" /> Studio vault
             </span>
-            <span className="text-slate-700">·</span>
-            <span className="flex items-center gap-1 text-amber-300/70">
-              <Film className="w-3 h-3 text-amber-400" /> Cinema craft
+            <span>·</span>
+            <span className="flex items-center gap-1">
+              <Film className="w-3 h-3" /> Cinema craft
             </span>
           </div>
         </div>

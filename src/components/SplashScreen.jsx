@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Film, ShieldCheck, Cloud, HardDrive, Sparkles, ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
+import StageWorksMark from './StageWorksMark';
+import { CATEGORY, LINE, PRODUCT } from '../constants/brand';
+import { APP_VERSION, BUILD_YEAR, isLocalStudioHost } from '../utils/runtimeEnv';
 
 const BOOT_STEPS = [
-  { id: 'engine', label: 'Screenplay engine', detail: '25-craft writing matrix' },
-  { id: 'vault', label: 'Project vault', detail: 'Local & cloud restore' },
-  { id: 'canvas', label: 'Director canvas', detail: 'Pre-viz workspace' },
-  { id: 'sync', label: 'Collaboration sync', detail: 'Secure room handshake' },
-  { id: 'ready', label: 'Studio ready', detail: 'Your workspace is live' },
+  { id: 'mark', label: 'Brand lockup', detail: 'Stage Work Studio mark' },
+  { id: 'type', label: 'Type & theme', detail: 'Fraunces · Figtree · gold stage' },
+  { id: 'vault', label: 'Local vault', detail: 'Projects stay on this machine' },
+  { id: 'os', label: 'Production OS', detail: 'Writer · Matrix · Generate' },
+  { id: 'ready', label: 'Studio ready', detail: 'Opening project library' },
 ];
 
 export default function SplashScreen({ onFinish }) {
+  const local = isLocalStudioHost();
   const [progress, setProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -24,7 +28,7 @@ export default function SplashScreen({ onFinish }) {
     if (finishedRef.current) return;
     finishedRef.current = true;
     try {
-      sessionStorage.setItem('sps_splash_done', '1');
+      if (!isLocalStudioHost()) sessionStorage.setItem('sps_splash_done', '1');
     } catch {
       /* ignore */
     }
@@ -39,12 +43,9 @@ export default function SplashScreen({ onFinish }) {
   useEffect(() => {
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
+        if (prev >= 100) return 100;
         const remaining = 100 - prev;
-        const inc = Math.max(1, Math.min(5, Math.round(remaining * 0.08) + (Math.random() > 0.7 ? 2 : 1)));
+        const inc = Math.max(3, Math.min(11, Math.round(remaining * 0.14)));
         return Math.min(100, prev + inc);
       });
     }, 90);
@@ -52,14 +53,36 @@ export default function SplashScreen({ onFinish }) {
   }, []);
 
   useEffect(() => {
+    const minMs = local ? 3200 : 2400;
+    const hard = setTimeout(() => {
+      setProgress(100);
+      setIsFadingOut(true);
+      setTimeout(() => finishOnce(), 420);
+    }, minMs + 1400);
+    return () => clearTimeout(hard);
+  }, [finishOnce, local]);
+
+  useEffect(() => {
     if (progress < 100) return undefined;
-    const fadeTimer = setTimeout(() => setIsFadingOut(true), 700);
-    const exitTimer = setTimeout(() => finishOnce(), 1200);
+    const fadeTimer = setTimeout(() => setIsFadingOut(true), 400);
+    const exitTimer = setTimeout(() => finishOnce(), 780);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(exitTimer);
     };
   }, [progress, finishOnce]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        e.preventDefault();
+        setIsFadingOut(true);
+        setTimeout(() => finishOnce(), 280);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [finishOnce]);
 
   const activeStepIdx = Math.min(
     BOOT_STEPS.length - 1,
@@ -68,197 +91,176 @@ export default function SplashScreen({ onFinish }) {
 
   const handleSkip = () => {
     setIsFadingOut(true);
-    setTimeout(() => finishOnce(), 380);
+    setTimeout(() => finishOnce(), 280);
   };
+
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost';
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] overflow-hidden transition-all duration-700 ease-out ${
-        isFadingOut ? 'opacity-0 scale-[1.02] pointer-events-none' : 'opacity-100 scale-100'
+      className={`fixed inset-0 z-[9999] overflow-hidden transition-opacity duration-500 ease-out ${
+        isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
-      style={{ fontFamily: 'var(--sps-font)' }}
+      style={{ fontFamily: 'var(--sps-font)', background: 'var(--sps-bg)', color: 'var(--sps-text)' }}
       role="dialog"
-      aria-label="Stage Production Studio loading"
+      aria-modal="true"
+      aria-label={`${LINE} launch`}
     >
-      {/* Atmospheric stage backdrop */}
-      <div className="absolute inset-0 bg-[#06080e]" />
+      <a
+        href="#studio-root"
+        className="sps-btn sps-btn-primary"
+        style={{ position: 'absolute', left: '-9999px' }}
+        onClick={(e) => {
+          e.preventDefault();
+          handleSkip();
+        }}
+      >
+        Skip intro
+      </a>
+
+      <div className="absolute inset-0" style={{ background: 'var(--sps-bg)' }} />
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background: `
-            radial-gradient(ellipse 90% 55% at 50% -5%, rgba(34, 211, 238, 0.18), transparent 55%),
-            radial-gradient(ellipse 50% 40% at 85% 70%, rgba(245, 158, 11, 0.08), transparent 50%),
-            radial-gradient(ellipse 45% 35% at 10% 80%, rgba(56, 189, 248, 0.07), transparent 45%),
-            linear-gradient(180deg, #0a1018 0%, #06080e 45%, #04060a 100%)
+            radial-gradient(ellipse 80% 50% at 50% 28%, color-mix(in srgb, var(--sps-gold) 14%, transparent), transparent 58%),
+            radial-gradient(ellipse 40% 30% at 80% 80%, rgba(244,236,222,0.04), transparent 50%)
           `,
         }}
       />
-
-      {/* Soft light sweep */}
       <div
-        className="absolute inset-0 opacity-40 pointer-events-none"
-        style={{
-          background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.03) 50%, transparent 60%)',
-          animation: 'spsSplashSweep 6s ease-in-out infinite',
-        }}
-      />
-
-      {/* Film grain */}
-      <div
-        className="absolute inset-0 opacity-[0.07] mix-blend-overlay pointer-events-none"
+        className="absolute inset-0 opacity-[0.06] mix-blend-overlay pointer-events-none"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
         }}
       />
 
-      {/* Letterbox bars */}
-      <div className="absolute top-0 inset-x-0 h-10 sm:h-14 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-20" />
-      <div className="absolute bottom-0 inset-x-0 h-10 sm:h-14 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-20" />
+      {/* Cinema letterbox */}
+      <div className="absolute top-0 inset-x-0 h-[7vh] min-h-8 z-20" style={{ background: '#050403' }} />
+      <div className="absolute bottom-0 inset-x-0 h-[7vh] min-h-8 z-20" style={{ background: '#050403' }} />
 
       <div
-        className={`relative z-10 h-full w-full flex flex-col items-center justify-center px-6 transition-all duration-1000 ease-out ${
-          entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+        className={`relative z-10 h-full w-full flex flex-col px-6 sm:px-10 transition-all duration-700 ${
+          entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
         }`}
+        style={{ paddingTop: 'max(7vh, 2rem)', paddingBottom: 'max(7vh, 2rem)' }}
       >
-        {/* Brand mark */}
-        <button
-          type="button"
-          onClick={handleSkip}
-          className="group relative mb-8 sm:mb-10 cursor-pointer focus:outline-none"
-          title="Enter studio"
-          aria-label="Enter Stage Production Studio"
-        >
-          <div
-            className="absolute -inset-8 rounded-full opacity-70 blur-3xl transition-opacity duration-700 group-hover:opacity-100"
-            style={{
-              background: 'radial-gradient(circle, rgba(34,211,238,0.35) 0%, rgba(245,158,11,0.12) 45%, transparent 70%)',
-              animation: 'spsSplashPulse 3.2s ease-in-out infinite',
-            }}
-          />
-          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-[1.35rem] bg-gradient-to-br from-slate-900 via-slate-950 to-black border border-cyan-400/30 shadow-[0_20px_60px_rgba(0,0,0,0.55)] flex items-center justify-center overflow-hidden">
-            <div
-              className="absolute inset-[3px] rounded-[1.15rem] border border-dashed border-cyan-400/25"
-              style={{ animation: 'spsSplashSpin 18s linear infinite' }}
-            />
-            <Film className="relative z-10 w-9 h-9 sm:w-10 sm:h-10 text-cyan-300 drop-shadow-[0_0_18px_rgba(34,211,238,0.55)]" />
-            <Sparkles className="absolute top-3 right-3 w-3.5 h-3.5 text-amber-300/90" style={{ animation: 'spsSplashPulse 2s ease-in-out infinite' }} />
-            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.06] to-transparent pointer-events-none" />
+        {/* Top chrome — env + version */}
+        <header className="flex flex-wrap items-center justify-between gap-3 pt-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <StageWorksMark size={28} className="w-7 h-7 rounded-[7px] shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold m-0 leading-tight" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                {PRODUCT}
+              </p>
+              <p className="text-[9px] uppercase tracking-[0.18em] m-0" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}>
+                {CATEGORY}
+              </p>
+            </div>
           </div>
-        </button>
-
-        {/* Hero brand — first viewport signal */}
-        <div className="text-center max-w-2xl mx-auto space-y-4">
-          <p
-            className="text-[10px] sm:text-[11px] uppercase tracking-[0.35em] text-cyan-300/80 font-semibold"
-            style={{ fontFamily: 'var(--sps-font-mono)' }}
-          >
-            Pedditi Labs
-          </p>
-          <h1
-            className="text-[clamp(1.85rem,5vw,3.35rem)] leading-[1.05] font-extrabold tracking-tight text-white"
-            style={{ fontFamily: 'var(--sps-font-display)' }}
-          >
-            <span className="block">Stage Production</span>
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              className="block bg-clip-text text-transparent"
+              className="text-[9px] uppercase tracking-[0.16em] font-semibold px-2.5 py-1 rounded-full border"
               style={{
-                backgroundImage: 'linear-gradient(100deg, #67e8f9 0%, #e2e8f0 45%, #fbbf24 100%)',
+                fontFamily: 'var(--sps-font-mono)',
+                borderColor: 'var(--sps-gold)',
+                color: 'var(--sps-gold)',
+                background: 'color-mix(in srgb, var(--sps-gold) 12%, transparent)',
               }}
             >
-              Studio
+              {local ? 'Local studio' : 'Live'}
             </span>
+            <span className="text-[10px] tabular-nums" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}>
+              v{APP_VERSION}
+            </span>
+          </div>
+        </header>
+
+        {/* Center lockup */}
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-6">
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="relative mb-8 cursor-pointer focus:outline-none focus-visible:ring-2 rounded-[1.4rem]"
+            style={{ outlineColor: 'var(--sps-gold)' }}
+            title={`Enter ${PRODUCT}`}
+            aria-label={`Enter ${LINE}`}
+          >
+            <div
+              className={`relative w-[5.5rem] h-[5.5rem] sm:w-28 sm:h-28 overflow-hidden rounded-[1.4rem] sps-splash-mark-hero ${
+                entered ? 'opacity-100 sps-splash-mark-entered' : 'opacity-0 sps-splash-mark-entering'
+              }`}
+              style={{
+                boxShadow: '0 20px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(201,163,106,0.35)',
+              }}
+            >
+              <StageWorksMark size={112} className="w-full h-full" />
+            </div>
+          </button>
+
+          <h1
+            className="text-[clamp(2.4rem,7vw,4.4rem)] leading-[0.95] font-semibold tracking-tight m-0 text-center"
+            style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}
+          >
+            {PRODUCT}
           </h1>
-          <p className="text-sm sm:text-base text-slate-400 max-w-md mx-auto leading-relaxed">
-            Professional screenplay, shot design, and collaboration — built for directors who ship cinema.
+          <p
+            className="mt-3 text-[11px] sm:text-[12px] uppercase tracking-[0.28em] font-semibold m-0 text-center"
+            style={{ fontFamily: 'var(--sps-font-mono)', color: 'var(--sps-gold)' }}
+          >
+            {CATEGORY}
           </p>
-        </div>
+          <p className="mt-4 max-w-md text-center text-[13px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
+            Lock the look. Call the take. Generate the feature.
+          </p>
 
-        {/* Trust strip */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] sm:text-xs text-slate-400">
-          <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Encrypted session vault
-          </span>
-          <span className="hidden sm:inline text-slate-700">·</span>
-          <span className="inline-flex items-center gap-1.5">
-            <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
-            Local-first projects
-          </span>
-          <span className="hidden sm:inline text-slate-700">·</span>
-          <span className="inline-flex items-center gap-1.5">
-            <Cloud className="w-3.5 h-3.5 text-sky-400" />
-            Live cloud rooms
-          </span>
-        </div>
-
-        {/* Progress panel */}
-        <div className="w-full max-w-md mt-10 sm:mt-12">
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md px-5 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-            <div className="flex items-end justify-between gap-3 mb-3">
-              <div className="text-left min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-semibold mb-1">
-                  Preparing workspace
-                </p>
-                <p className="text-sm text-slate-200 font-medium truncate">
-                  {BOOT_STEPS[activeStepIdx]?.label}
-                </p>
-              </div>
-              <span
-                className="text-lg font-bold text-cyan-300 tabular-nums shrink-0"
-                style={{ fontFamily: 'var(--sps-font-display)' }}
-              >
-                {progress}%
-              </span>
-            </div>
-
-            <div className="h-1.5 rounded-full bg-slate-900/90 overflow-hidden border border-white/5">
+          {/* Progress — determinate, labeled */}
+          <div className="w-full max-w-md mt-10">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              aria-label="Studio boot"
+              className="h-1 rounded-full overflow-hidden"
+              style={{ background: 'var(--sps-surface-2)' }}
+            >
               <div
-                className="h-full rounded-full relative transition-[width] duration-200 ease-out"
-                style={{
-                  width: `${progress}%`,
-                  background: 'linear-gradient(90deg, #0e7490, #22d3ee, #fbbf24)',
-                  boxShadow: '0 0 20px rgba(34,211,238,0.45)',
-                }}
-              >
-                <div
-                  className="absolute inset-0 opacity-60"
-                  style={{
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)',
-                    animation: 'spsSplashShimmer 1.4s linear infinite',
-                  }}
-                />
-              </div>
+                className="h-full rounded-full transition-[width] duration-200 ease-out"
+                style={{ width: `${progress}%`, background: 'var(--sps-gold)' }}
+              />
             </div>
-
-            {/* Step checklist — builds confidence */}
-            <ul className="mt-4 space-y-2">
+            <div className="mt-3 flex items-baseline justify-between gap-3">
+              <p className="text-[12px] m-0" role="status" aria-live="polite" style={{ color: 'var(--sps-text)' }}>
+                {BOOT_STEPS[activeStepIdx]?.label}
+              </p>
+              <p className="text-[12px] tabular-nums m-0 shrink-0" style={{ fontFamily: 'var(--sps-font-mono)', color: 'var(--sps-gold)' }}>
+                {progress}%
+              </p>
+            </div>
+            <ul className="mt-4 space-y-1.5 hidden sm:block m-0 p-0 list-none">
               {BOOT_STEPS.map((step, idx) => {
                 const done = idx < activeStepIdx || progress >= 100;
                 const active = idx === activeStepIdx && progress < 100;
                 return (
                   <li
                     key={step.id}
-                    className={`flex items-center gap-2.5 text-[12px] transition-all duration-300 ${
-                      done ? 'text-slate-300' : active ? 'text-cyan-200' : 'text-slate-600'
-                    }`}
+                    className="flex items-center gap-2 text-[11px]"
+                    style={{ color: done || active ? 'var(--sps-text)' : 'var(--sps-muted)' }}
                   >
                     <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                        done
-                          ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
-                          : active
-                            ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-300'
-                            : 'bg-transparent border-slate-700 text-transparent'
-                      }`}
+                      className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 border"
+                      style={{
+                        borderColor: done || active ? 'var(--sps-gold)' : 'var(--sps-border)',
+                        color: 'var(--sps-gold)',
+                      }}
                     >
-                      {done ? (
-                        <Check className="w-3 h-3" strokeWidth={3} />
-                      ) : active ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
+                      {done ? <Check className="w-2.5 h-2.5" strokeWidth={3} /> : active ? (
+                        <span className="w-1 h-1 rounded-full" style={{ background: 'var(--sps-gold)' }} />
                       ) : null}
                     </span>
-                    <span className="font-medium">{step.label}</span>
-                    <span className={`ml-auto text-[10px] hidden sm:inline ${done || active ? 'text-slate-500' : 'text-slate-700'}`}>
+                    <span>{step.label}</span>
+                    <span className="ml-auto" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)', fontSize: 10 }}>
                       {step.detail}
                     </span>
                   </li>
@@ -267,38 +269,42 @@ export default function SplashScreen({ onFinish }) {
             </ul>
           </div>
 
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-sm font-bold shadow-[0_12px_40px_rgba(34,211,238,0.35)] transition-all active:scale-[0.98]"
-            >
+          <div className="mt-8 flex flex-col sm:flex-row items-center gap-3">
+            <button type="button" onClick={handleSkip} className="sps-btn sps-btn-primary">
               Enter studio
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              <ArrowRight className="w-4 h-4" />
             </button>
-            <p className="text-[11px] text-slate-500">
-              {progress >= 100 ? 'Opening sign-in…' : 'Click mark or Enter to skip'}
+            <p className="text-[10px] m-0" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}>
+              Enter · Space · Esc to continue
             </p>
           </div>
         </div>
+
+        {/* Footer — legal / build */}
+        <footer className="shrink-0 pb-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px]" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}>
+          <p className="m-0 text-center sm:text-left">
+            © {BUILD_YEAR} {PRODUCT}. All rights reserved.
+          </p>
+          <p className="m-0 text-center sm:text-right truncate max-w-full">
+            {local ? `Local · ${host}` : 'stageworkstudio.com'} · Never controls this computer
+          </p>
+        </footer>
       </div>
 
       <style>{`
-        @keyframes spsSplashSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        @keyframes spsSplashMarkEnter {
+          0% { opacity: 0; transform: scale(0.96); }
+          100% { opacity: 1; transform: scale(1); }
         }
-        @keyframes spsSplashPulse {
-          0%, 100% { opacity: 0.65; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.04); }
+        .sps-splash-mark-entering {
+          animation: spsSplashMarkEnter 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
-        @keyframes spsSplashSweep {
-          0%, 100% { transform: translateX(-8%); opacity: 0.25; }
-          50% { transform: translateX(8%); opacity: 0.45; }
+        .sps-splash-mark-entered {
+          opacity: 1;
+          transform: scale(1);
         }
-        @keyframes spsSplashShimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
+        @media (prefers-reduced-motion: reduce) {
+          .sps-splash-mark-entering { animation: none !important; opacity: 1 !important; }
         }
       `}</style>
     </div>

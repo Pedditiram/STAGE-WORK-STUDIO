@@ -5,46 +5,26 @@ export default function AppVersionSelectorModal({ isOpen, onClose, currentMode, 
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 font-mono select-none"
-      onClick={onClose}
-    >
+    <div className="sps-overlay" onClick={onClose}>
       <div 
-        className="bg-zinc-950 border border-zinc-800 text-white rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl space-y-6 relative overflow-hidden"
+        className="sps-shell sps-shell-lg"
+        style={{ height: 'auto', padding: '1.25rem', alignSelf: 'center' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Glow Header Accent Background */}
-        <div className="absolute -top-24 -right-24 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Modal Header Bar */}
-        <div className="flex items-start justify-between border-b border-zinc-800/80 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 text-emerald-400">
-              <Sparkles className="w-6 h-6 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white font-sans flex items-center gap-2">
-                Stage Production Studio Architecture
-              </h2>
-              <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                Choose your runtime environment mode for this session.
-              </p>
-            </div>
+        <div className="sps-modal-head" style={{ margin: '-1.25rem -1.25rem 1rem' }}>
+          <div>
+            <h2>Stage Work Studio</h2>
+            <p>Local workstation or cloud room</p>
           </div>
           {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
+            <button type="button" onClick={onClose} className="sps-icon-btn" aria-label="Close">
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
         {/* Mode Selector Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* 1. LOCAL VERSION CARD */}
           <div 
             onClick={() => onSelectMode('local')}
@@ -118,6 +98,32 @@ export default function AppVersionSelectorModal({ isOpen, onClose, currentMode, 
             <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2 text-[11px] text-cyan-300 font-mono">
               <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
               <span>Cloud Realtime Multi-User Sync</span>
+            </div>
+          </div>
+
+          <div
+            className={`p-5 rounded-2xl border flex flex-col justify-between gap-4 ${
+              currentMode === 'local' || currentMode === 'cloud'
+                ? 'bg-zinc-900/60 border-zinc-800'
+                : 'bg-zinc-900/60 border-zinc-800'
+            }`}
+          >
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 w-fit">
+                <Cloud className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white font-sans">GOOGLE DRIVE</h3>
+                <span className="text-[11px] font-bold text-sky-400 font-mono">
+                  Share & manage files with local
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed font-mono">
+                Keep working locally. Push packs to a Stage Work Studio Drive folder, pull them on another machine, and share a view link with crew.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-zinc-800/60 text-[11px] text-sky-300 font-mono">
+              Connect in Settings → Cloud, or Projects library.
             </div>
           </div>
         </div>

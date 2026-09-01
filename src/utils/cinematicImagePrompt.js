@@ -3,11 +3,12 @@
  * Fixes out-of-context generations (wrong subject, ignored OTS framing, metadata soup).
  */
 
+import { getActiveCharacterProfiles } from './projectBibleVault';
+
 function getCharacterProfiles() {
   if (typeof window === 'undefined') return [];
   try {
-    const saved = localStorage.getItem('sps_character_bible_vault');
-    return saved ? JSON.parse(saved) : [];
+    return getActiveCharacterProfiles();
   } catch (e) {
     return [];
   }

@@ -12,13 +12,13 @@ import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
 const NATIVE_SYNC_PATH = '/api/sync';
 /** Production Vercel origin — source of truth for projects, collaborators, rooms, chat. */
-export const PRODUCTION_SYNC_ORIGIN = 'https://stage-production-studio.vercel.app';
+export const PRODUCTION_SYNC_ORIGIN = 'https://www.stageworkstudio.com';
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
 const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-43e0-74db-bb8d-6211e85dc74e';
 
-/** Active-tab room poll target (~2s). Hidden tabs back off to save quota. */
-const POLL_MS_ACTIVE = 2000;
-const POLL_MS_HIDDEN = 12000;
+/** Active-tab room poll. Hidden tabs back off hard to save Vercel quota. */
+const POLL_MS_ACTIVE = 12000;
+const POLL_MS_HIDDEN = 60000;
 
 let db = null;
 let broadcastChannel = null;
@@ -45,6 +45,8 @@ function isProductionHost(hostname = '') {
   const h = String(hostname || '').toLowerCase();
   return (
     h.includes('vercel.app') ||
+    h === 'stageworkstudio.com' ||
+    h.endsWith('.stageworkstudio.com') ||
     h === 'stageproductionstudio.com' ||
     h.endsWith('.stageproductionstudio.com')
   );
@@ -129,23 +131,52 @@ function normalizeRoomPayload(roomId, projectData = {}) {
 }
 
 const FETCH_TIMEOUT_MS = 12000;
+const syncEtags = new Map();
+const syncBodies = new Map();
 
-async function fetchJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+function syncCacheKey(url) {
+  return String(url || '').replace(/[?&]t=\d+/g, '').replace(/\?$/, '');
+}
+
+export async function fetchSyncJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const method = String(options.method || 'GET').toUpperCase();
+  const key = syncCacheKey(url);
+  const headers = { ...(options.headers || {}) };
+  if (method === 'GET') {
+    const prevTag = syncEtags.get(key);
+    if (prevTag) headers['If-None-Match'] = prevTag;
+  }
   try {
-    const res = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
+    const res = await fetch(method === 'GET' ? key : url, {
+      cache: 'no-store',
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    if (method === 'GET' && res.status === 304) return syncBodies.get(key) || {};
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    const json = await res.json();
+    if (method === 'GET') {
+      const tag = res.headers.get('etag');
+      if (tag) syncEtags.set(key, tag);
+      syncBodies.set(key, json);
+    }
+    return json;
   } finally {
     clearTimeout(timer);
   }
 }
 
+async function fetchJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  return fetchSyncJson(url, options, { timeoutMs });
+}
+
 /** Read room from native /api/sync */
 async function pullNativeRoom(roomId) {
   const base = getNativeSyncUrl();
-  const resObj = await fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}&t=${Date.now()}`);
+  const resObj = await fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}`);
   return resObj?.data || null;
 }
 

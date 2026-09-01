@@ -1,9 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Play, Pause, Film, Shield, Zap,
-  Award, Target, Lock, ArrowRight, CheckCircle2, Cloud, Mail, Clapperboard
+  Award, Target, Lock, ArrowRight, CheckCircle2, Cloud, Mail, Clapperboard, Download, Archive
 } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import StageWorksMark from './StageWorksMark';
+import RequestAccessModal from './RequestAccessModal';
+import { CATEGORY, LINE, PRODUCT } from '../constants/brand';
+import { exportDownloadText, assertExportAllowed, logExportSuccess, EXPORT_LIFECYCLE, resolveCollabRoomId } from '../utils/exportGate';
+import { lifecycleExportReadiness } from '../utils/productionLifecycle';
+import {
+  investorDeckToMarkdown,
+  investorDeckToPrintHtml,
+  investorDeckToCsv,
+  buildInvestorDeckZipFiles
+} from '../utils/investorDeckExport';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import { createZipArchive } from '../utils/zipUtils';
+import { saveExportBlob } from '../utils/saveExportFile';
 
 const OWNER_EMAIL = 'pedditiram@gmail.com';
 const CRAFT_COUNT = SEEDANCE_SLOTS.length;
@@ -12,15 +26,15 @@ const DECK_SLIDES = [
   {
     id: 'hero',
     kind: 'hero',
-    eyebrow: 'Pedditi Labs',
-    title: 'Stage Production Studio',
-    subtitle: 'Cinema craft intelligence for directors who refuse to compromise the frame.',
+    eyebrow: CATEGORY,
+    title: PRODUCT,
+    subtitle: `${LINE}. Lock the look, call the take, generate the feature.`,
     points: [
       `Script → ${CRAFT_COUNT}-craft shot matrix without the pre-viz tax`,
       'Cloud rooms where Directors, DPs, and Editors co-author in real time',
       'Prompt-ready keyframes for AI video pipelines'
     ],
-    highlight: 'The operating system for modern cinematic pre-production'
+    highlight: `${LINE} — the set runs here; the film is generated from the take`
   },
   {
     id: 'value',
@@ -97,31 +111,50 @@ const DECK_SLIDES = [
 
 const ACCENT_STYLES = {
   cyan: {
-    badge: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
-    glow: 'rgba(34,211,238,0.25)',
-    icon: 'text-cyan-300 border-cyan-500/40 bg-cyan-950/60'
+    badge: 'border text-[10px] font-bold tracking-wider',
+    glow: 'rgba(139,90,43,0.18)',
+    icon: 'text-[var(--sps-gold)] border-[var(--sps-border)] bg-[var(--sps-surface)]'
   },
   amber: {
-    badge: 'bg-amber-500/20 text-amber-200 border-amber-400/40',
-    glow: 'rgba(245,158,11,0.22)',
-    icon: 'text-amber-300 border-amber-500/40 bg-amber-950/50'
+    badge: 'border text-[10px] font-bold tracking-wider',
+    glow: 'rgba(139,90,43,0.18)',
+    icon: 'text-[var(--sps-gold)] border-[var(--sps-border)] bg-[var(--sps-surface)]'
   },
   emerald: {
-    badge: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
-    glow: 'rgba(52,211,153,0.2)',
-    icon: 'text-emerald-300 border-emerald-500/40 bg-emerald-950/50'
+    badge: 'border text-[10px] font-bold tracking-wider',
+    glow: 'rgba(139,90,43,0.18)',
+    icon: 'text-[var(--sps-gold)] border-[var(--sps-border)] bg-[var(--sps-surface)]'
   },
   gold: {
-    badge: 'bg-yellow-500/15 text-amber-100 border-amber-300/35',
-    glow: 'rgba(251,191,36,0.18)',
-    icon: 'text-amber-200 border-amber-400/35 bg-amber-950/40'
+    badge: 'border text-[10px] font-bold tracking-wider',
+    glow: 'rgba(139,90,43,0.18)',
+    icon: 'text-[var(--sps-gold)] border-[var(--sps-border)] bg-[var(--sps-surface)]'
   }
 };
 
-export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
+export default function InvestorDeckModal({
+  isOpen,
+  onClose,
+  onOpenLogin,
+  projectTitle = '',
+  shots = []
+}) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [enterKey, setEnterKey] = useState(0);
+  const [accessOpen, setAccessOpen] = useState(false);
+
+  const exportLife = useMemo(
+    () => lifecycleExportReadiness(shots, projectTitle),
+    [shots, projectTitle]
+  );
+  const {
+    strict: investorLifecycleStrict,
+    mode: investorLifecycleMode
+  } = useExportLifecyclePref('investor');
+  const hasFilmContext = Boolean(String(projectTitle || '').trim()) && (shots?.length || 0) > 0;
+  const exportBlocked = hasFilmContext && investorLifecycleStrict && !exportLife.exportReady;
+  const effectiveLifecycleMode = hasFilmContext ? investorLifecycleMode : EXPORT_LIFECYCLE.NONE;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,51 +198,194 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
     onOpenLogin?.();
   };
 
-  const requestAccess = () => {
-    const subject = encodeURIComponent('Stage Production Studio — Access Request');
-    const body = encodeURIComponent(
-      'Hi Pedditi,\n\nI viewed the Investor Deck & Studio Showcase and would like collaborator access to Stage Production Studio.\n\nName:\nStudio / Role:\nEmail:\n\nThanks.'
-    );
-    window.open(`mailto:${OWNER_EMAIL}?subject=${subject}&body=${body}`, '_blank');
+  const requestAccess = () => setAccessOpen(true);
+
+  const roomId = resolveCollabRoomId();
+  const lifeNote = `${DECK_SLIDES.length} slides${hasFilmContext ? ' · film context' : ' · showcase'}${roomId ? ` · room:${roomId}` : ''}`;
+  const exportTitle = projectTitle || PRODUCT;
+  const gatedShots = hasFilmContext ? shots : [];
+
+  const exportOutline = () => {
+    exportDownloadText('stageworks_investor_deck.md', investorDeckToMarkdown(DECK_SLIDES, { projectTitle }), {
+      projectTitle: exportTitle,
+      auditLabel: 'investor_deck_outline',
+      auditFormat: 'md',
+      mime: 'text/markdown;charset=utf-8',
+      lifecycleMode: effectiveLifecycleMode,
+      shots: gatedShots,
+      roomId,
+      note: lifeNote
+    });
+  };
+
+  const exportCsv = () => {
+    exportDownloadText('stageworks_investor_deck.csv', investorDeckToCsv(DECK_SLIDES, { projectTitle }), {
+      projectTitle: exportTitle,
+      auditLabel: 'investor_deck_csv',
+      auditFormat: 'csv',
+      mime: 'text/csv;charset=utf-8',
+      lifecycleMode: effectiveLifecycleMode,
+      shots: gatedShots,
+      roomId,
+      note: lifeNote
+    });
+  };
+
+  const exportPdf = () => {
+    if (exportBlocked) {
+      assertExportAllowed({
+        projectTitle: exportTitle,
+        label: 'investor_deck_pdf',
+        format: 'pdf',
+        lifecycleMode: effectiveLifecycleMode,
+        shots: gatedShots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle: exportTitle,
+      label: 'investor_deck_pdf',
+      format: 'pdf',
+      lifecycleMode: effectiveLifecycleMode,
+      shots: gatedShots,
+      roomId
+    });
+    if (!gate.ok) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.alert('Please allow popups to export PDF.');
+      return;
+    }
+    printWindow.document.write(investorDeckToPrintHtml(DECK_SLIDES, { projectTitle, roomId }));
+    printWindow.document.close();
+    logExportSuccess({
+      projectTitle: exportTitle,
+      label: 'investor_deck_pdf',
+      format: 'pdf',
+      filename: 'stageworks_investor_deck.pdf',
+      roomId,
+      note: lifeNote,
+      lifecycleMode: gate.advisory ? `${effectiveLifecycleMode}+ok` : effectiveLifecycleMode
+    });
+  };
+
+  const exportZip = async () => {
+    if (exportBlocked) {
+      assertExportAllowed({
+        projectTitle: exportTitle,
+        label: 'investor_deck_zip',
+        format: 'zip',
+        lifecycleMode: effectiveLifecycleMode,
+        shots: gatedShots,
+        roomId,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle: exportTitle,
+      label: 'investor_deck_zip',
+      format: 'zip',
+      lifecycleMode: effectiveLifecycleMode,
+      shots: gatedShots,
+      roomId
+    });
+    if (!gate.ok) return;
+    const files = buildInvestorDeckZipFiles(DECK_SLIDES, { projectTitle, roomId });
+    const blob = createZipArchive(files);
+    await saveExportBlob(blob, 'stageworks_investor_deck.zip', {
+      projectTitle: exportTitle,
+      shots: gatedShots,
+      lifecycleMode: effectiveLifecycleMode,
+      skipLifecycleCheck: true,
+      advisoryAlready: Boolean(gate.advisory),
+      auditLabel: 'investor_deck_zip',
+      auditFormat: 'zip',
+      roomId,
+      note: lifeNote,
+      showAlert: false
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/92 backdrop-blur-xl">
+    <div className="sps-overlay" style={{ zIndex: 50 }}>
       <div
-        className="relative w-full sm:max-w-4xl max-h-[100dvh] sm:max-h-[92vh] overflow-hidden flex flex-col border-0 sm:border border-cyan-500/35 sm:rounded-3xl shadow-[0_40px_120px_rgba(0,0,0,0.7)]"
+        className="sps-shell"
         style={{
-          background:
-            'radial-gradient(900px 480px at 12% -8%, rgba(34,211,238,0.14), transparent 55%), radial-gradient(700px 420px at 92% 8%, rgba(245,158,11,0.1), transparent 50%), radial-gradient(600px 400px at 50% 110%, rgba(56,189,248,0.08), transparent 55%), #07090f',
+          width: 'min(56rem, 100%)',
+          height: 'min(92dvh, 40rem)',
+          alignSelf: 'center',
           fontFamily: 'var(--sps-font)'
         }}
       >
-        {/* Atmospheric scan line */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay sps-deck-grain" aria-hidden />
-        <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[120%] h-48 bg-gradient-to-b from-cyan-400/10 to-transparent sps-deck-aurora" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-multiply sps-deck-grain" aria-hidden />
 
         {/* Header */}
-        <div className="relative z-10 px-4 sm:px-6 py-3.5 flex items-center justify-between border-b border-white/10 shrink-0 bg-black/25 backdrop-blur-md">
+        <div className="sps-modal-head relative z-10">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-cyan-400 via-sky-500 to-blue-600 text-white shadow-lg shadow-cyan-500/30 ring-1 ring-white/20 shrink-0">
-              <Film className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/20 shrink-0">
+              <StageWorksMark size={36} className="w-full h-full object-cover" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-300/90 font-semibold">Pedditi Labs</p>
-              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate font-display">
+              <p className="text-[10px] uppercase tracking-[0.22em] font-semibold" style={{ color: 'var(--sps-gold)' }}>{PRODUCT}</p>
+              <h3 className="text-sm sm:text-base font-semibold tracking-tight truncate font-display" style={{ color: 'var(--sps-text)' }}>
                 Investor Deck & Studio Showcase
               </h3>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {exportBlocked ? (
+              <span className="text-[10px] text-[var(--sps-gold)] max-w-[12rem] leading-snug hidden md:inline">
+                {exportLife.message}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={exportOutline}
+              disabled={exportBlocked}
+              className="sps-btn text-[11px] disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : 'Download product showcase outline (.md)'}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Outline</span>
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={exportBlocked}
+              className="sps-btn text-[11px] disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : 'Export investor deck CSV'}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={exportBlocked}
+              className="sps-btn text-[11px] disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : 'Print investor deck PDF'}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={exportZip}
+              disabled={exportBlocked}
+              className="sps-btn text-[11px] disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : 'Download investor deck ZIP'}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ZIP</span>
+            </button>
             <button
               type="button"
               onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                isAutoPlaying
-                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
-                  : 'bg-white/5 text-cyan-200 border-cyan-700/50 hover:bg-white/10'
-              }`}
+              className={`sps-btn text-[11px] ${isAutoPlaying ? 'sps-btn-primary' : ''}`}
             >
               {isAutoPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
               <span className="hidden sm:inline">{isAutoPlaying ? 'Pause' : 'Auto-Play'}</span>
@@ -217,7 +393,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer border border-transparent hover:border-white/15"
+              className="sps-icon-btn"
               aria-label="Close investor deck"
             >
               <X className="w-4 h-4" />
@@ -230,24 +406,24 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
           <div key={enterKey} className="sps-deck-enter space-y-6">
             {slide.kind === 'hero' && (
               <div className="min-h-[min(52vh,420px)] flex flex-col justify-center text-center sm:text-left gap-5">
-                <p className="text-[11px] sm:text-xs uppercase tracking-[0.28em] text-amber-300/90 font-bold">
+                <p className="text-[11px] sm:text-xs uppercase tracking-[0.28em] font-bold text-[var(--sps-gold)]">
                   {slide.eyebrow}
                 </p>
                 <h2
-                  className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white leading-[0.95] tracking-tight font-display sps-deck-title-glow"
+                  className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[0.95] tracking-tight font-display text-[var(--sps-text)]"
                 >
                   {slide.title}
                 </h2>
-                <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto sm:mx-0 leading-relaxed">
+                <p className="text-base sm:text-lg max-w-2xl mx-auto sm:mx-0 leading-relaxed text-[var(--sps-text)]">
                   {slide.subtitle}
                 </p>
                 <ul className="grid gap-2.5 max-w-xl mx-auto sm:mx-0 text-left">
                   {slide.points.map((p) => (
                     <li
                       key={p}
-                      className="flex items-start gap-2.5 text-sm text-slate-200/95"
+                      className="flex items-start gap-2.5 text-sm text-[var(--sps-text)]"
                     >
-                      <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-4 h-4 text-[var(--sps-gold)] shrink-0 mt-0.5" />
                       <span>{p}</span>
                     </li>
                   ))}
@@ -256,42 +432,42 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
                   <button
                     type="button"
                     onClick={requestAccess}
-                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-sky-500 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 hover:brightness-110 transition-all cursor-pointer inline-flex items-center gap-2"
+                    className="sps-btn sps-btn-primary text-sm"
                   >
                     Request access <ArrowRight className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
                     onClick={openLogin}
-                    className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white font-semibold text-sm hover:bg-white/10 transition-all cursor-pointer inline-flex items-center gap-2"
+                    className="sps-btn text-sm"
                   >
                     <Lock className="w-3.5 h-3.5" /> Login
                   </button>
                 </div>
-                <p className="text-[11px] text-cyan-300/80 font-mono tracking-wide">{slide.highlight}</p>
+                <p className="text-[11px] font-mono tracking-wide text-[var(--sps-gold)]">{slide.highlight}</p>
               </div>
             )}
 
             {slide.kind === 'content' && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <span className={`px-3 py-1 rounded-full border text-[10px] font-bold tracking-wider ${accent.badge}`}>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-gold)]`}>
                     {slide.badge}
                   </span>
-                  <span className="text-[11px] text-slate-500 font-mono">
+                  <span className="text-[11px] text-[var(--sps-muted)] font-mono">
                     {activeSlide + 1} / {DECK_SLIDES.length}
                   </span>
                 </div>
 
                 <div className="flex items-start gap-4">
-                  <div className={`hidden sm:flex p-3 rounded-2xl border shrink-0 shadow-lg ${accent.icon}`}>
+                  <div className={`hidden sm:flex p-3 rounded-2xl border shrink-0 ${accent.icon}`}>
                     <SlideIcon className="w-7 h-7" />
                   </div>
                   <div className="space-y-2 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight font-display">
+                    <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight font-display text-[var(--sps-text)]">
                       {slide.title}
                     </h2>
-                    <p className="text-sm sm:text-base text-slate-300 leading-relaxed">{slide.subtitle}</p>
+                    <p className="text-sm sm:text-base leading-relaxed text-[var(--sps-muted)]">{slide.subtitle}</p>
                   </div>
                 </div>
 
@@ -299,16 +475,15 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
                   {slide.points.map((point) => (
                     <div
                       key={point}
-                      className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-start gap-2.5 text-sm text-slate-200"
-                      style={{ boxShadow: `inset 0 0 0 1px ${accent.glow}` }}
+                      className="p-3.5 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-surface)] flex items-start gap-2.5 text-sm text-[var(--sps-text)]"
                     >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-4 h-4 text-[var(--sps-gold)] shrink-0 mt-0.5" />
                       <span className="leading-relaxed">{point}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="p-3.5 rounded-2xl border border-cyan-500/30 bg-cyan-950/40 text-center text-cyan-200 text-xs sm:text-sm font-semibold tracking-wide">
+                <div className="p-3.5 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-surface)] text-center text-[var(--sps-gold)] text-xs sm:text-sm font-semibold tracking-wide">
                   {slide.highlight}
                 </div>
               </div>
@@ -316,40 +491,34 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
 
             {slide.kind === 'cta' && (
               <div className="min-h-[min(48vh,380px)] flex flex-col items-center justify-center text-center gap-5 px-2">
-                <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-400/35 text-amber-200">
+                <div className="p-3 rounded-2xl border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-gold)]">
                   <Shield className="w-8 h-8" />
                 </div>
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-white font-display tracking-tight max-w-lg leading-tight">
+                <h2 className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight max-w-lg leading-tight text-[var(--sps-text)]">
                   {slide.title}
                 </h2>
-                <p className="text-sm sm:text-base text-slate-300 max-w-md leading-relaxed">{slide.subtitle}</p>
+                <p className="text-sm sm:text-base max-w-md leading-relaxed text-[var(--sps-muted)]">{slide.subtitle}</p>
 
                 <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-2.5 w-full max-w-lg">
                   <button
                     type="button"
                     onClick={requestAccess}
-                    className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-bold text-sm shadow-lg hover:brightness-110 transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                    className="sps-btn sps-btn-primary text-sm"
                   >
                     <Mail className="w-4 h-4" /> Request access
                   </button>
                   <button
                     type="button"
                     onClick={openLogin}
-                    className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-sky-500 text-slate-950 font-bold text-sm shadow-lg hover:brightness-110 transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                    className="sps-btn sps-btn-primary text-sm"
                   >
                     <Lock className="w-4 h-4" /> Login
                   </button>
-                  <a
-                    href={`mailto:${OWNER_EMAIL}`}
-                    className="px-5 py-3 rounded-xl bg-white/5 border border-white/15 text-white font-semibold text-sm hover:bg-white/10 transition-all inline-flex items-center justify-center gap-2"
-                  >
-                    Contact Owner
-                  </a>
                 </div>
 
-                <p className="text-[11px] text-amber-200/90 font-mono">{slide.highlight}</p>
-                <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-widest">
-                  <Zap className="w-3 h-3 text-cyan-400" />
+                <p className="text-[11px] font-mono text-[var(--sps-gold)]">{slide.highlight}</p>
+                <div className="flex items-center gap-2 text-[10px] text-[var(--sps-muted)] uppercase tracking-widest">
+                  <Zap className="w-3 h-3 text-[var(--sps-gold)]" />
                   Guest · Showcase only · Collaborators unlock the slate
                 </div>
               </div>
@@ -358,7 +527,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
         </div>
 
         {/* Footer nav */}
-        <div className="relative z-10 px-4 sm:px-6 py-3.5 bg-black/40 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="relative z-10 px-4 sm:px-6 py-2.5 bg-[var(--sps-bg-elevated)] border-t border-[var(--sps-border)] flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-1.5">
             {DECK_SLIDES.map((s, idx) => (
               <button
@@ -366,7 +535,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
                 type="button"
                 onClick={() => setActiveSlide(idx)}
                 className={`h-2 rounded-full transition-all cursor-pointer ${
-                  activeSlide === idx ? 'bg-cyan-400 w-7' : 'bg-slate-700 hover:bg-slate-500 w-2'
+                  activeSlide === idx ? 'bg-[var(--sps-gold)] w-7' : 'bg-[var(--sps-border-strong)] hover:bg-[var(--sps-muted)] w-2'
                 }`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
@@ -377,7 +546,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
             <button
               type="button"
               onClick={handlePrev}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all cursor-pointer"
+              className="sps-icon-btn"
               aria-label="Previous slide"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -385,7 +554,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
             <button
               type="button"
               onClick={handleNext}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all cursor-pointer"
+              className="sps-icon-btn"
               aria-label="Next slide"
             >
               <ChevronRight className="w-4 h-4" />
@@ -393,7 +562,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
             <button
               type="button"
               onClick={openLogin}
-              className="hidden sm:inline-flex px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-bold text-xs shadow hover:brightness-110 transition-all cursor-pointer items-center gap-1.5"
+              className="hidden sm:inline-flex sps-btn sps-btn-primary text-[10px]"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Director Login</span>
@@ -402,6 +571,7 @@ export default function InvestorDeckModal({ isOpen, onClose, onOpenLogin }) {
           </div>
         </div>
       </div>
+      <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
     </div>
   );
 }

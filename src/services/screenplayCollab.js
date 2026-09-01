@@ -2,11 +2,11 @@
  * Multi-writer screenplay collaboration — scene-locked co-write + presence.
  * Syncs via /api/sync?type=screenplay&roomId=… with localStorage + BroadcastChannel.
  */
-import { getNativeSyncUrl } from './cloudSync';
+import { getNativeSyncUrl, fetchSyncJson } from './cloudSync';
 import { extractSceneOutline } from '../utils/screenplayFormat';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
-const POLL_MS = 2200;
+const POLL_MS = 12000;
 const LOCK_TTL_MS = 5 * 60 * 1000;
 const PRESENCE_TTL_MS = 45 * 1000;
 const WRITER_COLORS = ['#22d3ee', '#a855f7', '#f59e0b', '#34d399', '#f43f5e', '#60a5fa', '#e879f9', '#fb923c'];
@@ -239,19 +239,10 @@ export function mergeScreenplayDocs(localDoc, remoteDoc, myEmail) {
 
 async function pullRemote(roomId, projectTitle) {
   const base = getNativeSyncUrl();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
-  try {
-    const res = await fetch(
-      `${base}?type=screenplay&roomId=${encodeURIComponent(roomId)}&project=${encodeURIComponent(projectTitle || '')}&t=${Date.now()}`,
-      { cache: 'no-store', signal: controller.signal }
-    );
-    if (!res.ok) throw new Error(`screenplay pull ${res.status}`);
-    const json = await res.json();
-    return json?.screenplay && typeof json.screenplay === 'object' ? json.screenplay : null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const json = await fetchSyncJson(
+    `${base}?type=screenplay&roomId=${encodeURIComponent(roomId)}&project=${encodeURIComponent(projectTitle || '')}`
+  );
+  return json?.screenplay && typeof json.screenplay === 'object' ? json.screenplay : null;
 }
 
 async function pushRemote(roomId, projectTitle, doc) {
@@ -448,7 +439,10 @@ export function subscribeToScreenplayCollab(roomId, projectTitle, callback) {
   };
 
   emit();
-  timer = setInterval(emit, POLL_MS);
+  timer = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    emit();
+  }, POLL_MS);
 
   let bc = null;
   if ('BroadcastChannel' in window) {

@@ -17,6 +17,8 @@ export default function DirectorCanvas({
   setAspectRatio,
   isFullscreen = false,
   onMinimizeHeader,
+  onUpdateShot,
+  autoSaveIntervalId: autoSaveIntervalIdProp,
 }) {
   const aspectNumeric = useMemo(() => parseAspectNumeric(aspectRatio), [aspectRatio]);
 
@@ -28,9 +30,9 @@ export default function DirectorCanvas({
       <div className="flex-1 relative overflow-hidden min-h-0 rounded-none">
         <Suspense
           fallback={
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-zinc-950 text-cyan-200">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0c0b0a] text-[var(--sps-gold)]">
               <Loader2 className="w-6 h-6 animate-spin" />
-              <span className="text-xs font-mono">Loading 3D Stage…</span>
+              <span className="text-xs tracking-wide uppercase">Opening stage</span>
             </div>
           }
         >
@@ -45,6 +47,8 @@ export default function DirectorCanvas({
             setAspectRatio={setAspectRatio}
             isFullscreen
             onMinimizeHeader={onMinimizeHeader}
+            onUpdateShot={onUpdateShot}
+            autoSaveIntervalId={autoSaveIntervalIdProp}
           />
         </Suspense>
       </div>

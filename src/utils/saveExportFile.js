@@ -4,6 +4,7 @@
  * Web: File System Access API when available, else browser Downloads.
  */
 import { parseSceneAndShotID } from './sceneShotUtils';
+import { assertExportAllowed, logExportSuccess, EXPORT_LIFECYCLE } from './exportGate';
 
 function sanitizeStem(s) {
   return String(s || 'export')
@@ -79,10 +80,34 @@ function downloadViaAnchor(blob, filename) {
  * @param {{ preferPicker?: boolean }} [opts]
  */
 export async function saveExportBlob(blob, filename, opts = {}) {
+  const label = opts.auditLabel || 'file_export';
+  const format = opts.auditFormat || (String(filename || '').split('.').pop() || '');
+  const requestedMode = opts.lifecycleMode || EXPORT_LIFECYCLE.NONE;
+  const gateMode = opts.skipLifecycleCheck ? EXPORT_LIFECYCLE.NONE : requestedMode;
+  const gate = assertExportAllowed({
+    projectTitle: opts.projectTitle,
+    label,
+    format,
+    showAlert: opts.showAlert !== false,
+    lifecycleMode: gateMode,
+    shots: opts.shots,
+    roomId: opts.roomId || ''
+  });
+  if (!gate.ok) {
+    return { success: false, blocked: true, error: gate.message };
+  }
+  const auditLifecycleMode = opts.skipLifecycleCheck
+    ? opts.advisoryAlready
+      ? `${requestedMode}+ok`
+      : requestedMode
+    : gate.advisory
+      ? `${requestedMode}+ok`
+      : requestedMode;
   const parts = String(filename || 'export.bin').split('.');
   const ext = parts.length > 1 ? parts.pop() : 'bin';
   const name = `${sanitizeStem(parts.join('.'))}.${ext}`;
   const preferPicker = opts.preferPicker !== false;
+  const auditNote = [opts.note, 'electron'].filter(Boolean).join(' · ');
 
   const api = typeof window !== 'undefined' ? window.electronAPI : null;
   if (api?.isElectron && typeof api.saveBinaryFile === 'function') {
@@ -94,6 +119,15 @@ export async function saveExportBlob(blob, filename, opts = {}) {
       if (result?.canceled) return { success: false, canceled: true };
       if (result?.success) {
         rememberExportDir(result.filePath);
+        logExportSuccess({
+          projectTitle: opts.projectTitle,
+          label,
+          format,
+          filename: name,
+          note: auditNote || 'electron',
+          roomId: opts.roomId || '',
+          lifecycleMode: auditLifecycleMode
+        });
         return { success: true, method: 'electron', filePath: result.filePath };
       }
     } catch (err) {
@@ -110,6 +144,15 @@ export async function saveExportBlob(blob, filename, opts = {}) {
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
+      logExportSuccess({
+        projectTitle: opts.projectTitle,
+        label,
+        format,
+        filename: handle.name || name,
+        note: [opts.note, 'fs-access'].filter(Boolean).join(' · ') || 'fs-access',
+        roomId: opts.roomId || '',
+        lifecycleMode: auditLifecycleMode
+      });
       return { success: true, method: 'fs-access', filePath: handle.name || name };
     } catch (err) {
       if (err?.name === 'AbortError') return { success: false, canceled: true };
@@ -117,5 +160,17 @@ export async function saveExportBlob(blob, filename, opts = {}) {
     }
   }
 
-  return downloadViaAnchor(blob, name);
+  const result = downloadViaAnchor(blob, name);
+  if (result.success) {
+    logExportSuccess({
+      projectTitle: opts.projectTitle,
+      label,
+      format,
+      filename: name,
+      note: [opts.note, 'download'].filter(Boolean).join(' · ') || 'download',
+      roomId: opts.roomId || '',
+      lifecycleMode: auditLifecycleMode
+    });
+  }
+  return result;
 }

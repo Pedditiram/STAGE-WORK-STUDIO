@@ -15,6 +15,8 @@
  * Without KV env vars the API safely falls back to JSONBlob (+ RESTFUL best-effort).
  */
 
+import crypto from 'crypto';
+
 let memoryRooms = {};
 let memoryProjects = [];
 let memoryCollaborators = [];
@@ -198,8 +200,42 @@ function mergeChatMessages(localList, remoteList) {
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag');
+  res.setHeader('Cache-Control', 'private, no-cache');
+}
+
+function etagOf(body) {
+  return `"${crypto.createHash('sha1').update(body).digest('hex').slice(0, 20)}"`;
+}
+
+function sendJson(req, res, obj) {
+  const body = JSON.stringify(obj);
+  const tag = etagOf(body);
+  res.setHeader('ETag', tag);
+  if (String(req.headers['if-none-match'] || '') === tag) {
+    res.status(304).end();
+    return;
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(200).send(body);
+}
+
+function compactRoomForGet(room) {
+  if (!room || typeof room !== 'object') return room;
+  const shots = Array.isArray(room.shots)
+    ? room.shots.map((s) => {
+        if (!s || typeof s !== 'object') return s;
+        const next = { ...s };
+        delete next.generatedImage;
+        delete next.generatedImages;
+        Object.keys(next).forEach((k) => {
+          if (typeof next[k] === 'string' && next[k].startsWith('data:image')) next[k] = '';
+        });
+        return next;
+      })
+    : room.shots;
+  return { ...room, shots, projectGeneratedImages: undefined };
 }
 
 function revisionOf(payload) {
@@ -698,7 +734,7 @@ async function saveProjectsStore(projects, deletedTitles = memoryDeletedTitles) 
     fetch(RESTFUL_PROJECTS_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Stage Production Studio Projects', data: body })
+      body: JSON.stringify({ name: 'Stage Work Studio Projects', data: body })
     }).catch(() => {});
     return ok;
   });
@@ -982,6 +1018,129 @@ async function hydrateCollaboratorsFromDurable({ force = false } = {}) {
   return { ok: result.ok, users: memoryCollaborators };
 }
 
+async function kvStorePopulated(kind) {
+  const data = await kvGet(kind);
+  if (!data) return false;
+  if (kind === 'projects') return Array.isArray(data.projects) && data.projects.length > 0;
+  if (kind === 'collaborators') return Array.isArray(data.users) && data.users.length > 0;
+  if (kind === 'rooms') return Boolean(data.rooms && Object.keys(data.rooms).length);
+  if (kind === 'presence') {
+    const slots = data.activeSlots || data.presence || data;
+    return Boolean(slots && typeof slots === 'object' && Object.keys(slots).length);
+  }
+  if (kind === 'chat') {
+    const chat = data.chat || data;
+    return Boolean(chat && typeof chat === 'object' && Object.keys(chat).length);
+  }
+  return false;
+}
+
+async function kvMigrationStatus() {
+  if (!kvConfigured()) {
+    return {
+      kvConfigured: false,
+      needsMigration: false,
+      ready: false,
+      message: 'Set SPS_KV_REST_URL + SPS_KV_REST_TOKEN on the server'
+    };
+  }
+  const kinds = ['projects', 'collaborators', 'rooms', 'presence', 'chat'];
+  const stores = {};
+  for (const kind of kinds) {
+    stores[kind] = { kvPopulated: await kvStorePopulated(kind) };
+  }
+  const needsMigration = kinds.some((k) => !stores[k].kvPopulated);
+  return {
+    kvConfigured: true,
+    stores,
+    needsMigration,
+    ready: !needsMigration,
+    checkedAt: new Date().toISOString()
+  };
+}
+
+async function migrateKvFromJsonBlob({ force = false } = {}) {
+  if (!kvConfigured()) {
+    return { ok: false, error: 'KV not configured' };
+  }
+  const results = [];
+
+  async function migrateOne(kind, buildPayload) {
+    if (!force && (await kvStorePopulated(kind))) {
+      results.push({ kind, skipped: true, reason: 'kv_has_data' });
+      return;
+    }
+    try {
+      const payload = await buildPayload();
+      if (!payload) {
+        results.push({ kind, ok: false, error: 'source_empty' });
+        return;
+      }
+      const ok = await kvSet(kind, payload);
+      results.push({ kind, ok, migrated: ok });
+    } catch (e) {
+      results.push({ kind, ok: false, error: e?.message || 'migrate_failed' });
+    }
+  }
+
+  await migrateOne('projects', async () => {
+    const data = await fetchJsonBlob(JSONBLOB_PROJECTS_URL);
+    if (!Array.isArray(data?.projects) || !data.projects.length) return null;
+    return {
+      projects: data.projects,
+      deletedTitles: normalizeDeletedTitles(data.deletedTitles),
+      updatedAt: new Date().toISOString(),
+      app: 'stage-production-studio'
+    };
+  });
+
+  await migrateOne('collaborators', async () => {
+    const data = await fetchJsonBlob(JSONBLOB_COLLABORATORS_URL);
+    const users = data?.users || data?.data?.users;
+    if (!Array.isArray(users) || !users.length) return null;
+    const secured = ensurePrimaryAdmin(users);
+    return {
+      users: secured,
+      lastSynced: new Date().toISOString(),
+      totalCollaborators: secured.length,
+      app: 'stage-production-studio'
+    };
+  });
+
+  await migrateOne('rooms', async () => {
+    const hub = await fetchJsonBlob(JSONBLOB_HUB_URL);
+    const data = hub?.data || hub;
+    const rooms = data?.rooms || hub?.rooms;
+    if (!rooms || !Object.keys(rooms).length) return null;
+    return {
+      rooms,
+      updatedAt: new Date().toISOString(),
+      app: 'stage-production-studio'
+    };
+  });
+
+  await migrateOne('presence', async () => {
+    const data = await fetchJsonBlob(JSONBLOB_PRESENCE_URL);
+    const slots = data?.activeSlots || data?.presence;
+    if (!slots || typeof slots !== 'object') return null;
+    return {
+      activeSlots: slots,
+      updatedAt: new Date().toISOString(),
+      app: 'sps-presence'
+    };
+  });
+
+  await migrateOne('chat', async () => {
+    const data = await fetchJsonBlob(JSONBLOB_CHAT_URL);
+    const chat = data?.chat || data?.data?.chat;
+    if (!chat || typeof chat !== 'object' || !Object.keys(chat).length) return null;
+    return { chat, updatedAt: new Date().toISOString(), app: 'sps-chat' };
+  });
+
+  const ok = results.every((r) => r.ok || r.skipped);
+  return { ok, results, status: await kvMigrationStatus() };
+}
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -990,8 +1149,12 @@ export default async function handler(req, res) {
   const safeRoomId = String(roomId || 'SPS-CLOUD-8821');
 
   if (req.method === 'GET') {
+    if (type === 'kv_migration') {
+      return sendJson(req, res, { success: true, ...(await kvMigrationStatus()) });
+    }
+
     if (type === 'projects') {
-      const { ok } = await hydrateProjectsFromDurable({ force: true });
+      const { ok } = await hydrateProjectsFromDurable({ force: memoryProjects.length === 0 });
       if (!ok && memoryProjects.length === 0) {
         return res.status(503).json({
           success: false,
@@ -1001,7 +1164,7 @@ export default async function handler(req, res) {
         });
       }
       const cleanProjs = filterDeletedProjects(memoryProjects, memoryDeletedTitles);
-      return res.status(200).json({
+      return sendJson(req, res, {
         success: true,
         projects: cleanProjs,
         deletedTitles: memoryDeletedTitles,
@@ -1011,7 +1174,7 @@ export default async function handler(req, res) {
     }
 
     if (type === 'collaborators') {
-      const { ok } = await hydrateCollaboratorsFromDurable({ force: true });
+      const { ok } = await hydrateCollaboratorsFromDurable({ force: memoryCollaborators.length === 0 });
       if (!ok && memoryCollaborators.length === 0) {
         return res.status(503).json({
           success: false,
@@ -1022,7 +1185,7 @@ export default async function handler(req, res) {
       }
       const users = ensurePrimaryAdmin(memoryCollaborators);
       memoryCollaborators = users;
-      return res.status(200).json({ success: true, users, durableOk: ok });
+      return sendJson(req, res, { success: true, users, durableOk: ok });
     }
 
     if (type === 'presence') {
@@ -1030,7 +1193,7 @@ export default async function handler(req, res) {
       await hydratePresenceFromDurable();
       const activeSlots = prunePresence(memoryPresence, now);
       memoryPresence = activeSlots;
-      return res.status(200).json({ success: true, activeSlots });
+      return sendJson(req, res, { success: true, activeSlots });
     }
 
     if (type === 'chat') {
@@ -1040,8 +1203,8 @@ export default async function handler(req, res) {
         chatHydrated = true;
         lastChatDurableOk = true;
       }
-      const messages = memoryChat[safeRoomId] || [];
-      return res.status(200).json({
+      const messages = (memoryChat[safeRoomId] || []).slice(-80);
+      return sendJson(req, res, {
         success: true,
         messages,
         roomId: safeRoomId,
@@ -1058,13 +1221,12 @@ export default async function handler(req, res) {
       }
       const docKey = screenplayDocKey(safeRoomId, projectTitle);
       let doc = memoryScreenplay[docKey] || null;
-      // Also accept room-embedded collab if memory miss
       if (!doc) {
         await hydrateRoomsFromDurable();
         const room = memoryRooms[safeRoomId];
         if (room?.screenplayCollab) doc = room.screenplayCollab;
       }
-      return res.status(200).json({
+      return sendJson(req, res, {
         success: true,
         screenplay: doc,
         roomId: safeRoomId,
@@ -1072,14 +1234,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // Room GET — always merge durable hub so other Vercel instances see latest writes
     await hydrateRoomsFromDurable();
-    const room = memoryRooms[safeRoomId] || null;
-    return res.status(200).json({ success: true, data: room, durableOk: lastRoomsDurableOk });
+    const room = compactRoomForGet(memoryRooms[safeRoomId] || null);
+    return sendJson(req, res, { success: true, data: room, durableOk: lastRoomsDurableOk });
   }
 
   if (req.method === 'POST' || req.method === 'PUT') {
     const body = req.body || {};
+
+    if (type === 'kv_migration') {
+      const result = await migrateKvFromJsonBlob({ force: Boolean(body.force) });
+      return sendJson(req, res, { success: result.ok, ...result });
+    }
 
     if (type === 'projects') {
       const incomingProjs = body.projects || body;

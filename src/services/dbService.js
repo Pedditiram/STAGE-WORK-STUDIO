@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary } from '../utils/projectPermissions';
 import { getNativeSyncUrl } from './cloudSync';
+import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -95,10 +96,10 @@ const SPS_COLLABORATORS_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019ff13d-7
 // Dedicated presence blob (must NOT share the rooms hub URL or presence wipes collab rooms)
 const SPS_PRESENCE_BLOB_URL = "https://jsonblob.com/api/jsonBlob/019ff13d-7ff2-7974-93c5-6c3abaa2cf10";
 
-const LIBRARY_POLL_MS_ACTIVE = 3000;
-const LIBRARY_POLL_MS_HIDDEN = 20000;
-const COLLAB_POLL_MS_ACTIVE = 5000;
-const COLLAB_POLL_MS_HIDDEN = 30000;
+const LIBRARY_POLL_MS_ACTIVE = 20000;
+const LIBRARY_POLL_MS_HIDDEN = 90000;
+const COLLAB_POLL_MS_ACTIVE = 30000;
+const COLLAB_POLL_MS_HIDDEN = 90000;
 const FETCH_TIMEOUT_MS = 12000;
 
 async function fetchJsonTimed(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
@@ -204,7 +205,7 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
 export async function fetchCollaboratorsFromCloud() {
   const base = syncApiUrl();
   try {
-    const res = await fetchJsonTimed(`${base}?type=collaborators&t=${Date.now()}`);
+    const res = await fetchJsonTimed(`${base}?type=collaborators`);
     if (res.status === 503) {
       // Durable unreachable — keep local, do not wipe
       const saved = localStorage.getItem('sps_authorized_phone_users');
@@ -354,7 +355,7 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   const newStr = JSON.stringify(list);
   const oldStr = localStorage.getItem('sps_project_library');
   if (newStr !== oldStr) {
-    localStorage.setItem('sps_project_library', newStr);
+    safeLocalStorageSetItem('sps_project_library', newStr);
     window.dispatchEvent(new Event('sps_projects_updated'));
   }
 
@@ -374,7 +375,7 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
     await fetchJsonTimed(SPS_PROJECTS_BLOB_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Stage Production Studio Projects', data: payload })
+      body: JSON.stringify({ name: 'Stage Work Studio Projects', data: payload })
     });
   } catch (e) {}
 
@@ -448,8 +449,9 @@ export function subscribeToProjectLibraryUpdates(callback) {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data && Array.isArray(data.projects)) {
-            const applied = processAndStoreProjects(data.projects);
-            if (typeof callback === 'function') callback(applied);
+            processAndStoreProjects(data.projects).then((applied) => {
+              if (typeof callback === 'function') callback(applied);
+            }).catch(() => {});
           }
         }
       }, (err) => {});
@@ -577,7 +579,7 @@ export function restoreProjectFromArchive(archiveId) {
   if (existingIdx >= 0) library[existingIdx] = { ...library[existingIdx], ...restored };
   else library.unshift(restored);
 
-  localStorage.setItem('sps_project_library', JSON.stringify(library));
+  safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
   writeProjectArchive(archive.filter((_, i) => i !== idx));
   window.dispatchEvent(new Event('sps_projects_updated'));
   return restored;
@@ -660,7 +662,7 @@ export function healActiveProjectFromArchive() {
   const inLibrary = library.some((p) => String(p?.title || '').trim().toUpperCase() === key);
   if (inLibrary) {
     // Ensure library write reflects cleared tombstone
-    localStorage.setItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(library)));
+    safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(library)));
     return library.find((p) => String(p?.title || '').trim().toUpperCase() === key) || null;
   }
 
@@ -755,7 +757,7 @@ function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true 
 
 let healCloudLibraryTimer = null;
 
-function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true } = {}) {
+async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true } = {}) {
   const localStr = localStorage.getItem('sps_project_library');
   let localProjs = [];
   if (localStr) {
@@ -763,12 +765,20 @@ function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true }
   }
   if (!Array.isArray(localProjs)) localProjs = [];
 
-  // Durable failed with no usable list — keep local intact
+  // Durable failed with no usable list — keep local intact (+ disk vault)
   if (!cloudAuthoritative && (!Array.isArray(rawCloudProjects) || rawCloudProjects.length === 0)) {
-    return filterOutDeletedProjects(localProjs);
+    const { enrichLibraryWithDiskVault, writeLocalProjectLibrary } = await import('../utils/projectWorkspace');
+    const kept = filterOutDeletedProjects(await enrichLibraryWithDiskVault(localProjs));
+    writeLocalProjectLibrary(kept);
+    return kept;
   }
 
-  if (!Array.isArray(rawCloudProjects)) return filterOutDeletedProjects(localProjs);
+  if (!Array.isArray(rawCloudProjects)) {
+    const { enrichLibraryWithDiskVault, writeLocalProjectLibrary } = await import('../utils/projectWorkspace');
+    const kept = filterOutDeletedProjects(await enrichLibraryWithDiskVault(localProjs));
+    writeLocalProjectLibrary(kept);
+    return kept;
+  }
 
   const deletedKeys = readDeletedTitleKeys();
   const cloudHadGhosts = (rawCloudProjects || []).some((p) => deletedKeys.has(projectKey(p)));
@@ -776,11 +786,14 @@ function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true }
   const merged = mergeProjectArrays(rawCloudProjects, localProjs, {
     cloudAuthoritative: Boolean(cloudAuthoritative)
   });
-  const finalList = filterOutDeletedProjects(merged);
+  const { enrichLibraryWithDiskVault, writeLocalProjectLibrary } = await import('../utils/projectWorkspace');
+  let finalList = filterOutDeletedProjects(
+    await enrichLibraryWithDiskVault(filterOutDeletedProjects(merged))
+  );
 
   const newStr = JSON.stringify(finalList);
-  if (newStr !== localStr) {
-    localStorage.setItem('sps_project_library', newStr);
+  const wrote = writeLocalProjectLibrary(finalList);
+  if (wrote || newStr !== localStr) {
     try {
       localStorage.setItem('sps_projects_cloud_synced_at', new Date().toISOString());
     } catch (e) {}
@@ -803,7 +816,7 @@ function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true }
 export async function fetchProjectLibraryFromCloud() {
   // 1. Try Native Vercel Serverless Sync Engine (authoritative when reachable)
   try {
-    const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects&t=${Date.now()}`);
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects`);
     if (res.status === 503) {
       // Durable hydrate failed — do NOT clear local library
       return processAndStoreProjects([], { cloudAuthoritative: false });
@@ -927,10 +940,12 @@ export async function broadcastActiveSlotEditing(userEmail, userName, projectTit
   }
 }
 
+const PRESENCE_TTL_MS = 120000;
+
 function collectActiveUsers(activeSlots, currentEmail, now = Date.now()) {
   const activeUsersMap = [];
   Object.values(activeSlots || {}).forEach((item) => {
-    if (item && (now - (item.timestamp || 0)) < 120000) {
+    if (item && (now - (item.timestamp || 0)) < PRESENCE_TTL_MS) {
       if (item.userEmail !== (currentEmail || '').trim().toLowerCase()) {
         activeUsersMap.push(item);
       }
@@ -939,58 +954,80 @@ function collectActiveUsers(activeSlots, currentEmail, now = Date.now()) {
   return activeUsersMap;
 }
 
-// 8. Subscribe to Active Editing Slots — always on when called (Local badge must not hide peers)
-export function subscribeToActiveEditingSlots(currentEmail, callback) {
-  if (typeof window === 'undefined') return () => {};
+function collectOnlineEmails(activeSlots, now = Date.now()) {
+  const emails = new Set();
+  Object.values(activeSlots || {}).forEach((item) => {
+    if (!item || (now - (item.timestamp || 0)) >= PRESENCE_TTL_MS) return;
+    const email = String(item.userEmail || '').trim().toLowerCase();
+    if (email) emails.add(email);
+  });
+  return emails;
+}
 
-  const checkPresence = async () => {
+async function fetchMergedPresenceSlots() {
+  const merged = {};
+  try {
+    const res = await fetch(`${syncApiUrl()}?type=presence`, { cache: 'no-store' });
+    if (res.ok) {
+      const resData = await res.json();
+      Object.assign(merged, resData?.activeSlots || {});
+      if (Object.keys(merged).length > 0) return merged;
+    }
+  } catch (e) {}
+  try {
+    const resBlob = await fetch(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (resBlob.ok) {
+      const data = await resBlob.json();
+      const slots = data?.activeSlots || (data && typeof data === 'object' ? data : {});
+      Object.entries(slots).forEach(([key, val]) => {
+        if (!val || typeof val !== 'object') return;
+        const existing = merged[key];
+        if (!existing || (val.timestamp || 0) >= (existing.timestamp || 0)) {
+          merged[key] = val;
+        }
+      });
+    }
+  } catch (e) {}
+  return merged;
+}
+
+function pollPresence(onTick) {
+  if (typeof window === 'undefined') return () => {};
+  const tick = async () => {
     if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      const merged = {};
-      const now = Date.now();
-
-      // 1. Native sync engine (Vercel /api/sync — durable presence store)
-      try {
-        const res = await fetch(`${syncApiUrl()}?type=presence&t=${Date.now()}`, { cache: 'no-store' });
-        if (res.ok) {
-          const resData = await res.json();
-          Object.assign(merged, resData?.activeSlots || {});
-        }
-      } catch (e) {}
-
-      // 2. Always merge dedicated presence blob (multi-instance + offline fallback)
-      try {
-        const resBlob = await fetch(`${SPS_PRESENCE_BLOB_URL}?t=${Date.now()}`, { cache: 'no-store' });
-        if (resBlob.ok) {
-          const data = await resBlob.json();
-          const slots = data?.activeSlots || (data && typeof data === 'object' ? data : {});
-          Object.entries(slots).forEach(([key, val]) => {
-            if (!val || typeof val !== 'object') return;
-            const existing = merged[key];
-            if (!existing || (val.timestamp || 0) >= (existing.timestamp || 0)) {
-              merged[key] = val;
-            }
-          });
-        }
-      } catch (e) {}
-
-      if (typeof callback === 'function') {
-        callback(collectActiveUsers(merged, currentEmail, now));
-      }
+      const merged = await fetchMergedPresenceSlots();
+      onTick(merged, Date.now());
     } catch (e) {}
   };
-
-  checkPresence();
-  const interval = setInterval(checkPresence, 3000);
-
+  tick();
+  const interval = setInterval(tick, 15000);
   return () => clearInterval(interval);
+}
+
+// 8. Subscribe to Active Editing Slots — always on when called (Local badge must not hide peers)
+export function subscribeToActiveEditingSlots(currentEmail, callback) {
+  return pollPresence((merged, now) => {
+    if (typeof callback === 'function') {
+      callback(collectActiveUsers(merged, currentEmail, now));
+    }
+  });
+}
+
+/** Live emails with a heartbeat in the last 2 minutes (includes current user). */
+export function subscribeToPresenceEmails(callback) {
+  return pollPresence((merged, now) => {
+    if (typeof callback === 'function') {
+      callback(collectOnlineEmails(merged, now));
+    }
+  });
 }
 
 // 9. Test Live Cloud Database Connection
 export async function testDatabaseConnection() {
   const startTime = Date.now();
   try {
-    const res = await fetchJsonTimed(`${syncApiUrl()}?type=presence&t=${Date.now()}`);
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=presence`);
     const latency = Date.now() - startTime;
     if (res.ok) {
       return {
@@ -1008,6 +1045,15 @@ export async function testDatabaseConnection() {
       message: `🔴 Sync unreachable: ${err?.message || 'network error'}`
     };
   }
+}
+
+/** Phone alerts (SMS / WhatsApp) — held. No network call until re-enabled. */
+export async function notifyStudioWhatsApp() {
+  return;
+}
+
+export async function notifyStudioOnlineWhatsApp() {
+  return;
 }
 
 // Auto Initialize Database on import

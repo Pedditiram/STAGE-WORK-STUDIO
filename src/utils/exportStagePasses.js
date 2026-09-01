@@ -155,7 +155,47 @@ export function renderOpenPoseOverlay(renderer, scene, camera, humans) {
   return new Promise((resolve) => c.toBlob((b) => resolve(b), 'image/png'));
 }
 
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('dataUrl failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function renderPassBlob(renderer, scene, camera, humans, mode) {
+  if (mode === 'openpose') {
+    return renderOpenPoseOverlay(renderer, scene, camera, humans);
+  }
+  if (mode === 'color') {
+    return renderPassToBlob(renderer, scene, camera, 'color');
+  }
+  return renderPassToBlob(renderer, scene, camera, mode);
+}
+
 export async function exportPassBundle({
+  renderer,
+  scene,
+  camera,
+  humans = [],
+  fileStem,
+  modes = ['color', 'depth', 'normals', 'canny', 'openpose'],
+  saveOpts = {}
+}) {
+  const results = [];
+  for (const mode of modes) {
+    const blob = await renderPassBlob(renderer, scene, camera, humans, mode);
+    if (!blob) continue;
+    const name = `${fileStem}_${mode}.png`;
+    const saved = await saveExportBlob(blob, name, { preferPicker: modes.length === 1, ...saveOpts });
+    results.push({ mode, saved, name });
+  }
+  return results;
+}
+
+/** Render AI passes to data URLs for a print/PDF pack (no disk save). */
+export async function renderPassPackForPrint({
   renderer,
   scene,
   camera,
@@ -163,29 +203,77 @@ export async function exportPassBundle({
   fileStem,
   modes = ['color', 'depth', 'normals', 'canny', 'openpose']
 }) {
-  const results = [];
+  const passes = [];
   for (const mode of modes) {
-    let blob;
-    if (mode === 'openpose') {
-      // still render color underlay hidden — stick only
-      blob = await renderOpenPoseOverlay(renderer, scene, camera, humans);
-    } else if (mode === 'color') {
-      blob = await renderPassToBlob(renderer, scene, camera, 'color');
-    } else {
-      blob = await renderPassToBlob(renderer, scene, camera, mode);
-    }
+    const blob = await renderPassBlob(renderer, scene, camera, humans, mode);
     if (!blob) continue;
-    const name = `${fileStem}_${mode}.png`;
-    const saved = await saveExportBlob(blob, name, { preferPicker: modes.length === 1 });
-    results.push({ mode, saved, name });
+    const dataUrl = await blobToDataUrl(blob);
+    passes.push({ mode, name: `${fileStem}_${mode}.png`, dataUrl });
   }
-  return results;
+  return passes;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Print-ready HTML for Stage AI pass pack (embedded PNGs). */
+export function stagePassesToPrintHtml({
+  projectTitle = 'Project',
+  shotId = '',
+  fileStem = '',
+  passes = []
+} = {}) {
+  const title = escapeHtml(projectTitle || 'Project');
+  const id = escapeHtml(shotId || 'Shot');
+  const stem = escapeHtml(fileStem || '');
+  const list = Array.isArray(passes) ? passes.filter((p) => p?.dataUrl) : [];
+  const sections = list
+    .map((p) => {
+      const mode = escapeHtml(p.mode || 'pass');
+      const name = escapeHtml(p.name || `${p.mode}.png`);
+      return `<section class="pass">
+        <h2>${mode} <span class="file">${name}</span></h2>
+        <img src="${p.dataUrl}" alt="${mode}" />
+      </section>`;
+    })
+    .join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${title} — Stage passes · ${id}</title>
+  <style>
+    @page { size: letter landscape; margin: 0.4in; }
+    body { font-family: system-ui, sans-serif; font-size: 9pt; color: #111; margin: 0; padding: 12px; }
+    h1 { font-size: 12pt; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .meta { color: #555; margin-bottom: 10px; font-size: 8pt; }
+    .pass { page-break-inside: avoid; margin-bottom: 12px; border-top: 1px solid #ddd; padding-top: 8px; }
+    .pass:first-of-type { border-top: none; padding-top: 0; }
+    h2 { font-size: 10pt; margin: 0 0 6px; text-transform: uppercase; }
+    .file { font-weight: normal; color: #666; font-size: 8pt; font-family: ui-monospace, monospace; text-transform: none; }
+    img { max-width: 100%; max-height: 5.8in; display: block; background: #111; border: 1px solid #ccc; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <h1>${title} — Stage pass pack</h1>
+  <p class="meta">${id}${stem ? ` · ${stem}` : ''} · ${list.length} passes · ${escapeHtml(new Date().toISOString())}</p>
+  ${sections || '<p>No passes rendered.</p>'}
+  <script>window.onload = () => { window.print(); };</script>
+</body>
+</html>`;
 }
 
 /** Minimal OBJ of mannequin capsules / joints for sculpt base. */
 export function exportMannequinsObj(humans = []) {
   let vCount = 0;
-  const lines = ['# Stage Production Studio mannequin export', 'o SPS_Mannequins'];
+  const lines = ['# Stage Work Studio mannequin export', 'o SPS_Mannequins'];
   const pushBox = (cx, cy, cz, sx, sy, sz) => {
     const hx = sx / 2;
     const hy = sy / 2;

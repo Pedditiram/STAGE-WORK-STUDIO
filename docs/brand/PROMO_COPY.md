@@ -6,7 +6,7 @@ Aligned with [BRAND_BOOK.md](./BRAND_BOOK.md). Owner: pedditiram@gmail.com
 
 ## Investor one-pager outline
 
-1. **Hero** — Stage Production Studio · Pedditi Labs  
+1. **Hero** — StageWorks  
 2. **Problem** — Pre-viz is slow, expensive, and fragmented across tools  
 3. **Solution** — Script → 24-craft matrix + cloud co-authoring + AI keyframe compile  
 4. **Proof points** — 10× turnaround path · 80%+ pre-viz cost cut · shot-level merge  
@@ -24,10 +24,10 @@ HTML sheet: [promo/investor-onepager.html](./promo/investor-onepager.html)
 **Stage Production Studio** — cinema craft intelligence for directors who refuse to compromise the frame. Script to 24-craft matrix. Cloud rooms. Prompt-ready keyframes.
 
 ### Medium
-Pedditi Labs presents **Stage Production Studio**: reinvent film pre-visualization with autonomous craft control and real-time collaboration. Directors, DPs, and Editors share one slate — allotments, slot lock, versioned sync. Cut traditional pre-viz overhead. Ship faster into AI video pipelines.
+**StageWorks**: reinvent film pre-visualization with autonomous craft control and real-time collaboration. Directors, DPs, and Editors share one slate — allotments, slot lock, versioned sync. Cut traditional pre-viz overhead. Ship faster into AI video pipelines.
 
 ### Hashtag set (sparingly)
-`#StageProductionStudio` `#PedditiLabs` `#CinemaCraft` `#PreViz` `#FilmTech`
+`#StageWorks` `#CinemaCraft` `#PreViz` `#FilmTech`
 
 Social HTML pattern: [promo/social-og-sheet.html](./promo/social-og-sheet.html)
 
@@ -35,11 +35,11 @@ Social HTML pattern: [promo/social-og-sheet.html](./promo/social-og-sheet.html)
 
 ## Email invite blurb
 
-**Subject:** You’re invited — Stage Production Studio (Pedditi Labs)
+**Subject:** You’re invited — StageWorks
 
 Hi {Name},
 
-You’ve been invited to collaborate on **Stage Production Studio** — Pedditi Labs’ cinema craft workspace for script breakdown, 24-craft shot matrices, and cloud co-authoring.
+You’ve been invited to collaborate on **StageWorks** — cinema craft workspace for script breakdown, 24-craft shot matrices, and cloud co-authoring.
 
 1. Open the studio link  
 2. Sign in with your authorized Gmail  
@@ -49,13 +49,13 @@ Guests without login can browse the **Investor Deck & Studio Showcase** only.
 
 Questions or access requests: pedditiram@gmail.com  
 
-— Pedditi Ram · Pedditi Labs
+— Pedditi Ram
 
 ---
 
 ## WhatsApp share blurb
 
-*Stage Production Studio (Pedditi Labs)* — cinema craft intelligence: script → 24-craft matrix, real-time cloud rooms, prompt-ready keyframes.  
+*StageWorks* — cinema craft intelligence: script → 24-craft matrix, real-time cloud rooms, prompt-ready keyframes.  
 
 Guests: Investor Deck only. Collaborators: allotted projects after login.  
 

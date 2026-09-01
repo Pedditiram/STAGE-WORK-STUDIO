@@ -11,16 +11,18 @@ const PURPLE = '#9b4dc8';
 function shellMat(hex = YELLOW) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(hex),
-    roughness: 0.62,
-    metalness: 0.04
+    roughness: 0.46,
+    metalness: 0.06,
+    envMapIntensity: 0.4
   });
 }
 
 function jointMat(hex = PURPLE) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(hex),
-    roughness: 0.48,
-    metalness: 0.12
+    roughness: 0.38,
+    metalness: 0.14,
+    envMapIntensity: 0.25
   });
 }
 
@@ -28,35 +30,48 @@ function mesh(geo, mat) {
   const m = new THREE.Mesh(geo, mat);
   m.castShadow = true;
   m.receiveShadow = true;
+  m.userData.mannequinPart = true;
   return m;
 }
 
 /** Rounded limb segment (capsule along +Y from origin). */
-function limbSeg(mat, radius, len, segs = 12) {
+function limbSeg(mat, radius, len, segs = 16) {
   const m = mesh(
-    new THREE.CapsuleGeometry(radius, Math.max(0.01, len - radius * 2), 6, segs),
+    new THREE.CapsuleGeometry(radius, Math.max(0.01, len - radius * 2), 8, segs),
     mat
   );
   m.position.y = len / 2;
   return m;
 }
 
-function fist(shell, side = 'R') {
+function cinematicHand(shell, side = 'R') {
   const sign = side === 'L' ? -1 : 1;
   const g = new THREE.Group();
   g.name = `hand${side}`;
-  const palm = mesh(new THREE.BoxGeometry(0.075, 0.055, 0.09), shell);
-  palm.position.set(0, 0.02, 0.02);
+  const palm = mesh(new THREE.BoxGeometry(0.068, 0.02, 0.088), shell);
+  palm.position.set(0, 0.012, 0.018);
   g.add(palm);
-  // knuckle row
+  const lengths = [0.048, 0.058, 0.054, 0.042];
   for (let i = 0; i < 4; i++) {
-    const k = mesh(new THREE.SphereGeometry(0.014, 10, 8), shell);
-    k.position.set(sign * (-0.024 + i * 0.016), 0.035, 0.055);
-    g.add(k);
+    const finger = new THREE.Group();
+    finger.name = `finger${side}${i}`;
+    const x = sign * (-0.024 + i * 0.016);
+    finger.position.set(x, 0.02, 0.055);
+    finger.rotation.x = 0.35;
+    const len = lengths[i];
+    const cap = mesh(new THREE.CapsuleGeometry(0.0075, Math.max(0.012, len - 0.015), 4, 8), shell);
+    cap.position.y = len / 2;
+    finger.add(cap);
+    g.add(finger);
   }
-  const thumb = mesh(new THREE.CapsuleGeometry(0.012, 0.03, 4, 8), shell);
-  thumb.position.set(sign * 0.04, 0.015, 0.01);
-  thumb.rotation.z = sign * 0.9;
+  const thumb = new THREE.Group();
+  thumb.name = `thumb${side}`;
+  thumb.position.set(sign * 0.038, 0.008, 0.012);
+  thumb.rotation.z = sign * 0.85;
+  thumb.rotation.x = 0.25;
+  const thumbCap = mesh(new THREE.CapsuleGeometry(0.009, 0.028, 4, 8), shell);
+  thumbCap.position.y = 0.02;
+  thumb.add(thumbCap);
   g.add(thumb);
   return g;
 }
@@ -72,22 +87,50 @@ function shoe(shell) {
   return g;
 }
 
+function makeNameplate(text) {
+  const label = String(text || '').trim().slice(0, 28);
+  if (!label) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 256, 64);
+  ctx.fillStyle = 'rgba(12,11,10,0.72)';
+  ctx.fillRect(8, 12, 240, 40);
+  ctx.font = '600 22px Figtree, system-ui, sans-serif';
+  ctx.fillStyle = '#f4ecde';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
+  );
+  sprite.name = 'nameplate';
+  sprite.scale.set(0.72, 0.18, 1);
+  sprite.position.set(0, 1.92, 0);
+  sprite.userData.skipPick = true;
+  return sprite;
+}
+
 /**
- * @param {string} [colorHex] optional shell override (ignored if purple-looking)
+ * @param {string} [colorHex]
  * @param {object} [poseIn]
+ * @param {{ name?: string, charAssetId?: string, figureSource?: string }} [opts]
  */
-export function makeStudioMannequin(colorHex, poseIn) {
+export function makeStudioMannequin(colorHex, poseIn, opts = {}) {
   const group = new THREE.Group();
   group.userData.kind = 'human';
-  group.userData.mannequinStyle = 'flick-segmented';
+  group.userData.mannequinStyle = 'cinematic-segmented';
+  group.userData.figureSource = opts.figureSource || 'mannequin';
+  group.userData.charAssetId = opts.charAssetId || '';
+  group.userData.glbUrl = opts.glbUrl || '';
 
-  const shellHex = colorHex && !/#9b|#a855|#c026|purple/i.test(String(colorHex))
+  const shellHex = /^#[0-9a-fA-F]{6}$/.test(String(colorHex || '')) && !/#9b|#a855|#c026/i.test(String(colorHex))
     ? colorHex
     : YELLOW;
-  // Always use mustard for classic look unless a custom yellow/wood passed
-  const shell = shellMat(
-    /#e8|#f5|#facc|#d4a|#c8c8/i.test(String(shellHex)) || !colorHex ? YELLOW : shellHex
-  );
+  const shell = shellMat(shellHex);
   const joint = jointMat(PURPLE);
 
   // ——— Hips / pelvis (V-shaped block) ———
@@ -140,9 +183,42 @@ export function makeStudioMannequin(colorHex, poseIn) {
   const head = new THREE.Group();
   head.name = 'head';
   head.position.y = 0.16;
-  const skull = mesh(new THREE.SphereGeometry(0.125, 22, 18), shell);
+  const skull = mesh(new THREE.SphereGeometry(0.125, 28, 22), shell);
   skull.scale.set(0.95, 1.12, 0.95);
   head.add(skull);
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#1c1410'),
+    roughness: 0.28,
+    metalness: 0.08
+  });
+  const makeEye = (side) => {
+    const g = new THREE.Group();
+    g.name = side === 'L' ? 'eyeL' : 'eyeR';
+    g.position.set(side === 'L' ? -0.038 : 0.038, 0.018, 0.1);
+    g.add(mesh(new THREE.SphereGeometry(0.015, 10, 8), eyeMat));
+    return g;
+  };
+  const eyeL = makeEye('L');
+  const eyeR = makeEye('R');
+  const browMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#3a2418'),
+    roughness: 0.5,
+    metalness: 0.04
+  });
+  const makeBrow = (side) => {
+    const g = new THREE.Group();
+    g.name = side === 'L' ? 'browL' : 'browR';
+    g.position.set(side === 'L' ? -0.038 : 0.038, 0.052, 0.108);
+    g.add(mesh(new THREE.BoxGeometry(0.038, 0.008, 0.01), browMat));
+    return g;
+  };
+  const browL = makeBrow('L');
+  const browR = makeBrow('R');
+  const mouth = new THREE.Group();
+  mouth.name = 'mouth';
+  mouth.position.set(0, -0.042, 0.112);
+  mouth.add(mesh(new THREE.BoxGeometry(0.042, 0.012, 0.012), browMat));
+  head.add(eyeL, eyeR, browL, browR, mouth);
   neck.add(head);
   chest.add(neck);
 
@@ -171,7 +247,7 @@ export function makeStudioMannequin(colorHex, poseIn) {
     const wrist = mesh(new THREE.SphereGeometry(0.032, 10, 8), joint);
     wrist.position.y = 0.26;
     lower.add(wrist);
-    const hand = fist(shell, side);
+    const hand = cinematicHand(shell, side);
     hand.position.y = 0.28;
     lower.add(hand);
 
@@ -229,11 +305,20 @@ export function makeStudioMannequin(colorHex, poseIn) {
   hips.add(makeLeg('L'), makeLeg('R'));
   group.add(hips);
 
+  const plate = typeof document !== 'undefined' ? makeNameplate(opts.name || opts.charAssetId) : null;
+  if (plate) group.add(plate);
+
   group.userData.joints = {
     hips,
     spine,
     chest,
+    neck,
     head,
+    eyeL,
+    eyeR,
+    browL,
+    browR,
+    mouth,
     upperArmL: group.getObjectByName('upperArmL'),
     lowerArmL: group.getObjectByName('lowerArmL'),
     upperArmR: group.getObjectByName('upperArmR'),
@@ -258,6 +343,28 @@ export function applyStudioMannequinPose(group, poseIn) {
   if (j.head) {
     j.head.rotation.x = pose.headX;
     j.head.rotation.y = pose.headY;
+  }
+  if (j.eyeL) {
+    j.eyeL.rotation.x = pose.eyeX || 0;
+    j.eyeL.rotation.y = pose.eyeY || 0;
+    const es = 0.55 + 0.55 * (pose.eyeOpen ?? 1);
+    j.eyeL.scale.setScalar(es);
+  }
+  if (j.eyeR) {
+    j.eyeR.rotation.x = pose.eyeX || 0;
+    j.eyeR.rotation.y = pose.eyeY || 0;
+    const es = 0.55 + 0.55 * (pose.eyeOpen ?? 1);
+    j.eyeR.scale.setScalar(es);
+  }
+  if (j.browL) j.browL.rotation.z = (pose.brow || 0) * 0.45;
+  if (j.browR) j.browR.rotation.z = -(pose.brow || 0) * 0.45;
+  if (j.mouth) {
+    j.mouth.scale.set(
+      1 + (pose.mouthSmile || 0) * 0.55 + (pose.mouthWide || 0) * 0.35,
+      0.45 + (pose.mouthOpen || 0) * 1.5,
+      1
+    );
+    j.mouth.position.y = -0.042 - (pose.jaw || 0) * 0.04;
   }
   // Arms hang down at rest (π·0.92 bias)
   if (j.upperArmL) {

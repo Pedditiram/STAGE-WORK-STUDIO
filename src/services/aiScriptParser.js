@@ -4,6 +4,10 @@ import {
   joinPdfTextItems,
   repairTeluguPdfText
 } from '../utils/repairTeluguPdfText';
+import { resolveLlmApiKey } from '../utils/saasControl';
+import { composeLookFacts, buildReferenceSheetsFromFacts, shotsMentionWeaponForPerson, storyLooksIndianEpic } from '../utils/characterSheetLock';
+import { ensureShotSpecMeta } from '../utils/shotSpec';
+import { importFdx } from '../utils/screenplayInterop';
 
 function safeTrim(str) {
   if (str == null) return '';
@@ -12,12 +16,23 @@ function safeTrim(str) {
 
 function getApiKey() {
   if (typeof window === 'undefined') return '';
-  return safeTrim(localStorage.getItem('sps_api_key'));
+  return safeTrim(resolveLlmApiKey(getLlmProvider()) || localStorage.getItem('sps_api_key'));
 }
 
 function getLlmProvider() {
   if (typeof window === 'undefined') return 'google_gemini';
   return safeTrim(localStorage.getItem('sps_llm_provider')) || 'google_gemini';
+}
+
+function isBuiltInLlm(provider = getLlmProvider()) {
+  const key = safeTrim(provider).toLowerCase();
+  return key === 'built_in' || key === 'builtin' || key === 'offline';
+}
+
+function isGeminiLlmProvider(provider = getLlmProvider()) {
+  const key = safeTrim(provider).toLowerCase();
+  if (!key || isBuiltInLlm(key)) return false;
+  return key === 'gemini' || key.startsWith('google_gemini');
 }
 
 /** Last parse run metadata for UI (fallback warnings, missing key, etc.) */
@@ -52,21 +67,61 @@ function setParseMeta( partial = {}) {
 const LLM_TIMEOUT_MS = 55000;
 const LLM_MAX_RETRIES = 2;
 
+export function isParseAbortError(err) {
+  return Boolean(
+    err &&
+      (err.name === 'AbortError' ||
+        err.code === 'PARSE_ABORTED' ||
+        /aborted|The operation was aborted/i.test(String(err.message || '')))
+  );
+}
+
+export function assertParseNotAborted(signal) {
+  if (signal?.aborted) {
+    const err = new Error('Parse stopped by user.');
+    err.name = 'AbortError';
+    err.code = 'PARSE_ABORTED';
+    throw err;
+  }
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_TIMEOUT_MS) {
+  const external = options.signal;
+  if (external?.aborted) {
+    const err = new Error('Parse stopped by user.');
+    err.name = 'AbortError';
+    err.code = 'PARSE_ABORTED';
+    throw err;
+  }
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const onExternalAbort = () => {
+    try {
+      controller?.abort();
+    } catch (_) {
+      /* ignore */
+    }
+  };
+  if (external && controller) {
+    external.addEventListener('abort', onExternalAbort, { once: true });
+  }
   const timer = controller
     ? setTimeout(() => {
-        try { controller.abort(); } catch (_) { /* ignore */ }
+        try {
+          controller.abort();
+        } catch (_) {
+          /* ignore */
+        }
       }, timeoutMs)
     : null;
   try {
     const res = await fetch(url, {
       ...options,
-      signal: controller ? controller.signal : options.signal
+      signal: controller ? controller.signal : external
     });
     return res;
   } finally {
     if (timer) clearTimeout(timer);
+    if (external && controller) external.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -74,6 +129,7 @@ async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, r
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      assertParseNotAborted(options.signal);
       const res = await fetchWithTimeout(url, options, timeoutMs);
       if (res && (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429))) {
         return res;
@@ -85,18 +141,25 @@ async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, r
         return res;
       }
     } catch (e) {
+      if (isParseAbortError(e) || options.signal?.aborted) {
+        const err = new Error('Parse stopped by user.');
+        err.name = 'AbortError';
+        err.code = 'PARSE_ABORTED';
+        throw err;
+      }
       lastErr = e;
       if (e?.name === 'AbortError') {
         lastErr = new Error(`LLM request timed out after ${Math.round(timeoutMs / 1000)}s`);
+        lastErr.code = 'LLM_TIMEOUT';
       }
     }
     if (attempt < retries) {
       const backoff = Math.min(4000, 600 * Math.pow(2, attempt));
       await new Promise((r) => setTimeout(r, backoff));
+      assertParseNotAborted(options.signal);
     }
   }
-  if (lastErr) throw lastErr;
-  return null;
+  throw lastErr || new Error('LLM request failed');
 }
 
 /** Extract and parse JSON array from LLM text; repair truncated trailing commas / fences. */
@@ -105,7 +168,13 @@ export function safeParseJsonArray(text) {
   let cleaned = text.trim();
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   const start = cleaned.indexOf('[');
-  if (start === -1) return null;
+  const objStart = cleaned.indexOf('{');
+  if (start === -1) {
+    const obj = safeParseJsonObject(cleaned);
+    const inner = obj?.shots || obj?.data || obj?.result || obj?.items;
+    if (Array.isArray(inner) && inner.length) return inner;
+    return null;
+  }
   let candidate = cleaned.slice(start);
 
   const tryParse = (raw) => {
@@ -120,8 +189,12 @@ export function safeParseJsonArray(text) {
   let parsed = tryParse(candidate);
   if (parsed) return parsed;
 
+  const closed = closeUnterminatedJsonStrings(candidate);
+  parsed = tryParse(closed);
+  if (parsed) return parsed;
+
   // Truncation repair: close open braces/brackets and strip trailing commas
-  let repaired = candidate
+  let repaired = closeUnterminatedJsonStrings(candidate)
     .replace(/,\s*([}\]])/g, '$1')
     .replace(/,\s*$/, '');
   const openBrackets = (repaired.match(/\[/g) || []).length;
@@ -133,6 +206,12 @@ export function safeParseJsonArray(text) {
   repaired = repaired.replace(/,\s*([}\]])/g, '$1');
   parsed = tryParse(repaired);
   if (parsed) return parsed;
+
+  if (objStart !== -1 && objStart < start) {
+    const obj = safeParseJsonObject(cleaned);
+    const inner = obj?.shots || obj?.data || obj?.result || obj?.items;
+    if (Array.isArray(inner) && inner.length) return inner;
+  }
 
   // Greedy balanced extract of first complete array
   const match = cleaned.match(/\[[\s\S]*\]/);
@@ -183,12 +262,12 @@ function sanitizeSceneShotId(rawId, index = 0) {
   return formatSceneShotId(1, index + 1);
 }
 
-/** Validate LLM shot objects, normalize crafts, dedupe IDs, cap at 100. */
+/** Validate LLM shot objects, normalize crafts, dedupe IDs, cap at 600 (feature expand). */
 export function validateAndSanitizeShots(rawShots, scriptText = '') {
   if (!Array.isArray(rawShots) || rawShots.length === 0) return [];
   const seen = new Set();
   const out = [];
-  for (let idx = 0; idx < rawShots.length && out.length < 100; idx++) {
+  for (let idx = 0; idx < rawShots.length && out.length < 600; idx++) {
     const raw = rawShots[idx];
     if (!raw || typeof raw !== 'object') continue;
     const normalized = normalizeShotTo26Crafts(
@@ -208,13 +287,23 @@ export function validateAndSanitizeShots(rawShots, scriptText = '') {
       normalized.sceneShotId = id;
     }
     seen.add(normalized.sceneShotId);
-    out.push(normalized);
+    out.push(ensureShotSpecMeta(normalized));
   }
   return out;
 }
 
 export function missingApiKeyMessage() {
-  return 'No LLM API key set. Open Admin Settings → add a Google Gemini / OpenAI / Anthropic / NVIDIA key (stored as sps_api_key). Offline heuristic parse will be used until a key is available.';
+  return 'No API key set. Open Settings and add a key. Offline breakdown will be used until a key is available.';
+}
+
+export function classifyLlmFailureCode(errOrMessage) {
+  const code = errOrMessage && typeof errOrMessage === 'object' ? errOrMessage.code : '';
+  if (code === 'LLM_TIMEOUT' || code === 'PARSE_ABORTED') return code;
+  const msg = String(errOrMessage?.message || errOrMessage || '');
+  if (/timed out/i.test(msg)) return 'LLM_TIMEOUT';
+  if (/aborted|stopped by user/i.test(msg)) return 'PARSE_ABORTED';
+  if (!msg.trim()) return 'LLM_EMPTY';
+  return 'LLM_FAILED';
 }
 
 /** Typed PDF extract failures — UI should surface message; do not feed garbage into the LLM/heuristic. */
@@ -540,6 +629,24 @@ export function looksLikeUsableScriptText(text) {
   return true;
 }
 
+const HEURISTIC_SLUGLINE_RE =
+  /(?:^|\n)\s*(?:INT\.?|EXT\.?|INT\/EXT|I\/E|సీన్|దృశ్యం|SCENE\s+\d+|SC\.?\s*\d+)/gi;
+
+/**
+ * Cap offline heuristic cards so garbage PDFs / bible dumps cannot flood the Matrix preview.
+ * Sluglined screenplays scale with scene count; Fountain-only scenes scale with cues; prose dumps stay ≤80.
+ */
+export function heuristicShotBudget(scriptText) {
+  const t = String(scriptText || '');
+  if (!safeTrim(t)) return 0;
+  const slugs = (t.match(HEURISTIC_SLUGLINE_RE) || []).length;
+  const cueLines = t.split('\n').filter((line) => isFountainCharacterCue(line)).length;
+  const paras = t.split(/\n\s*\n/).filter((p) => safeTrim(p).length >= 12).length;
+  if (slugs >= 1) return Math.min(400, Math.max(8, slugs * 8, cueLines + slugs));
+  if (cueLines >= 1) return Math.min(400, Math.max(8, cueLines * 2));
+  return Math.min(80, Math.max(4, paras || 4));
+}
+
 /** Whitespace / control cleanup only — keep title words that heavy sanitize may strip. */
 export function lightSanitizePdfExtractedText(text) {
   if (!text) return '';
@@ -719,8 +826,7 @@ export const GEMINI_LLM_FALLBACK_MODELS = Object.freeze([
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-2.0-flash'
+  'gemini-flash-latest'
 ]);
 
 export function resolveGeminiLlmConfig(providerKey) {
@@ -762,24 +868,24 @@ export function extractGeminiResponseText(data) {
 }
 
 export function describeGeminiResponseIssue(data) {
-  if (!data || typeof data !== 'object') return 'Gemini returned an empty response body.';
+  if (!data || typeof data !== 'object') return 'Parser returned an empty response.';
   const block = data.promptFeedback?.blockReason || data.promptFeedback?.block_reason;
   if (block) {
-    return `Gemini blocked the prompt (safety / policy: ${block}).`;
+    return `Prompt blocked (safety / policy: ${block}).`;
   }
   const candidates = data.candidates;
   if (!Array.isArray(candidates) || candidates.length === 0) {
-    return 'Gemini returned no candidates (empty or filtered response).';
+    return 'Parser returned no candidates (empty or filtered response).';
   }
   const finish = candidates[0]?.finishReason || candidates[0]?.finish_reason;
   if (finish && /SAFETY|RECITATION|BLOCKLIST|PROHIBITED|OTHER/i.test(String(finish))) {
-    return `Gemini stopped without usable text (finishReason: ${finish}).`;
+    return `Parser stopped without usable text (finishReason: ${finish}).`;
   }
   const text = extractGeminiResponseText(data);
   if (!safeTrim(text)) {
     return finish
-      ? `Gemini returned no usable text (finishReason: ${finish}).`
-      : 'Gemini returned no usable text in candidates.';
+      ? `Parser returned no usable text (finishReason: ${finish}).`
+      : 'Parser returned no usable text.';
   }
   return null;
 }
@@ -800,21 +906,21 @@ export async function formatGeminiHttpError(res, modelId = '') {
     (bodyText && bodyText.length < 400 ? bodyText.trim() : '') ||
     '';
   const blob = `${apiMsg} ${bodyText}`.toUpperCase();
-  const modelHint = modelId ? ` (model: ${modelId})` : '';
+  const modelHint = '';
 
   if (status === 429 || /RESOURCE_EXHAUSTED|QUOTA|RATE[_\s-]?LIMIT/.test(blob)) {
     return `API quota / rate limit exhausted${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
   }
   if (status === 401 || status === 403 || /API[_ ]?KEY[_ ]?INVALID|PERMISSION_DENIED|UNAUTHENTICATED/.test(blob)) {
-    return `Invalid or unauthorized Gemini API key${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
+    return `Invalid or unauthorized API key${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
   }
   if (status === 404 || /NOT_FOUND|is not found|not supported for generateContent/i.test(`${apiMsg} ${bodyText}`)) {
-    return `Gemini model not found or unavailable${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
+    return `Model not found or unavailable${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
   }
   if (status === 400) {
-    return `Gemini request rejected (HTTP 400)${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
+    return `Request rejected (HTTP 400)${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
   }
-  return `Gemini API error HTTP ${status || 'network'}${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
+  return `API error HTTP ${status || 'network'}${modelHint}${apiMsg ? `: ${apiMsg}` : ''}`;
 }
 
 function buildGeminiGenerationConfig(modelId, thinkingLevel, generationConfig = {}) {
@@ -863,12 +969,17 @@ function buildGeminiGenerationConfig(modelId, thinkingLevel, generationConfig = 
 export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, options = {}) {
   const cleanKey = safeTrim(apiKey);
   if (!cleanKey) {
-    const err = new Error('Missing Gemini API key.');
+    const err = new Error('Missing API key.');
     err.code = 'MISSING_API_KEY';
     throw err;
   }
 
   const provider = options.provider || getLlmProvider();
+  if (isBuiltInLlm(provider)) {
+    const err = new Error('Built-In engine does not call a cloud LLM.');
+    err.code = 'BUILT_IN';
+    throw err;
+  }
   const cfg = resolveGeminiLlmConfig(provider);
   const modelChain = Array.isArray(options.models) && options.models.length
     ? options.models
@@ -889,7 +1000,8 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
       const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body
+        body,
+        signal: options.signal
       }, { timeoutMs: options.timeoutMs || LLM_TIMEOUT_MS, retries: options.retries ?? 1 });
 
       if (res && res.ok) {
@@ -928,6 +1040,7 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
         continue;
       }
     } catch (e) {
+      if (isParseAbortError(e) || options.signal?.aborted) throw e;
       lastError = e?.message || String(e);
       console.warn('Gemini API endpoint attempt failed:', lastError);
       if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(lastError)) {
@@ -937,54 +1050,114 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
     }
   }
 
-  const err = new Error(lastError || `Gemini API did not return a usable response for ${cfg.label}.`);
+  const err = new Error(lastError || 'Parser did not return a usable response.');
   err.code = lastFatal ? 'GEMINI_FATAL' : 'GEMINI_UNAVAILABLE';
   err.provider = provider;
   err.modelId = cfg.modelId;
   throw err;
 }
 
-/**
- * PARSE RAW SCRIPT TO 26 PRODUCTION CRAFTS
- * Uses low temperature (0.1) across all LLM providers for deterministic results.
- * Always returns a shot array (may be empty). Call getLastParseMeta() for warnings.
- */
-export async function parseRawScriptToShots(scriptText) {
-  const provider = getLlmProvider();
-  const apiKey = getApiKey();
+const SLUGLINE_START =
+  /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|FADE IN|FADE OUT|CUT TO|SMASH CUT|DISSOLVE TO)\b/i;
 
-  if (!scriptText || typeof scriptText !== 'string' || !safeTrim(scriptText)) {
-    setParseMeta({
-      source: 'empty',
-      usedFallback: false,
-      warning: 'Script text is empty. Paste a screenplay or upload a PDF/TXT before parsing.',
-      error: 'EMPTY_SCRIPT',
-      shotCount: 0,
-      provider,
-      hasApiKey: Boolean(apiKey)
-    });
-    return [];
+/** Strip BOM / zero-width and convert Final Draft XML to Fountain-like text. */
+export function prepareScriptTextForParse(scriptText) {
+  let t = String(scriptText ?? '');
+  t = t.replace(/^\uFEFF/, '').replace(/[\u200B-\u200D\uFEFF]/g, '');
+  t = t.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (/<FinalDraft\b/i.test(t) || (/<Paragraph\b/i.test(t) && /<Text\b/i.test(t))) {
+    try {
+      t = importFdx(t);
+    } catch {
+      t = t.replace(/<[^>]+>/g, '\n');
+    }
   }
-
-  const trimmed = safeTrim(scriptText);
-  if (trimmed.length < 12) {
-    setParseMeta({
-      source: 'too_short',
-      usedFallback: false,
-      warning: 'Script text is too short to parse into production shots.',
-      error: 'SCRIPT_TOO_SHORT',
-      shotCount: 0,
-      provider,
-      hasApiKey: Boolean(apiKey)
-    });
-    return [];
+  if (/[\u0C00-\u0C7F]/.test(t)) {
+    t = repairTeluguPdfText(t);
   }
+  return t.trim();
+}
 
-  const fullTextToProcess = scriptText.slice(0, 180000);
+/** Close a truncated JSON string so a cut-off LLM payload can still parse. */
+export function closeUnterminatedJsonStrings(raw) {
+  const s = String(raw || '');
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c === '\\') {
+        esc = true;
+        continue;
+      }
+      if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    }
+  }
+  return inStr ? `${s}"` : s;
+}
 
-  const prompt = `You are a Hollywood Technical Director and Master Cinematographer (Pedditi Labs Cinema Intelligence Engine).
+export const LLM_PARSE_CHUNK_CHARS = 28000;
+export const LLM_PARSE_MAX_CHUNKS = 8;
+
+/** Split a long screenplay on scene headings so LLM parse stays inside context. */
+export function splitScreenplayForLlmParse(scriptText, maxChars = LLM_PARSE_CHUNK_CHARS) {
+  const text = String(scriptText || '');
+  if (!text) return [];
+  if (text.length <= maxChars) return [text];
+  const sceneBits = text.split(
+    /(?=\n(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|SCENE\s+\d+|SC\.\s*\d+|FADE IN)\b)/i
+  );
+  const parts = [];
+  let buf = '';
+  const push = (chunk) => {
+    const t = String(chunk || '').trim();
+    if (t) parts.push(t);
+  };
+  for (const bit of sceneBits) {
+    if (!bit) continue;
+    if (!buf) {
+      buf = bit;
+      continue;
+    }
+    if (buf.length + bit.length <= maxChars) {
+      buf += bit;
+      continue;
+    }
+    push(buf);
+    if (bit.length <= maxChars) {
+      buf = bit;
+      continue;
+    }
+    for (let i = 0; i < bit.length && parts.length < LLM_PARSE_MAX_CHUNKS; i += maxChars) {
+      push(bit.slice(i, i + maxChars));
+    }
+    buf = '';
+  }
+  push(buf);
+  if (parts.length <= 1 && text.length > maxChars) {
+    const hard = [];
+    for (let i = 0; i < text.length && hard.length < LLM_PARSE_MAX_CHUNKS; i += maxChars) {
+      hard.push(text.slice(i, i + maxChars));
+    }
+    return hard;
+  }
+  return parts.slice(0, LLM_PARSE_MAX_CHUNKS);
+}
+
+function buildShotParsePrompt(screenplaySlice, { part = 1, total = 1 } = {}) {
+  const partNote =
+    total > 1
+      ? `\nThis is PART ${part} of ${total} of the screenplay. Parse ONLY this part. Do not invent scenes from other parts. Continue sceneShotId numbering from the headings in this part.\n`
+      : '';
+  return `You are a Hollywood Technical Director and Master Cinematographer (Stage Work Studio Cinema Intelligence Engine).
 Parse the following screenplay script into a complete JSON array of 26-craft stage production shots.
-
+${partNote}
 NATIVE TELUGU & MULTILINGUAL SCRIPT DIRECTIVE:
 1. The input screenplay text may be written in Telugu Script (Unicode: తెలుగు), Transliterated/Romanized Telugu, English, or a mix of Telugu & English (Tollywood Screenplay Format).
 2. Carefully analyze Telugu scene headings, Telugu character names (e.g. రాముడు, లక్ష్మణుడు, సీత, దుషణుడు), and Telugu dialogue — then map them into the 26-craft shot schema.
@@ -1008,161 +1181,550 @@ CRITICAL REQUIREMENT FOR 'characterIdMatrix': Use ONLY short, concise 1-to-3 wor
 OPTIONAL dialogue format tip: You may prefix Telugu lines with an English speaker cue, e.g. Rama: "నీవు ఎవరు?" — speaker name English, quoted line Telugu.
 
 Screenplay text to break down:
-${fullTextToProcess}
+${screenplaySlice}
 
 Return ONLY valid JSON array without markdown code blocks.`;
+}
 
-  const finalizeLlmShots = (parsed, sourceLabel) => {
-    const shots = validateAndSanitizeShots(parsed, scriptText);
+/** Fountain character cue: ALL CAPS name on its own line (no trailing colon required). */
+export function isFountainCharacterCue(line) {
+  const t = safeTrim(line);
+  if (!t || t.length > 40) return false;
+  if (SLUGLINE_START.test(t)) return false;
+  if (/^(ACT\s|SCENE\s|SHOT\s|PART\s|TITLE:|SUPER:|MONTAGE)/i.test(t)) return false;
+  const stripped = t.replace(/\s*\((?:CONT'?D|CONTINUED|V\.O\.|O\.S\.|OS|VO|OFF)\)\s*$/i, '');
+  if (!/^[A-Z][A-Z0-9 .'\-]{1,36}$/.test(stripped)) return false;
+  const letters = stripped.replace(/[^A-Z]/g, '');
+  if (letters.length < 2 || letters.length > 28) return false;
+  if (stripped.split(/\s+/).filter(Boolean).length > 6) return false;
+  return true;
+}
+
+/** Finished screenplay (sluglines, shot tags, or Fountain speakers) — not a director brief. */
+export function looksLikeScreenplayForParse(text) {
+  const t = safeTrim(text);
+  if (!t) return false;
+  if (/^(INT\.?|EXT\.?|INT\/EXT|FADE IN)/im.test(t)) return true;
+  if (/^(సీన్|దృశ్యం)\s*\d/m.test(t)) return true;
+  if (/\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t)) return true;
+  const cues = t.split(/\n/).filter((line) => isFountainCharacterCue(line)).length;
+  if (cues >= 2) return true;
+  if (cues >= 1 && /\n\([^)]{2,48}\)\n/.test(t)) return true;
+  return false;
+}
+
+export function isPremiseBrief(text) {
+  const t = safeTrim(text);
+  if (!t) return false;
+  if (looksLikeScreenplayForParse(t)) return false;
+  const words = t.split(/\s+/).filter(Boolean).length;
+  const hasHeadings = /^(INT\.?|EXT\.?|INT\/EXT|FADE IN)/im.test(t);
+  const hasShotTags = /\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t);
+  if (hasHeadings && t.length > 2800) return false;
+  if (hasShotTags && t.length > 1800) return false;
+  if (/\b(\d+\s*(?:hour|hr)s?|complete story|birth to death|make (?:a |this )?(?:feature|movie|film)|expand (?:this|into)|full (?:length|feature)|break(?:down)? (?:into|this))\b/i.test(t)) {
+    return true;
+  }
+  return words < 380 || t.length < 2200;
+}
+
+export function inferRuntimeMinutes(text) {
+  const t = safeTrim(text);
+  const hours = t.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b/i);
+  if (hours) return Math.round(Math.min(240, Math.max(40, parseFloat(hours[1]) * 60)));
+  const mins = t.match(/(\d+)\s*(?:minutes?|mins?)\b/i);
+  if (mins) return Math.round(Math.min(240, Math.max(40, parseInt(mins[1], 10))));
+  return 150;
+}
+
+async function completeLlmText(prompt, { temperature = 0.22, maxOutputTokens = 65536, timeoutMs = 120000, signal } = {}) {
+  assertParseNotAborted(signal);
+  const apiKey = getApiKey();
+  const provider = getLlmProvider();
+  if (!apiKey || isBuiltInLlm(provider)) return '';
+
+  if (isGeminiLlmProvider(provider)) {
+    const response = await fetchGeminiContent(
+      apiKey,
+      prompt,
+      { temperature, maxOutputTokens },
+      { provider, timeoutMs, retries: 1, signal }
+    );
+    assertParseNotAborted(signal);
+    if (!response?.ok) return '';
+    const data = await response.json();
+    return extractGeminiResponseText(data) || '';
+  }
+
+  if (provider === 'anthropic' || provider.startsWith('anthropic')) {
+    const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'dangerously-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: Math.min(8192, maxOutputTokens),
+        temperature,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal
+    }, { timeoutMs, retries: 1 });
+    assertParseNotAborted(signal);
+    if (!res?.ok) return '';
+    const data = await res.json();
+    return data.content?.[0]?.text || '';
+  }
+
+  if (provider === 'openai') {
+    const res = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', temperature, messages: [{ role: 'user', content: prompt }] }),
+      signal
+    }, { timeoutMs, retries: 1 });
+    assertParseNotAborted(signal);
+    if (!res?.ok) return '';
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || '';
+  }
+
+  return '';
+}
+
+async function fetchSelectedLlmShotJson(prompt, { provider, apiKey, signal } = {}) {
+  assertParseNotAborted(signal);
+  if (!apiKey || isBuiltInLlm(provider)) return { parsed: null, error: 'MISSING_API_KEY' };
+
+  const parseBody = (text) => safeParseJsonArray(text);
+
+  if (provider === 'anthropic' || String(provider || '').startsWith('anthropic')) {
+    const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'dangerously-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 8192,
+        temperature: 0.1,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal
+    });
+    if (!res?.ok) return { parsed: null, error: `API error HTTP ${res?.status}. Check your API key in Settings.` };
+    const data = await res.json();
+    const parsed = parseBody(data.content?.[0]?.text || '');
+    return parsed?.length
+      ? { parsed, error: null }
+      : { parsed: null, error: 'Parser returned invalid or empty shot JSON.' };
+  }
+
+  if (provider === 'openai') {
+    const res = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0.1,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal
+    });
+    if (!res?.ok) return { parsed: null, error: `API error HTTP ${res?.status}. Check your API key in Settings.` };
+    const data = await res.json();
+    const parsed = parseBody(data.choices?.[0]?.message?.content || '');
+    return parsed?.length
+      ? { parsed, error: null }
+      : { parsed: null, error: 'Parser returned invalid or empty shot JSON.' };
+  }
+
+  const isNvidiaKey = Boolean(apiKey && apiKey.startsWith('nvapi-'));
+  if (provider === 'minimax' || provider === 'nvidia_minimax' || provider === 'minimax_m3' || isNvidiaKey) {
+    const res = await fetchWithRetry('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'minimaxai/minimax-m3',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 4096
+      }),
+      signal
+    });
+    if (!res?.ok) return { parsed: null, error: `API error HTTP ${res?.status}. Check your API key in Settings.` };
+    const data = await res.json();
+    const parsed = parseBody(data.choices?.[0]?.message?.content || '');
+    return parsed?.length
+      ? { parsed, error: null }
+      : { parsed: null, error: 'Script parser returned invalid or empty shot JSON.' };
+  }
+
+  if (isGeminiLlmProvider(provider)) {
+    const geminiCfg = resolveGeminiLlmConfig(provider);
+    const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1, maxOutputTokens: 65536 }, { provider, signal });
+    if (!response?.ok) return { parsed: null, error: 'Parser did not return a usable response.' };
+    const data = await response.json();
+    const issue = describeGeminiResponseIssue(data);
+    const parsed = parseBody(extractGeminiResponseText(data));
+    return parsed?.length
+      ? { parsed, error: null, source: geminiCfg.modelId || 'google_gemini' }
+      : { parsed: null, error: issue || 'Parser returned invalid or empty shot JSON.' };
+  }
+
+  return { parsed: null, error: 'LLM parse unavailable.' };
+}
+
+function sequencesToFountain(title, premise, sequences = []) {
+  const lines = [
+    `Title: ${title || 'UNTITLED'}`,
+    `Credit: expanded from a director brief`,
+    '',
+    `/* BRIEF */`,
+    premise,
+    ''
+  ];
+  sequences.forEach((seq) => {
+    const loc = (seq.locations && seq.locations[0]) || seq.title || 'LOCATION';
+    const time = seq.timeOfDay || 'DAY';
+    const heading = String(loc).toUpperCase().startsWith('INT') || String(loc).toUpperCase().startsWith('EXT')
+      ? loc
+      : `EXT. ${loc} - ${time}`;
+    lines.push(heading);
+    lines.push('');
+    lines.push(seq.synopsis || seq.dramaticBeat || seq.title || '');
+    if (Array.isArray(seq.characters) && seq.characters.length) {
+      lines.push('');
+      lines.push(`Present: ${seq.characters.join(', ')}`);
+    }
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+
+function expandPremiseHeuristic(premise) {
+  const minutes = inferRuntimeMinutes(premise);
+  const seqN = Math.min(24, Math.max(12, Math.round(minutes / 8)));
+  const hook = clip(premise, 180);
+  const shots = [];
+  for (let s = 1; s <= seqN; s++) {
+    const per = 4;
+    for (let h = 1; h <= per; h++) {
+      shots.push({
+        sceneShotId: formatSceneShotId(s, h),
+        sceneSynopsis: `${hook} — Sequence ${s} of ${seqN}, coverage ${h}.`,
+        shotComposition: h === 1 ? 'Extreme Wide Shot (EWS)' : h === 2 ? 'Medium Shot (MS)' : h === 3 ? 'Close-Up (CU)' : 'Over-the-Shoulder (OTS)',
+        cameraMotionTag: '[Camera: Slow Dolly / Motivated Track]',
+        timeAndLightingEnv: '[Timing: Epic period] • [Env: Mythic landscape]',
+        actionEnvContext: `Cinematic world implied by: ${hook}`,
+        characterIdAssetRef: '[CharID: @LeadHero]',
+        characterDialogue: '',
+        characterExpression: 'Held dramatic presence',
+        characterMovement: 'Advances through the beat',
+        shotDurationAndImages: 'Duration: 6s'
+      });
+    }
+  }
+  return validateAndSanitizeShots(shots, premise);
+}
+
+async function expandPremiseToFeatureShots(premise, { onProgress, signal } = {}) {
+  assertParseNotAborted(signal);
+  const minutes = inferRuntimeMinutes(premise);
+  const seqTarget = Math.min(24, Math.max(14, Math.round(minutes / 8)));
+  const shotsPerSeq = minutes >= 160 ? 10 : minutes >= 120 ? 8 : 6;
+  const tick = (percent, message) => {
+    try { onProgress?.({ percent, message }); } catch { /* ignore */ }
+  };
+
+  tick(8, `Expanding ${minutes}-minute feature into ${seqTarget} sequences…`);
+
+  const seqPrompt = `You are a Hollywood showrunner + Indian epic film writer (Rajamouli / Mani Ratnam grammar, not a chatbot).
+
+DIRECTOR BRIEF (this is NOT a finished screenplay — invent the full picture):
+"""
+${premise.slice(0, 4000)}
+"""
+
+Task: Expand this brief into a COMPLETE ${minutes}-minute theatrical feature.
+Return ONLY a JSON array of exactly ${seqTarget} sequence objects. Keys:
+"seq" (1..${seqTarget}), "title", "minutes" (integers summing near ${minutes}), "timeOfDay", "locations" (string array), "characters" (English names), "synopsis" (90-140 words), "dramaticBeat".
+
+Cover birth-to-end if the brief asks. No skipped decades. English names. Locations specific. Return JSON array only.`;
+
+  let sequences = [];
+  try {
+    const seqText = await completeLlmText(seqPrompt, { temperature: 0.35, maxOutputTokens: 16384, signal });
+    sequences = safeParseJsonArray(seqText) || [];
+  } catch (e) {
+    if (isParseAbortError(e)) throw e;
+    console.warn('Feature sequence expand failed:', e);
+  }
+  assertParseNotAborted(signal);
+  sequences = (sequences || []).filter((s) => s && (s.synopsis || s.title)).slice(0, seqTarget);
+  if (sequences.length < 8) {
+    return expandPremiseHeuristic(premise);
+  }
+
+  tick(18, `Sequences locked (${sequences.length}). Breaking coverage into 26-craft shots…`);
+
+  const allShots = [];
+  const batchSize = 2;
+  const batches = [];
+  for (let i = 0; i < sequences.length; i += batchSize) batches.push(sequences.slice(i, i + batchSize));
+
+  for (let b = 0; b < batches.length; b++) {
+    assertParseNotAborted(signal);
+    const batch = batches[b];
+    const startSeq = batch[0]?.seq || b * batchSize + 1;
+    tick(
+      18 + Math.round((b / batches.length) * 72),
+      `Coverage ${b + 1}/${batches.length} · sequences ${batch.map((s) => s.seq || s.title).join(', ')}`
+    );
+
+    const shotPrompt = `You are a Master Cinematographer filling Stage Work Studio 26-craft shot rows.
+
+FEATURE: ${minutes} minutes from this brief:
+"""
+${premise.slice(0, 1200)}
+"""
+
+SEQUENCES TO COVER NOW (write ${shotsPerSeq} shots PER sequence, chronological, no montage dumping entire life into one shot):
+${JSON.stringify(batch, null, 2)}
+
+Each shot MUST include sceneShotId as SC{seq padded 2}_SH{shot padded 2} (e.g. SC07_SH03) matching the sequence "seq" number.
+Each shot MUST include ALL keys:
+"sceneShotId", "sceneSynopsis", "shotComposition", "cameraMotionTag", "timeAndLightingEnv", "directionalLightingAndHighlight", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "colorPaletteSlot", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPsychologyState", "characterMannerismAndPosture", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength", "vfxCgiBreakdown", "stuntAndSafetyNotes", "makeupAndHairStyle", "editTransitionCut", "characterIdMatrix".
+
+Rules:
+- Character names ENGLISH. Dialogue may be Telugu if the brief is Telugu/Indian epic.
+- Each craft field: 8-28 words. Photoreal cinema. Period-accurate if epic.
+- characterIdMatrix: Image_1 = Name | Image_2 = Name (short English names only).
+- Return ONLY a JSON array of shots.`;
+
+    try {
+      const shotText = await completeLlmText(shotPrompt, { temperature: 0.2, maxOutputTokens: 65536, timeoutMs: 120000, signal });
+      const parsed = safeParseJsonArray(shotText) || [];
+      parsed.forEach((raw, i) => {
+        allShots.push({
+          ...raw,
+          sceneShotId: sanitizeSceneShotId(raw?.sceneShotId, allShots.length + i)
+        });
+      });
+    } catch (e) {
+      if (isParseAbortError(e)) throw e;
+      console.warn(`Feature shot batch ${b + 1} failed:`, e);
+    }
+  }
+
+  let shots = validateAndSanitizeShots(allShots, premise);
+  if (shots.length < 12) shots = expandPremiseHeuristic(premise);
+
+  const fountain = sequencesToFountain('Feature expand', premise, sequences);
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sps_current_screenplay_text', fountain);
+      localStorage.setItem('sps_live_screenplay_text', fountain);
+      localStorage.setItem('sps_extracted_master_story', sequences.map((s) => s.synopsis).filter(Boolean).slice(0, 6).join('\n\n'));
+      window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'feature_expand' } }));
+    }
+  } catch { /* ignore */ }
+
+  tick(96, `Sanitized ${shots.length} shots. Filling consoles…`);
+  setParseMeta({
+    source: 'feature_expand',
+    usedFallback: false,
+    warning: null,
+    error: null,
+    shotCount: shots.length,
+    provider: getLlmProvider(),
+    hasApiKey: true,
+    runtimeMinutes: minutes,
+    sequenceCount: sequences.length,
+    sequences: sequences.map((s) => ({ ...s })),
+    screenplayText: fountain
+  });
+  return shots;
+}
+
+function clip(s, max) {
+  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+/**
+ * PARSE RAW SCRIPT TO 26 PRODUCTION CRAFTS
+ * Uses low temperature (0.1) across all LLM providers for deterministic results.
+ * Always returns a shot array (may be empty). Call getLastParseMeta() for warnings.
+ */
+export async function parseRawScriptToShots(scriptText, options = {}) {
+  try {
+    return await parseRawScriptToShotsUnsafe(scriptText, options);
+  } catch (err) {
+    if (isParseAbortError(err)) throw err;
+    const fallbackShots = parseRawScriptFallback(prepareScriptTextForParse(scriptText) || String(scriptText || ''));
+    setParseMeta({
+      source: 'fallback',
+      usedFallback: true,
+      warning: `Parser recovered from an internal error (${err?.message || 'unknown'}). Offline heuristic breakdown used.`,
+      error: 'PARSE_CRASH',
+      shotCount: fallbackShots.length,
+      provider: getLlmProvider(),
+      hasApiKey: Boolean(getApiKey())
+    });
+    return fallbackShots;
+  }
+}
+
+async function parseRawScriptToShotsUnsafe(scriptText, options = {}) {
+  const provider = getLlmProvider();
+  const apiKey = isBuiltInLlm(provider) ? '' : getApiKey();
+  const onProgress = options.onProgress;
+  const signal = options.signal;
+  assertParseNotAborted(signal);
+
+  if (!scriptText || typeof scriptText !== 'string' || !safeTrim(scriptText)) {
+    setParseMeta({
+      source: 'empty',
+      usedFallback: false,
+      warning: 'Script text is empty. Paste a screenplay or upload a PDF/TXT before parsing.',
+      error: 'EMPTY_SCRIPT',
+      shotCount: 0,
+      provider,
+      hasApiKey: Boolean(apiKey)
+    });
+    return [];
+  }
+
+  const trimmed = prepareScriptTextForParse(scriptText);
+  if (!trimmed) {
+    setParseMeta({
+      source: 'empty',
+      usedFallback: false,
+      warning: 'Script text is empty after import cleanup. Paste a screenplay or upload PDF/TXT/FDX/Fountain.',
+      error: 'EMPTY_SCRIPT',
+      shotCount: 0,
+      provider,
+      hasApiKey: Boolean(apiKey)
+    });
+    return [];
+  }
+  if (trimmed.length < 12) {
+    setParseMeta({
+      source: 'too_short',
+      usedFallback: false,
+      warning: 'Script text is too short to parse into production shots.',
+      error: 'SCRIPT_TOO_SHORT',
+      shotCount: 0,
+      provider,
+      hasApiKey: Boolean(apiKey)
+    });
+    return [];
+  }
+
+  if (isPremiseBrief(trimmed)) {
+    if (isBuiltInLlm(provider) || !apiKey) {
+      const shots = expandPremiseHeuristic(trimmed);
+      setParseMeta({
+        source: isBuiltInLlm(provider) ? 'built_in_expand' : 'fallback',
+        usedFallback: !isBuiltInLlm(provider),
+        warning: apiKey ? null : 'No API key — expanded a skeleton feature. Add Gemini in Settings for a full 3-hour breakdown.',
+        error: apiKey ? null : 'MISSING_API_KEY',
+        shotCount: shots.length,
+        provider,
+        hasApiKey: Boolean(apiKey)
+      });
+      return shots;
+    }
+    return expandPremiseToFeatureShots(trimmed, { onProgress, signal });
+  }
+
+  const fullTextToProcess = trimmed.slice(0, 180000);
+
+  const finalizeLlmShots = (parsed, sourceLabel, extraMeta = {}) => {
+    const shots = validateAndSanitizeShots(parsed, trimmed);
     if (shots.length === 0) return null;
     setParseMeta({
       source: sourceLabel,
       usedFallback: false,
-      warning: null,
+      warning: extraMeta.warning || null,
       error: null,
       shotCount: shots.length,
       provider,
-      hasApiKey: true
+      hasApiKey: true,
+      parseParts: extraMeta.parseParts || 1
     });
     return shots;
   };
 
   let llmError = null;
 
-  // 1. ROUTE TO ANTHROPIC CLAUDE LLM ENGINE
-  if (provider === 'anthropic' && apiKey) {
-    try {
-      const res = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'dangerously-allow-browser': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 8192,
-          temperature: 0.1,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
+  if (isBuiltInLlm(provider)) {
+    const fallbackShots = parseRawScriptFallback(trimmed);
+    setParseMeta({
+      source: 'built_in',
+      usedFallback: false,
+      warning: null,
+      error: null,
+      shotCount: fallbackShots.length,
+      provider: 'built_in',
+      hasApiKey: false
+    });
+    return fallbackShots;
+  }
 
-      if (res?.ok) {
-        const data = await res.json();
-        const text = data.content?.[0]?.text || '';
-        const parsed = safeParseJsonArray(text);
-        if (parsed?.length) {
-          const shots = finalizeLlmShots(parsed, 'anthropic');
-          if (shots) return shots;
+  if (apiKey) {
+    const chunks = splitScreenplayForLlmParse(fullTextToProcess);
+    const merged = [];
+    let sourceLabel = provider;
+    try {
+      for (let i = 0; i < chunks.length; i += 1) {
+        assertParseNotAborted(signal);
+        try {
+          onProgress?.({
+            percent: Math.round(((i + 0.15) / chunks.length) * 88),
+            message: chunks.length > 1 ? `Parsing screenplay part ${i + 1} of ${chunks.length}…` : 'Parsing screenplay…'
+          });
+        } catch {
+          /* ignore */
         }
-        llmError = 'Anthropic returned invalid or empty shot JSON.';
-      } else if (res) {
-        llmError = `Anthropic API error HTTP ${res.status}. Check your API key in Admin Settings.`;
+        const prompt = buildShotParsePrompt(chunks[i], { part: i + 1, total: chunks.length });
+        const result = await fetchSelectedLlmShotJson(prompt, { provider, apiKey, signal });
+        if (result.source) sourceLabel = result.source;
+        if (result.parsed?.length) merged.push(...result.parsed);
+        else llmError = result.error || llmError;
+      }
+      if (merged.length) {
+        const shots = finalizeLlmShots(merged, sourceLabel, {
+          parseParts: chunks.length,
+          warning: chunks.length > 1 ? `Parsed in ${chunks.length} parts.` : null
+        });
+        if (shots) return shots;
       }
     } catch (e) {
-      llmError = e?.message || 'Anthropic request failed.';
-      console.warn("Anthropic Claude LLM breakdown fallback:", e);
+      if (isParseAbortError(e)) throw e;
+      llmError = e?.message || 'Parser request failed.';
+      console.warn('LLM breakdown fallback:', e);
     }
   }
 
-  // 2. ROUTE TO OPENAI LLM ENGINE
-  if (provider === 'openai' && apiKey) {
-    try {
-      const res = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          temperature: 0.1,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-
-      if (res?.ok) {
-        const data = await res.json();
-        const text = data.choices?.[0]?.message?.content || '';
-        const parsed = safeParseJsonArray(text);
-        if (parsed?.length) {
-          const shots = finalizeLlmShots(parsed, 'openai');
-          if (shots) return shots;
-        }
-        llmError = 'OpenAI returned invalid or empty shot JSON.';
-      } else if (res) {
-        llmError = `OpenAI API error HTTP ${res.status}. Check your API key in Admin Settings.`;
-      }
-    } catch (e) {
-      llmError = e?.message || 'OpenAI request failed.';
-      console.warn("OpenAI LLM breakdown fallback:", e);
-    }
-  }
-
-  // 2B. ROUTE TO NVIDIA BUILD / MINIMAX-M3 ENGINE
-  const isNvidiaKey = Boolean(apiKey && apiKey.startsWith('nvapi-'));
-  if ((provider === 'minimax' || provider === 'nvidia_minimax' || provider === 'minimax_m3' || isNvidiaKey) && apiKey) {
-    try {
-      const res = await fetchWithRetry('https://integrate.api.nvidia.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'minimaxai/minimax-m3',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          max_tokens: 4096
-        })
-      });
-
-      if (res?.ok) {
-        const data = await res.json();
-        const text = data.choices?.[0]?.message?.content || '';
-        const parsed = safeParseJsonArray(text);
-        if (parsed?.length) {
-          const shots = finalizeLlmShots(parsed, 'nvidia_minimax');
-          if (shots) return shots;
-        }
-        llmError = 'NVIDIA MiniMax returned invalid or empty shot JSON.';
-      } else if (res) {
-        llmError = `NVIDIA API error HTTP ${res.status}. Check your nvapi key in Admin Settings.`;
-      }
-    } catch (e) {
-      llmError = e?.message || 'NVIDIA MiniMax request failed.';
-      console.warn("NVIDIA MiniMax-M3 breakdown fallback:", e);
-    }
-  }
-
-  // 3. ROUTE TO GOOGLE GEMINI / PEDDITI LABS ENGINE
-  if ((provider.startsWith('google_gemini') || provider === 'gemini' || !provider || (!['anthropic', 'openai', 'minimax', 'nvidia_minimax', 'minimax_m3'].includes(provider) && !isNvidiaKey)) && apiKey) {
-    try {
-      const geminiCfg = resolveGeminiLlmConfig(provider);
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1, maxOutputTokens: 65536 }, { provider });
-
-      if (response && response.ok) {
-        const data = await response.json();
-        const issue = describeGeminiResponseIssue(data);
-        const responseText = extractGeminiResponseText(data);
-        const parsed = safeParseJsonArray(responseText);
-        if (parsed?.length) {
-          const shots = finalizeLlmShots(parsed, geminiCfg.modelId || 'google_gemini');
-          if (shots) return shots;
-        }
-        llmError = issue || 'Gemini returned invalid or empty shot JSON.';
-      } else {
-        llmError = llmError || 'Gemini API did not return a usable response.';
-      }
-    } catch (e) {
-      llmError = e?.message || 'Gemini request failed.';
-      console.warn('Google Gemini API breakdown fallback:', e);
-    }
-  }
+  assertParseNotAborted(signal);
 
   // Fallback / Built-In Fast Universal Heuristic Rule Parser
-  const fallbackShots = parseRawScriptFallback(scriptText);
+  const fallbackShots = parseRawScriptFallback(trimmed);
   const warningParts = [];
   if (!apiKey) {
     warningParts.push(missingApiKeyMessage());
@@ -1176,7 +1738,7 @@ Return ONLY valid JSON array without markdown code blocks.`;
     source: 'fallback',
     usedFallback: true,
     warning: warningParts.join(' '),
-    error: apiKey ? (llmError ? 'LLM_FAILED' : 'LLM_EMPTY') : 'MISSING_API_KEY',
+    error: apiKey ? classifyLlmFailureCode(llmError) : 'MISSING_API_KEY',
     shotCount: fallbackShots.length,
     provider,
     hasApiKey: Boolean(apiKey)
@@ -1190,7 +1752,7 @@ export function autoEnhanceCraftValue(craftKey, baseValue) {
   const val = baseValue.trim();
 
   // Don't re-enhance if already enhanced
-  if (val.includes('Pedditi Labs') || val.includes('Enhanced') || val.includes('—')) {
+  if (val.includes('Pedditi Labs') || val.includes('Stage Work Studio') || val.includes('Enhanced') || val.includes('—')) {
     return val;
   }
 
@@ -1219,12 +1781,19 @@ export function autoEnhanceCraftValue(craftKey, baseValue) {
   return enhancements[craftKey] || val;
 }
 
+export function ensureShotDurationCraft(value) {
+  const raw = String(value || '').trim();
+  if (/\b\d+(?:\.\d+)?\s*s(ec|ecs|econd)?\b/i.test(raw) || /\bDuration\s*:/i.test(raw)) return raw || 'Duration: 6s';
+  if (!raw) return 'Duration: 6s';
+  return `Duration: 6s | ${raw}`;
+}
+
 export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
   if (!shot || typeof shot !== 'object') shot = {};
 
   const shotId = shot.sceneShotId || `SC01_SH${(index + 1) < 10 ? '0' + (index + 1) : (index + 1)}`;
-  const leadChar = shot.characterIdAssetRef || '[CharID: @Lead_Protagonist]';
-  const dialogue = shot.characterDialogue || '[Atmospheric Production Sound & Environmental Foley]';
+  const leadChar = shot.characterIdAssetRef || '[Needs Direction: unnamed subject]';
+  const dialogue = shot.characterDialogue || '[Needs Direction: no spoken line]';
   const actionContext = shot.actionEnvContext || defaultText || 'Cinematic stage production scene beat.';
 
   const rawShotComposition = shot.shotComposition || 'Medium Shot (MS)';
@@ -1270,7 +1839,7 @@ export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
     characterDialogue: dialogue,
     characterMovement: autoEnhanceCraftValue('characterMovement', rawCharacterMovement),
     characterEyeLooks: autoEnhanceCraftValue('characterEyeLooks', rawCharacterEyeLooks),
-    shotDurationAndImages: shot.shotDurationAndImages || 'Duration: 6s | Image_1: @Lead_Protagonist | Image_2: @CoArtist',
+    shotDurationAndImages: ensureShotDurationCraft(shot.shotDurationAndImages),
     soundFxAndFoley: autoEnhanceCraftValue('soundFxAndFoley', rawSoundFxAndFoley),
     backgroundScoreMood: autoEnhanceCraftValue('backgroundScoreMood', rawBackgroundScoreMood),
     lensAndFocalLength: autoEnhanceCraftValue('lensAndFocalLength', rawLensAndFocalLength),
@@ -1283,13 +1852,86 @@ export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
   };
 }
 
+function segmentFountainBeats(scriptText) {
+  const lines = safeTrim(scriptText).replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  let buf = [];
+  const flush = () => {
+    const t = safeTrim(buf.join('\n'));
+    if (t.length >= 4) blocks.push(t);
+    buf = [];
+  };
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = safeTrim(line);
+    if (isFountainCharacterCue(line)) {
+      flush();
+      buf.push(line);
+      i += 1;
+      while (i < lines.length) {
+        const nxt = lines[i];
+        if (isFountainCharacterCue(nxt) || SLUGLINE_START.test(safeTrim(nxt))) {
+          i -= 1;
+          break;
+        }
+        buf.push(nxt);
+        i += 1;
+      }
+      flush();
+      continue;
+    }
+    if (SLUGLINE_START.test(trimmed) && trimmed.length < 90) {
+      flush();
+      buf.push(line);
+      flush();
+      continue;
+    }
+    if (!trimmed) {
+      flush();
+      continue;
+    }
+    buf.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+function extractFountainFromBlock(block) {
+  const lines = String(block || '').split('\n').map((l) => safeTrim(l));
+  const names = [];
+  const spoken = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!isFountainCharacterCue(lines[i])) continue;
+    const name = lines[i].replace(/\s*\(.*\)\s*$/, '').trim();
+    if (name && !names.includes(name)) names.push(name);
+    const parts = [];
+    let j = i + 1;
+    while (j < lines.length && !isFountainCharacterCue(lines[j]) && !SLUGLINE_START.test(lines[j])) {
+      const ln = lines[j];
+      if (/^\(.*\)$/.test(ln)) {
+        j += 1;
+        continue;
+      }
+      if (ln) parts.push(ln);
+      j += 1;
+    }
+    if (parts.length) spoken.push(`${name}: "${parts.join(' ')}"`);
+  }
+  return { names, dialogue: spoken.join('\n') };
+}
+
 function smartSegmentTextIntoShots(scriptText) {
   if (!scriptText || typeof scriptText !== 'string') return [];
 
   const cleanScript = safeTrim(scriptText).replace(/\r\n/g, '\n');
+  const fountainCues = cleanScript.split('\n').filter((line) => isFountainCharacterCue(line)).length;
+  if (fountainCues >= 2 || (fountainCues >= 1 && /\n\([^)]{2,48}\)\n/.test(cleanScript))) {
+    const beats = segmentFountainBeats(cleanScript);
+    if (beats.length) return beats;
+  }
 
   // Regex splitting by Scene Headers, Shot Headers, or Paragraph Breaks
-  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:EXT\.|INT\.)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
+  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:EXT\.?|INT\.?)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
 
   let rawSegments = cleanScript.split(segmentRegex).map(b => safeTrim(b)).filter(Boolean);
 
@@ -1328,7 +1970,7 @@ function parseRawScriptFallback(scriptText) {
       return;
     }
 
-    if (parsedShots.length >= 100) return;
+    if (parsedShots.length >= heuristicShotBudget(scriptText)) return;
 
     const textLower = cleanBlock.toLowerCase();
 
@@ -1338,7 +1980,7 @@ function parseRawScriptFallback(scriptText) {
     }
 
     // Detect Scene Header (e.g. SCENE 1, SC 01, EXT. DANDAKA, INT. ROOM, సీన్ 1, 1. EXT., ACT I, ACT II)
-    const sceneHeaderMatch = cleanBlock.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+)|సీన్\s*(\d+)|దృశ్యం\s*(\d+)|BLOCK\s*[-:\s]?(\d+)|ACT\s*([I|V|X\d]+)|(?:EXT\.|INT\.)\s*([A-Za-z0-9_\s-]+))/i);
+    const sceneHeaderMatch = cleanBlock.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+)|సీన్\s*(\d+)|దృశ్యం\s*(\d+)|BLOCK\s*[-:\s]?(\d+)|ACT\s*([I|V|X\d]+)|(?:EXT\.?|INT\.?)\s*([A-Za-z0-9_\s-]+))/i);
 
     let isHeaderBlockOnly = false;
 
@@ -1353,8 +1995,8 @@ function parseRawScriptFallback(scriptText) {
           }
         }
       } else if (!textLower.startsWith('shot') && !textLower.startsWith('sh') && !textLower.startsWith('s0') && !textLower.startsWith('s1')) {
-        // If a new EXT. or INT. scene header is encountered without explicit scene number
-        if (cleanBlock.length < 80 && (textLower.includes('ext.') || textLower.includes('int.'))) {
+        // New EXT/INT slug — with or without the conventional period
+        if (cleanBlock.length < 80 && /(?:^|\n)\s*(?:int|ext)\b/i.test(cleanBlock)) {
           currentSceneNum++;
           currentSceneStr = `SC${currentSceneNum < 10 ? '0' + currentSceneNum : currentSceneNum}`;
           if (!sceneShotCounters[currentSceneStr]) {
@@ -1451,12 +2093,17 @@ function parseRawScriptFallback(scriptText) {
 
     // Universal Dynamic Character Extraction from Text
     const extractedCharNames = [];
+    const fountainBits = extractFountainFromBlock(block);
+    fountainBits.names.forEach((name) => {
+      extractedCharNames.push(`@${String(name).replace(/\s+/g, '_')}`);
+    });
     const dialogueSlugMatch = block.match(/([\u0C00-\u0C7FA-Z][\u0C00-\u0C7FA-Z\s]{1,20}):/g);
     if (dialogueSlugMatch) {
       dialogueSlugMatch.forEach(m => {
         const cleanName = safeTrim(m.replace(':', ''));
         if (cleanName && !['EXT', 'INT', 'SCENE', 'SHOT', 'ACT', 'CUT TO'].includes(cleanName)) {
-          extractedCharNames.push(`@${cleanName.replace(/\s+/g, '_')}`);
+          const tag = `@${cleanName.replace(/\s+/g, '_')}`;
+          if (!extractedCharNames.includes(tag)) extractedCharNames.push(tag);
         }
       });
     }
@@ -1470,7 +2117,8 @@ function parseRawScriptFallback(scriptText) {
     const secondaryCharTag = extractedCharNames[1] || "[Co-Artist: Supporting Performer]";
 
     const quoteMatch = block.match(/"([^"]+)"|'([^']+)'/);
-    let dialogue = quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Atmospheric Production Sound & Environmental Foley]';
+    let dialogue = fountainBits.dialogue
+      || (quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Atmospheric Production Sound & Environmental Foley]');
 
     let actionContext = safeTrim(block.replace(/\s+/g, ' '));
     if (actionContext.length > 220) actionContext = actionContext.substring(0, 220) + '...';
@@ -1666,13 +2314,13 @@ export async function enhanceCraftSlotWithLLM(craftKey, currentValue, shotContex
   }
 
   if (!apiKey) {
-    const fallback = currentValue ? `[Enhanced] ${currentValue}` : `[Pedditi Labs Cinematic Preset for ${craftKey}]`;
+    const fallback = currentValue ? `[Enhanced] ${currentValue}` : `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
     return autoEnhanceCraftValue(craftKey, fallback) || fallback;
   }
 
   if (apiKey) {
     try {
-      const prompt = `You are a legendary Master Director & Cinematographer (Pedditi Labs Cinema Intelligence Engine).
+      const prompt = `You are a legendary Master Director & Cinematographer (Stage Work Studio Cinema Intelligence Engine).
 Enhance the following film craft parameter for a cinema production script:
 Craft Field: "${craftKey}"
 Current Value: "${currentValue || ''}"
@@ -1693,7 +2341,7 @@ Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 
     }
   }
 
-  return currentValue ? `[Enhanced] ${currentValue}` : `[Pedditi Labs Cinematic Preset for ${craftKey}]`;
+  return currentValue ? `[Enhanced] ${currentValue}` : `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
 }
 
 export async function enhanceEntireShotWithLLM(shot) {
@@ -1701,7 +2349,7 @@ export async function enhanceEntireShotWithLLM(shot) {
 
   if (apiKey && shot) {
     try {
-      const prompt = `You are a Master Film Director (Pedditi Labs Cinema Intelligence Engine).
+      const prompt = `You are a Master Film Director (Stage Work Studio Cinema Intelligence Engine).
 Elevate the following shot into an ultra-cinematic masterpiece by enhancing all craft fields:
 Current Shot JSON: ${JSON.stringify(shot)}
 
@@ -1737,7 +2385,7 @@ Extract the COMPLETE story arc for character "${characterName}" from the followi
 Script Shots Context:
 ${JSON.stringify(shots, null, 2)}
 
-Task: Extract their complete story arc, origins, core motivation, mannerisms, gait, voice texture, narrative connections, and scene presence purpose across this film script.
+Task: Extract their complete story arc, origins, core motivation, mannerisms, gait, voice texture, narrative connections, scene presence purpose, AND a production wardrobe bible (layers, elements, accessories, missing costume details) from this film script.
 
 Return ONLY a valid JSON object with the following exact keys:
 {
@@ -1748,7 +2396,11 @@ Return ONLY a valid JSON object with the following exact keys:
   "walkingStyle": "Detailed description of their gait, stride speed, posture balance, and physical presence while moving.",
   "dialogueDelivery": "Unique dialogue cadence, vocal rhythm, dialect accent, emotional inflection, and speaking habits.",
   "uniqueVoice": "Vocal pitch, acoustic texture, timbre, and resonance.",
-  "outfit": "Signature costume design, fabrics, color palette, worn props, and visual grooming style."
+  "outfit": "Primary silhouette and garments: silhouette, era, layers from skin to outer, fabrics, dyes, fit, weathering, grooming that reads as costume.",
+  "wardrobeElements": "Itemized costume ELEMENTS head-to-toe: headwear, hair ornament, outer layer, inner/torso, bottoms, footwear, armor/drape, belts, pockets, embroidery, insignia, sacred marks. Name each piece; do not collapse into one sentence.",
+  "accessories": "Worn ACCESSORIES and held props: jewelry, tilak/bindi, weapons, shields, malas, rings, earrings, armlets, bags, instruments, ritual objects, eyewear. Material, metal, gem, and where on the body.",
+  "costumeDetails": "Missing production details: color palette hex-or-named swatches, fabric weave, aging/dirt, makeup that is costume, tattoos, scars that costume reveals, continuity notes if costume changes by scene.",
+  "colorPalette": "3-6 named costume colors with where they sit (e.g. saffron dhoti, gold zari border, charcoal armor)."
 }
 
 Do NOT output markdown blocks or extra text. Return valid JSON ONLY.`;
@@ -1780,134 +2432,448 @@ Do NOT output markdown blocks or extra text. Return valid JSON ONLY.`;
     walkingStyle: `Measured, heavy stride with commanding posture and unwavering center of gravity.`,
     dialogueDelivery: `Poetic cadence with deliberate pauses between key phrases, speaking with crisp emotional weight.`,
     uniqueVoice: `Resonant baritone with warm acoustic depth and clear articulation.`,
-    outfit: `Signature cinematic costume tailored with authentic textures and period-accurate accessories.`
+    outfit: `Signature cinematic costume tailored with authentic textures and period-accurate accessories.`,
+    wardrobeElements: `Head-to-toe elements: headwear, outer layer, inner garments, bottoms, footwear, belt, embroidery or insignia as the script implies.`,
+    accessories: `Worn accessories and held props: jewelry, weapons, ritual objects, bags, and signature handheld pieces.`,
+    costumeDetails: `Color, fabric weave, weathering, makeup-as-costume, and any scene-to-scene costume change the script implies.`,
+    colorPalette: `Primary, accent, and metal tones pulled from the character's described look.`
   };
 }
 
-export async function extractProjectCharactersWithLLM(shots = [], projectTitle = '') {
-  const apiKey = getApiKey();
+const GENERIC_CAST_NAMES = /^(lead[_\s-]?protagonist|primary[_\s-]?antagonist|supporting[_\s-]?(performer|character|artist)|co[-_\s]?artist|crowd|scene|lead|extra|background|unnamed|character|new character name)$/i;
+const CAST_CUE_STOP = new Set([
+  'ACT', 'EXT', 'INT', 'CUT TO', 'FADE IN', 'FADE OUT', 'SHOT', 'SCENE', 'TITLE', 'SUPER',
+  'PART ONE', 'PART TWO', 'INTERMISSION', 'DISSOLVE', 'SMASH CUT', 'CONTINUED', 'MORE',
+  'THE END', 'MONTAGE', 'FLASHBACK', 'PRESENT', 'LATER', 'NIGHT', 'DAY', 'DAWN', 'DUSK'
+]);
+const SYNOPSIS_NAME_STOP = new Set([
+  'Scene', 'Location', 'Context', 'Featuring', 'Camera', 'Medium', 'Close', 'Wide', 'Shot',
+  'The', 'And', 'With', 'From', 'Into', 'After', 'Before', 'During', 'Lord', 'Lady',
+  'King', 'Queen', 'Prince', 'Princess', 'Young', 'Old'
+]);
 
-  const prompt = `You are a Lead Cinema Casting & Screenwriting Analyst.
-Analyze the following film project script shots for "${projectTitle}":
-
-Project Shots Data:
-${JSON.stringify(shots, null, 2)}
-
-Task: Extract ALL unique characters present in this project's script. Synthesize full, elaborate Character Bible profiles for EACH character found.
-
-Return ONLY a valid JSON array of objects with the following exact keys for each character:
-[
-  {
-    "id": "char_uniqueId",
-    "tag": "@CharName_Tag",
-    "name": "Full Character Name",
-    "role": "Role (e.g., Lead Protagonist, Primary Antagonist, Supporting)",
-    "backstory": "An elaborate 3-4 sentence backstory detailing their origins, core trauma/oath, and emotional driving force in the story.",
-    "characterConnections": "Detailed narrative relationships with other characters in the story.",
-    "shotPurpose": "Explicit dramatic reason for their presence in shots across this scene/project.",
-    "mannerism": "Physical gestures, hand habits, posture tendencies, eye twitches or physical quirks.",
-    "walkingStyle": "Detailed description of their gait, stride speed, posture balance, and physical presence while moving.",
-    "dialogueDelivery": "Unique dialogue cadence, vocal rhythm, dialect accent, emotional inflection, and speaking habits.",
-    "uniqueVoice": "Vocal pitch, acoustic texture, timbre, and resonance.",
-    "outfit": "Signature costume design, fabrics, color palette, worn props, and visual grooming style."
-  }
-]
-
-Do NOT output markdown blocks or extra text. Return valid JSON array ONLY.`;
-
-  if (apiKey) {
-    try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
-      if (response && response.ok) {
-        const data = await response.json();
-        const responseText = extractGeminiResponseText(data);
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("LLM character extraction fallback:", err);
-    }
-  }
-
-  // Fallback local extraction from shots & screenplay text if API key is absent or offline
-  const extractedMap = new Map();
-  
-  const scriptText = typeof window !== 'undefined' ? (localStorage.getItem('sps_live_screenplay_text') || localStorage.getItem('sps_current_screenplay_text') || '') : '';
-  const safeScriptText = safeTrim(scriptText);
-  const dialogueCharMatches = safeScriptText.match(/^[A-Z][A-Z\s]{2,15}$/gm) || [];
-  
-  const knownNameMap = new Map();
-  dialogueCharMatches.forEach(rawName => {
-    const clean = safeTrim(rawName);
-    if (clean && !['ACT', 'EXT', 'INT', 'CUT TO', 'SHOT', 'SCENE', 'PART ONE', 'PART TWO'].includes(clean)) {
-      const tag = `@${clean.replace(/\s+/g, '_')}`;
-      if (!knownNameMap.has(tag)) {
-        knownNameMap.set(tag, clean.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
-      }
-    }
-  });
-
-  if (Array.isArray(shots)) {
-    shots.forEach((shot) => {
-      if (!shot || typeof shot !== 'object') return;
-      const rawRef = shot.characterIdAssetRef || '';
-      const mat = shot.characterIdMatrix || '';
-      const combined = `${rawRef} ${mat}`;
-      const tagMatches = combined.match(/@([A-Za-z0-9_]+)/g) || [];
-      tagMatches.forEach(tag => {
-        const name = tag.replace('@', '').replace(/_/g, ' ');
-        if (!knownNameMap.has(tag)) {
-          knownNameMap.set(tag, name);
-        }
-      });
-    });
-  }
-
-  if (knownNameMap.size === 0) {
-    knownNameMap.set('@Lead_Protagonist', 'Lead Protagonist');
-    knownNameMap.set('@Primary_Antagonist', 'Primary Antagonist');
-  }
-
-  let idx = 0;
-  knownNameMap.forEach((name, tag) => {
-    const isHero = idx === 0;
-    const isVillain = tag.toLowerCase().includes('antagonist') || tag.toLowerCase().includes('villain') || tag.toLowerCase().includes('rival');
-    
-    extractedMap.set(tag, {
-      id: `char_${Date.now()}_${idx}`,
-      tag: tag,
-      name: name,
-      role: isHero ? 'Lead Protagonist' : isVillain ? 'Primary Antagonist' : 'Supporting Character',
-      backstory: `${name} is a key figure in the narrative, bound by personal conviction and driven by high-stakes dramatic motivation.`,
-      characterConnections: `Interacts closely with lead performers and opposing forces across key scene beats.`,
-      shotPurpose: `Anchors the emotional gravitas, dramatic tension, and cinematic focus of key scene beats.`,
-      mannerism: `Calm, dignified posture; subtle tilt of the chin during intense focus; serene, unwavering gaze.`,
-      walkingStyle: `Measured, rhythmic stride with perfect center of balance and quiet, fluid movements.`,
-      dialogueDelivery: `Deep, poetic cadence delivered with steady authority and warm resonant depth.`,
-      uniqueVoice: `Resonant baritone with warm acoustic depth.`,
-      outfit: `Signature cinematic costume tailored with authentic textures and period-accurate accessories.`
-    });
-    idx++;
-  });
-
-  return Array.from(extractedMap.values());
+function titleCasePerson(raw) {
+  return String(raw || '')
+    .replace(/[_@]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
 
-export async function extractMasterScriptSynopsisWithLLM(fullScriptText = '') {
+function tagFromPersonName(name) {
+  const slug = String(name || '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug ? `@${slug}` : '';
+}
+
+function isGenericCastName(name) {
+  const n = String(name || '').replace(/[@_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!n || n.length < 2) return true;
+  return GENERIC_CAST_NAMES.test(n) || GENERIC_CAST_NAMES.test(n.replace(/\s+/g, '_'));
+}
+
+function addHarvestedPerson(map, raw) {
+  let name = String(raw || '')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/CharID\s*:?/gi, ' ')
+    .replace(/Co-?Artist\s*:?/gi, ' ')
+    .replace(/Image_\d+\s*=?/gi, ' ')
+    .replace(/^[@]+/, '')
+    .replace(/[_|,;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (name.length < 2 || name.length > 42) return;
+  if (isGenericCastName(name)) return;
+  if (/^\d+$/.test(name)) return;
+  if (/^(duration|atmospheric|production|foley|environment)/i.test(name)) return;
+  const pretty = titleCasePerson(name);
+  if (!pretty || isGenericCastName(pretty)) return;
+  const key = pretty.toLowerCase();
+  const cur = map.get(key) || { name: pretty, tag: tagFromPersonName(pretty), hits: 0 };
+  cur.hits += 1;
+  map.set(key, cur);
+}
+
+export function harvestCharacterNamesFromProject(shots = [], scriptText = '') {
+  const map = new Map();
+
+  (shots || []).forEach((shot) => {
+    if (!shot || typeof shot !== 'object') return;
+    String(shot.characterIdMatrix || '')
+      .split('|')
+      .forEach((part) => {
+        const rhs = part.includes('=') ? part.split('=').slice(1).join('=') : part;
+        addHarvestedPerson(map, rhs);
+      });
+    const ref = String(shot.characterIdAssetRef || '');
+    (ref.match(/@([A-Za-z][A-Za-z0-9_]{1,32})/g) || []).forEach((t) => addHarvestedPerson(map, t));
+    const labeled = ref.match(/CharID\s*:\s*@?([A-Za-z][A-Za-z0-9_ ]{1,40})/i);
+    if (labeled) addHarvestedPerson(map, labeled[1]);
+    (String(shot.coArtistInteraction || '').match(/@([A-Za-z][A-Za-z0-9_]{1,32})/g) || []).forEach((t) => addHarvestedPerson(map, t));
+    String(shot.characterDialogue || '').split('\n').forEach((line) => {
+      const cue = line.match(/^\s*([A-Z][A-Za-z][A-Za-z .'-]{0,28})\s*[:：]/);
+      if (cue) addHarvestedPerson(map, cue[1]);
+    });
+    String(shot.shotDurationAndImages || '')
+      .split('|')
+      .forEach((part) => {
+        const rhs = part.includes(':') ? part.split(':').slice(1).join(':') : part;
+        if (/@|[A-Za-z]/.test(rhs)) addHarvestedPerson(map, rhs);
+      });
+  });
+
+  const script = safeTrim(scriptText);
+  if (script) {
+    (script.match(/^[A-Z][A-Z \t.'-]{1,28}$/gm) || []).forEach((line) => {
+      const clean = safeTrim(line);
+      if (CAST_CUE_STOP.has(clean) || /^(INT|EXT|INT\/EXT)\.?/i.test(clean)) return;
+      if (clean.split(/\s+/).length > 4) return;
+      addHarvestedPerson(map, clean);
+    });
+    (script.match(/^Present:\s*(.+)$/gim) || []).forEach((line) => {
+      String(line.replace(/^Present:\s*/i, ''))
+        .split(/,|;| and /i)
+        .forEach((bit) => addHarvestedPerson(map, bit));
+    });
+  }
+
+  const hay = [
+    ...(shots || []).map((s) => `${s.sceneSynopsis || ''} ${s.actionEnvContext || ''}`),
+    script
+  ].join('\n');
+  const freq = new Map();
+  (hay.match(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){0,2})\b/g) || []).forEach((phrase) => {
+    const words = phrase.split(/\s+/);
+    if (words.every((w) => SYNOPSIS_NAME_STOP.has(w))) return;
+    if (SYNOPSIS_NAME_STOP.has(words[0]) && words.length === 1) return;
+    freq.set(phrase, (freq.get(phrase) || 0) + 1);
+  });
+  freq.forEach((n, phrase) => {
+    if (n >= 2) addHarvestedPerson(map, phrase);
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => b.hits - a.hits)
+    .slice(0, 28);
+}
+
+function readMasterStoryForCast() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const src = localStorage.getItem('sps_script_synopsis_source') || 'auto_llm';
+    if (src === 'writer_custom') {
+      return localStorage.getItem('sps_writer_custom_script_synopsis') || localStorage.getItem('sps_extracted_master_story') || '';
+    }
+    return localStorage.getItem('sps_extracted_master_story') || localStorage.getItem('sps_writer_custom_script_synopsis') || '';
+  } catch {
+    return '';
+  }
+}
+
+function shotMentionsPerson(shot, person) {
+  const name = String(person?.name || '').toLowerCase();
+  const tag = String(person?.tag || '').replace(/^@/, '').toLowerCase();
+  const h = `${shot?.sceneSynopsis || ''} ${shot?.characterIdAssetRef || ''} ${shot?.characterIdMatrix || ''} ${shot?.characterDialogue || ''} ${shot?.actionEnvContext || ''} ${shot?.coArtistInteraction || ''} ${shot?.makeupAndHairStyle || ''}`.toLowerCase();
+  if (name.length > 2 && h.includes(name)) return true;
+  if (tag.length > 2 && h.includes(tag)) return true;
+  return false;
+}
+
+function dossierForPerson(shots, person, allPeople = []) {
+  const hits = (shots || []).filter((s) => shotMentionsPerson(s, person));
+  const pool = hits.length ? hits : [];
+  const others = allPeople
+    .map((p) => p.name)
+    .filter((n) => n && n.toLowerCase() !== String(person.name || '').toLowerCase())
+    .slice(0, 8);
+  const coFromShots = [];
+  pool.forEach((s) => {
+    others.forEach((n) => {
+      if (`${s.sceneSynopsis || ''} ${s.coArtistInteraction || ''} ${s.characterIdMatrix || ''}`.toLowerCase().includes(n.toLowerCase())) {
+        coFromShots.push(n);
+      }
+    });
+  });
+  return {
+    beats: pool.map((s) => clip(s.sceneSynopsis || s.actionEnvContext, 200)).filter(Boolean).slice(0, 5),
+    dialogue: pool
+      .map((s) => clip(s.characterDialogue, 140))
+      .filter((d) => d && !/atmospheric|foley|production sound/i.test(d))
+      .slice(0, 3),
+    wardrobe: [
+      ...new Set(
+        pool
+          .flatMap((s) => [clip(s.characterIdAssetRef, 120), clip(s.makeupAndHairStyle, 100)])
+          .filter(Boolean)
+      )
+    ].slice(0, 3),
+    world: clip(pool[0]?.timeAndLightingEnv || pool[0]?.actionEnvContext || '', 160),
+    movement: clip(pool[0]?.characterMovement || pool[0]?.characterMannerismAndPosture || '', 120),
+    co: [...new Set(coFromShots)].slice(0, 6),
+    hitCount: pool.length
+  };
+}
+
+function skeletonBibleFromHarvest(people, shots = [], projectTitle = '', story = '') {
+  const title = projectTitle || 'this film';
+  const storyBit = clip(story, 320);
+  return people.map((p, idx) => {
+    const d = dossierForPerson(shots, p, people);
+    const villain = /duryodhan|dushan|antagonist|villain|rival|kaurava|shakuni|karna.*enemy/i.test(`${p.name} ${p.tag} ${d.beats.join(' ')}`);
+    const beatText = d.beats.join(' ');
+    const backstory = [
+      storyBit ? `In ${title}: ${storyBit}` : `${p.name} belongs to the story of ${title}.`,
+      beatText ? `${p.name} on screen: ${clip(beatText, 360)}` : ''
+    ].filter(Boolean).join(' ');
+    return {
+      id: `char_${Date.now()}_${idx}`,
+      source: 'auto_extracted',
+      tag: p.tag,
+      name: p.name,
+      role: idx === 0 ? 'Lead Protagonist' : villain ? 'Primary Antagonist' : idx < 4 ? 'Principal Cast' : 'Supporting',
+      backstory,
+      characterConnections: d.co.length
+        ? `${p.name} shares coverage with ${d.co.join(', ')} in this script.`
+        : `Relationships as written in ${title}.`,
+      shotPurpose: d.beats[0] || `${p.name} appears in ${d.hitCount || p.hits || 0} listed beats of ${title}.`,
+      mannerism: d.movement || '',
+      walkingStyle: clip(d.movement, 100),
+      dialogueDelivery: d.dialogue[0] || '',
+      uniqueVoice: '',
+      outfit: d.wardrobe[0] || `Period costume of ${title}'s world, as seen in their scenes.`,
+      wardrobeElements: d.wardrobe[1] || d.wardrobe[0] || '',
+      accessories: '',
+      costumeDetails: d.world || '',
+      colorPalette: '',
+      psychologicalArchetype: '',
+      internalConflict: clip(storyBit, 180)
+    };
+  });
+}
+
+function profilesLookGeneric(list) {
+  if (!Array.isArray(list) || !list.length) return true;
+  const real = list.filter((c) => c && !isGenericCastName(c.name) && !isGenericCastName(c.tag));
+  if (!real.length) return true;
+  const hollow = real.filter((c) => /appears throughout|key figure in the narrative|expand with ai auto-compose/i.test(c.backstory || ''));
+  return hollow.length === real.length;
+}
+
+function bibleLooksStoryLite(c) {
+  const b = String(c?.backstory || '');
+  return !b || b.length < 80 || /appears throughout|key figure in the narrative|expand with ai auto-compose/i.test(b);
+}
+
+function mergeBibleWithDossier(llmChar, people, shots, story, projectTitle) {
+  const person = {
+    name: llmChar.name,
+    tag: llmChar.tag
+  };
+  const skel = skeletonBibleFromHarvest([person], shots, projectTitle, story)[0] || {};
+  const out = { ...skel, ...llmChar, source: 'auto_extracted' };
+  if (bibleLooksStoryLite(out) && skel.backstory) out.backstory = skel.backstory;
+  if (!clip(out.outfit, 40) || /signature cinematic costume/i.test(out.outfit)) out.outfit = skel.outfit;
+  if (!clip(out.shotPurpose, 40)) out.shotPurpose = skel.shotPurpose;
+  if (!clip(out.characterConnections, 40) || /co-performers/i.test(out.characterConnections)) {
+    out.characterConnections = skel.characterConnections;
+  }
+  return out;
+}
+
+export async function extractProjectCharactersWithLLM(shots = [], projectTitle = '', options = {}) {
+  const scriptText =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('sps_live_screenplay_text') || localStorage.getItem('sps_current_screenplay_text') || ''
+      : '';
+  const story = readMasterStoryForCast();
+  const harvested = harvestCharacterNamesFromProject(shots, `${scriptText}\n${story}`);
+  const dossiers = harvested.map((p) => ({
+    name: p.name,
+    tag: p.tag,
+    ...dossierForPerson(shots, p, harvested)
+  }));
+
+  const prompt = `You are the casting director + continuity supervisor for the feature "${projectTitle || 'UNTITLED'}".
+Fill Character Bible rows that are TRUE to this film only. Do not write generic heroes. Do not use @Lead_Protagonist.
+
+MASTER STORY / SYNOPSIS:
+"""
+${clip(story || scriptText, 3500)}
+"""
+
+PEOPLE FOUND (use these names; add a person only if the story clearly names them):
+${dossiers.map((d) => `- ${d.name} (${d.tag})
+  Beats: ${d.beats.join(' | ') || '(find in synopsis)'}
+  Dialogue: ${d.dialogue.join(' / ') || 'n/a'}
+  Wardrobe/makeup crafts: ${d.wardrobe.join(' | ') || 'n/a'}
+  World: ${d.world || 'n/a'}
+  Shares frames with: ${d.co.join(', ') || 'n/a'}`).join('\n\n') || '(read names from the synopsis)'}
+
+Rules:
+- backstory must mention THIS plot (what they do in this story), not "a complex protagonist".
+- outfit must match the world of the synopsis (e.g. Mahabharata riverbank ≠ grey hoodie).
+- characterConnections must name other people from the list when they share story.
+- English names. Tags like @Kunti. Each field 8-28 words.
+
+Return ONLY a JSON array with keys:
+"id", "tag", "name", "role", "backstory", "characterConnections", "shotPurpose", "mannerism", "walkingStyle", "dialogueDelivery", "uniqueVoice", "outfit", "wardrobeElements", "accessories", "costumeDetails", "colorPalette", "psychologicalArchetype", "internalConflict".`;
+
+  let parsed = [];
+  try {
+    const llmText = await completeLlmText(prompt, {
+      temperature: 0.12,
+      maxOutputTokens: 16384,
+      timeoutMs: 90000,
+      signal: options.signal
+    });
+    parsed = safeParseJsonArray(llmText) || [];
+  } catch (err) {
+    if (isParseAbortError(err)) throw err;
+    console.warn('LLM character extraction fallback:', err);
+  }
+
+  parsed = (parsed || [])
+    .filter((c) => c && (c.name || c.tag) && !isGenericCastName(c.name) && !isGenericCastName(c.tag))
+    .map((c, i) => mergeBibleWithDossier(
+      {
+        ...c,
+        id: c.id || `char_${Date.now()}_${i}`,
+        tag: c.tag || tagFromPersonName(c.name),
+        name: titleCasePerson(c.name || String(c.tag || '').replace(/^@/, ''))
+      },
+      harvested,
+      shots,
+      story,
+      projectTitle
+    ));
+
+  if (!profilesLookGeneric(parsed) && parsed.some((c) => !bibleLooksStoryLite(c))) return parsed;
+  const skeleton = skeletonBibleFromHarvest(harvested, shots, projectTitle, story);
+  if (skeleton.length) return skeleton;
+  return [];
+}
+
+function lookFactsForChar(char, shots, projectTitle, story, llmFacts) {
+  const genreKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_preset_profile') || '') : '';
+  return composeLookFacts({
+    char,
+    shots,
+    projectTitle,
+    synopsis: story,
+    genreKey,
+    llmFacts
+  });
+}
+
+function fallbackReferenceSheets(char, shots, projectTitle) {
+  const story = clip(typeof window !== 'undefined' ? (localStorage.getItem('sps_extracted_master_story') || '') : '', 400);
+  return buildReferenceSheetsFromFacts(lookFactsForChar(char, shots, projectTitle, story, null));
+}
+
+/**
+ * LLM extracts FACTS only. The app writes image prompts so every character
+ * (not only famous names) uses Matrix wardrobe + station, not game-art priors.
+ */
+export async function extractCharacterReferenceSheets({ characters = [], shots = [], projectTitle = '', signal } = {}) {
+  const people = (characters || []).filter((c) => c && (c.name || c.tag) && !isGenericCastName(c.name) && !isGenericCastName(c.tag));
+  if (!people.length) return [];
+
+  const story = readMasterStoryForCast();
+  const outMap = new Map();
+  const genreKey = typeof window !== 'undefined' ? (localStorage.getItem('sps_preset_profile') || '') : '';
+  const epic = storyLooksIndianEpic({ title: projectTitle, synopsis: story, genreKey });
+
+  const batchSize = 4;
+  for (let i = 0; i < people.length; i += batchSize) {
+    assertParseNotAborted(signal);
+    const batch = people.slice(i, i + batchSize);
+    const dossiers = batch.map((p) => {
+      const d = dossierForPerson(shots, p, people);
+      return {
+        id: p.id,
+        tag: p.tag,
+        name: p.name,
+        role: p.role,
+        outfitBible: clip(p.outfit, 140),
+        beats: d.beats.slice(0, 3),
+        garmentsFromShots: d.wardrobe,
+        location: d.world,
+        armedInShots: shotsMentionWeaponForPerson(shots, p)
+      };
+    });
+
+    const prompt = `Casting continuity: extract FACTS only. Do not write image prompts or the words "character sheet" or "turnaround".
+
+Film: "${projectTitle || 'UNTITLED'}"
+Period: ${epic ? 'Indian period epic as in this synopsis (textiles and court of THAT world).' : 'Only the period/place in the synopsis — never default to medieval Europe.'}
+Synopsis:
+"""
+${clip(story, 1800)}
+"""
+
+Evidence per person (use ONLY this; do not copy another person's clothes):
+${JSON.stringify(dossiers, null, 2)}
+
+Return a JSON array. Each object:
+"id" (copy), "tag", "name",
+"ageStation" (one line: age + social station from role + beats + garments; e.g. adult queen/mother, elderly king, young soldier — never invent a girl warrior if evidence is a mother/queen/civilian),
+"garments" (one line copied/condensed from garmentsFromShots or outfitBible; if empty, civilian period dress of this film for that station),
+"location" (from their shots).
+
+If armedInShots is false, garments must not add weapons. Return JSON array only.`;
+
+    let parsed = [];
+    try {
+      const text = await completeLlmText(prompt, {
+        temperature: 0.08,
+        maxOutputTokens: 4096,
+        timeoutMs: 90000,
+        signal
+      });
+      parsed = safeParseJsonArray(text) || [];
+    } catch (err) {
+      if (isParseAbortError(err)) throw err;
+      console.warn('Reference sheet fact extract failed:', err);
+    }
+
+    batch.forEach((person) => {
+      const hit = parsed.find(
+        (row) =>
+          row &&
+          (row.id === person.id ||
+            String(row.tag || '').toLowerCase() === String(person.tag || '').toLowerCase() ||
+            String(row.name || '').toLowerCase() === String(person.name || '').toLowerCase())
+      );
+      const facts = lookFactsForChar(person, shots, projectTitle, story, hit || null);
+      if (hit?.garments) facts.outfit = clip(hit.garments, 200) || facts.outfit;
+      if (hit?.ageStation) facts.station = clip(hit.ageStation, 160) || facts.station;
+      outMap.set(person.id, buildReferenceSheetsFromFacts(facts));
+    });
+  }
+
+  return people.map((p) => ({
+    ...p,
+    referenceSheets: outMap.get(p.id) || fallbackReferenceSheets(p, shots, projectTitle)
+  }));
+}
+
+export async function extractMasterScriptSynopsisWithLLM(fullScriptText = '', options = {}) {
   const apiKey = getApiKey();
   const provider = getLlmProvider();
+  const signal = options.signal;
+  assertParseNotAborted(signal);
 
   const safeScriptText = safeTrim(fullScriptText);
   const scriptSnippet = safeScriptText.length > 30 
     ? safeScriptText.substring(0, 12000) 
     : 'A high-stakes cinematic screenplay.';
 
-  const prompt = `You are a Hollywood Executive Story Editor and Master Script Consultant (Pedditi Labs Cinema Intelligence Engine).
+  const prompt = `You are a Hollywood Executive Story Editor and Master Script Consultant (Stage Work Studio Cinema Intelligence Engine).
 
 Analyze the screenplay text below and extract an elaborate, production-ready 3-PARAGRAPH MASTER SCRIPT SYNOPSIS.
 
@@ -1925,10 +2891,10 @@ FORMAT RULES:
 - Do NOT include markdown titles, headings, bullet points, or metadata prefixes.
 - Return ONLY the clean multi-paragraph story text.`;
 
-  if (apiKey) {
+  if (apiKey && !isBuiltInLlm(provider)) {
     try {
-      if (provider === 'google_gemini' || provider === 'gemini') {
-        const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
+      if (isGeminiLlmProvider(provider)) {
+        const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
         if (response && response.ok) {
           const data = await response.json();
           const text = safeTrim(extractGeminiResponseText(data));
@@ -1937,7 +2903,7 @@ FORMAT RULES:
       }
 
       if (provider === 'openai') {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        const res = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -1947,7 +2913,8 @@ FORMAT RULES:
             model: 'gpt-4o',
             temperature: 0.1,
             messages: [{ role: 'user', content: prompt }]
-          })
+          }),
+          signal
         });
         if (res.ok) {
           const data = await res.json();
@@ -1956,6 +2923,7 @@ FORMAT RULES:
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM master synopsis extraction error:", err);
     }
   }
@@ -1978,7 +2946,7 @@ ACT III: DRAMATIC CLIMAX & THEMATIC RESOLUTION
 In an epic display of divine authority and martial mastery, the protagonist steps forward to face the entire invading host single-handedly. Flashing solar radiance and serene martial precision turn the tide of battle, vanquishing the demonic siege and establishing peace across the realm. The resolution reinforces the enduring triumph of righteous dharma over chaos.`;
 }
 
-export async function composeDirectorPsychologyWithLLM(projectTitle = '', shots = [], scriptText = '', projectDescription = '') {
+export async function composeDirectorPsychologyWithLLM(projectTitle = '', shots = [], scriptText = '', projectDescription = '', options = {}) {
   const apiKey = getApiKey();
 
   // Extract character names & scene context for project-specific prompt intelligence
@@ -2048,7 +3016,8 @@ Return valid JSON ONLY.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 });
+      assertParseNotAborted(options.signal);
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 }, { signal: options.signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2058,6 +3027,7 @@ Return valid JSON ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM director psychology error:", err);
     }
   }
@@ -2188,7 +3158,7 @@ Return valid JSON ONLY.`;
 // ----------------------------------------------------------------------
 export async function composeDoPVisionWithLLM(project = {}) {
   const apiKey = getApiKey();
-  const { title = 'Stage Production', rawScript = '', shots = [] } = project;
+  const { title = 'Stage Production', rawScript = '', shots = [], signal } = project;
 
   const prompt = `You are an Academy-Award winning Director of Photography (DoP) & Master Cinematographer.
 Project Title: "${title}"
@@ -2207,7 +3177,8 @@ Return valid JSON ONLY.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.2 });
+      assertParseNotAborted(signal);
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.2 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2218,6 +3189,7 @@ Return valid JSON ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM DoP vision synthesis error:", err);
     }
   }
@@ -2245,7 +3217,7 @@ export async function composeHybridDoPVisionMergeWithLLM(projectTitle = '', huma
 // ----------------------------------------------------------------------
 export async function composeSoundVisionWithLLM(project = {}) {
   const apiKey = getApiKey();
-  const { title = 'Stage Production', rawScript = '' } = project;
+  const { title = 'Stage Production', rawScript = '', signal } = project;
 
   const prompt = `You are a Master Film Composer & Lead Sound Designer.
 Project Title: "${title}"
@@ -2264,7 +3236,8 @@ Return valid JSON ONLY.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.2 });
+      assertParseNotAborted(signal);
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.2 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2275,6 +3248,7 @@ Return valid JSON ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM Sound vision synthesis error:", err);
     }
   }
@@ -2297,9 +3271,11 @@ export async function composeHybridSoundVisionMergeWithLLM(projectTitle = '', hu
   };
 }
 
-export async function synthesizeFullAppElementsFromScript(scriptText, projectTitle = '', shots = []) {
+export async function synthesizeFullAppElementsFromScript(scriptText, projectTitle = '', shots = [], options = {}) {
+  const signal = options.signal;
+  assertParseNotAborted(signal);
   if (!shots || shots.length === 0) {
-    shots = await parseRawScriptToShots(scriptText);
+    shots = await parseRawScriptToShots(scriptText, { signal });
   }
 
   const detectedGenre = detectScriptGenre(projectTitle, shots, scriptText);
@@ -2307,39 +3283,61 @@ export async function synthesizeFullAppElementsFromScript(scriptText, projectTit
   // 1. Synthesize Character Bibles
   let characters = [];
   try {
-    characters = await extractProjectCharactersWithLLM(shots, projectTitle);
+    assertParseNotAborted(signal);
+    characters = await extractProjectCharactersWithLLM(shots, projectTitle, { signal });
   } catch (e) {
+    if (isParseAbortError(e)) throw e;
     console.warn("Character auto-synthesis error:", e);
   }
 
   // 2. Synthesize Director's Core Vision & Script Psychology
   let directorPsychology = null;
   try {
-    directorPsychology = await composeDirectorPsychologyWithLLM(projectTitle, shots, scriptText);
+    assertParseNotAborted(signal);
+    directorPsychology = await composeDirectorPsychologyWithLLM(projectTitle, shots, scriptText, '', { signal });
   } catch (e) {
+    if (isParseAbortError(e)) throw e;
     console.warn("Director psychology auto-synthesis error:", e);
   }
 
   // 3. Synthesize DoP Vision Vault
   let dopVision = null;
   try {
-    dopVision = await composeDoPVisionWithLLM({ title: projectTitle, shots, scriptText });
+    assertParseNotAborted(signal);
+    dopVision = await composeDoPVisionWithLLM({ title: projectTitle, shots, scriptText, signal });
   } catch (e) {
+    if (isParseAbortError(e)) throw e;
     console.warn("DoP vision auto-synthesis error:", e);
   }
 
   // 4. Synthesize Sound & Music Vision Vault
   let soundVision = null;
   try {
-    soundVision = await composeSoundVisionWithLLM({ title: projectTitle, shots, scriptText });
+    assertParseNotAborted(signal);
+    soundVision = await composeSoundVisionWithLLM({ title: projectTitle, shots, scriptText, signal });
   } catch (e) {
+    if (isParseAbortError(e)) throw e;
     console.warn("Sound vision auto-synthesis error:", e);
   }
+
+  let worldAssets = [];
+  try {
+    worldAssets = await extractWorldEnvironmentAssetsWithLLM(shots, projectTitle, { signal });
+  } catch (e) {
+    if (isParseAbortError(e)) throw e;
+    console.warn("World auto-synthesis error:", e);
+    worldAssets = heuristicWorldAssetsFromShots(shots, projectTitle);
+  }
+
+  const meta = getLastParseMeta();
 
   return {
     shots,
     detectedGenre,
     characters,
+    worldAssets,
+    screenplayText: meta?.screenplayText || '',
+    runtimeMinutes: meta?.runtimeMinutes || null,
     directorPsychology: directorPsychology ? {
       activeVisionTab: 'ai',
       compilerActiveMode: 'AI_LLM',
@@ -2469,13 +3467,13 @@ function heuristicWorldAssetsFromShots(shots = [], projectTitle = '') {
  * Extract World & Environment assets (locations, backgrounds, props, elements, atmosphere)
  * for the World Console vault — feeds image→video asset consistency.
  */
-export async function extractWorldEnvironmentAssetsWithLLM(shots = [], projectTitle = '') {
+export async function extractWorldEnvironmentAssetsWithLLM(shots = [], projectTitle = '', options = {}) {
   const apiKey = getApiKey();
   const prompt = `You are a Production Designer & World-Building Analyst for cinema.
 Analyze these shots for "${projectTitle}" and extract a reusable WORLD & ENVIRONMENT ASSET BIBLE.
 
 Shots:
-${JSON.stringify((shots || []).slice(0, 40).map((s) => ({
+${JSON.stringify((shots || []).slice(0, 80).map((s) => ({
   sceneShotId: s.sceneShotId,
   actionEnvContext: s.actionEnvContext,
   timeAndLightingEnv: s.timeAndLightingEnv,
@@ -2503,7 +3501,8 @@ Focus on locations, background plates, set props, environmental elements, atmosp
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 });
+      assertParseNotAborted(options.signal);
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 }, { signal: options.signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2535,6 +3534,7 @@ Focus on locations, background plates, set props, environmental elements, atmosp
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn('LLM world/environment extraction fallback:', err);
     }
   }

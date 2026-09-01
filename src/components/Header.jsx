@@ -1,18 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Cloud, HardDrive, Settings, Lock, Sparkles, LayoutGrid, FileText, FolderKanban, Video, Download, Upload, Check, Moon, Scroll, HelpCircle, ChevronDown, ChevronUp, RefreshCw, RotateCcw, RotateCw, Users, MessageSquare, Globe2, Brain, Clapperboard, Maximize2
-} from 'lucide-react';
+import { readCloudSyncHealth, syncBackendLabel } from '../utils/cloudSyncHealth';
+import { managedCreditStatus } from '../utils/saasControl';
+import {
+  IconScript as Scroll,
+  IconMatrix as LayoutGrid,
+  IconForm as FileText,
+  IconStage as Video,
+  IconCast as Users,
+  IconWorld as Globe2,
+  IconLibrary as FolderKanban,
+  IconCompile as Sparkles,
+  IconPromo as PromoMark,
+  IconCampaign as CampaignMark,
+  IconStoryboard as StoryboardMark,
+  IconBudget as BudgetMark,
+  IconClapper as PitchMark,
+  IconReel as ReelMark,
+  IconSpark as GenerateMark,
+  IconUndo as RotateCcw,
+  IconRedo as RotateCw,
+  IconCloud as Cloud,
+  IconGear as Settings,
+  IconHelp as HelpCircle,
+  IconChat as MessageSquare,
+  IconExpand as Maximize2,
+  IconMoon as Moon,
+  IconLock as Lock,
+  IconDownload as Download,
+  IconChevronUp as ChevronUp,
+  IconSync as RefreshCw,
+  IconBrain as Brain,
+  IconNav as NavMark
+} from './StudioIcons';
+import { PinBarButton } from './HoverPinBar';
+import HeaderDriveMenu from './HeaderDriveMenu';
+import HeaderSaveMenu from './HeaderSaveMenu';
 import {
   getAllottedProjectTitles,
   isStudioAdmin,
   isStudioOwner,
   getCurrentUserEmail,
   isGuestSession,
+  canGuestBrowseApp,
   canCreateOrDeleteProjects,
   filterAllottedTitlesToLiveLibrary,
-  getLiveProjectLibrary
+  getLiveProjectLibrary,
+  isStudioModuleEnabled,
+  areAllConsolesOff,
+  setPresentationMode
 } from '../utils/projectPermissions';
-import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 export default function Header({ 
   projectTitle, 
@@ -25,14 +61,24 @@ export default function Header({
   onExportProject,
   onImportProject,
   onOpenCompiler,
+  onOpenGenerateDesk,
   onOpenPromoPack,
+  onOpenCampaignKit,
+  onOpenStoryboard,
+  onOpenPitchDeck,
+  onOpenBudgetConsole,
+  showBudgetConsole = false,
+  showPromoConsole = true,
+  showPitchConsole = true,
+  showReelConsole = true,
+  onOpenFeatureReel,
   onOpenAdminModal,
   onOpenProjectConsole,
-  onOpenDirectorPsychology,
   onOpenCharacterBible,
   onOpenWorldEnvironment,
   onOpenWriterConsole,
   onOpenHelpModal,
+  onOpenNavigatorShortcutHelp,
   onOpenStudioBrain,
   onOpenLoginModal,
   onOpenInvestorDeck,
@@ -44,6 +90,12 @@ export default function Header({
   isAdminLoggedIn,
   showCanvasTab = false,
   onSaveProject,
+  onDurableProjectSave,
+  autoSaveIntervalId = '5m',
+  onChangeAutoSaveInterval,
+  lastDurableSaveAt = null,
+  lastVersionFile = '',
+  isDurableSaving = false,
   isProjectSavedToast = false,
   isCloudSyncing = false,
   shotCount = 0,
@@ -60,14 +112,55 @@ export default function Header({
   isFullscreen = false,
   onToggleFullscreen,
   onMinimizeHeader,
+  headerPinned = false,
+  onTogglePinHeader,
   onOpenCollabChat,
   collabChatOpen = false,
   unreadChatCount = 0,
+  onOpenNavigator,
+  shots = [],
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isActiveUsersOpen, setIsActiveUsersOpen] = useState(false);
+  const [syncHealth, setSyncHealth] = useState(() => readCloudSyncHealth());
+  const [creditStatus, setCreditStatus] = useState(() => managedCreditStatus());
+
+  useEffect(() => {
+    const refresh = () => setSyncHealth(readCloudSyncHealth());
+    refresh();
+    window.addEventListener('sps_cloud_sync_health_updated', refresh);
+    return () => window.removeEventListener('sps_cloud_sync_health_updated', refresh);
+  }, []);
+
+  useEffect(() => {
+    const refreshCredits = () => setCreditStatus(managedCreditStatus());
+    refreshCredits();
+    window.addEventListener('sps_saas_changed', refreshCredits);
+    return () => window.removeEventListener('sps_saas_changed', refreshCredits);
+  }, []);
+
+  useEffect(() => {
+    if (!creditStatus?.relevant || creditStatus.level === 'ok') return undefined;
+    const key = `sps_credit_low_toast_${creditStatus.level}_${creditStatus.credits}`;
+    try {
+      if (sessionStorage.getItem(key)) return undefined;
+      sessionStorage.setItem(key, '1');
+    } catch {
+      /* ignore */
+    }
+    showNotice(creditStatus.message);
+    return undefined;
+  }, [creditStatus]);
+
+  useEffect(() => {
+    const onFail = (e) => {
+      showNotice(e?.detail?.message || 'Cloud sync failed 3 times in a row.');
+    };
+    window.addEventListener('sps_cloud_sync_fail_alert', onFail);
+    return () => window.removeEventListener('sps_cloud_sync_fail_alert', onFail);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -83,7 +176,7 @@ export default function Header({
   const handleTitleSubmit = () => {
     if (tempTitleInput.trim()) {
       if (!isAdminLoggedIn) {
-        alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can rename projects.');
+        showNotice('Only the studio admin can rename this project.');
         setTempTitleInput(projectTitle);
         setIsEditingTitle(false);
         return;
@@ -149,26 +242,37 @@ export default function Header({
 
   const [currentUser, setCurrentUser] = useState(getLoggedInUser);
   const isGuest = isGuestSession();
+  const [guestBrowse, setGuestBrowse] = useState(() => canGuestBrowseApp());
+  const lookOnly = isGuest && guestBrowse;
+  const [notice, setNotice] = useState('');
 
-  const redirectGuest = (label = 'this studio area') => {
-    alert(
-      `🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view Investor Deck & Studio Showcase.\n\nSign in to use ${label}, or contact pedditiram@gmail.com for access.`
-    );
-    if (onOpenInvestorDeck) onOpenInvestorDeck();
+  const showNotice = (msg) => {
+    setNotice(msg);
+    window.clearTimeout(showNotice._t);
+    showNotice._t = window.setTimeout(() => setNotice(''), 3200);
   };
 
-  const withGuestGuard = (label, fn) => () => {
-    if (isGuest) {
+  const redirectGuest = (label = 'this studio area') => {
+    showNotice(`Sign in to use ${label}.`);
+    onOpenLoginModal?.();
+  };
+
+  const withGuestGuard = (label, fn, { allowLook } = { allowLook: true }) => () => {
+    if (isGuest && !(allowLook && guestBrowse)) {
       redirectGuest(label);
       return;
     }
     fn?.();
   };
 
+  const consoleOn = (id) => (id === 'budget' ? showBudgetConsole : isStudioModuleEnabled(id));
+  const demoMode = areAllConsolesOff();
+
   // Real-time automatic synchronization when collaborator projects or profiles change
   React.useEffect(() => {
     const handleUpdate = () => {
       setCurrentUser(getLoggedInUser());
+      setGuestBrowse(canGuestBrowseApp());
     };
     if (isProfileOpen) {
       handleUpdate();
@@ -176,10 +280,12 @@ export default function Header({
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('sps_collaborators_updated', handleUpdate);
     window.addEventListener('sps_projects_updated', handleUpdate);
+    window.addEventListener('sps_guest_browse_changed', handleUpdate);
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('sps_collaborators_updated', handleUpdate);
       window.removeEventListener('sps_projects_updated', handleUpdate);
+      window.removeEventListener('sps_guest_browse_changed', handleUpdate);
     };
   }, [isAdminLoggedIn, projectTitle, isProfileOpen]);
 
@@ -191,7 +297,9 @@ export default function Header({
   const authEmail = currentUser.email || (isAdminLoggedIn ? 'pedditiram@gmail.com' : 'user@gmail.com');
   // Owner: live library titles only. Collaborators: allotted ∩ live (drops deleted 002, etc.)
   const liveLibrary = getLiveProjectLibrary();
-  const allottedProjects = isStudioOwner(authEmail)
+  const allottedProjects = isGuest
+    ? [projectTitle || 'GUEST PLAYGROUND']
+    : isStudioOwner(authEmail)
     ? liveLibrary
         .map((p) => String(p?.title || '').trim())
         .filter((t) => t && t.toUpperCase() !== 'STAGE PRODUCTION STUDIO')
@@ -225,11 +333,13 @@ export default function Header({
 
   const userColorGradient = getUserGradient(userName);
 
-  // Detect Electron for traffic-light padding
-  const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-
   return (
-    <header className="sticky top-0 z-40 sps-ui-chrome bg-zinc-950/78 backdrop-blur-2xl border-b border-white/[0.09] shadow-[0_8px_32px_rgba(0,0,0,0.28)] shrink-0 w-full min-w-0 overflow-x-clip text-xs">
+      <header className="sticky top-0 z-40 sps-ui-chrome bg-[var(--sps-bg)]/88 backdrop-blur-xl border-b border-[var(--sps-border)] shrink-0 w-full min-w-0 text-xs">
+      {notice ? (
+        <div className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+8px)] z-[70] sps-chip bg-[var(--sps-surface)] text-[var(--sps-text)] shadow-lg max-w-[min(90vw,28rem)] text-center normal-case tracking-normal">
+          {notice}
+        </div>
+      ) : null}
       {/* Click outside backdrop when profile dropdown is open */}
       {isProfileOpen && (
         <div 
@@ -238,71 +348,36 @@ export default function Header({
         />
       )}
 
-      {/* macOS traffic-light drag strip — sits above content, lets user drag the window */}
-      {isElectron && (
-        <div
-          style={{ WebkitAppRegion: 'drag', height: '4px', width: '100%' }}
-          className="absolute top-0 left-0 right-0"
-        />
-      )}
-
       <div
-        className="sps-header-bar w-full min-w-0 flex items-center gap-1.5 relative flex-nowrap overflow-hidden py-1.5"
-        style={isElectron ? { paddingLeft: '82px', paddingRight: '8px' } : { paddingLeft: '10px', paddingRight: '8px' }}
+        className="sps-header-bar w-full min-w-0 relative"
+        style={{ paddingLeft: '12px', paddingRight: '12px' }}
       >
-        
-        {/* ========================================================================= */}
-        {/* LEFT SECTION: BRAND, PROJECTS CONSOLE & ACTIVE PROJECT TITLE */}
-        {/* ========================================================================= */}
-        <div className="sps-header-left flex items-center gap-1.5 min-w-0 shrink">
-          <div className="flex items-center gap-1.5 min-w-0" title="Stage Production Studio">
-            <div
-              className={`relative w-8 h-8 rounded-xl shadow-lg flex items-center justify-center shrink-0 ring-1 ${
-                colorTheme === 'paper'
-                  ? 'ring-slate-200 shadow-cyan-500/15 bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600'
-                  : 'ring-white/20 shadow-cyan-500/25 bg-gradient-to-tr from-cyan-400 via-sky-500 to-blue-600'
-              }`}
-              aria-hidden="true"
-            >
-              <Clapperboard className="w-4 h-4 text-white drop-shadow" />
-            </div>
-            <div className="flex flex-col leading-tight min-w-0 max-w-[7.5rem] sm:max-w-[11rem] lg:max-w-[13rem]">
-              <h1
-                className={`text-[11px] sm:text-[12px] font-bold tracking-wide font-display truncate ${
-                  colorTheme === 'paper' ? 'text-slate-900' : 'text-white'
-                }`}
-              >
-                Stage Production Studio
-              </h1>
-              <span
-                className={`hidden sm:block text-[9px] font-medium tracking-wide truncate ${
-                  colorTheme === 'paper' ? 'text-slate-500' : 'text-zinc-500'
-                }`}
-              >
-                Pedditi Labs · Cinema craft
-              </span>
-            </div>
-          </div>
-
-          <div className="h-5 w-px bg-white/10 hidden md:block shrink-0" />
-
+        <div className="sps-header-identity">
+          <button
+            type="button"
+            onClick={() => onOpenNavigator?.()}
+            className="sps-icon-btn shrink-0"
+            title="Navigator (Shift+Space · swipe from left · two-finger tap)"
+            aria-label="Open studio navigator"
+          >
+            <NavMark className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={() => {
-              if (isGuest) {
+              if (isGuest && !lookOnly) {
                 redirectGuest('Projects Console');
                 return;
               }
               onOpenProjectConsole?.();
             }}
-            className="sps-chrome-btn inline-flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border border-cyan-400/30 font-semibold shadow-sm shrink-0 cursor-pointer"
-            title={isGuest ? 'Guest: open Investor Deck instead' : 'Projects & AI Script Breakdown Console'}
+            className="sps-icon-btn shrink-0"
+            title={isGuest && !lookOnly ? 'Guest: sign in or enable Guest Browse' : 'Projects'}
           >
-            <FolderKanban className="w-3.5 h-3.5 text-cyan-300" />
-            <span className="hidden xl:inline text-[11px]">Projects</span>
+            <FolderKanban className="w-3.5 h-3.5" />
           </button>
 
-          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/10 px-2 py-1 rounded-xl min-w-0 shrink">
+          <div className="min-w-0 flex items-baseline gap-2">
             {isEditingTitle ? (
               <input
                 type="text"
@@ -311,260 +386,192 @@ export default function Header({
                 onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
                 onBlur={handleTitleSubmit}
                 autoFocus
-                className="bg-zinc-950 border border-amber-500/60 rounded-lg px-2 py-0.5 text-xs text-amber-200 font-semibold focus:outline-none max-w-[88px] sm:max-w-[140px]"
+                className="bg-transparent border-b border-[var(--sps-gold)] px-0 py-0.5 text-xs text-[var(--sps-text)] focus:outline-none max-w-[160px]"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => {
                   if (!isAdminLoggedIn) {
-                    alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can rename projects.');
+                    showNotice('Only the studio admin can rename this project.');
                     return;
                   }
                   setTempTitleInput(projectTitle);
                   setIsEditingTitle(true);
                 }}
-                className="text-amber-200 font-semibold hover:text-amber-100 max-w-[64px] sm:max-w-[110px] lg:max-w-[140px] truncate text-left text-xs min-w-0"
+                className="font-display italic text-[14px] text-[var(--sps-gold)] truncate text-left min-w-0 max-w-[9rem] lg:max-w-[14rem]"
                 title={isAdminLoggedIn ? 'Click to edit project title' : 'Project title (admin rename only)'}
               >
                 {projectTitle}
               </button>
             )}
-            <span className="text-[10px] text-cyan-200 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded-full border border-cyan-400/25 shrink-0" title={`${shotCount} shots`}>
-              <span className="sm:hidden">{shotCount}</span>
-              <span className="hidden sm:inline">{shotCount} shots</span>
-            </span>
+            <span className="text-[10px] text-[var(--sps-muted)] tabular-nums shrink-0">{shotCount}</span>
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* CENTER SECTION: STUDIO WORKSPACES */}
-        {/* ========================================================================= */}
-        <div className={`sps-header-center flex items-center gap-0.5 p-0.5 sm:p-1 rounded-2xl border min-w-0 shrink overflow-hidden ${
-          colorTheme === 'paper'
-            ? 'bg-white border-slate-200 shadow-sm'
-            : 'bg-black/35 border-white/10 shadow-inner'
-        }`}>
-          {/* 1. Writer Console */}
-          <button
-            type="button"
-            onClick={() => {
-              if (isGuest) {
-                redirectGuest('Writer Console');
-                return;
-              }
-              if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
-              else setActiveView("screenplay");
-            }}
-            className={`sps-chrome-btn relative px-1.5 sm:px-2 py-1.5 rounded-xl flex items-center gap-1 shrink-0 ${
-              activeView === "screenplay"
-                ? "bg-amber-400 text-zinc-950 shadow-[0_4px_16px_rgba(245,158,11,0.35)] font-semibold"
-                : colorTheme === 'paper'
-                  ? "text-slate-600 hover:text-amber-800 hover:bg-amber-50"
-                  : "text-zinc-400 hover:text-amber-200 hover:bg-white/5"
-            }`}
-            title="Writer Console — Screenplay Editor & Master Script Synopsis"
-          >
-            <Scroll className="w-4 h-4 shrink-0" />
-            <span className="hidden 2xl:inline text-[11px]">Writer</span>
-          </button>
-
-          {/* 2. Matrix View */}
-          <button
-            type="button"
-            onClick={withGuestGuard('Cinema Matrix', () => setActiveView("spreadsheet"))}
-            className={`sps-chrome-btn relative px-1.5 sm:px-2 py-1.5 rounded-xl flex items-center gap-1 shrink-0 ${
-              activeView === "spreadsheet"
-                ? "bg-cyan-400 text-zinc-950 shadow-[0_4px_16px_rgba(34,211,238,0.35)] font-semibold"
-                : colorTheme === 'paper'
-                  ? "text-slate-600 hover:text-cyan-800 hover:bg-cyan-50"
-                  : "text-zinc-400 hover:text-cyan-200 hover:bg-white/5"
-            }`}
-            title={`${SEEDANCE_SLOTS.length}-Craft Cinema Matrix Spreadsheet View`}
-          >
-            <LayoutGrid className="w-4 h-4 shrink-0" />
-            <span className="hidden 2xl:inline text-[11px]">Matrix</span>
-          </button>
-
-          {/* 3. Studio Form */}
-          <button
-            type="button"
-            onClick={withGuestGuard('Studio Form', () => setActiveView("form"))}
-            className={`sps-chrome-btn relative px-1.5 sm:px-2 py-1.5 rounded-xl flex items-center gap-1 shrink-0 ${
-              activeView === "form"
-                ? "bg-emerald-400 text-zinc-950 shadow-[0_4px_16px_rgba(52,211,153,0.3)] font-semibold"
-                : colorTheme === 'paper'
-                  ? "text-slate-600 hover:text-emerald-800 hover:bg-emerald-50"
-                  : "text-zinc-400 hover:text-emerald-200 hover:bg-white/5"
-            }`}
-            title={`Studio Form — ${SEEDANCE_SLOTS.length}-Craft Production Form Editor`}
-          >
-            <FileText className="w-4 h-4 shrink-0" />
-            <span className="hidden 2xl:inline text-[11px]">Form</span>
-          </button>
-
-          {/* 4. Director Canvas */}
-          {showCanvasTab && (
-            <button
-              type="button"
-              onClick={withGuestGuard('Director Canvas', () => setActiveView("canvas"))}
-              className={`sps-chrome-btn relative px-1.5 sm:px-2 py-1.5 rounded-xl flex items-center gap-1 shrink-0 ${
-                activeView === "canvas"
-                  ? "bg-sky-500 text-white shadow-[0_4px_16px_rgba(14,165,233,0.35)] font-semibold"
-                  : colorTheme === 'paper'
-                    ? "text-sky-700 hover:text-sky-900 hover:bg-sky-50"
-                    : "text-zinc-400 hover:text-sky-200 hover:bg-white/5"
-              }`}
-              title="3D Stage — mannequins, cameras, Master Cinema framing"
-            >
-              <Video className="w-4 h-4 shrink-0" />
-              <span className="hidden 2xl:inline text-[11px]">3D Stage</span>
-            </button>
-          )}
-
-          <div className={`h-4 w-px my-auto shrink-0 ${colorTheme === 'paper' ? 'bg-slate-200' : 'bg-white/10'}`} />
-
-          {/* 5. Master Character Bible Vault */}
-          <button
-            type="button"
-            onClick={withGuestGuard('Character Bible', onOpenCharacterBible)}
-            className={`sps-chrome-btn relative px-1.5 py-1.5 rounded-xl shrink-0 ${
-              colorTheme === 'paper'
-                ? 'text-violet-700 hover:bg-violet-50 hover:text-violet-900'
-                : 'text-zinc-400 hover:bg-white/5 hover:text-violet-200'
-            }`}
-            title="Master Character Bible Vault"
-          >
-            <Users className="w-4 h-4" />
-          </button>
-
-          {/* 5b. World & Environment Console */}
-          <button
-            type="button"
-            onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)}
-            className={`sps-chrome-btn relative px-1.5 py-1.5 rounded-xl shrink-0 ${
-              colorTheme === 'paper'
-                ? 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900'
-                : 'text-zinc-400 hover:bg-white/5 hover:text-emerald-200'
-            }`}
-            title="World & Environment Console — locations, plates, props"
-          >
-            <Globe2 className="w-4 h-4" />
-          </button>
-
-          {/* 6. Dedicated Director's Vision Vault */}
-          <button
-            type="button"
-            onClick={withGuestGuard("Director's Vision", onOpenDirectorPsychology)}
-            className={`sps-chrome-btn relative px-1.5 py-1.5 rounded-xl shrink-0 ${
-              colorTheme === 'paper'
-                ? 'text-amber-700 hover:bg-amber-50 hover:text-amber-900'
-                : 'text-zinc-400 hover:bg-white/5 hover:text-amber-200'
-            }`}
-            title="Director's Core Vision & Script Psychology Vault"
-          >
-            <Sparkles className="w-4 h-4" />
-          </button>
+        <div className="sps-header-work">
+          <div className="sps-tabs sps-tabs-mast" role="tablist" aria-label="Studio rooms">
+            {demoMode ? (
+              <button
+                type="button"
+                className="text-[10px] uppercase tracking-[0.14em] px-2 py-1 font-semibold bg-transparent border-0 cursor-pointer"
+                style={{ color: 'var(--sps-gold)' }}
+                title="Turn off presentation mode"
+                onClick={() => setPresentationMode(false)}
+              >
+                Presentation mode
+              </button>
+            ) : null}
+            {consoleOn('writer') ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'screenplay'}
+                onClick={() => {
+                  if (isGuest && !lookOnly) {
+                    redirectGuest('Writer Console');
+                    return;
+                  }
+                  if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
+                  else setActiveView('screenplay');
+                }}
+                title="Writer"
+              >
+                <Scroll className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+            {consoleOn('matrix') ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'spreadsheet'}
+                onClick={() => {
+                  if (isGuest && !lookOnly) {
+                    redirectGuest('Cinema Matrix');
+                    return;
+                  }
+                  setActiveView('spreadsheet');
+                }}
+                title="Matrix"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+            {consoleOn('form') ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'form'}
+                onClick={() => {
+                  if (isGuest && !lookOnly) {
+                    redirectGuest('Studio Form');
+                    return;
+                  }
+                  setActiveView('form');
+                }}
+                title="Form"
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+            {consoleOn('stage') ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === 'canvas'}
+                onClick={() => {
+                  if (isGuest && !lookOnly) {
+                    redirectGuest('Director Canvas');
+                    return;
+                  }
+                  setActiveView('canvas');
+                }}
+                title="3D Stage"
+              >
+                <Video className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+            <span className="sps-tabs-split" aria-hidden="true" />
+            {consoleOn('cast') ? (
+              <button type="button" role="tab" aria-selected={activeView === 'cast'} onClick={withGuestGuard('Character Bible', onOpenCharacterBible)} title="Characters">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+            {consoleOn('world') ? (
+              <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)} title="World">
+                <Globe2 className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            ) : null}
+          </div>
+          <div className="sps-header-tools">
+            <div className="sps-tabs sps-tabs-mast" role="tablist" aria-label="Packs and generate">
+              {consoleOn('storyboard') ? (
+                <button type="button" role="tab" aria-selected={activeView === 'storyboard'} onClick={withGuestGuard('Storyboard', onOpenStoryboard)} title="Storyboard">
+                  <StoryboardMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('promo') ? (
+                <button type="button" role="tab" aria-selected={activeView === 'promo'} onClick={withGuestGuard('Promo Pack', onOpenPromoPack)} title="Promo Pack">
+                  <PromoMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('campaign') ? (
+                <button type="button" role="tab" aria-selected={activeView === 'campaign'} onClick={withGuestGuard('Campaign Kit', onOpenCampaignKit)} title="Campaign Kit">
+                  <CampaignMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('pitch') ? (
+                <button type="button" role="tab" aria-selected={activeView === 'pitch'} onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)} title="Pitch Deck">
+                  <PitchMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('budget') ? (
+                <button type="button" role="tab" aria-selected={activeView === 'budget'} onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })} title="Budget">
+                  <BudgetMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('reel') ? (
+                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Feature reel', onOpenFeatureReel)} title="Reel">
+                  <ReelMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              <span className="sps-tabs-split" aria-hidden="true" />
+              {consoleOn('compile') ? (
+                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })} title="Compile">
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {consoleOn('generate') ? (
+                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })} title="Generate">
+                  <GenerateMark className="w-3.5 h-3.5 shrink-0" />
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* RIGHT SECTION: SYSTEM TOOLS, SYNC, ADMIN */}
-        {/* ========================================================================= */}
-        <div className="sps-header-actions flex items-center gap-0.5 min-w-0 shrink justify-end overflow-hidden">
-
-          {/* UNDO & REDO BUTTONS */}
-          <div className="flex items-center gap-0.5 bg-white/[0.03] p-0.5 rounded-xl border border-white/10 shrink-0">
-            <button
-              type="button"
-              onClick={onUndo}
-              disabled={!canUndo}
-              className={`p-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                canUndo
-                  ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 active:scale-95"
-                  : "text-zinc-600 border border-transparent cursor-not-allowed opacity-40"
-              }`}
-              title="Undo last edit (Cmd+Z / Ctrl+Z)"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              {canUndo && (
-                <span className="text-[9px] bg-amber-400 text-zinc-950 px-1 rounded-full font-bold">
-                  {undoCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={onRedo}
-              disabled={!canRedo}
-              className={`p-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                canRedo
-                  ? "bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border border-cyan-500/30 active:scale-95"
-                  : "text-zinc-600 border border-transparent cursor-not-allowed opacity-40"
-              }`}
-              title="Redo last undone edit (Cmd+Shift+Z / Ctrl+Y)"
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-              {canRedo && (
-                <span className="text-[9px] bg-cyan-400 text-zinc-950 px-1 rounded-full font-bold">
-                  {redoCount}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* App Version Mode Badge (Local / Cloud) */}
-          <button
-            type="button"
-            onClick={onOpenAppVersionModal}
-            className={`py-1.5 px-2 rounded-xl border font-semibold text-[11px] flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 ${
-              appVersionMode === 'local'
-                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
-                : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border-cyan-400/30'
-            }`}
-            title="Click to switch App Version Mode (Local Version vs Cloud Version)"
-          >
-            {appVersionMode === 'local' ? (
-              <>
-                <HardDrive className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              </>
-            ) : (
-              <>
-                <Cloud className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
-              </>
-            )}
+        <div className="sps-header-rail">
+          <button type="button" onClick={onUndo} disabled={!canUndo} className="sps-icon-btn" title="Undo">
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
-
-          {/* Studio chat & shot comments */}
+          <button type="button" onClick={onRedo} disabled={!canRedo} className="sps-icon-btn" title="Redo">
+            <RotateCw className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={() => onOpenCollabChat?.()}
-            className={`sps-chrome-btn relative py-1.5 px-2 rounded-xl border font-semibold text-[11px] flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0 ${
-              collabChatOpen
-                ? colorTheme === 'paper'
-                  ? 'bg-cyan-600 text-white border-cyan-700'
-                  : 'bg-cyan-500 text-slate-950 border-cyan-300 shadow-[0_4px_14px_rgba(34,211,238,0.3)]'
-                : colorTheme === 'paper'
-                  ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border-cyan-300'
-                  : 'bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border-cyan-400/40'
-            }`}
-            title="Open studio chat & shot comments"
+            className={`sps-icon-btn relative ${collabChatOpen ? 'is-on' : ''}`}
+            title="Chat"
           >
-            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-            <span className="sr-only">Chat</span>
+            <MessageSquare className="w-3.5 h-3.5" />
             {unreadChatCount > 0 && !collabChatOpen && (
-              <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 min-w-[0.9rem] h-3.5 px-0.5 bg-[var(--sps-gold)] text-[var(--sps-on-gold)] text-[8px] flex items-center justify-center">
                 {unreadChatCount > 9 ? '9+' : unreadChatCount}
               </span>
             )}
           </button>
-
-          {/* Active users — compact label; full list only in dropdown */}
           {Boolean(roomId && getCurrentUserEmail()) && (() => {
             const liveCount = activeRemoteUsers.length + 1;
-            const hasOthers = activeRemoteUsers.length > 0;
             const AVATAR_COLORS = [
               'from-emerald-500 to-teal-700',
               'from-amber-500 to-orange-600',
@@ -581,35 +588,12 @@ export default function Header({
                     setIsProfileOpen(false);
                     setIsActiveUsersOpen((v) => !v);
                   }}
-                  className={`sps-chrome-btn relative z-[55] h-8 px-2 rounded-xl border flex items-center gap-1.5 shadow-sm cursor-pointer ${
-                    hasOthers
-                      ? colorTheme === 'paper'
-                        ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-800 text-white'
-                        : 'bg-emerald-500 hover:bg-emerald-400 border-emerald-300 text-zinc-950'
-                      : colorTheme === 'paper'
-                        ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
-                        : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/50 text-emerald-100'
-                  }`}
-                  title={`${liveCount} online — open users`}
+                  className="sps-icon-btn"
+                  title={`${liveCount} online`}
                   aria-label={`Users, ${liveCount} online`}
                   aria-expanded={isActiveUsersOpen}
                 >
-                  <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden sm:inline text-[11px] font-bold tracking-wide">Users</span>
-                  <span
-                    className={`min-w-[1.15rem] h-[1.15rem] px-1 rounded-md text-[9px] font-black tabular-nums flex items-center justify-center ${
-                      hasOthers
-                        ? colorTheme === 'paper'
-                          ? 'bg-white/25 text-white'
-                          : 'bg-zinc-950/20 text-zinc-950'
-                        : colorTheme === 'paper'
-                          ? 'bg-emerald-200 text-emerald-950'
-                          : 'bg-emerald-400/25 text-emerald-50'
-                    }`}
-                  >
-                    {liveCount}
-                  </span>
-                  <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${isActiveUsersOpen ? 'rotate-180' : ''}`} />
+                  <Users className="w-3.5 h-3.5" />
                 </button>
 
                 {isActiveUsersOpen && (
@@ -619,26 +603,19 @@ export default function Header({
                       onClick={() => setIsActiveUsersOpen(false)}
                       aria-hidden="true"
                     />
-                    <div className={`sps-panel-enter absolute right-0 top-full mt-2 w-[min(100vw-1rem,20rem)] sm:w-80 rounded-2xl border shadow-2xl z-[60] overflow-hidden ${
-                      colorTheme === 'paper'
-                        ? 'bg-white/95 backdrop-blur-xl border-emerald-200'
-                        : 'bg-zinc-950/92 backdrop-blur-xl border-emerald-500/30'
-                    }`}>
-                      <div className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${
-                        colorTheme === 'paper' ? 'border-emerald-100 bg-emerald-50' : 'border-white/10 bg-emerald-500/10'
-                      }`}>
+                    <div className="sps-dropdown sps-panel-enter absolute right-0 top-full mt-2 w-[min(100vw-1rem,20rem)] sm:w-80 z-[60]">
+                      <div className="sps-dropdown-head flex items-center justify-between gap-2">
                         <div>
-                          <p className={`text-[12px] font-black tracking-wide ${colorTheme === 'paper' ? 'text-emerald-950' : 'text-white'}`}>
-                            {liveCount} online now
+                          <p className="text-[13px] font-semibold tracking-tight">
+                            {liveCount} online
                           </p>
-                          <p className={`text-[10px] mt-0.5 ${colorTheme === 'paper' ? 'text-emerald-800/70' : 'text-zinc-400'}`}>
-                            <span className="font-semibold">{projectTitle || 'This project'}</span>
+                          <p className="text-[10px] mt-0.5 text-[var(--sps-muted)]">
+                            <span className="font-semibold text-[var(--sps-text)]">{projectTitle || 'This project'}</span>
                             {roomId ? <> · <span className="font-mono">{roomId}</span></> : null}
                           </p>
                         </div>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-lime-300 animate-pulse" />
-                          LIVE
+                        <span className="sps-chip !text-[var(--sps-on-gold)] !bg-[var(--sps-gold)] !border-[var(--sps-gold)]">
+                          Live
                         </span>
                       </div>
                       <ul className="max-h-72 overflow-y-auto py-1">
@@ -698,53 +675,56 @@ export default function Header({
               </div>
             );
           })()}
-          
-          {/* Cloud Sync Button */}
+
+          <HeaderSaveMenu
+            lookOnly={lookOnly}
+            projectTitle={projectTitle}
+            autoSaveIntervalId={autoSaveIntervalId}
+            onChangeAutoSaveInterval={onChangeAutoSaveInterval}
+            onSaveNow={onDurableProjectSave || onSaveProject}
+            isSaving={isDurableSaving}
+            lastSavedAt={lastDurableSaveAt}
+            lastVersionFile={lastVersionFile}
+            isSavedToast={isProjectSavedToast}
+          />
+
           <button
             type="button"
             onClick={onSaveProject}
-            disabled={isCloudSyncing}
-            className={`sps-chrome-btn py-1.5 px-2 rounded-xl duration-300 flex items-center gap-1 shadow-md shrink-0 cursor-pointer border ${
-              isProjectSavedToast
-                ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-bold border-emerald-300"
-                : isCloudSyncing
-                  ? "bg-amber-500 text-slate-950 font-bold border-amber-400 cursor-wait animate-pulse"
-                  : colorTheme === 'paper'
-                    ? "bg-cyan-600 hover:bg-cyan-700 text-white font-semibold border-cyan-700 shadow-sm"
-                    : "bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 border-cyan-400/30"
-            }`}
-            title="Sync All Projects & Data to Cloud Database"
+            disabled={isCloudSyncing || lookOnly}
+            className={`sps-icon-btn ${isProjectSavedToast || isCloudSyncing ? 'is-on' : ''}`}
+            title={
+              isCloudSyncing
+                ? 'Cloud syncing…'
+                : `Cloud sync · backend ${syncBackendLabel(syncHealth?.backend)}${
+                    syncHealth?.kvConfigured ? ' (KV)' : ''
+                  }${syncHealth?.failStreak ? ` · ${syncHealth.failStreak} fail(s)` : ''}`
+            }
           >
-            {isCloudSyncing ? (
-              <RefreshCw className="w-3.5 h-3.5 text-slate-950 animate-spin shrink-0" />
-            ) : isProjectSavedToast ? (
-              <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3.5] animate-in zoom-in spin-in-12 duration-300 shrink-0" />
-            ) : (
-              <RefreshCw className={`w-3.5 h-3.5 hover:rotate-180 transition-all duration-500 shrink-0 ${
-                colorTheme === 'paper' ? 'text-white' : 'text-cyan-300'
-              }`} />
-            )}
+            {isCloudSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
           </button>
-
-          {/* Export JSON Button — 2xl+; profile covers overflow on smaller screens */}
-          <button
-            type="button"
-            onClick={onExportProject}
-            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 shrink-0"
-            title="Export .JSON Project File"
-          >
-            <Download className="w-3.5 h-3.5 text-cyan-300" />
-          </button>
-
-          {/* Import JSON Button — Owner only */}
-          {canCreateOrDeleteProjects() && (
-            <label className="sps-chrome-btn hidden 2xl:inline-flex sps-touch p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-zinc-300 border border-white/10 cursor-pointer shrink-0" title="Import .JSON Project File (Owner only)">
-              <Upload className="w-3.5 h-3.5 text-amber-300" />
-              <input type="file" accept=".json" onChange={onImportProject} className="hidden" />
-            </label>
-          )}
-
-          {/* Admin Settings Trigger */}
+          {creditStatus?.relevant && creditStatus.level !== 'ok' ? (
+            <button
+              type="button"
+              className={`sps-chip text-[9px] font-mono ${
+                creditStatus.level === 'empty' ? 'text-red-400 border-red-500/50' : 'text-amber-300 border-amber-500/40'
+              }`}
+              title={creditStatus.message}
+              onClick={() => onOpenAdminModal?.()}
+            >
+              {creditStatus.level === 'empty' ? 'Credits 0' : `Credits ${creditStatus.credits}`}
+            </button>
+          ) : null}
+          <HeaderDriveMenu
+            lookOnly={lookOnly}
+            project={{
+              title: projectTitle,
+              shots,
+              targetModel,
+              aspectRatio,
+              roomId,
+            }}
+          />
           <button
             type="button"
             onClick={() => {
@@ -753,114 +733,57 @@ export default function Header({
                 return;
               }
               if (!isAdminLoggedIn) {
-                alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can open Admin Settings (create users, allot projects, delete projects).');
-                if (onOpenLoginModal) onOpenLoginModal();
+                showNotice('Sign in as studio admin to open Settings.');
+                onOpenLoginModal?.();
                 return;
               }
-              if (onOpenAdminModal) onOpenAdminModal();
+              onOpenAdminModal?.();
             }}
-            className={`sps-chrome-btn p-1.5 rounded-xl border text-xs shrink-0 ${
-              isAdminLoggedIn
-                ? 'bg-amber-500/15 text-amber-200 border-amber-400/30 hover:bg-amber-500/25'
-                : 'bg-white/[0.03] text-zinc-400 border-white/10 hover:text-zinc-200 hover:bg-white/[0.06]'
-            }`}
-            title={isGuest ? 'Guest: open Investor Deck' : (isAdminLoggedIn ? 'Studio Settings (⌘K / Ctrl+K)' : 'Admin only (⌘K / Ctrl+K)')}
+            className={`sps-icon-btn ${isAdminLoggedIn ? 'is-on' : ''}`}
+            title={isAdminLoggedIn ? 'Settings' : 'Sign in for settings'}
           >
-            {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5 text-amber-300 animate-spin-slow" /> : <Lock className="w-3.5 h-3.5 text-zinc-400" />}
+            {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
           </button>
-
-          {/* Studio Brain — local pipeline intelligence */}
           <button
             type="button"
-            onClick={onOpenStudioBrain}
-            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-violet-300 border border-white/10 shrink-0"
-            title="Studio Brain — learns your pipeline (offline presets)"
+            onClick={() => onOpenNavigatorShortcutHelp?.()}
+            className="sps-icon-btn"
+            title="Navigator shortcut (Shift + Space)"
+            aria-label="Show navigator keyboard shortcut"
           >
-            <Brain className="w-3.5 h-3.5 text-violet-300" />
+            <kbd style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--sps-font-mono)', lineHeight: 1 }}>⇧␣</kbd>
           </button>
-
-          {/* Help & User Guide Trigger */}
-          <button
-            type="button"
-            onClick={onOpenHelpModal}
-            className="sps-chrome-btn hidden 2xl:inline-flex p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-cyan-300 border border-white/10 shrink-0"
-            title="Open Help & User Guide"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-cyan-300" />
+          <button type="button" onClick={onOpenHelpModal} className="sps-icon-btn" title="Help">
+            <HelpCircle className="w-3.5 h-3.5" />
           </button>
-
-          {/* Color Theme Selector Pill */}
-          <div className="hidden 2xl:flex items-center gap-0.5 bg-white/[0.03] p-0.5 rounded-xl border border-white/10 shrink-0" title="Switch App Color Theme">
-            <button
-              type="button"
-              onClick={() => onChangeColorTheme && onChangeColorTheme('dark')}
-              className={`p-1.5 rounded-lg transition-all ${
-                colorTheme === 'dark' ? 'bg-zinc-800 text-amber-200 shadow' : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Cyber Dark Mode"
-            >
-              <Moon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeColorTheme && onChangeColorTheme('paper')}
-              className={`p-1.5 rounded-lg transition-all ${
-                colorTheme === 'paper' ? 'bg-amber-100 text-amber-950 shadow border border-amber-300' : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Light Paper Mode"
-            >
-              <Scroll className="w-3.5 h-3.5 text-amber-800" />
-            </button>
-          </div>
-
-          {/* Promo Pack — Trailer / Teaser / Reels */}
-          <button
-            type="button"
-            onClick={withGuestGuard('Promo Pack', onOpenPromoPack)}
-            className="p-1.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-200 font-bold text-xs flex items-center justify-center gap-1 shadow border border-amber-700/40 shrink-0"
-            title="Promo Pack — Trailer 1:30 · Teaser 2:30 · Reels"
-          >
-            <Clapperboard className="w-3.5 h-3.5" />
-            <span className="hidden 2xl:inline">Promo</span>
-          </button>
-
-          {/* Master Prompt Compiler Trigger */}
-          <button
-            type="button"
-            onClick={withGuestGuard('Prompt Compiler', onOpenCompiler)}
-            className="p-1.5 px-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:brightness-110 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1 shadow border border-amber-300/40 shrink-0"
-            title="Open Master Prompt Compiler"
-          >
-            <Sparkles className="w-3.5 h-3.5 fill-zinc-950" />
-            <span className="hidden 2xl:inline">Compile</span>
-          </button>
-        </div>
-
-          {/* Minimize top bar */}
+          {typeof onTogglePinHeader === 'function' && (
+              <PinBarButton
+                pinned={headerPinned}
+                onToggle={onTogglePinHeader}
+                label="studio bar"
+              />
+          )}
           {typeof onMinimizeHeader === 'function' && (
             <button
               type="button"
-              onClick={onMinimizeHeader}
-              className="sps-chrome-btn p-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 text-zinc-300 hover:text-cyan-200 border border-white/10 hover:border-cyan-400/40 shrink-0"
-              title="Minimize top bar"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onMinimizeHeader();
+              }}
+              className="sps-icon-btn"
+              title="Minimize bar"
+              aria-label="Minimize bar"
             >
               <ChevronUp className="w-4 h-4" />
             </button>
           )}
-
-          {/* Fit / fullscreen (when provided) */}
           {typeof onToggleFullscreen === 'function' && (
-            <button
-              type="button"
-              onClick={onToggleFullscreen}
-              className="sps-chrome-btn p-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 text-zinc-300 hover:text-cyan-200 border border-white/10 hover:border-cyan-400/40 shrink-0"
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            >
+            <button type="button" onClick={onToggleFullscreen} className={`sps-icon-btn ${isFullscreen ? 'is-on' : ''}`} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
           )}
 
-          {/* EXTREME TOP RIGHT: Logged-In User Profile */}
           <div className="sps-header-profile shrink-0 relative">
             <button
               type="button"
@@ -869,18 +792,10 @@ export default function Header({
                 setCurrentUser(getLoggedInUser());
                 setIsProfileOpen(!isProfileOpen);
               }}
-              className="sps-chrome-btn flex items-center gap-1.5 p-1 pr-1.5 xl:pr-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-cyan-400/45 cursor-pointer shadow shrink-0"
-              title="Click to view logged-in profile, designation & allotted projects"
+              className="sps-icon-btn"
+              title="Profile"
             >
-              {/* Round Circle Avatar Icon with User-Unique Gradient Color */}
-              <div className={`w-6 h-6 rounded-full bg-gradient-to-tr ${userColorGradient} text-white font-black text-xs font-mono flex items-center justify-center shadow shrink-0 ring-1 ring-white/20`}>
-                {firstLetter}
-              </div>
-
-              {/* 4-Letter Name Display — hide on laptop widths to free toolbar space */}
-              <span className="hidden 2xl:block font-bold text-white text-xs tracking-wide whitespace-nowrap">{fourLetterName}</span>
-
-              <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isProfileOpen ? 'rotate-180 text-amber-400' : ''}`} />
+              <span className="sps-avatar">{firstLetter}</span>
             </button>
 
             {/* Profile & Designation Fixed High Z-Index Dropdown Menu (Theme Adaptive: Paper Light & Dark Cyber Modes) */}
@@ -890,22 +805,17 @@ export default function Header({
                   className="fixed inset-0 z-40 bg-black/10 dark:bg-black/30" 
                   onClick={() => setIsProfileOpen(false)} 
                 />
-                <div className={`sps-panel-enter fixed top-12 right-2 sm:right-4 w-[min(100vw-1rem,20rem)] sm:w-80 max-h-[min(85dvh,40rem)] overflow-y-auto rounded-2xl shadow-2xl z-50 p-4 space-y-3.5 text-xs text-left border ${
-                  colorTheme === 'paper' 
-                    ? 'bg-white/95 backdrop-blur-xl text-slate-900 border-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.12)]' 
-                    : 'bg-slate-950/92 backdrop-blur-xl text-white border-cyan-500/35 shadow-[0_25px_70px_rgba(0,0,0,0.75)]'
-                }`} style={{ fontFamily: 'var(--sps-font)' }}>
+                <div className="sps-dropdown sps-panel-enter fixed top-12 right-2 sm:right-4 w-[min(100vw-1rem,20rem)] sm:w-80 max-h-[min(85dvh,40rem)] overflow-y-auto z-50 p-4 space-y-3.5 text-xs text-left">
                 
-                {/* User Info & Designation Header */}
-                <div className={`flex items-center gap-3 pb-3 border-b ${colorTheme === 'paper' ? 'border-slate-200' : 'border-white/10'}`}>
-                  <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-black text-base shadow-lg shrink-0 tracking-wider ring-2 ring-white/30`}>
+                <div className="flex items-center gap-3 pb-3 border-b border-[var(--sps-border)]">
+                  <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-semibold text-base shrink-0 tracking-wider`}>
                     {firstLetter}
                   </div>
                   <div className="flex flex-col min-w-0 leading-snug">
-                    <span className={`font-bold text-base truncate block tracking-tight ${colorTheme === 'paper' ? 'text-slate-900' : 'text-white'}`} style={{ fontFamily: 'var(--sps-font-display)' }}>{userName}</span>
-                    <span className={`text-xs font-semibold block mt-0.5 ${colorTheme === 'paper' ? 'text-cyan-700' : 'text-cyan-300'}`}>{userDesignation}</span>
-                    <span className={`text-[11px] font-semibold block mt-0.5 ${colorTheme === 'paper' ? 'text-amber-700' : 'text-amber-300'}`}>{userRole}</span>
-                    <span className={`text-[10.5px] truncate block mt-0.5 ${colorTheme === 'paper' ? 'text-slate-600' : 'text-slate-400'}`}>{authEmail}</span>
+                    <span className="font-display text-lg truncate block tracking-tight">{userName}</span>
+                    <span className="text-xs block mt-0.5 text-[var(--sps-gold)]">{userDesignation}</span>
+                    <span className="text-[11px] block mt-0.5 text-[var(--sps-muted)]">{userRole}</span>
+                    <span className="text-[10.5px] truncate block mt-0.5 text-[var(--sps-muted)]">{authEmail}</span>
                   </div>
                 </div>
 
@@ -913,7 +823,7 @@ export default function Header({
                 <button
                   type="button"
                   onClick={() => { setIsProfileOpen(false); if (onOpenInvestorDeck) onOpenInvestorDeck(); }}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black text-xs font-sans shadow-md flex items-center justify-between transition-all border border-amber-300/60 cursor-pointer"
+                  className="w-full py-2.5 px-3 sps-btn sps-btn-primary text-xs flex items-center justify-between"
                 >
                   <span className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
@@ -950,11 +860,18 @@ export default function Header({
                   <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
                     colorTheme === 'paper' ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900/80 border-cyan-500/25 text-slate-300'
                   }`}>
-                    Guest view is limited to the Investor Deck. Request access from{' '}
-                    <a href="mailto:pedditiram@gmail.com" className="text-cyan-500 font-semibold underline-offset-2 hover:underline">
-                      pedditiram@gmail.com
-                    </a>
-                    {' '}or log in below.
+                    {lookOnly
+                      ? 'Guest look-only is on. Walk Writer, Matrix, Form, and desks — nothing saves. Sign in to edit.'
+                      : 'Guest view is limited to the Investor Deck unless the owner turns on Guest Browse in Settings. Request access from'}
+                    {!lookOnly && (
+                      <>
+                        {' '}
+                        <a href="mailto:pedditiram@gmail.com" className="text-cyan-500 font-semibold underline-offset-2 hover:underline">
+                          pedditiram@gmail.com
+                        </a>
+                        {' '}or log in below.
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1020,8 +937,8 @@ export default function Header({
                     onClick={() => {
                       setIsProfileOpen(false);
                       if (!isAdminLoggedIn) {
-                        alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can open Admin Settings.');
-                        if (onOpenLoginModal) onOpenLoginModal();
+                        showNotice('Sign in as studio admin to open Settings.');
+                        onOpenLoginModal?.();
                         return;
                       }
                       if (onOpenAdminModal) onOpenAdminModal();
@@ -1092,6 +1009,7 @@ export default function Header({
             </>
           )}
           </div>
+        </div>
       </div>
     </header>
   );

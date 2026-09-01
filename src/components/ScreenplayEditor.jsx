@@ -3,8 +3,15 @@ import {
   FileText, Sparkles, RefreshCw, Download, Copy, Check, Save, Edit3, Cpu,
   Layers, Scroll, BookOpen, Search, Upload, History, ChevronDown, PanelRightOpen,
   PanelRightClose, StickyNote, Radar, Activity, Gauge, AlertTriangle, Zap,
-  Users, Lock, Unlock, Archive, Palette, CircleHelp, Focus, ListTree, LayoutTemplate, MoreHorizontal, Maximize2, Minimize2, Mic, MicOff
+  Users, Lock, Unlock, Archive, Palette, CircleHelp, Focus, ListTree, LayoutTemplate, MoreHorizontal, Maximize2, Minimize2, Mic, MicOff, Wand2
 } from 'lucide-react';
+import { PinBarButton } from './HoverPinBar';
+import { resolveLlmApiKey } from '../utils/saasControl';
+import { assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
+import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import { lifecycleExportReadiness } from '../utils/productionLifecycle';
+import { createZipArchive } from '../utils/zipUtils';
+import { saveExportBlob } from '../utils/saveExportFile';
 import {
   parseRawScriptToShots,
   extractMasterScriptSynopsisWithLLM,
@@ -26,12 +33,13 @@ import {
   replaceAllMatches,
   getLineIndexAtOffset
 } from '../utils/screenplayFormat';
-import {
+import { readOpenScreenplayText, writeOpenScreenplayText, 
   importScreenplayFile,
   exportFountain,
   exportPlainTxt,
   exportFdx,
   downloadTextFile,
+  buildWriterMergeZipFiles,
   saveScreenplayVersion,
   loadScreenplayVersions,
   deleteScreenplayVersion,
@@ -46,8 +54,19 @@ import {
 import { analyzeScreenplay, intensityColor } from '../utils/screenplayIntelligence';
 import ScreenplayDiffModal from './ScreenplayDiffModal';
 import WriterHelpModal from './WriterHelpModal';
+import ActiveProjectConfirmModal from './ActiveProjectConfirmModal';
+import ScriptMergePromptModal from './ScriptMergePromptModal';
+import AiScriptBreakdownPanel from './AiScriptBreakdownPanel';
+import { detectScriptTitle } from '../utils/activeProjectGate';
+import { assertProjectWriteGate, isProjectLifecycleLocked } from '../utils/productionLifecycle';
+import { proposeApplyShotsCommand } from '../utils/llmCommandBus';
+import {
+  assertMergeApplyAllowed,
+  buildStoryPackage,
+  isSampleDemoShots,
+  saveStoryPackage
+} from '../utils/storyPackage';
 import { isModKey, ELEMENT_DIGIT_MAP } from '../utils/writerHotkeys';
-import { learnFromProject } from '../services/studioBrain';
 import {
   WRITER_VIEW_MODES,
   WRITER_VIEW_TIP_KEY,
@@ -72,6 +91,8 @@ import {
   hasTeluguScript,
   commitRomanWordBeforeCaret
 } from '../utils/teluguVoiceText';
+import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
+import { GUEST_PLAY_SCREENPLAY } from '../utils/guestPlayground';
 
 const DEFAULT_SAMPLE_SCREENPLAY = `ACT I: THE THREAT OF JANASTHANA — DEMON LEGION ARRIVES
 
@@ -244,9 +265,14 @@ Camera drifts up from Rama — sky cracks to actual blue, actual sun. Saffron an
 
 function readStoredScreenplay() {
   if (typeof window === 'undefined') return DEFAULT_SAMPLE_SCREENPLAY;
-  const saved =
-    localStorage.getItem('sps_live_screenplay_text') ||
-    localStorage.getItem('sps_current_screenplay_text');
+  try {
+    if (isGuestSession() && canGuestBrowseApp()) {
+      return sessionStorage.getItem('sps_guest_play_screenplay') || GUEST_PLAY_SCREENPLAY;
+    }
+  } catch {
+    /* ignore */
+  }
+  const saved = readOpenScreenplayText();
   return saved && saved.trim() ? saved : DEFAULT_SAMPLE_SCREENPLAY;
 }
 
@@ -254,16 +280,22 @@ export default function ScreenplayEditor({
   shots = [],
   onUpdateShotsFromScript,
   onNavigateToView,
+  onOpenCharacters,
+  onOpenLlmCommands,
+  onApplyShots,
+  setPresetProfile,
   projectTitle = 'STAGE PRODUCTION STUDIO',
   initialConsoleTab = 'screenplay',
-  roomId = 'SPS-CLOUD-8821'
+  roomId = ''
 }) {
-  const [activeConsoleTab, setActiveConsoleTab] = useState(
-    initialConsoleTab === 'synopsis' ? 'synopsis' : 'screenplay'
-  );
+  const [activeConsoleTab, setActiveConsoleTab] = useState(() => {
+    if (initialConsoleTab === 'synopsis') return 'synopsis';
+    if (initialConsoleTab === 'breakdown') return 'breakdown';
+    return 'screenplay';
+  });
 
   useEffect(() => {
-    if (initialConsoleTab === 'synopsis' || initialConsoleTab === 'screenplay') {
+    if (initialConsoleTab === 'synopsis' || initialConsoleTab === 'screenplay' || initialConsoleTab === 'breakdown') {
       setActiveConsoleTab(initialConsoleTab);
     }
   }, [initialConsoleTab]);
@@ -272,9 +304,37 @@ export default function ScreenplayEditor({
   const [llmAutoSynopsis, setLlmAutoSynopsis] = useState('');
   const [writerCustomSynopsis, setWriterCustomSynopsis] = useState('');
   const [isGeneratingSynopsis, setIsGeneratingSynopsis] = useState(false);
-  const [synopsisSaveMsg, setSynopsisSaveMsg] = useState(false);
 
   const [scriptText, setScriptText] = useState(readStoredScreenplay);
+  const [writerChromePinned, setWriterChromePinned] = useState(() => {
+    try {
+      const v = localStorage.getItem('sps_pin_writer_chrome');
+      if (v === 'false') return false;
+      return true;
+    } catch { return true; }
+  });
+  const [elementBarPinned, setElementBarPinned] = useState(() => {
+    try {
+      const v = localStorage.getItem('sps_pin_writer_element_bar');
+      return v === null ? true : v === 'true';
+    } catch { return true; }
+  });
+  const [writerChromeHoverOpen, setWriterChromeHoverOpen] = useState(false);
+  const [elementBarHoverOpen, setElementBarHoverOpen] = useState(false);
+  const writerChromeLeaveRef = useRef(null);
+  const elementBarLeaveRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sps_pin_writer_chrome', writerChromePinned ? 'true' : 'false');
+      localStorage.setItem('sps_pin_writer_element_bar', elementBarPinned ? 'true' : 'false');
+    } catch (e) {}
+  }, [writerChromePinned, elementBarPinned]);
+
+  useEffect(() => () => {
+    if (writerChromeLeaveRef.current) clearTimeout(writerChromeLeaveRef.current);
+    if (elementBarLeaveRef.current) clearTimeout(elementBarLeaveRef.current);
+  }, []);
   const [caretPos, setCaretPos] = useState(0);
   const [rightDrawer, setRightDrawer] = useState(null); // 'find' | 'versions' | 'intel' | null
   const [versionsSubTab, setVersionsSubTab] = useState('drafts'); // 'drafts' | 'archive'
@@ -295,6 +355,19 @@ export default function ScreenplayEditor({
   const [diffLeft, setDiffLeft] = useState({ text: '', label: 'Version' });
   const [helpOpen, setHelpOpen] = useState(false);
   const [viewMode, setViewMode] = useState(() => loadWriterViewMode());
+  const projectLocked = useMemo(() => isProjectLifecycleLocked(projectTitle), [projectTitle]);
+  const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
+  const {
+    strict: writerLifecycleStrict,
+    mode: writerLifecycleMode
+  } = useExportLifecyclePref('writer');
+  const exportBlocked = writerLifecycleStrict && !exportLife.exportReady;
+  const writerLiveCount = useMemo(
+    () => (Array.isArray(shots) ? shots.filter((s) => s && !s.isArchived).length : 0),
+    [shots]
+  );
+  const writerLifeNote = `${writerLiveCount} live shots · writer${roomId ? ` · room:${roomId}` : ''}`;
+
   const [viewTipDismissed, setViewTipDismissed] = useState(() => {
     try {
       return localStorage.getItem(WRITER_VIEW_TIP_KEY) === '1';
@@ -308,8 +381,19 @@ export default function ScreenplayEditor({
   const [isAutoParsing, setIsAutoParsing] = useState(false);
   const [isAICowriting, setIsAICowriting] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [copiedSynopsis, setCopiedSynopsis] = useState('');
   const [parseStatusMsg, setParseStatusMsg] = useState('✓ Live Auto-Synced with 25-Craft Matrix');
   const [importMsg, setImportMsg] = useState('');
+  const [parseGateOpen, setParseGateOpen] = useState(false);
+  const [pendingParseText, setPendingParseText] = useState('');
+  const [mergePromptOpen, setMergePromptOpen] = useState(false);
+  const [mergeApplyState, setMergeApplyState] = useState({
+    parsedShots: [],
+    textToParse: '',
+    existingCount: 0,
+    incomingCount: 0
+  });
+  const [pendingDetectedTitle, setPendingDetectedTitle] = useState('');
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [collabDoc, setCollabDoc] = useState(null);
   const [claimedSceneKey, setClaimedSceneKey] = useState(null);
@@ -940,15 +1024,16 @@ export default function ScreenplayEditor({
     el.scrollTop = Math.max(0, lineIdx * lineHeight - el.clientHeight / 3);
   };
 
-  const handleSaveSynopsis = () => {
-    localStorage.setItem('sps_script_synopsis_source', scriptSynopsisSource);
-    localStorage.setItem('sps_writer_custom_script_synopsis', writerCustomSynopsis);
-    if (llmAutoSynopsis) {
-      localStorage.setItem('sps_extracted_master_story', llmAutoSynopsis);
-    }
-    setSynopsisSaveMsg(true);
-    setTimeout(() => setSynopsisSaveMsg(false), 2000);
-  };
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      localStorage.setItem('sps_script_synopsis_source', scriptSynopsisSource);
+      localStorage.setItem('sps_writer_custom_script_synopsis', writerCustomSynopsis);
+      if (llmAutoSynopsis) {
+        localStorage.setItem('sps_extracted_master_story', llmAutoSynopsis);
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [scriptSynopsisSource, writerCustomSynopsis, llmAutoSynopsis]);
 
   const handleAIExtractSynopsis = async () => {
     try {
@@ -967,27 +1052,125 @@ export default function ScreenplayEditor({
   };
 
   const handleParseScriptToMatrix = async (textToParse = scriptText) => {
+    if (!textToParse || !String(textToParse).trim()) {
+      setParseStatusMsg('⚠️ Paste screenplay text before syncing to matrix.');
+      return;
+    }
+    const writeGate = assertProjectWriteGate(projectTitle, { auditLabel: 'writer_parse_start' });
+    if (!writeGate.ok) {
+      setParseStatusMsg(`⚠️ ${writeGate.message}`);
+      alert(writeGate.message);
+      return;
+    }
+    const detected = detectScriptTitle(textToParse);
+    setPendingDetectedTitle(detected);
+    setPendingParseText(String(textToParse));
+    setParseGateOpen(true);
+  };
+
+  const proposeParsedShotsToReview = (parsedShots, textToParse, mode = 'overwrite') => {
+    const pkg = buildStoryPackage({
+      projectTitle,
+      shots: parsedShots,
+      fullElements: { shots: parsedShots },
+      sourceText: textToParse
+    });
+    const liveCount = (Array.isArray(shots) ? shots : []).filter((s) => !s?.isArchived).length;
+    const gate = assertMergeApplyAllowed({
+      activeTitle: projectTitle,
+      pkg,
+      mode,
+      intendedTitle: detectScriptTitle(textToParse) || projectTitle,
+      existingShotCount: liveCount,
+      incomingCount: parsedShots.length,
+      auditLabel: mode === 'merge' ? 'writer_merge_apply' : 'writer_overwrite_apply'
+    });
+    if (!gate.ok) {
+      setParseStatusMsg(`⚠️ ${gate.message}`);
+      alert(gate.message);
+      return;
+    }
+    const proposed = proposeApplyShotsCommand(
+      {
+        projectTitle,
+        shots: parsedShots,
+        mode,
+        extras: {
+          screenplayText: textToParse,
+          markStoryPackage: true,
+          learnFromParse: true
+        },
+        source: mode === 'merge' ? 'writer_merge' : 'writer_parse',
+        reason: `Writer screenplay → Matrix (${mode})`
+      },
+      { shots, projectTitle }
+    );
+    if (!proposed.ok) {
+      setParseStatusMsg(`⚠️ ${proposed.error || proposed.errors?.join('; ') || 'Proposal blocked'}`);
+      alert(proposed.error || proposed.errors?.join('; ') || 'Parse proposal failed');
+      return;
+    }
+    if (onOpenLlmCommands) {
+      onOpenLlmCommands();
+      setParseStatusMsg(
+        `✓ ${parsedShots.length} shots queued (${mode}) — approve in LLM command review`
+      );
+    } else {
+      setParseStatusMsg(
+        `✓ Parsed ${parsedShots.length} shots (${mode}) — open Production → LLM command review to apply`
+      );
+    }
+  };
+
+  const confirmParseScriptToMatrix = async () => {
+    setParseGateOpen(false);
+    const textToParse = pendingParseText || scriptText;
+    setPendingParseText('');
+    const detected = pendingDetectedTitle || detectScriptTitle(textToParse);
+    setPendingDetectedTitle('');
+    const gate = assertProjectWriteGate(projectTitle, {
+      intendedTitle: detected || projectTitle,
+      auditLabel: 'writer_parse_confirm'
+    });
+    if (!gate.ok) {
+      setParseStatusMsg(`⚠️ ${gate.message}`);
+      alert(gate.message);
+      return;
+    }
     try {
       if (!textToParse || !String(textToParse).trim()) {
         setParseStatusMsg('⚠️ Paste screenplay text before syncing to matrix.');
         return;
       }
       setIsAutoParsing(true);
-      setParseStatusMsg('⚡ Pedditi Labs Engine parsing screenplay to 26-craft matrix...');
+      setParseStatusMsg('⚡ Stage Work Studio Engine parsing screenplay to 26-craft matrix...');
       const parsedShots = await parseRawScriptToShots(textToParse);
       const meta = getLastParseMeta();
       if (parsedShots && Array.isArray(parsedShots) && parsedShots.length > 0) {
-        if (onUpdateShotsFromScript) onUpdateShotsFromScript(parsedShots);
-        try {
-          learnFromProject({ projectTitle, shots: parsedShots });
-        } catch (e) {}
-        if (meta?.usedFallback) {
+        saveStoryPackage(
+          buildStoryPackage({
+            projectTitle,
+            shots: parsedShots,
+            fullElements: { shots: parsedShots },
+            parseMeta: meta,
+            sourceText: textToParse
+          })
+        );
+        const liveCount = (Array.isArray(shots) ? shots : []).filter((s) => !s?.isArchived).length;
+        if (liveCount > 0 && !isSampleDemoShots(shots)) {
+          setMergeApplyState({
+            parsedShots,
+            textToParse,
+            existingCount: liveCount,
+            incomingCount: parsedShots.length
+          });
+          setMergePromptOpen(true);
           setParseStatusMsg(
-            `✓ Synced ${parsedShots.length} shots (offline heuristic)${meta.hasApiKey ? '' : ' — add API key in Admin Settings for LLM parse'}`
+            `✓ Parsed ${parsedShots.length} shots — choose overwrite or merge (${liveCount} live rows)`
           );
-        } else {
-          setParseStatusMsg(`✓ Synced ${parsedShots.length} Shots to 26-Craft Matrix`);
+          return;
         }
+        proposeParsedShotsToReview(parsedShots, textToParse, 'overwrite');
       } else {
         setParseStatusMsg(meta?.warning || '⚠️ No shots produced — existing matrix left unchanged');
       }
@@ -1307,6 +1490,15 @@ export default function ScreenplayEditor({
   };
 
   const handleExportPDF = () => {
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'screenplay_pdf',
+      format: 'pdf',
+      lifecycleMode: writerLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
     setExportOpen(false);
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -1361,9 +1553,11 @@ export default function ScreenplayEditor({
             .action { margin-bottom: 10px; }
             .space { height: 10px; }
             @media print { body { padding: 0; } }
-          </style>
+            .doc-meta { font-size: 10pt; color: #555; margin: 0 0 12px; }
+  </style>
         </head>
         <body>
+  <p class="doc-meta">${roomId ? `Collab room: ${roomId}` : 'Collab room: —'} · ${new Date().toISOString()}</p>
           <div class="header">${projectTitle || 'STAGE PRODUCTION STUDIO'} • MASTER SCREENPLAY DRAFT</div>
           ${formattedHtml}
           <script>window.onload = () => { window.print(); };</script>
@@ -1371,29 +1565,137 @@ export default function ScreenplayEditor({
       </html>
     `);
     printWindow.document.close();
+    const slug = String(projectTitle || 'screenplay').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    logExportSuccess({
+      projectTitle,
+      label: 'screenplay_pdf',
+      format: 'pdf',
+      filename: `${slug}_screenplay.pdf`,
+      roomId,
+      note: writerLifeNote,
+      lifecycleMode: gate.advisory ? `${writerLifecycleMode}+ok` : writerLifecycleMode
+    });
   };
 
   const handleExportFountain = () => {
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'screenplay_fountain',
+      format: 'fountain',
+      lifecycleMode: writerLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
     setExportOpen(false);
-    const body = exportFountain(scriptText, { title: projectTitle });
-    downloadTextFile(`${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.fountain`, body);
+    const body = exportFountain(scriptText, { title: projectTitle, roomId });
+    const filename = `${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.fountain`;
+    downloadTextFile(filename, body);
+    logExportSuccess({
+      projectTitle,
+      label: 'screenplay_fountain',
+      format: 'fountain',
+      filename,
+      roomId,
+      note: writerLifeNote,
+      lifecycleMode: gate.advisory ? `${writerLifecycleMode}+ok` : writerLifecycleMode
+    });
   };
 
   const handleExportTxt = () => {
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'screenplay_txt',
+      format: 'txt',
+      lifecycleMode: writerLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
     setExportOpen(false);
-    downloadTextFile(
-      `${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.txt`,
-      exportPlainTxt(scriptText)
-    );
+    const filename = `${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.txt`;
+    downloadTextFile(filename, exportPlainTxt(scriptText));
+    logExportSuccess({
+      projectTitle,
+      label: 'screenplay_txt',
+      format: 'txt',
+      filename,
+      roomId,
+      note: writerLifeNote,
+      lifecycleMode: gate.advisory ? `${writerLifecycleMode}+ok` : writerLifecycleMode
+    });
   };
 
   const handleExportFdx = () => {
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'screenplay_fdx',
+      format: 'fdx',
+      lifecycleMode: writerLifecycleMode,
+      shots,
+      roomId
+    });
+    if (!gate.ok) return;
     setExportOpen(false);
-    downloadTextFile(
-      `${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.fdx`,
-      exportFdx(scriptText, { title: projectTitle }),
-      'application/xml'
-    );
+    const filename = `${(projectTitle || 'screenplay').replace(/\s+/g, '_')}.fdx`;
+    downloadTextFile(filename, exportFdx(scriptText, { title: projectTitle }), 'application/xml');
+    logExportSuccess({
+      projectTitle,
+      label: 'screenplay_fdx',
+      format: 'fdx',
+      filename,
+      roomId,
+      note: writerLifeNote,
+      lifecycleMode: gate.advisory ? `${writerLifecycleMode}+ok` : writerLifecycleMode
+    });
+  };
+
+  const handleExportMergeZip = async () => {
+    const collabRoom = resolveCollabRoomId(roomId);
+    const liveShotCount = (Array.isArray(shots) ? shots : []).filter((s) => s && !s.isArchived).length;
+    const lifeNote = `${liveShotCount} live shots · writer merge pack`;
+    if (exportBlocked) {
+      assertExportAllowed({
+        projectTitle,
+        label: 'screenplay_merge_zip',
+        format: 'zip',
+        lifecycleMode: writerLifecycleMode,
+        shots,
+        roomId: collabRoom,
+        showAlert: true
+      });
+      return;
+    }
+    const gate = assertExportAllowed({
+      projectTitle,
+      label: 'screenplay_merge_zip',
+      format: 'zip',
+      lifecycleMode: writerLifecycleMode,
+      shots,
+      roomId: collabRoom
+    });
+    if (!gate.ok) return;
+    setExportOpen(false);
+    const slug = String(projectTitle || 'screenplay').replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const files = buildWriterMergeZipFiles(scriptText, {
+      projectTitle,
+      roomId: collabRoom,
+      liveShotCount,
+      mergeMode: 'merge_pack'
+    });
+    const blob = createZipArchive(files);
+    await saveExportBlob(blob, `${slug}_writer_merge.zip`, {
+      projectTitle,
+      shots,
+      lifecycleMode: writerLifecycleMode,
+      skipLifecycleCheck: true,
+      advisoryAlready: Boolean(gate.advisory),
+      auditLabel: 'screenplay_merge_zip',
+      auditFormat: 'zip',
+      roomId: collabRoom,
+      note: lifeNote,
+      showAlert: false
+    });
   };
 
   const handleCopyScript = () => {
@@ -1401,6 +1703,18 @@ export default function ScreenplayEditor({
       navigator.clipboard.writeText(scriptText);
       setCopiedToast(true);
       setTimeout(() => setCopiedToast(false), 2000);
+    }
+  };
+
+  const handleCopySynopsis = async (text, which) => {
+    const body = String(text || '').trim();
+    if (!body || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(body);
+      setCopiedSynopsis(which);
+      setTimeout(() => setCopiedSynopsis(''), 1800);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -1412,11 +1726,11 @@ export default function ScreenplayEditor({
   const handleAICowriteNextScene = async () => {
     setIsAICowriting(true);
     try {
-      const apiKey = typeof window !== 'undefined' ? localStorage.getItem('sps_api_key') || '' : '';
+      const apiKey = resolveLlmApiKey(provider) || (typeof window !== 'undefined' ? localStorage.getItem('sps_api_key') || '' : '');
       const provider =
         typeof window !== 'undefined' ? localStorage.getItem('sps_llm_provider') || 'google_gemini' : 'google_gemini';
 
-      const promptText = `You are a Hollywood Master Screenwriter (Pedditi Labs Cinema Intelligence Engine).
+      const promptText = `You are a Hollywood Master Screenwriter (Stage Work Studio Cinema Intelligence Engine).
 Continue the following screenplay by writing the next dramatic 1-2 shots/scenes in standard Fountain screenplay format. Include [SHOT SXX-X] camera tags, dialogue, and vivid stage directions.
 
 Current Screenplay:
@@ -1621,51 +1935,81 @@ Write ONLY the continuation in clean screenplay format:`;
   return (
     <div
       ref={writerRootRef}
-      className={`sps-writer-console force-dark flex flex-col h-full bg-zinc-950 text-zinc-100 rounded-xl overflow-hidden border border-zinc-800 shadow-2xl font-mono ${
+      className={`sps-writer-console sps-atelier-room flex flex-col h-full overflow-hidden ${
         fullscreenLevel === 1 ? 'sps-fs-console' : ''
       }`}
-      data-force-dark="true"
+      style={{ background: 'var(--sps-bg)', color: 'var(--sps-text)', fontFamily: 'var(--sps-font)' }}
     >
-      {/* TOP SUB-NAV */}
-      <div className="p-2.5 px-3 border-b border-zinc-800 bg-zinc-900/90 flex flex-wrap items-center justify-between gap-2 shrink-0 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-amber-400 flex items-center gap-1.5 mr-1 uppercase tracking-wider">
-            <Scroll className="w-4 h-4" />
-            Writer Console
-          </span>
-          <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 shadow-inner">
+      {/* TOP SUB-NAV — hover to reveal, pin to keep */}
+      <div
+        className={`sps-hover-chrome sps-writer-top-chrome shrink-0 ${writerChromePinned ? 'is-pinned' : 'is-collapsed'}${!writerChromePinned && writerChromeHoverOpen ? ' is-hover-open' : ''}`}
+        onMouseEnter={() => {
+          if (writerChromeLeaveRef.current) clearTimeout(writerChromeLeaveRef.current);
+          if (!writerChromePinned) setWriterChromeHoverOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (writerChromeLeaveRef.current) clearTimeout(writerChromeLeaveRef.current);
+          writerChromeLeaveRef.current = setTimeout(() => setWriterChromeHoverOpen(false), 160);
+        }}
+      >
+      <button
+        type="button"
+        className="sps-chrome-reveal"
+        aria-label="Show writer toolbar"
+        tabIndex={-1}
+        onClick={() => {
+          setWriterChromeHoverOpen(true);
+          setWriterChromePinned(true);
+        }}
+      />
+      <div className="sps-hover-chrome-bar py-1 px-2 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] flex flex-wrap items-center gap-1 min-w-0 max-w-full">
+        <div className="flex items-center gap-1 min-w-0">
+          <div className="sps-tabs sps-tabs-writer" role="tablist" aria-label="Writer console">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeConsoleTab === 'screenplay'}
               onClick={() => setActiveConsoleTab('screenplay')}
-              className={`px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeConsoleTab === 'screenplay'
-                  ? 'bg-amber-400 text-zinc-950 shadow-md'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
             >
-              <Scroll className="w-3.5 h-3.5" />
+              <Scroll className="w-3.5 h-3.5 shrink-0" />
               Screenplay
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeConsoleTab === 'synopsis'}
               onClick={() => setActiveConsoleTab('synopsis')}
-              className={`px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeConsoleTab === 'synopsis'
-                  ? 'bg-amber-400 text-zinc-950 shadow-md'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
             >
-              <BookOpen className="w-3.5 h-3.5" />
-              Master Synopsis
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              Synopsis
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeConsoleTab === 'breakdown'}
+              onClick={() => setActiveConsoleTab('breakdown')}
+              title="AI Script Breakdown (same flow as Project Console)"
+            >
+              <Wand2 className="w-3.5 h-3.5 shrink-0" />
+              Breakdown
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={false}
+              onClick={() => onOpenCharacters?.()}
+              title="Character bible"
+            >
+              <Users className="w-3.5 h-3.5 shrink-0" />
+              Characters
             </button>
           </div>
         </div>
 
         {activeConsoleTab === 'screenplay' && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Industry-familiar view modes */}
+          <div className="flex flex-wrap items-center gap-1 min-w-0 flex-1">
             <div
-              className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-700 shadow-inner"
+              className="sps-tabs sps-tabs-views"
               role="tablist"
               aria-label="Writer view mode"
               title="Page = Final Draft · Focus = WriterDuet/Highland · Scenes = Navigator · Studio = full SPS"
@@ -1686,15 +2030,10 @@ Write ONLY the continuation in clean screenplay format:`;
                     role="tab"
                     aria-selected={viewMode === m.id}
                     onClick={() => applyViewMode(m.id)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 cursor-pointer transition-all ${
-                      viewMode === m.id
-                        ? 'bg-amber-400 text-zinc-950 shadow-md'
-                        : 'text-zinc-500 hover:text-zinc-200'
-                    }`}
                     title={`${m.label} — ${m.industry}`}
                   >
-                    <Icon className="w-3 h-3" />
-                    <span className="hidden lg:inline">{m.short}</span>
+                    <Icon className="w-3 h-3 shrink-0" />
+                    <span>{m.short}</span>
                   </button>
                 );
               })}
@@ -1708,12 +2047,11 @@ Write ONLY the continuation in clean screenplay format:`;
               onChange={handleImportFile}
             />
 
-            {viewMode !== 'focus' && (
-              <>
+            <div className={`sps-toolbar-slot ${viewMode === 'focus' ? 'invisible pointer-events-none' : ''}`}>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                  className="sps-btn text-[10px]"
                   aria-label="Import screenplay file"
                   title="Import Fountain, FDX, TXT, or PDF"
                 >
@@ -1722,31 +2060,45 @@ Write ONLY the continuation in clean screenplay format:`;
                 </button>
 
                 <div className="relative" ref={exportMenuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setExportOpen((o) => !o)}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold border border-emerald-500/40 flex items-center gap-1.5 cursor-pointer"
-                    aria-label="Export screenplay"
-                    aria-expanded={exportOpen}
-                    title="Export PDF, Fountain, TXT, or FDX"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Export</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                  {exportOpen && (
-                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl py-1">
-                      <button type="button" onClick={handleExportPDF} className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 cursor-pointer">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (exportBlocked) return;
+                        setExportOpen((o) => !o);
+                      }}
+                      disabled={exportBlocked}
+                      className="sps-btn sps-btn-primary text-[10px] disabled:opacity-40"
+                      aria-label="Export screenplay"
+                      aria-expanded={exportOpen}
+                      title={exportBlocked ? exportLife.message : 'Export PDF, Fountain, TXT, or FDX'}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Export</span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {exportBlocked ? (
+                    <span className="hidden lg:inline text-[9px] text-[var(--sps-gold)] max-w-[10rem] leading-snug ml-1">
+                      {exportLife.message}
+                    </span>
+                  ) : null}
+                  {exportOpen && !exportBlocked && viewMode !== 'focus' && (
+                    <div className="sps-dropdown absolute right-0 top-full mt-1 z-50 min-w-[160px] py-1">
+                      <button type="button" onClick={handleExportPDF} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer">
                         PDF (Print)
                       </button>
-                      <button type="button" onClick={handleExportFountain} className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 cursor-pointer">
+                      <button type="button" onClick={handleExportFountain} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer">
                         Fountain (.fountain)
                       </button>
-                      <button type="button" onClick={handleExportTxt} className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 cursor-pointer">
+                      <button type="button" onClick={handleExportTxt} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer">
                         Plain Text (.txt)
                       </button>
-                      <button type="button" onClick={handleExportFdx} className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 cursor-pointer">
+                      <button type="button" onClick={handleExportFdx} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer">
                         Final Draft (.fdx)
+                      </button>
+                      <button type="button" onClick={handleExportMergeZip} className="w-full text-left px-3 py-1.5 text-xs cursor-pointer">
+                        Merge pack (.zip)
                       </button>
                     </div>
                   )}
@@ -1755,30 +2107,14 @@ Write ONLY the continuation in clean screenplay format:`;
                 <button
                   type="button"
                   onClick={() => toggleDrawer('find')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    rightDrawer === 'find'
-                      ? 'bg-cyan-700 text-white border-cyan-500/40'
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
-                  }`}
+                  className={`sps-btn text-[10px] ${rightDrawer === 'find' ? 'sps-btn-primary' : ''}`}
                   aria-label="Find and replace"
                   title="Find / Replace"
                 >
                   <Search className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Find</span>
                 </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 text-xs font-bold border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
-              aria-label="Save draft version"
-              title="Save Draft (⌘S)"
-            >
-              <Save className="w-3.5 h-3.5" />
-              Save
-            </button>
+            </div>
 
             {/* Studio-native tools — full row in Studio; More menu in Page/Scenes */}
             {viewCfg.showStudioChrome ? (
@@ -1789,15 +2125,11 @@ Write ONLY the continuation in clean screenplay format:`;
                     setVersionsSubTab('drafts');
                     toggleDrawer('versions');
                   }}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    rightDrawer === 'versions' && versionsSubTab === 'drafts'
-                      ? 'bg-cyan-700 text-white border-cyan-500/40'
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
-                  }`}
+                  className={`sps-btn text-[10px] ${rightDrawer === 'versions' && versionsSubTab === 'drafts' ? 'sps-btn-primary' : ''}`}
                   title="Quick draft versions"
                 >
                   <History className="w-3.5 h-3.5" />
-                  Versions
+                  <span className="hidden xl:inline">Versions</span>
                 </button>
                 <button
                   type="button"
@@ -1806,15 +2138,11 @@ Write ONLY the continuation in clean screenplay format:`;
                     setVersionsSubTab('archive');
                     setRightDrawer('versions');
                   }}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    rightDrawer === 'versions' && versionsSubTab === 'archive'
-                      ? 'bg-amber-600 text-zinc-950 border-amber-400/50'
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-amber-200 border-amber-800/50'
-                  }`}
+                  className={`sps-btn text-[10px] ${rightDrawer === 'versions' && versionsSubTab === 'archive' ? 'sps-btn-primary' : ''}`}
                   title="Script Archive milestones"
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  Archive
+                  <span className="hidden xl:inline">Archive</span>
                 </button>
                 <button
                   type="button"
@@ -1822,35 +2150,27 @@ Write ONLY the continuation in clean screenplay format:`;
                     setIntelSubTab('radar');
                     toggleDrawer('intel');
                   }}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    rightDrawer === 'intel'
-                      ? 'bg-fuchsia-600 text-white border-fuchsia-400/50'
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-fuchsia-200 border-fuchsia-700/40'
-                  }`}
+                  className={`sps-btn text-[10px] ${rightDrawer === 'intel' ? 'sps-btn-primary' : ''}`}
                   title="Writer Intel"
                 >
                   <Radar className="w-3.5 h-3.5" />
-                  Intel
+                  <span className="hidden xl:inline">Intel</span>
                   <span className="text-[9px] font-black opacity-90">{intel.readiness?.score ?? 0}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setCollabEnabled((v) => !v)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    collabEnabled
-                      ? 'bg-emerald-600 text-white border-emerald-400/50'
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-emerald-200 border-emerald-800/50'
-                  }`}
+                  className={`sps-btn text-[10px] ${collabEnabled ? 'sps-btn-primary' : ''}`}
                   title="Co-Write"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  Co-Write
+                  <span className="hidden xl:inline">Co-Write</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleAICowriteNextScene}
                   disabled={isAICowriting}
-                  className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer border border-purple-400/40"
+                  className="sps-btn sps-btn-primary text-[10px]"
                   title="AI Co-Writer"
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${isAICowriting ? 'animate-spin' : ''}`} />
@@ -1859,9 +2179,9 @@ Write ONLY the continuation in clean screenplay format:`;
                 <button
                   type="button"
                   onClick={() => handleParseScriptToMatrix()}
-                  disabled={isAutoParsing}
-                  className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer border border-cyan-400/40"
-                  title="Sync to Matrix (⌘⇧Enter)"
+                  disabled={isAutoParsing || projectLocked}
+                  className="sps-btn sps-btn-primary text-[10px]"
+                  title={projectLocked ? 'Project locked — unlock in Production dashboard' : 'Sync to Matrix (⌘⇧Enter)'}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isAutoParsing ? 'animate-spin' : ''}`} />
                   Sync
@@ -1872,7 +2192,7 @@ Write ONLY the continuation in clean screenplay format:`;
                 <button
                   type="button"
                   onClick={() => setStudioMoreOpen((o) => !o)}
-                  className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-fuchsia-200 text-xs font-bold border border-fuchsia-800/40 flex items-center gap-1.5 cursor-pointer"
+                  className="sps-btn text-[10px]"
                   title="Studio tools when you’re ready"
                 >
                   <MoreHorizontal className="w-3.5 h-3.5" />
@@ -1955,7 +2275,7 @@ Write ONLY the continuation in clean screenplay format:`;
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sky-300 text-xs font-bold border border-sky-800/50 flex items-center gap-1.5 cursor-pointer"
+              className="sps-btn text-[10px]"
               title="Writer Help (⌘/)"
             >
               <CircleHelp className="w-3.5 h-3.5" />
@@ -1967,15 +2287,15 @@ Write ONLY the continuation in clean screenplay format:`;
                 <button
                   type="button"
                   onClick={handleCopyScript}
-                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 cursor-pointer"
+                  className="sps-icon-btn"
                   title="Copy screenplay text"
                 >
-                  {copiedToast ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copiedToast ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </button>
                 <button
                   type="button"
                   onClick={() => setRightDrawer((d) => (d ? null : 'find'))}
-                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 cursor-pointer"
+                  className={`sps-icon-btn ${rightDrawer ? 'is-on' : ''}`}
                   title={rightDrawer ? 'Close panel' : 'Open panel'}
                 >
                   {rightDrawer ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
@@ -1991,21 +2311,27 @@ Write ONLY the continuation in clean screenplay format:`;
               type="button"
               onClick={handleAIExtractSynopsis}
               disabled={isGeneratingSynopsis}
-              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer border border-purple-400/40"
+              className="sps-btn sps-btn-primary text-[10px]"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isGeneratingSynopsis ? 'animate-spin' : ''}`} />
               {isGeneratingSynopsis ? 'Extracting…' : 'Re-Extract Synopsis'}
             </button>
-            <button
-              type="button"
-              onClick={handleSaveSynopsis}
-              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer border border-emerald-400/40"
-            >
-              <Save className="w-3.5 h-3.5" />
-              {synopsisSaveMsg ? 'Saved ✓' : 'Save Synopsis'}
-            </button>
           </div>
         )}
+        <span className="ml-auto shrink-0">
+          <PinBarButton
+            pinned={writerChromePinned}
+            onToggle={() => {
+              setWriterChromePinned((v) => {
+                const next = !v;
+                if (!next) setWriterChromeHoverOpen(false);
+                return next;
+              });
+            }}
+            label="writer bar"
+          />
+        </span>
+      </div>
       </div>
 
       {/* SCREENPLAY TAB */}
@@ -2159,7 +2485,28 @@ Write ONLY the continuation in clean screenplay format:`;
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Element toolbar */}
             {viewCfg.showElementBar && (
-            <div className="px-3 py-1.5 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
+            <div
+              className={`sps-hover-chrome sps-writer-format-chrome shrink-0 ${elementBarPinned ? 'is-pinned' : 'is-collapsed'}${!elementBarPinned && elementBarHoverOpen ? ' is-hover-open' : ''}`}
+              onMouseEnter={() => {
+                if (elementBarLeaveRef.current) clearTimeout(elementBarLeaveRef.current);
+                if (!elementBarPinned) setElementBarHoverOpen(true);
+              }}
+              onMouseLeave={() => {
+                if (elementBarLeaveRef.current) clearTimeout(elementBarLeaveRef.current);
+                elementBarLeaveRef.current = setTimeout(() => setElementBarHoverOpen(false), 160);
+              }}
+            >
+            <button
+              type="button"
+              className="sps-chrome-reveal"
+              aria-label="Show format bar"
+              tabIndex={-1}
+              onClick={() => {
+                setElementBarHoverOpen(true);
+                setElementBarPinned(true);
+              }}
+            />
+            <div className="sps-hover-chrome-bar px-3 py-1.5 bg-[var(--sps-bg-elevated)] border-b border-[var(--sps-border)] flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="flex items-center gap-1 flex-wrap">
                 {[
                   { type: 'scene_heading', label: 'Scene', title: 'Insert / format Scene Heading' },
@@ -2191,61 +2538,6 @@ Write ONLY the continuation in clean screenplay format:`;
                 </button>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <div
-                  className="flex items-center p-0.5 rounded-lg bg-zinc-950 border border-zinc-700"
-                  role="group"
-                  aria-label="Voice language"
-                  title="Auto uses Telugu when script has తెలుగు text · తె = type roman→తెలుగు"
-                >
-                  {[
-                    { id: 'auto', label: 'Auto' },
-                    { id: 'te-IN', label: 'తెలుగు' },
-                    { id: 'en-IN', label: 'EN' }
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        if (voiceListening) startVoiceInLang(opt.id);
-                        else persistVoiceLangMode(opt.id);
-                      }}
-                      className={`px-2 py-1 rounded-md text-[10px] font-black cursor-pointer ${
-                        voiceLangMode === opt.id
-                          ? opt.id === 'te-IN'
-                            ? 'bg-amber-400 text-zinc-950'
-                            : 'bg-emerald-600 text-white'
-                          : 'text-zinc-500 hover:text-zinc-200'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => (voiceListening ? toggleVoiceToType() : startVoiceInLang(voiceLangMode))}
-                  className={`px-2 py-1 rounded text-[10px] font-black border flex items-center gap-1 cursor-pointer ${
-                    voiceListening
-                      ? 'bg-rose-600 border-rose-400 text-white animate-pulse'
-                      : resolvedVoiceLang === 'te-IN'
-                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-200'
-                        : 'bg-zinc-900 border-emerald-700/50 text-emerald-300'
-                  }`}
-                  title={
-                    resolvedVoiceLang === 'te-IN'
-                      ? 'Speak Telugu — inserts తెలుగు script only (⌘⇧M)'
-                      : 'Speak English — types in English (⌘⇧M)'
-                  }
-                >
-                  {voiceListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
-                  {voiceListening
-                    ? resolvedVoiceLang === 'te-IN'
-                      ? 'వినడం…'
-                      : 'Listening'
-                    : resolvedVoiceLang === 'te-IN'
-                      ? 'తెలుగు Voice'
-                      : 'EN Voice'}
-                </button>
                 {viewCfg.showColorsToggle && (
                 <button
                   type="button"
@@ -2273,27 +2565,39 @@ Write ONLY the continuation in clean screenplay format:`;
                 >
                   Tab = cycle · Enter = smart next
                 </span>
+                <PinBarButton
+                  pinned={elementBarPinned}
+                  onToggle={() => {
+                    setElementBarPinned((v) => {
+                      const next = !v;
+                      if (!next) setElementBarHoverOpen(false);
+                      return next;
+                    });
+                  }}
+                  label="format bar"
+                />
               </div>
+            </div>
             </div>
             )}
 
             {/* Predictive assist — studio / optional */}
             {viewCfg.showAssist && intel.suggestion && (
-              <div className="px-3 py-1.5 bg-zinc-950/90 border-b border-fuchsia-900/40 flex items-center justify-between gap-2 shrink-0">
+              <div className="px-3 py-1.5 bg-[var(--sps-bg-elevated)] border-b border-[var(--sps-border)] flex items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Zap className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                  <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-fuchsia-400 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black text-fuchsia-300 uppercase tracking-wide truncate">
+                    <p className="text-[10px] font-black text-amber-800 dark:text-fuchsia-300 uppercase tracking-wide truncate">
                       Predictive Assist · {intel.suggestion.label}
                     </p>
-                    <p className="text-[10px] text-zinc-500 truncate">{intel.suggestion.hint}</p>
+                    <p className="text-[10px] text-[var(--sps-muted)] truncate">{intel.suggestion.hint}</p>
                   </div>
                 </div>
                 {intel.suggestion.insert ? (
                   <button
                     type="button"
                     onClick={applyPrediction}
-                    className="shrink-0 px-2.5 py-1 rounded-lg bg-fuchsia-600/90 hover:bg-fuchsia-500 text-white text-[10px] font-black cursor-pointer"
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-700 hover:bg-amber-600 dark:bg-fuchsia-600/90 dark:hover:bg-fuchsia-500 text-white text-[10px] font-black cursor-pointer"
                   >
                     Apply
                   </button>
@@ -2400,7 +2704,7 @@ Write ONLY the continuation in clean screenplay format:`;
                               ? 'text-zinc-600'
                               : 'text-zinc-400'
                         }`}
-                        title="Telugu mode: type roman (nenu + Space → నేను) · dictate Telugu"
+                        title="Telugu: roman + Space → తెలుగు"
                       >
                         తె
                       </button>
@@ -2414,7 +2718,7 @@ Write ONLY the continuation in clean screenplay format:`;
                               ? 'text-zinc-600'
                               : 'text-zinc-400'
                         }`}
-                        title="English mode: type & dictate English"
+                        title="English type & dictate"
                       >
                         EN
                       </button>
@@ -2428,7 +2732,7 @@ Write ONLY the continuation in clean screenplay format:`;
                               ? 'text-zinc-600'
                               : 'text-zinc-400'
                         }`}
-                        title="Auto: Telugu if script has తెలుగు, else English"
+                        title="Auto language from script"
                       >
                         A
                       </button>
@@ -3195,16 +3499,28 @@ Write ONLY the continuation in clean screenplay format:`;
                   : 'bg-zinc-900/50 border-zinc-800 opacity-70'
               }`}
             >
-              <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800">
-                <span className="text-xs font-black text-amber-300 flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-amber-400" />
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800 gap-2">
+                <span className="text-xs font-black text-amber-300 flex items-center gap-2 min-w-0">
+                  <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
                   LLM Auto-Generated Script Synopsis
                 </span>
-                {scriptSynopsisSource === 'auto_llm' && (
-                  <span className="text-[10px] bg-amber-400 text-zinc-950 font-black px-2 py-0.5 rounded-full uppercase">
-                    Active in Prompts
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {scriptSynopsisSource === 'auto_llm' && (
+                    <span className="text-[10px] bg-amber-400 text-zinc-950 font-black px-2 py-0.5 rounded-full uppercase">
+                      Active in Prompts
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="sps-btn text-[10px]"
+                    disabled={!String(llmAutoSynopsis || '').trim()}
+                    onClick={() => handleCopySynopsis(llmAutoSynopsis, 'llm')}
+                    title="Copy LLM synopsis"
+                  >
+                    {copiedSynopsis === 'llm' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedSynopsis === 'llm' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <div className="flex-1 bg-zinc-950/80 rounded-lg p-4 border border-zinc-800 text-xs text-zinc-200 leading-relaxed font-sans overflow-y-auto whitespace-pre-wrap">
                 {llmAutoSynopsis || (
@@ -3222,16 +3538,28 @@ Write ONLY the continuation in clean screenplay format:`;
                   : 'bg-zinc-900/50 border-zinc-800 opacity-70'
               }`}
             >
-              <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800">
-                <span className="text-xs font-black text-amber-300 flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-amber-400" />
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800 gap-2">
+                <span className="text-xs font-black text-amber-300 flex items-center gap-2 min-w-0">
+                  <Edit3 className="w-4 h-4 text-amber-400 shrink-0" />
                   Writer Custom Script Synopsis
                 </span>
-                {scriptSynopsisSource === 'writer_custom' && (
-                  <span className="text-[10px] bg-amber-400 text-zinc-950 font-black px-2 py-0.5 rounded-full uppercase">
-                    Active in Prompts
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {scriptSynopsisSource === 'writer_custom' && (
+                    <span className="text-[10px] bg-amber-400 text-zinc-950 font-black px-2 py-0.5 rounded-full uppercase">
+                      Active in Prompts
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="sps-btn text-[10px]"
+                    disabled={!String(writerCustomSynopsis || '').trim()}
+                    onClick={() => handleCopySynopsis(writerCustomSynopsis, 'writer')}
+                    title="Copy writer synopsis"
+                  >
+                    {copiedSynopsis === 'writer' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedSynopsis === 'writer' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <textarea
                 value={writerCustomSynopsis}
@@ -3246,10 +3574,27 @@ Write ONLY the continuation in clean screenplay format:`;
         </div>
       )}
 
-      {/* FOOTER */}
-      <div className="px-3 py-2 border-t border-zinc-800 bg-zinc-900/90 flex flex-wrap items-center justify-between text-xs text-zinc-400 gap-2 shrink-0 backdrop-blur-md">
+      {/* BREAKDOWN TAB — mirrored Project Console AI Script Breakdown */}
+      {activeConsoleTab === 'breakdown' && (
+        <div className="flex-1 min-h-0 overflow-hidden p-3 sm:p-4 bg-[var(--sps-bg)] flex flex-col">
+          <AiScriptBreakdownPanel
+            projectTitle={projectTitle}
+            shots={shots}
+            onApplyShots={onApplyShots}
+            setPresetProfile={setPresetProfile}
+            initialScriptText={scriptText}
+            eventSource="writer"
+            onApplied={() => onNavigateToView?.('spreadsheet')}
+            className="flex-1 min-h-0 h-full"
+          />
+        </div>
+      )}
+
+      {/* FOOTER — hide on breakdown so Story Package / Parse aren't cramped */}
+      {activeConsoleTab !== 'breakdown' ? (
+      <div className="px-3 py-1 border-t border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] flex flex-wrap items-center justify-between text-[11px] gap-2 shrink-0">
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-cyan-300 font-bold bg-zinc-950 px-2.5 py-0.5 rounded border border-zinc-800">
+          <span className="sps-count-pill font-semibold">
             Page {currentPage} / {totalPages} · ~{runtimeMin} min
           </span>
           <button
@@ -3258,12 +3603,12 @@ Write ONLY the continuation in clean screenplay format:`;
               setIntelSubTab('radar');
               setRightDrawer('intel');
             }}
-            className="text-fuchsia-300 font-bold bg-fuchsia-950/40 px-2.5 py-0.5 rounded border border-fuchsia-700/40 cursor-pointer hover:bg-fuchsia-900/40"
+            className="sps-btn text-[10px]"
             title="Open Writer Intel"
           >
             Intel {intel.readiness?.score ?? 0} · {intel.readiness?.grade || 'Draft'}
           </button>
-          <span className="text-zinc-400">
+          <span className="text-[var(--sps-muted)]">
             {sceneOutline.filter((s) => s.type === 'scene').length} scenes · {shotCount} shots · {wordCount} words
             {(intel.flags || []).length > 0 ? ` · ${intel.flags.length} flags` : ''}
           </span>
@@ -3282,6 +3627,7 @@ Write ONLY the continuation in clean screenplay format:`;
           </button>
         )}
       </div>
+      ) : null}
 
       <ScreenplayDiffModal
         isOpen={diffOpen}
@@ -3309,6 +3655,43 @@ Write ONLY the continuation in clean screenplay format:`;
       />
 
       <WriterHelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      <ActiveProjectConfirmModal
+        isOpen={parseGateOpen}
+        activeTitle={projectTitle}
+        intendedTitle={pendingDetectedTitle || projectTitle}
+        existingCount={Array.isArray(shots) ? shots.length : 0}
+        incomingCount={null}
+        actionLabel="Parse screenplay into the Matrix for this film"
+        onCancel={() => {
+          setParseGateOpen(false);
+          setPendingParseText('');
+          setPendingDetectedTitle('');
+          setParseStatusMsg('Parse cancelled — matrix left unchanged');
+        }}
+        onConfirm={confirmParseScriptToMatrix}
+      />
+
+      <ScriptMergePromptModal
+        isOpen={mergePromptOpen}
+        projectTitle={projectTitle}
+        existingCount={mergeApplyState.existingCount}
+        incomingCount={mergeApplyState.incomingCount}
+        onOverwrite={() => {
+          const { parsedShots, textToParse } = mergeApplyState;
+          setMergePromptOpen(false);
+          proposeParsedShotsToReview(parsedShots, textToParse, 'overwrite');
+        }}
+        onMerge={() => {
+          const { parsedShots, textToParse } = mergeApplyState;
+          setMergePromptOpen(false);
+          proposeParsedShotsToReview(parsedShots, textToParse, 'merge');
+        }}
+        onCancel={() => {
+          setMergePromptOpen(false);
+          setParseStatusMsg('Apply cancelled — story package saved; matrix unchanged until LLM review');
+        }}
+      />
     </div>
   );
 }

@@ -257,4 +257,4 @@ Not a vendor quote. Cross-check Vercel, OpenAI, Anthropic, Google, xAI, Runway, 
 
 ---
 
-*Generated for Pedditi Labs · Stage Production Studio · Aug 2026*
+*Generated for StageWorks · Aug 2026*
