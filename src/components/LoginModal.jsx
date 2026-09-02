@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles } from 'lucide-react';
+import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles, Monitor } from 'lucide-react';
 import {
   getCurrentUserEmail,
   isStudioAdmin,
@@ -16,7 +16,7 @@ import { registerThisDevice, getDeviceId } from '../utils/saasControl';
 import StageWorksMark from './StageWorksMark';
 import { CATEGORY, PRODUCT } from '../constants/brand';
 
-export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpenAppDemo }) {
+export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpenAppDemo, onOpenDesktopTrial, overlayMode = 'default' }) {
   const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin' | 'guest'
   const [emailInput, setEmailInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
@@ -242,17 +242,30 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setErrorMsg('');
   };
 
+  const isSwitch = overlayMode === 'switch';
+
   return (
-    <div className="sps-overlay" style={{ zIndex: 100 }}>
-      <div className="sps-shell sps-shell-md" style={{ height: 'auto', maxHeight: 'min(92dvh, 40rem)', alignSelf: 'center' }}>
+    <div
+      className={`sps-overlay${isSwitch ? ' is-switch-account' : ''}`}
+      style={{
+        zIndex: isSwitch ? 80 : 100,
+        ...(isSwitch
+          ? { background: 'transparent', backdropFilter: 'none', WebkitBackdropFilter: 'none' }
+          : null)
+      }}
+    >
+      <div
+        className="sps-shell sps-shell-md"
+        style={{ height: 'auto', maxHeight: 'min(92dvh, 40rem)', alignSelf: 'center', pointerEvents: 'auto' }}
+      >
         <div className="sps-modal-head">
           <div className="flex items-center gap-3 min-w-0">
             <div className="sps-mark shrink-0 overflow-hidden p-0">
               <StageWorksMark size={32} className="w-8 h-8 object-cover" />
             </div>
             <div className="min-w-0">
-              <h2>{PRODUCT}</h2>
-              <p>{CATEGORY}</p>
+              <h2>{isSwitch ? 'Switch account' : PRODUCT}</h2>
+              <p>{isSwitch ? 'Sign in as another user — Projects stay open.' : CATEGORY}</p>
             </div>
           </div>
           <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close login">
@@ -380,6 +393,16 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 <span>Launch studio workspace</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
+              {onOpenDesktopTrial ? (
+                <button
+                  type="button"
+                  className="sps-btn w-full"
+                  onClick={() => onOpenDesktopTrial()}
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span>Download desktop trial</span>
+                </button>
+              ) : null}
             </form>
           ) : loginMode === 'admin' ? (
             <form onSubmit={handleAdminLogin} className="space-y-4">
@@ -464,6 +487,16 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 <Sparkles className="w-4 h-4" />
                 <span>App demo tour</span>
               </button>
+              {onOpenDesktopTrial ? (
+                <button
+                  type="button"
+                  className="sps-btn w-full"
+                  onClick={() => onOpenDesktopTrial()}
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span>Download desktop trial</span>
+                </button>
+              ) : null}
             </div>
           )}
 

@@ -17,6 +17,7 @@ import { extractWorldEnvironmentAssetsWithLLM } from '../services/aiScriptParser
 import { readLockedImageFile } from '../utils/continuitySpine';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
+import StudioProfileControl from './StudioProfileControl';
 import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
 import { GUEST_PLAY_WORLD } from '../utils/guestPlayground';
 import {
@@ -524,6 +525,7 @@ export default function WorldEnvironmentConsole({
               ZIP
             </button>
 
+            <StudioProfileControl />
             <button
               type="button"
               onClick={handleRequestClose}

@@ -12,6 +12,7 @@
 
 import { isGuestPlayTitle, getGuestPlayProject } from './guestPlayground';
 import { canUseSaasConsole } from './saasControl';
+import { PRODUCTION_ORIGIN } from './runtimeEnv';
 
 export const PRIMARY_ADMIN_EMAILS = ['pedditiram@gmail.com'];
 
@@ -116,7 +117,7 @@ function guestQueryOn() {
 
 /** Shareable look-only URL for this origin. */
 export function getGuestLookShareUrl() {
-  if (typeof window === 'undefined') return 'https://stage-production-studio.vercel.app/?guest=1';
+  if (typeof window === 'undefined') return `${PRODUCTION_ORIGIN}/?guest=1`;
   const url = new URL(window.location.origin + window.location.pathname);
   url.searchParams.set('guest', '1');
   return url.toString();

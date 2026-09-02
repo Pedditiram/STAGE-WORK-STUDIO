@@ -6,7 +6,7 @@ import { SWS_PROVIDERS } from './swsComfyConstants';
 import { SWS_NODE_IDS, SWS_COMFY_NODE_CLASSES } from './swsComfyTemplates';
 import { buildSwsWorkflowContract } from './swsWorkflowContract';
 import { buildComfyPromptGraph, stripSecretsFromWorkflow } from './swsComfyJson';
-import { apiPromptToFrontendWorkflow, isComfyApiPrompt, isComfyFrontendWorkflow, validateComfyFrontendWorkflow } from './swsComfyFrontend';
+import { apiPromptToFrontendWorkflow, isComfyApiPrompt, isComfyFrontendWorkflow, SWS_NODE_IO, validateComfyFrontendWorkflow } from './swsComfyFrontend';
 import { validateAgainstInstalledNodes, validateSwsWorkflow } from './swsWorkflowValidator';
 import { buildClapboard, clapboardResolveCsv, clapboardResolveEdl } from './shotClapboard';
 
@@ -132,6 +132,18 @@ export function runSwsComfySelfTests() {
   });
   if (!foldedSys.ok && foldedSys.errors.some((e) => e.code === 'system_folded_into_prompt')) pass('system_folded_rejected');
   else fail('system_folded_rejected', 'Folding systemInstruction into prompt should fail validation.');
+
+  const promptIo = SWS_NODE_IO[SWS_COMFY_NODE_CLASSES.PROMPT];
+  if (
+    promptIo?.outputs?.length === 3 &&
+    promptIo.outputs[0]?.name === 'prompt' &&
+    promptIo.outputs[1]?.name === 'negative_prompt' &&
+    promptIo.outputs[2]?.name === 'system_instruction'
+  ) {
+    pass('sws_prompt_third_output');
+  } else {
+    fail('sws_prompt_third_output', 'SWS Prompt must expose system_instruction as a third output.');
+  }
 
   const reserved = validateSwsWorkflow({
     contract: { ...contract, provider: 'fal.ai' },

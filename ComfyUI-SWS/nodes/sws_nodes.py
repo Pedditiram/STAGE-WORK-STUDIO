@@ -125,13 +125,13 @@ class SWSPrompt:
             ("system_instruction", ""),
         ])
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("prompt", "negative_prompt")
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("prompt", "negative_prompt", "system_instruction")
     FUNCTION = "run"
     CATEGORY = "SWS"
 
     def run(self, prompt, negative_prompt, system_instruction=""):
-        return (prompt, negative_prompt)
+        return (prompt, negative_prompt, system_instruction)
 
 
 class SWSReferenceLoader:

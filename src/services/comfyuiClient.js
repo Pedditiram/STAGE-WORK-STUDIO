@@ -169,6 +169,11 @@ export async function waitForComfyPendingLoaded({
   };
 }
 
+export function installedComfyClassCount(objectInfo) {
+  if (!objectInfo || typeof objectInfo !== 'object') return 0;
+  return Object.keys(objectInfo).length;
+}
+
 export function missingSwsNodes(objectInfo, requiredClassTypes = []) {
   const installed = new Set(Object.keys(objectInfo || {}));
   return requiredClassTypes.filter((cls) => !installed.has(cls));

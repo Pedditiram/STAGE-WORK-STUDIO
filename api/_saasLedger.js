@@ -113,6 +113,31 @@ export function grantFromStripeSession(session) {
   return { ok: true, credits: row.credits, email, granted: pack.credits, pack: pack.id };
 }
 
+/** License a desktop-trial requester without skipping SaaS. Owner stays Enterprise. */
+export function activateDesktopTrialLicense(email) {
+  const { list, idx, row, clean } = getOrCreateRow(email);
+  const isNew = idx < 0;
+  if (clean === OWNER_EMAIL) {
+    row.plan = 'enterprise';
+    row.status = 'ACTIVE';
+    row.desktopTrialApprovedAt = new Date().toISOString();
+    saveRow(list, idx, row);
+    return row;
+  }
+  const paid = ['creator', 'pro', 'production', 'studio', 'enterprise'];
+  const current = String(row.plan || '').toLowerCase();
+  if (isNew || !paid.includes(current) || String(row.status || '').toUpperCase() !== 'ACTIVE') {
+    row.plan = 'trial';
+    row.credits = 50;
+    row.status = 'ACTIVE';
+    row.apiMode = row.apiMode || 'byok';
+    row.trialStartedAt = row.trialStartedAt || new Date().toISOString();
+  }
+  row.desktopTrialApprovedAt = new Date().toISOString();
+  saveRow(list, idx, row);
+  return row;
+}
+
 export function grantServerCredits(email, amount) {
   const { list, idx, row } = getOrCreateRow(email);
   row.credits = (row.credits || 0) + Math.max(0, Math.floor(Number(amount) || 0));

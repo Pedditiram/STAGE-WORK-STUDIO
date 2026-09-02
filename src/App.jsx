@@ -2,6 +2,11 @@ import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import SplashScreen from './components/SplashScreen';
 import { isLocalStudioHost } from './utils/runtimeEnv';
 import Header from './components/Header';
+import {
+  STUDIO_SWITCH_ACCOUNT_EVENT,
+  STUDIO_LOGOUT_EVENT,
+  STUDIO_OPEN_LOGIN_EVENT
+} from './components/StudioProfileControl';
 import SpreadsheetView from './components/SpreadsheetView';
 import StudioFormView from './components/StudioFormView';
 import DirectorCanvas from './components/DirectorCanvas';
@@ -9,6 +14,7 @@ import ScreenplayEditor from './components/ScreenplayEditor';
 import TemplateSelector from './components/TemplateSelector';
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import LoginModal from './components/LoginModal';
+import DesktopTrialModal from './components/DesktopTrialModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
@@ -907,6 +913,17 @@ export default function App() {
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
   const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isDesktopTrialOpen, setIsDesktopTrialOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const trial = String(params.get('trial') || params.get('download') || '').toLowerCase();
+    if (trial === '1' || trial === 'true' || trial === 'desktop') {
+      setIsDesktopTrialOpen(true);
+    }
+  }, []);
+  const [loginOverlayMode, setLoginOverlayMode] = useState('default');
   const [isNavigatorOpen, setIsNavigatorOpen] = useState(false);
 
   useEffect(() => {
@@ -1797,7 +1814,9 @@ export default function App() {
   useEffect(() => {
     if (isGuestSession()) return undefined;
     if (!effectiveRoomId) return;
-    const unsubscribe = subscribeToCloudRoom(effectiveRoomId, (cloudData) => {
+    const unsubscribe = subscribeToCloudRoom(
+      effectiveRoomId,
+      (cloudData) => {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
         const openTitle = projectTitleRef.current;
         if (cloudData.projectTitle && openTitle && !titlesMatch(cloudData.projectTitle, openTitle)) {
@@ -1831,7 +1850,9 @@ export default function App() {
           setTimeout(() => { isReceivingCloudUpdate.current = false; }, 500);
         }
       }
-    });
+    },
+      projectTitleRef.current
+    );
     return () => {
       if (unsubscribe) unsubscribe();
     };
@@ -2693,8 +2714,31 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    setLoginOverlayMode('default');
     setIsLoginModalOpen(true);
   };
+
+  const handleStudioSwitchAccount = () => {
+    setLoginOverlayMode('switch');
+    setIsLoginModalOpen(true);
+  };
+
+  useEffect(() => {
+    const onSwitch = () => handleStudioSwitchAccount();
+    const onLogout = () => handleStudioLogout();
+    const onLogin = () => {
+      setLoginOverlayMode('default');
+      setIsLoginModalOpen(true);
+    };
+    window.addEventListener(STUDIO_SWITCH_ACCOUNT_EVENT, onSwitch);
+    window.addEventListener(STUDIO_LOGOUT_EVENT, onLogout);
+    window.addEventListener(STUDIO_OPEN_LOGIN_EVENT, onLogin);
+    return () => {
+      window.removeEventListener(STUDIO_SWITCH_ACCOUNT_EVENT, onSwitch);
+      window.removeEventListener(STUDIO_LOGOUT_EVENT, onLogout);
+      window.removeEventListener(STUDIO_OPEN_LOGIN_EVENT, onLogin);
+    };
+  }, []);
 
   const openProjectsTab = (tab = 'library') => {
     if (!guestMayLook('Projects')) return;
@@ -3697,6 +3741,8 @@ export default function App() {
           onOpenNavigator={() => setIsNavigatorOpen((open) => !open)}
           onOpenNavigatorShortcutHelp={() => openNavigatorShortcutHelp()}
           onOpenLoginModal={() => setIsLoginModalOpen(true)}
+          onSwitchAccount={handleStudioSwitchAccount}
+          onLogout={handleStudioLogout}
           onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
           appVersionMode={appVersionMode}
           onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
@@ -4074,7 +4120,11 @@ export default function App() {
         setPresetProfile={handleSetPresetProfile}
         isAdminLoggedIn={isAdminLoggedIn}
         onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenLogin={() => {
+          setLoginOverlayMode('switch');
+          setIsLoginModalOpen(true);
+        }}
+        onSwitchAccount={handleStudioSwitchAccount}
         onLogout={handleStudioLogout}
         onOpenNavigatorShortcutHelp={() => openNavigatorShortcutHelp()}
         onOpenAdminSettings={(tab) => {
@@ -4173,10 +4223,20 @@ export default function App() {
       {/* Gmail Login & Account Switcher Modal */}
       <LoginModal
         isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
+        overlayMode={loginOverlayMode}
+        onClose={() => {
+          setIsLoginModalOpen(false);
+          setLoginOverlayMode('default');
+        }}
         setIsAdminLoggedIn={handleSetAdminLoggedIn}
         onOpenAppDemo={() => setIsStudioTourOpen(true)}
+        onOpenDesktopTrial={() => {
+          setIsLoginModalOpen(false);
+          setLoginOverlayMode('default');
+          setIsDesktopTrialOpen(true);
+        }}
       />
+      <DesktopTrialModal isOpen={isDesktopTrialOpen} onClose={() => setIsDesktopTrialOpen(false)} />
 
       {/* Real-Time Active User Slot Conflict Alert Modal */}
       <ConflictAlertModal

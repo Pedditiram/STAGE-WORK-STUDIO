@@ -14,6 +14,7 @@ import { assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../u
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { compilerPromptsToPrintHtml } from '../utils/compilerExport';
+import StudioProfileControl from './StudioProfileControl';
 
 export default function PromptCompilerModal({
   isOpen,
@@ -946,6 +947,7 @@ ${mainPrompt}`;
                 <Minimize2 className="w-3.5 h-3.5" />
                 Exit
               </button>
+              <StudioProfileControl />
               <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>
@@ -967,6 +969,7 @@ ${mainPrompt}`;
                 <Maximize2 className="w-4 h-4" />
                 Full screen
               </button>
+              <StudioProfileControl />
               <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>

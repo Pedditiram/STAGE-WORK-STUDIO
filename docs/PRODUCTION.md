@@ -123,6 +123,44 @@ Hardened runtime + entitlements are configured in `package.json` / `build/entitl
 
 ---
 
+## Desktop trial download (website, not Vercel static)
+
+Vercel **cannot** host the unsigned ~500MB Electron `.app`. Keep binaries on **GitHub Releases** (or another HTTPS object store). The website only queues email requests and issues a **tokenized** redirect after the owner approves.
+
+### Where the binary lives
+| Place | Role |
+|-------|------|
+| `release/mac-arm64/` on this Mac | Local pack only (`npm run electron:build:dir` / `electron:pack`). Not uploaded. |
+| GitHub Release asset (HTTPS) | Public file the tokenized link 302s to after approve |
+| `SPS_DESKTOP_RELEASE_URL` or Settings → SaaS | Admin paste/replace that HTTPS URL |
+
+Upload a new build: create a GitHub Release, attach the `.dmg` / `.zip`, paste the asset URL in **Settings → SaaS → Desktop trial** (or set the env var and redeploy).
+
+### Visitor flow
+1. Login → **Download desktop trial**, or `/?trial=1`, or Investor Deck / presentation CTA.
+2. Form: name, email, optional org/why → `POST /api/desktop-trial` `{ action: "request" }` (idempotent on email).
+3. Owner inbox `pedditiram@gmail.com` (`SPS_ACCESS_TO_EMAIL`) is emailed when Resend is configured.
+4. **Settings → SaaS**: pending list → **Approve** / **Deny**. Approve licenses SaaS **trial** (owner stays Enterprise) and emails the **same requester email** a personal `/api/desktop-trial?action=download&token=…` link.
+5. Token: hashed at rest, ~14 days, 8 downloads. Anonymous GET without a valid token does not receive the binary URL.
+
+### Env vars
+| Env | Purpose |
+|-----|---------|
+| `SPS_RESEND_API_KEY` or `RESEND_API_KEY` | Outbound mail (same as OTP). Without it, the queue still works in SaaS admin. |
+| `SPS_OTP_FROM_EMAIL` / `SPS_OTP_FROM_NAME` | From header |
+| `SPS_ACCESS_TO_EMAIL` | Admin notify (default owner) |
+| `SPS_SAAS_ADMIN_EMAILS` | Extra approve-capable emails (comma) |
+| `SPS_DESKTOP_RELEASE_URL` | Default GitHub Release HTTPS URL |
+| `SPS_PUBLIC_ORIGIN` | Origin used in emailed download links |
+| `SPS_KV_REST_URL` + `SPS_KV_REST_TOKEN` | Durable request queue on Vercel (same KV as sync). Local Vite writes `storage/cloud/desktop-trial.json` (gitignored). |
+
+### APIs
+- `GET /api/desktop-trial?action=public` — mail/KV/hasRelease flags (no binary URL)
+- `POST /api/desktop-trial` `{ action: "request" \| "list" \| "approve" \| "deny" \| "resend" \| "set-release-url" }`
+- `GET /api/desktop-trial?action=download&token=` — 302 to release URL if token valid
+
+---
+
 ## Residual checklist
 
 | Item | Status |

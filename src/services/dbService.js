@@ -9,7 +9,7 @@ import {
   getDocs 
 } from 'firebase/firestore';
 import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary } from '../utils/projectPermissions';
-import { getNativeSyncUrl } from './cloudSync';
+import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
 // Default Firebase Cloud Database Configuration
@@ -87,6 +87,19 @@ function applyCloudCollaborators(users) {
 
 function syncApiUrl() {
   return getNativeSyncUrl();
+}
+
+function liveRoomId() {
+  if (typeof window === 'undefined') return 'SPS-CLOUD-8821';
+  try {
+    return (
+      localStorage.getItem('sps_current_room_id') ||
+      localStorage.getItem('sps_cloud_room_id') ||
+      'SPS-CLOUD-8821'
+    );
+  } catch (e) {
+    return 'SPS-CLOUD-8821';
+  }
 }
 
 // Permanent Production REST Cloud Database Endpoints (Zero-Config, 100% Active Globally across Firefox, Safari, Chrome)
@@ -304,6 +317,18 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
 
   pull();
   schedule();
+  let lastCollabStamp = '';
+  const unsubTick = subscribeToCollabTick(liveRoomId(), '', (tick, reason) => {
+    if (cancelled || reason === 'init') {
+      lastCollabStamp = String(tick?.collaborators?.stamp || '');
+      return;
+    }
+    const sig = String(tick?.collaborators?.stamp || '');
+    if (sig && sig !== lastCollabStamp) {
+      lastCollabStamp = sig;
+      pull();
+    }
+  });
   if (typeof window !== 'undefined') {
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('focus', onVis);
@@ -329,6 +354,7 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
   return () => {
     cancelled = true;
     if (pollTimer) clearInterval(pollTimer);
+    if (typeof unsubTick === 'function') unsubTick();
     if (typeof window !== 'undefined') {
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('focus', onVis);
@@ -435,6 +461,18 @@ export function subscribeToProjectLibraryUpdates(callback) {
 
   checkUpdates();
   schedule();
+  let lastLibStamp = '';
+  const unsubTick = subscribeToCollabTick(liveRoomId(), '', (tick, reason) => {
+    if (cancelled || reason === 'init') {
+      lastLibStamp = String(tick?.projects?.stamp || '');
+      return;
+    }
+    const sig = String(tick?.projects?.stamp || '');
+    if (sig && sig !== lastLibStamp) {
+      lastLibStamp = sig;
+      checkUpdates();
+    }
+  });
   if (typeof window !== 'undefined') {
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('focus', onVis);
@@ -461,6 +499,7 @@ export function subscribeToProjectLibraryUpdates(callback) {
   return () => {
     cancelled = true;
     if (pollTimer) clearInterval(pollTimer);
+    if (typeof unsubTick === 'function') unsubTick();
     if (typeof window !== 'undefined') {
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('focus', onVis);

@@ -64,9 +64,7 @@ const build = spawnSync(
     '--platform=browser',
     '--format=esm',
     `--outfile=${bundle}`,
-    '--external:pdfjs-dist',
-    '--external:pdfjs-dist/build/pdf.worker.min.mjs?url',
-    '--external:pdfjs-dist/build/pdf.worker.mjs?url'
+    '--external:pdfjs-dist'
   ],
   { cwd: root, encoding: 'utf8' }
 );

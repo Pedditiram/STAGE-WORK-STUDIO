@@ -15,7 +15,8 @@ import {
   pullLatestComfyOutput,
   probeComfyUi,
   setComfyUiBaseUrl,
-  missingComfyClassStatusLine
+  missingComfyClassStatusLine,
+  installedComfyClassCount
 } from '../services/comfyuiClient';
 import {
   getSeedanceStillModel,
@@ -89,6 +90,8 @@ export default function SwsComfyWorkflowModal({
   const [comfyProbeNote, setComfyProbeNote] = useState('');
   const [filmProgress, setFilmProgress] = useState('');
   const [comfyUiVersion, setComfyUiVersion] = useState('');
+  const [installedClassCount, setInstalledClassCount] = useState(0);
+  const [offerPullLatest, setOfferPullLatest] = useState(null);
   const filmCancelRef = useRef({ cancelled: false });
   const [assetRoots, setAssetRoots] = useState(() => emptyAssetRoots());
   const [diskAssetSlots, setDiskAssetSlots] = useState([]);
@@ -117,6 +120,8 @@ export default function SwsComfyWorkflowModal({
     setError('');
     setTestNote('');
     setComfyProbeNote('');
+    setOfferPullLatest(null);
+    setInstalledClassCount(0);
     setComfyUrl(getComfyUiBaseUrl());
   }, [isOpen, family, shot, shotIndex]);
 
@@ -603,6 +608,9 @@ export default function SwsComfyWorkflowModal({
         return;
       }
 
+      const classCount = installedComfyClassCount(objectInfo);
+      setInstalledClassCount(classCount);
+
       const requiredClasses = seedanceMaster
         ? [...SEEDANCE_MASTER_REQUIRED_NODES]
         : requiredCustomNodes();
@@ -710,8 +718,19 @@ export default function SwsComfyWorkflowModal({
       } catch {
         /* non-fatal */
       }
+      let pullOffer = '';
+      setOfferPullLatest(null);
+      try {
+        const peek = await pullLatestComfyOutput({ baseUrl: comfyUrl });
+        if (peek.ok && peek.filename) {
+          setOfferPullLatest({ filename: peek.filename, outputFile: peek.outputFile || '' });
+          pullOffer = ` History already has a viewable output (${peek.filename}) — Pull latest to attach it.`;
+        }
+      } catch {
+        /* offer is optional */
+      }
       setStatus(
-        `Loaded “${loaded.name || 'workflow'}” (${frontend.nodes.length} nodes) onto ComfyUI at ${comfyUrl}.${diskNote} ${classReport.status} Tab title should show the shot name — if it still says Unsaved Workflow, restart ComfyUI once so ComfyUI-SWS reloads.`
+        `Loaded “${loaded.name || 'workflow'}” (${frontend.nodes.length} nodes) onto ComfyUI at ${comfyUrl}.${diskNote} ${classReport.status} ComfyUI ${probe.comfyuiVersion || 'unknown'} · ${classCount} installed class${classCount === 1 ? '' : 'es'}.${pullOffer} Tab title should show the shot name — if it still says Unsaved Workflow, restart ComfyUI once so ComfyUI-SWS reloads.`
       );
     } finally {
       setBusy(false);
@@ -899,6 +918,7 @@ export default function SwsComfyWorkflowModal({
         setError(pulled.message || 'Could not read ComfyUI history.');
         return;
       }
+      setOfferPullLatest(null);
       const probe = await probeComfyUi(comfyUrl);
       const ver = probe.ok ? probe.comfyuiVersion || 'unknown' : comfyUiVersion || 'unknown';
       if (probe.ok) setComfyUiVersion(ver);
@@ -1053,6 +1073,7 @@ export default function SwsComfyWorkflowModal({
       requiredNodes: seedanceMaster ? SEEDANCE_MASTER_REQUIRED_NODES : requiredCustomNodes()
     }),
     comfyuiVersion: comfyUiVersion || 'unknown',
+    installedClassCount,
     awaitingOutputCount: awaitingOutputCount(projectTitle),
     generations: (history || []).slice(0, 6).map((row) => ({
       generationId: row.generationId,
@@ -1300,6 +1321,19 @@ export default function SwsComfyWorkflowModal({
               Pull latest from ComfyUI
             </button>
           </div>
+          {offerPullLatest?.filename ? (
+            <p className="m-0 text-[11px] text-[color:var(--sps-muted)]">
+              After Send: history already has a viewable output ({offerPullLatest.filename}).{' '}
+              <button
+                type="button"
+                className="sps-btn text-xs"
+                onClick={pullComfyOutput}
+                disabled={busy}
+              >
+                Pull latest
+              </button>
+            </p>
+          ) : null}
           {status ? <p className="m-0 text-[11px] text-[color:var(--sps-success)]">{status}</p> : null}
           {error ? <p className="m-0 text-[11px] text-red-300 whitespace-pre-wrap">{error}</p> : null}
           {testNote ? <p className="m-0 text-[11px] text-[color:var(--sps-muted)]">{testNote}</p> : null}

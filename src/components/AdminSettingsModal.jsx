@@ -13,8 +13,9 @@ import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import GoogleDrivePanel from './GoogleDrivePanel';
 import SaasAdminPanel from './SaasAdminPanel';
 import ByokKeysPanel from './ByokKeysPanel';
+import StudioProfileControl from './StudioProfileControl';
 import { runFactoryReset } from '../utils/factoryReset';
-import { studioApiUrl } from '../utils/runtimeEnv';
+import { studioApiUrl, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 
 /** Persist collaborators to localStorage synchronously, then notify other UI (not this modal). */
 function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
@@ -41,7 +42,7 @@ function GuestBrowseSwitch() {
   const [copied, setCopied] = React.useState(false);
   const shareUrl = typeof window !== 'undefined'
     ? getGuestLookShareUrl()
-    : 'https://stage-production-studio.vercel.app/?guest=1';
+    : `${PRODUCTION_ORIGIN}/?guest=1`;
 
   const Switch = ({ on, onToggle, title }) => (
     <button
@@ -1771,6 +1772,7 @@ export default function AdminSettingsModal({
               )}
             </button>
 
+            <StudioProfileControl />
             <button
               type="button"
               onClick={onClose}
@@ -3212,13 +3214,13 @@ export default function AdminSettingsModal({
                         <input
                           type="text"
                           readOnly
-                          value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'sps_local_dev'}`}
+                          value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `${PRODUCTION_ORIGIN}?room=${roomId || 'sps_local_dev'}`}
                           className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-cyan-300 font-mono select-all shadow-inner"
                         />
                         <button
                           type="button"
                           onClick={() => {
-                            const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `https://stage-production-studio.vercel.app?room=${roomId || 'sps_local_dev'}`;
+                            const url = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}` : `${PRODUCTION_ORIGIN}?room=${roomId || 'sps_local_dev'}`;
                             if (typeof navigator !== 'undefined' && navigator.clipboard) {
                               navigator.clipboard.writeText(url);
                             }

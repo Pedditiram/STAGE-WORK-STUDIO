@@ -7,6 +7,7 @@ import {
 import { resolveLlmApiKey } from '../utils/saasControl';
 import { composeLookFacts, buildReferenceSheetsFromFacts, shotsMentionWeaponForPerson, storyLooksIndianEpic } from '../utils/characterSheetLock';
 import { ensureShotSpecMeta } from '../utils/shotSpec';
+import { PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 import { importFdx } from '../utils/screenplayInterop';
 
 function safeTrim(str) {
@@ -163,18 +164,29 @@ async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, r
 }
 
 /** Extract and parse JSON array from LLM text; repair truncated trailing commas / fences. */
+function unwrapShotArrayFromObject(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  const bags = [obj.shots, obj.data, obj.result, obj.items, obj.breakdown];
+  for (const inner of bags) {
+    if (Array.isArray(inner) && inner.length) return inner;
+    if (inner && typeof inner === 'object' && Array.isArray(inner.shots) && inner.shots.length) {
+      return inner.shots;
+    }
+  }
+  return null;
+}
+
 export function safeParseJsonArray(text) {
   if (!text || typeof text !== 'string') return null;
   let cleaned = text.trim();
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   const start = cleaned.indexOf('[');
   const objStart = cleaned.indexOf('{');
-  if (start === -1) {
-    const obj = safeParseJsonObject(cleaned);
-    const inner = obj?.shots || obj?.data || obj?.result || obj?.items;
-    if (Array.isArray(inner) && inner.length) return inner;
-    return null;
+  if (objStart !== -1 && (start === -1 || objStart < start)) {
+    const wrapped = unwrapShotArrayFromObject(safeParseJsonObject(cleaned));
+    if (wrapped) return wrapped;
   }
+  if (start === -1) return null;
   let candidate = cleaned.slice(start);
 
   const tryParse = (raw) => {
@@ -208,9 +220,8 @@ export function safeParseJsonArray(text) {
   if (parsed) return parsed;
 
   if (objStart !== -1 && objStart < start) {
-    const obj = safeParseJsonObject(cleaned);
-    const inner = obj?.shots || obj?.data || obj?.result || obj?.items;
-    if (Array.isArray(inner) && inner.length) return inner;
+    const wrapped = unwrapShotArrayFromObject(safeParseJsonObject(cleaned));
+    if (wrapped) return wrapped;
   }
 
   // Greedy balanced extract of first complete array
@@ -357,20 +368,8 @@ async function loadPdfJsLibrary() {
     }
 
     if (pdfjsLib.GlobalWorkerOptions) {
-      let workerSrc = '';
-      try {
-        // Prefer Vite-resolved same-version worker (dev + prod hashed asset)
-        const pdfWorkerModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-        workerSrc = pdfWorkerModule.default || pdfWorkerModule;
-      } catch (workerErr) {
-        console.warn('pdf.js Vite worker URL import failed; using /pdf.worker.min.mjs', workerErr);
-      }
-      if (!workerSrc || typeof workerSrc !== 'string') {
-        // Packaged Electron (file://) + Vercel: public copy matches installed pdfjs-dist version
-        workerSrc = publicAssetUrl('pdf.worker.min.mjs');
-      }
-      // Never point at a mismatched CDN worker (e.g. v3 vs v6) — that silently breaks extraction.
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+      // One public worker (scripts/sync-pdfjs-assets.mjs) — skip Vite ?url duplicate in dist/assets.
+      pdfjsLib.GlobalWorkerOptions.workerSrc = publicAssetUrl('pdf.worker.min.mjs');
     }
     return pdfjsLib;
   })();
@@ -397,25 +396,30 @@ function arrayBufferToBase64(buffer) {
  * Electron file:// falls back to the production extract API.
  */
 function getPdfExtractApiUrl() {
-  if (typeof window === 'undefined') return 'https://stage-production-studio.vercel.app/api/extract-pdf';
+  if (typeof window === 'undefined') return `${PRODUCTION_ORIGIN}/api/extract-pdf`;
   try {
     const { protocol, origin } = window.location;
     if (protocol === 'http:' || protocol === 'https:') {
       return `${origin}/api/extract-pdf`;
     }
   } catch (e) {}
-  return 'https://stage-production-studio.vercel.app/api/extract-pdf';
+  return `${PRODUCTION_ORIGIN}/api/extract-pdf`;
 }
 
 /**
  * Server-side pdfjs-legacy extract (reliable for styled / CID font PDFs like Kara-Dhushan).
  * Returns text or null if unavailable — never throws for network blips.
  */
-async function extractTextFromPDFViaServer(file, originalArrayBuffer) {
+async function extractTextFromPDFViaServer(file, originalArrayBuffer, { signal } = {}) {
+  assertParseNotAborted(signal);
   if (typeof window === 'undefined' || typeof fetch !== 'function') return null;
   try {
     const pdfBase64 = arrayBufferToBase64(originalArrayBuffer);
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const onExternalAbort = () => {
+      try { controller?.abort(); } catch { /* ignore */ }
+    };
+    if (signal && controller) signal.addEventListener('abort', onExternalAbort, { once: true });
     const timer = controller ? setTimeout(() => controller.abort(), 55000) : null;
     const res = await fetch(getPdfExtractApiUrl(), {
       method: 'POST',
@@ -424,10 +428,12 @@ async function extractTextFromPDFViaServer(file, originalArrayBuffer) {
         pdfBase64,
         fileName: file?.name || 'script.pdf'
       }),
-      signal: controller?.signal,
+      signal: controller?.signal || signal,
       cache: 'no-store'
     });
     if (timer) clearTimeout(timer);
+    if (signal && controller) signal.removeEventListener('abort', onExternalAbort);
+    assertParseNotAborted(signal);
     const data = await res.json().catch(() => null);
     if (res.ok && data?.success && data?.text && looksLikeUsableScriptText(data.text)) {
       return safeTrim(repairTeluguPdfText(data.text));
@@ -440,6 +446,12 @@ async function extractTextFromPDFViaServer(file, originalArrayBuffer) {
     return null;
   } catch (e) {
     if (e instanceof PdfExtractError) throw e;
+    if (isParseAbortError(e) || signal?.aborted) {
+      const err = new Error('Parse stopped by user.');
+      err.name = 'AbortError';
+      err.code = 'PARSE_ABORTED';
+      throw err;
+    }
     console.warn('[PDF] Server extract failed, will try browser pdf.js:', e?.message || e);
     return null;
   }
@@ -450,12 +462,15 @@ async function extractTextFromPDFViaServer(file, originalArrayBuffer) {
  * Throws PdfExtractError on scanned/empty/garbage/parse failure — never returns PDF binary noise.
  * Prefer Vercel /api/extract-pdf (Node pdfjs-legacy); fall back to in-browser pdf.js.
  */
-export async function extractTextFromPDF(file) {
+export async function extractTextFromPDF(file, options = {}) {
+  const signal = options.signal;
+  assertParseNotAborted(signal);
   if (!file) {
     throw new PdfExtractError('EMPTY', PDF_EXTRACT_MESSAGES.EMPTY);
   }
 
   const originalArrayBuffer = await file.arrayBuffer();
+  assertParseNotAborted(signal);
   if (!originalArrayBuffer || originalArrayBuffer.byteLength === 0) {
     throw new PdfExtractError('EMPTY', PDF_EXTRACT_MESSAGES.EMPTY);
   }
@@ -464,7 +479,7 @@ export async function extractTextFromPDF(file) {
   }
 
   // 0) Server extract first — fixes browser false NO_TEXT_LAYER on text-layer PDFs
-  const serverText = await extractTextFromPDFViaServer(file, originalArrayBuffer);
+  const serverText = await extractTextFromPDFViaServer(file, originalArrayBuffer, { signal });
   if (serverText) return serverText;
 
   // Fresh copies per attempt — pdf.js workers transfer/detach ArrayBuffers
@@ -521,10 +536,11 @@ export async function extractTextFromPDF(file) {
     ];
 
     for (const attempt of attempts) {
+      assertParseNotAborted(signal);
       try {
         const loadingTask = pdfjsLib.getDocument(attempt.options);
         const pdf = await loadingTask.promise;
-        const result = await extractPagesTextFromPdfObj(pdf);
+        const result = await extractPagesTextFromPdfObj(pdf, { signal });
         if (result.pageCount > 0 && result.totalTextItems === 0) {
           sawTrulyEmptyTextLayer = true;
         }
@@ -630,7 +646,7 @@ export function looksLikeUsableScriptText(text) {
 }
 
 const HEURISTIC_SLUGLINE_RE =
-  /(?:^|\n)\s*(?:INT\.?|EXT\.?|INT\/EXT|I\/E|సీన్|దృశ్యం|SCENE\s+\d+|SC\.?\s*\d+)/gi;
+  /(?:^|\n)\s*(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|సీన్|దృశ్యం|SCENE\s+\d+|SC\.?\s*\d+)/gi;
 
 /**
  * Cap offline heuristic cards so garbage PDFs / bible dumps cannot flood the Matrix preview.
@@ -659,7 +675,7 @@ export function lightSanitizePdfExtractedText(text) {
   );
 }
 
-export async function extractPagesTextFromPdfObj(pdf) {
+export async function extractPagesTextFromPdfObj(pdf, { signal } = {}) {
   const extractedPagesText = [];
   let pagesWithText = 0;
   let totalTextItems = 0;
@@ -667,6 +683,7 @@ export async function extractPagesTextFromPdfObj(pdf) {
   const pageCount = pdf?.numPages || 0;
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+    assertParseNotAborted(signal);
     try {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent({
@@ -1057,8 +1074,15 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
   throw err;
 }
 
+/** INT/EXT (optional leading scene number) plus Fountain transitions. */
 const SLUGLINE_START =
-  /^(INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|FADE IN|FADE OUT|CUT TO|SMASH CUT|DISSOLVE TO)\b/i;
+  /^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|FADE IN|FADE OUT|CUT TO|SMASH CUT|DISSOLVE TO|MATCH CUT)\b/i;
+const TRANSITION_ONLY_RE =
+  /^(?:FADE (?:IN|OUT)|CUT TO|SMASH CUT|DISSOLVE TO|MATCH CUT|BACK TO(?: SCENE)?)\s*[:.]?\s*$/i;
+const NUMBERED_SCENE_SLUG_RE =
+  /^\s*(?:SC(?:ENE)?\.?\s*)?(\d{1,3})\s*[.)]?\s*(?:INT|EXT|I\/E|EST)\b/i;
+const FOUNTAIN_NOT_CUE_RE =
+  /^(MORE|CONT'?D|CONTINUED|THE END|END OF|OMITTED|NIGHT|DAY|DAWN|DUSK|LATER|PRESENT|CAST)$/i;
 
 /** Strip BOM / zero-width and convert Final Draft XML to Fountain-like text. */
 export function prepareScriptTextForParse(scriptText) {
@@ -1075,7 +1099,21 @@ export function prepareScriptTextForParse(scriptText) {
   if (/[\u0C00-\u0C7F]/.test(t)) {
     t = repairTeluguPdfText(t);
   }
+  t = scrubScreenplayChrome(t);
   return t.trim();
+}
+
+/** Drop Fountain chrome, PDF hyphen wraps, and page-number debris before parse. */
+export function scrubScreenplayChrome(text) {
+  let s = String(text || '');
+  s = s.replace(/\u00AD/g, '');
+  s = s.replace(/\/\*[\s\S]*?\*\//g, '\n');
+  s = s.replace(/\[\[[\s\S]*?\]\]/g, '');
+  s = s.replace(/([A-Za-z\u0C00-\u0C7F])-\n([A-Za-z\u0C00-\u0C7F])/g, '$1$2');
+  s = s.replace(/^[ \t]*={3,}[ \t]*$/gm, '');
+  s = s.replace(/^[ \t]*\d{1,3}\.?[ \t]*$/gm, '');
+  s = s.replace(/^[ \t]*\(?(?:MORE|CONTINUED)\)?[ \t]*:?[ \t]*$/gim, '');
+  return s.replace(/\n{3,}/g, '\n\n');
 }
 
 /** Close a truncated JSON string so a cut-off LLM payload can still parse. */
@@ -1111,7 +1149,7 @@ export function splitScreenplayForLlmParse(scriptText, maxChars = LLM_PARSE_CHUN
   if (!text) return [];
   if (text.length <= maxChars) return [text];
   const sceneBits = text.split(
-    /(?=\n(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|SCENE\s+\d+|SC\.\s*\d+|FADE IN)\b)/i
+    /(?=\n(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|SCENE\s+\d+|SC\.\s*\d+|FADE IN)\b)/i
   );
   const parts = [];
   let buf = '';
@@ -1190,9 +1228,13 @@ Return ONLY valid JSON array without markdown code blocks.`;
 export function isFountainCharacterCue(line) {
   const t = safeTrim(line);
   if (!t || t.length > 40) return false;
-  if (SLUGLINE_START.test(t)) return false;
+  if (SLUGLINE_START.test(t) || TRANSITION_ONLY_RE.test(t)) return false;
   if (/^(ACT\s|SCENE\s|SHOT\s|PART\s|TITLE:|SUPER:|MONTAGE)/i.test(t)) return false;
-  const stripped = t.replace(/\s*\((?:CONT'?D|CONTINUED|V\.O\.|O\.S\.|OS|VO|OFF)\)\s*$/i, '');
+  const stripped = t
+    .replace(/\s*\^$/, '')
+    .replace(/\s*\((?:CONT'?D|CONTINUED|V\.O\.|O\.S\.|OS|VO|OFF)\)\s*$/i, '')
+    .trim();
+  if (FOUNTAIN_NOT_CUE_RE.test(stripped)) return false;
   if (!/^[A-Z][A-Z0-9 .'\-]{1,36}$/.test(stripped)) return false;
   const letters = stripped.replace(/[^A-Z]/g, '');
   if (letters.length < 2 || letters.length > 28) return false;
@@ -1204,7 +1246,7 @@ export function isFountainCharacterCue(line) {
 export function looksLikeScreenplayForParse(text) {
   const t = safeTrim(text);
   if (!t) return false;
-  if (/^(INT\.?|EXT\.?|INT\/EXT|FADE IN)/im.test(t)) return true;
+  if (/^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t)) return true;
   if (/^(సీన్|దృశ్యం)\s*\d/m.test(t)) return true;
   if (/\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t)) return true;
   const cues = t.split(/\n/).filter((line) => isFountainCharacterCue(line)).length;
@@ -1218,7 +1260,7 @@ export function isPremiseBrief(text) {
   if (!t) return false;
   if (looksLikeScreenplayForParse(t)) return false;
   const words = t.split(/\s+/).filter(Boolean).length;
-  const hasHeadings = /^(INT\.?|EXT\.?|INT\/EXT|FADE IN)/im.test(t);
+  const hasHeadings = /^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t);
   const hasShotTags = /\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t);
   if (hasHeadings && t.length > 2800) return false;
   if (hasShotTags && t.length > 1800) return false;
@@ -1755,6 +1797,7 @@ export function autoEnhanceCraftValue(craftKey, baseValue) {
   if (val.includes('Pedditi Labs') || val.includes('Stage Work Studio') || val.includes('Enhanced') || val.includes('—')) {
     return val;
   }
+  if (/Needs Direction/i.test(val)) return val;
 
   const enhancements = {
     shotComposition: `${val} — Rule of Thirds Frame Balance, Dynamic Subject Prominence & Background Depth Compression`,
@@ -1797,24 +1840,24 @@ export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
   const actionContext = shot.actionEnvContext || defaultText || 'Cinematic stage production scene beat.';
 
   const rawShotComposition = shot.shotComposition || 'Medium Shot (MS)';
-  const rawCameraMotionTag = shot.cameraMotionTag || '[Camera: Slow Push-In / Dolly Zoom]';
-  const rawTimeAndLightingEnv = shot.timeAndLightingEnv || '[Weather: Sunny Clear Sky] • [Timing: Golden Hour Sunset] • [Env: Outdoor Direct Sun]';
-  const rawDirectionalLightingAndHighlight = shot.directionalLightingAndHighlight || '[Angle: 45° Side Key Light] • [Shadow: Subject Canopy Shade] • [Highlight: Eye Catchlight]';
-  const rawSubjectLightingTag = shot.subjectLightingTag || '[Lighting: Direct Cinematic Sunbeam & Directional Key]';
-  const rawSubjectColorTag = shot.subjectColorTag || '[Subject Color: High-Contrast Cinematic Color Palette]';
-  const rawBackgroundLightingTag = shot.backgroundLightingTag || '[BG Lighting: Soft Natural Ambient Falloff & Warm Bokeh]';
-  const rawBackgroundColorTag = shot.backgroundColorTag || '[BG Color: Rich Deep Tones & Environmental Contrast]';
-  const rawColorPaletteSlot = shot.colorPaletteSlot || '[Palette: Konaseema Golden Hour (#d4af37 Gold | #8b4513 Earth | #228b22 Emerald)]';
-  const rawAtmosphereVolumetricsTag = shot.atmosphereVolumetricsTag || '[Atmosphere: Volumetric Rays & Dust Motes in Light Cones]';
-  const rawCharacterExpression = shot.characterExpression || 'Focused determination and dramatic presence';
-  const rawCharacterPsychologyState = shot.characterPsychologyState || '[Mindstate: Heroic Adrenaline Surge & Unwavering Oath]';
-  const rawCharacterMannerismAndPosture = shot.characterMannerismAndPosture || '[Mannerism: Military Straight Spine & Controlled Gestures]';
-  const rawCharacterPlacement = shot.characterPlacement || 'Center frame focus, environment & co-artists in background';
-  const rawCharacterMovement = shot.characterMovement || 'Dynamic movement focused on action beat';
-  const rawCharacterEyeLooks = shot.characterEyeLooks || '[Eye Look: Laser Focus on Scene Target]';
-  const rawSoundFxAndFoley = shot.soundFxAndFoley || '[SFX: Environmental Foley & Acoustic Movement]';
-  const rawBackgroundScoreMood = shot.backgroundScoreMood || '[Score: Orchestral Cinematic Strings & Driving Percussion]';
-  const rawLensAndFocalLength = shot.lensAndFocalLength || '50mm Master Prime (f/1.4) - Shallow Depth Bokeh';
+  const rawCameraMotionTag = shot.cameraMotionTag || '[Needs Direction: hold]';
+  const rawTimeAndLightingEnv = shot.timeAndLightingEnv || '[Needs Direction]';
+  const rawDirectionalLightingAndHighlight = shot.directionalLightingAndHighlight || '[Needs Direction]';
+  const rawSubjectLightingTag = shot.subjectLightingTag || '[Needs Direction: lighting]';
+  const rawSubjectColorTag = shot.subjectColorTag || '[Needs Direction: subject color]';
+  const rawBackgroundLightingTag = shot.backgroundLightingTag || '[Needs Direction: background light]';
+  const rawBackgroundColorTag = shot.backgroundColorTag || '[Needs Direction: background color]';
+  const rawColorPaletteSlot = shot.colorPaletteSlot || '[Needs Direction: palette]';
+  const rawAtmosphereVolumetricsTag = shot.atmosphereVolumetricsTag || '[Needs Direction: atmosphere]';
+  const rawCharacterExpression = shot.characterExpression || '[Needs Direction: expression]';
+  const rawCharacterPsychologyState = shot.characterPsychologyState || '[Needs Direction: mindstate]';
+  const rawCharacterMannerismAndPosture = shot.characterMannerismAndPosture || '[Needs Direction: mannerism]';
+  const rawCharacterPlacement = shot.characterPlacement || '[Needs Direction: placement]';
+  const rawCharacterMovement = shot.characterMovement || '[Needs Direction: hold]';
+  const rawCharacterEyeLooks = shot.characterEyeLooks || '[Needs Direction: eye look]';
+  const rawSoundFxAndFoley = shot.soundFxAndFoley || '[Needs Direction: sfx]';
+  const rawBackgroundScoreMood = shot.backgroundScoreMood || '[Needs Direction: score]';
+  const rawLensAndFocalLength = shot.lensAndFocalLength || '[Needs Direction: lens]';
 
   return {
     sceneShotId: shotId,
@@ -1830,7 +1873,7 @@ export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
     colorPaletteSlot: autoEnhanceCraftValue('colorPaletteSlot', rawColorPaletteSlot),
     atmosphereVolumetricsTag: autoEnhanceCraftValue('atmosphereVolumetricsTag', rawAtmosphereVolumetricsTag),
     characterIdAssetRef: leadChar,
-    coArtistInteraction: shot.coArtistInteraction || '[Co-Artist: Supporting Performer & Surrounding Crowd]',
+    coArtistInteraction: shot.coArtistInteraction || '[Needs Direction: no co-artist]',
     actionEnvContext: actionContext,
     characterExpression: autoEnhanceCraftValue('characterExpression', rawCharacterExpression),
     characterPsychologyState: autoEnhanceCraftValue('characterPsychologyState', rawCharacterPsychologyState),
@@ -1844,11 +1887,11 @@ export function normalizeShotTo26Crafts(shot, index = 0, defaultText = '') {
     backgroundScoreMood: autoEnhanceCraftValue('backgroundScoreMood', rawBackgroundScoreMood),
     lensAndFocalLength: autoEnhanceCraftValue('lensAndFocalLength', rawLensAndFocalLength),
     // Additional production craft metadata
-    vfxCgiBreakdown: shot.vfxCgiBreakdown || '[VFX: Practical Shot - In-Camera Production]',
-    stuntAndSafetyNotes: shot.stuntAndSafetyNotes || '[Stunt: Standard Performer Safety Controls]',
-    makeupAndHairStyle: shot.makeupAndHairStyle || '[Makeup: Authentic Cinema Grooming & Natural Glow]',
-    editTransitionCut: shot.editTransitionCut || 'Hard Cut (Standard Scene Beat)',
-    characterIdMatrix: shot.characterIdMatrix || 'Image_1 = lead | Image_2 = coartist | Image_3 = scene'
+    vfxCgiBreakdown: shot.vfxCgiBreakdown || '[Needs Direction: vfx]',
+    stuntAndSafetyNotes: shot.stuntAndSafetyNotes || '[Needs Direction: stunt]',
+    makeupAndHairStyle: shot.makeupAndHairStyle || '[Needs Direction: makeup]',
+    editTransitionCut: shot.editTransitionCut || '[Needs Direction: cut]',
+    characterIdMatrix: shot.characterIdMatrix || 'Image_1 = scene | Image_2 = environment'
   };
 }
 
@@ -1864,6 +1907,10 @@ function segmentFountainBeats(scriptText) {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const trimmed = safeTrim(line);
+    if (TRANSITION_ONLY_RE.test(trimmed)) {
+      flush();
+      continue;
+    }
     if (isFountainCharacterCue(line)) {
       flush();
       buf.push(line);
@@ -1902,7 +1949,10 @@ function extractFountainFromBlock(block) {
   const spoken = [];
   for (let i = 0; i < lines.length; i += 1) {
     if (!isFountainCharacterCue(lines[i])) continue;
-    const name = lines[i].replace(/\s*\(.*\)\s*$/, '').trim();
+    const name = lines[i]
+      .replace(/\s*\^$/, '')
+      .replace(/\s*\(.*\)\s*$/, '')
+      .trim();
     if (name && !names.includes(name)) names.push(name);
     const parts = [];
     let j = i + 1;
@@ -1931,7 +1981,7 @@ function smartSegmentTextIntoShots(scriptText) {
   }
 
   // Regex splitting by Scene Headers, Shot Headers, or Paragraph Breaks
-  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:EXT\.?|INT\.?)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
+  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:\d{1,3}\.?\s+)?(?:EXT\.?|INT\.?|I\/E\.?|EST\.?)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
 
   let rawSegments = cleanScript.split(segmentRegex).map(b => safeTrim(b)).filter(Boolean);
 
@@ -1960,6 +2010,7 @@ function parseRawScriptFallback(scriptText) {
   let currentSceneNum = 1;
   let currentSceneStr = "SC01";
   const sceneShotCounters = {};
+  let intExtSlugCount = 0;
 
   rawBlocks.forEach((block) => {
     if (!block || typeof block !== 'string') return;
@@ -1972,20 +2023,45 @@ function parseRawScriptFallback(scriptText) {
 
     if (parsedShots.length >= heuristicShotBudget(scriptText)) return;
 
+    if (TRANSITION_ONLY_RE.test(cleanBlock)) return;
+    if (
+      /^(?:\d{1,3}\.?|\(?\s*(?:MORE|CONTINUED)\s*\)?|CONTINUED:?)$/i.test(cleanBlock) ||
+      /^=+$/.test(cleanBlock)
+    ) {
+      return;
+    }
+
     const textLower = cleanBlock.toLowerCase();
 
     // Skip metadata / summary counters at top
     if (/^(?:\d+\s*Acts|\d+\s*Scenes|\d+\s*Shots|#[0-9a-f]{6})/i.test(cleanBlock)) {
       return;
     }
+    if (
+      cleanBlock.length < 140 &&
+      /^(?:title\s*:|written by\b|fade in\s*:|by\s+[A-Z])/i.test(cleanBlock) &&
+      !/(?:INT|EXT|సీన్|దృశ్యం)\b/i.test(cleanBlock)
+    ) {
+      return;
+    }
 
     // Detect Scene Header (e.g. SCENE 1, SC 01, EXT. DANDAKA, INT. ROOM, సీన్ 1, 1. EXT., ACT I, ACT II)
     const sceneHeaderMatch = cleanBlock.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+)|సీన్\s*(\d+)|దృశ్యం\s*(\d+)|BLOCK\s*[-:\s]?(\d+)|ACT\s*([I|V|X\d]+)|(?:EXT\.?|INT\.?)\s*([A-Za-z0-9_\s-]+))/i);
+    const numberedSlugMatch = cleanBlock.match(NUMBERED_SCENE_SLUG_RE);
 
     let isHeaderBlockOnly = false;
 
-    if (sceneHeaderMatch) {
-      const parsedNum = parseInt(sceneHeaderMatch[1] || sceneHeaderMatch[2] || sceneHeaderMatch[3] || sceneHeaderMatch[4] || sceneHeaderMatch[5] || sceneHeaderMatch[6], 10);
+    if (numberedSlugMatch || sceneHeaderMatch) {
+      const parsedNum = parseInt(
+        (numberedSlugMatch && numberedSlugMatch[1]) ||
+          sceneHeaderMatch?.[1] ||
+          sceneHeaderMatch?.[2] ||
+          sceneHeaderMatch?.[3] ||
+          sceneHeaderMatch?.[4] ||
+          sceneHeaderMatch?.[5] ||
+          sceneHeaderMatch?.[6],
+        10
+      );
       if (!isNaN(parsedNum) && parsedNum > 0 && parsedNum < 300) {
         if (parsedNum !== currentSceneNum) {
           currentSceneNum = parsedNum;
@@ -1995,12 +2071,15 @@ function parseRawScriptFallback(scriptText) {
           }
         }
       } else if (!textLower.startsWith('shot') && !textLower.startsWith('sh') && !textLower.startsWith('s0') && !textLower.startsWith('s1')) {
-        // New EXT/INT slug — with or without the conventional period
+        // New EXT/INT slug — with or without the conventional period. Do not bump SC on the first slug.
         if (cleanBlock.length < 80 && /(?:^|\n)\s*(?:int|ext)\b/i.test(cleanBlock)) {
-          currentSceneNum++;
-          currentSceneStr = `SC${currentSceneNum < 10 ? '0' + currentSceneNum : currentSceneNum}`;
-          if (!sceneShotCounters[currentSceneStr]) {
-            sceneShotCounters[currentSceneStr] = 0;
+          intExtSlugCount += 1;
+          if (intExtSlugCount > 1) {
+            currentSceneNum++;
+            currentSceneStr = `SC${currentSceneNum < 10 ? '0' + currentSceneNum : currentSceneNum}`;
+            if (!sceneShotCounters[currentSceneStr]) {
+              sceneShotCounters[currentSceneStr] = 0;
+            }
           }
         }
       }
@@ -2046,7 +2125,7 @@ function parseRawScriptFallback(scriptText) {
       framing = "Extreme Close-Up (ECU)";
     } else if (textLower.includes("close-up") || textLower.includes("closeup") || textLower.includes(" cu ") || textLower.endsWith(" cu")) {
       framing = "Close-Up (CU)";
-    } else if (textLower.includes("wide shot") || textLower.includes("wide") || textLower.includes("establishing")) {
+    } else if (textLower.includes("wide shot") || textLower.includes("establishing") || /\b(?:ews|ws)\b/.test(textLower)) {
       framing = "Wide Shot (WS)";
     } else if (textLower.includes("ots") || textLower.includes("over-the-shoulder")) {
       framing = "Over-The-Shoulder (OTS)";
@@ -2054,8 +2133,8 @@ function parseRawScriptFallback(scriptText) {
       framing = "Medium Close-Up (MCU)";
     }
 
-    // Universal Dynamic Camera Motion Detection
-    let cameraMotion = "[Camera: Tracking Shot / Steadicam Follow]";
+    // Universal Dynamic Camera Motion Detection — hold unless the text names a move
+    let cameraMotion = "[Needs Direction: hold]";
     if (textLower.includes("push-in") || textLower.includes("push in") || textLower.includes("dolly")) {
       cameraMotion = "[Camera: Slow Push-In / Dolly Zoom]";
     } else if (textLower.includes("crane") || textLower.includes("tilt")) {
@@ -2064,15 +2143,15 @@ function parseRawScriptFallback(scriptText) {
       cameraMotion = "[Camera: Hero Orbit 180/360 Deg]";
     } else if (textLower.includes("reveal") || textLower.includes("pan")) {
       cameraMotion = "[Camera: Slow Epic Reveal / Pan Right]";
-    } else if (textLower.includes("handheld") || textLower.includes("action") || textLower.includes("fight")) {
+    } else if (textLower.includes("handheld") || /\bfight\b/.test(textLower)) {
       cameraMotion = "[Camera: Dynamic Handheld Action Tracking]";
     }
 
     // Universal Dynamic Environment & Lighting Detection
-    let lighting = "[Lighting: Natural Cinematic Sunbeams & Directional Fill]";
-    let subjColor = "[Subject Color: High-Contrast Cinema Color Palette]";
-    let bgLighting = "[BG Lighting: Soft Natural Ambient Falloff]";
-    let bgColor = "[BG Color: Rich Deep Tones]";
+    let lighting = "[Needs Direction: lighting]";
+    let subjColor = "[Needs Direction: subject color]";
+    let bgLighting = "[Needs Direction: background light]";
+    let bgColor = "[Needs Direction: background color]";
 
     if (textLower.includes("night") || textLower.includes("dark") || textLower.includes("moon")) {
       lighting = "[Lighting: Moonlight & Deep Shadow Silhouette Fill]";
@@ -2113,12 +2192,16 @@ function parseRawScriptFallback(scriptText) {
       if (!extractedCharNames.includes(h)) extractedCharNames.push(h);
     });
 
-    const leadCharTag = extractedCharNames[0] || "[CharID: @Lead_Protagonist]";
-    const secondaryCharTag = extractedCharNames[1] || "[Co-Artist: Supporting Performer]";
+    const leadCharTag = extractedCharNames[0] || "[Needs Direction: unnamed subject]";
+    const secondaryCharTag = extractedCharNames[1] || "[Needs Direction: no co-artist]";
 
     const quoteMatch = block.match(/"([^"]+)"|'([^']+)'/);
     let dialogue = fountainBits.dialogue
-      || (quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Atmospheric Production Sound & Environmental Foley]');
+      || (quoteMatch ? `"${quoteMatch[1] || quoteMatch[2]}"` : '[Needs Direction: no spoken line]');
+    const hasWalkOrRun = /\b(walks?|walking|runs?|running|sprints?|strides?)\b/i.test(cleanBlock);
+    const characterMovement = hasWalkOrRun
+      ? 'Movement as written in action (walk/run only — look is not a walk)'
+      : '[Needs Direction: hold]';
 
     let actionContext = safeTrim(block.replace(/\s+/g, ' '));
     if (actionContext.length > 220) actionContext = actionContext.substring(0, 220) + '...';
@@ -2145,23 +2228,25 @@ function parseRawScriptFallback(scriptText) {
       subjectColorTag: subjColor,
       backgroundLightingTag: bgLighting,
       backgroundColorTag: bgColor,
-      atmosphereVolumetricsTag: "[Atmosphere: Haze & Dust Motes in Light Cones]",
+      atmosphereVolumetricsTag: /haze|fog|dust|smoke|mist/i.test(textLower)
+        ? "[Atmosphere: Haze & Dust Motes in Light Cones]"
+        : "[Needs Direction: atmosphere]",
       characterIdAssetRef: leadCharTag,
       coArtistInteraction: secondaryCharTag,
       actionEnvContext: actionContext,
-      characterExpression: "Focused determination and dramatic presence",
-      characterPlacement: "Center frame focus, environment & co-artists in background",
+      characterExpression: "[Needs Direction: expression]",
+      characterPlacement: "[Needs Direction: placement]",
       characterDialogue: dialogue,
-      characterMovement: "Dynamic movement focused on action beat",
-      characterEyeLooks: "[Eye Look: Laser Focus on Scene Target]",
+      characterMovement,
+      characterEyeLooks: "[Needs Direction: eye look]",
       shotDurationAndImages: durationAndImagesStr,
-      soundFxAndFoley: "[SFX: Environmental Foley & Acoustic Movement]",
-      backgroundScoreMood: "[Score: Orchestral Cinematic Strings & Driving Percussion]",
-      lensAndFocalLength: "50mm Master Prime (f/1.4) - Shallow Depth Bokeh",
-      vfxCgiBreakdown: "[VFX: Practical Shot - In-Camera Production]",
-      stuntAndSafetyNotes: "[Stunt: Standard Performer Safety Controls]",
-      makeupAndHairStyle: "[Makeup: Authentic Cinema Grooming & Natural Sweat Glow]",
-      editTransitionCut: "Hard Cut (Standard Scene Beat)",
+      soundFxAndFoley: "[Needs Direction: sfx]",
+      backgroundScoreMood: "[Needs Direction: score]",
+      lensAndFocalLength: "[Needs Direction: lens]",
+      vfxCgiBreakdown: "[Needs Direction: vfx]",
+      stuntAndSafetyNotes: "[Needs Direction: stunt]",
+      makeupAndHairStyle: "[Needs Direction: makeup]",
+      editTransitionCut: "[Needs Direction: cut]",
       characterIdMatrix: matrixSlots.join(' | ')
     });
   });
@@ -2220,8 +2305,10 @@ function enrichShotsWithStudioBrain(shots) {
   });
 }
 
-export async function generateScriptFromConcept(conceptPrompt, shotCount = 5) {
+export async function generateScriptFromConcept(conceptPrompt, shotCount = 5, options = {}) {
   const apiKey = getApiKey();
+  const signal = options.signal;
+  assertParseNotAborted(signal);
   const prompt = `Generate exactly ${shotCount} stage production shots as a JSON array for this creative concept: "${conceptPrompt}".
 Each shot in the JSON array MUST contain all 26 canonical craft keys:
 "sceneShotId", "sceneSynopsis", "shotComposition", "cameraMotionTag", "timeAndLightingEnv", "directionalLightingAndHighlight", "subjectLightingTag", "subjectColorTag", "backgroundLightingTag", "backgroundColorTag", "colorPaletteSlot", "atmosphereVolumetricsTag", "characterIdAssetRef", "coArtistInteraction", "actionEnvContext", "characterExpression", "characterPsychologyState", "characterMannerismAndPosture", "characterPlacement", "characterDialogue", "characterMovement", "characterEyeLooks", "shotDurationAndImages", "soundFxAndFoley", "backgroundScoreMood", "lensAndFocalLength".
@@ -2230,7 +2317,7 @@ Return ONLY valid JSON array without markdown code blocks.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2240,6 +2327,7 @@ Return ONLY valid JSON array without markdown code blocks.`;
         }
       }
     } catch (e) {
+      if (isParseAbortError(e)) throw e;
       console.warn("Google Gemini concept generator fallback:", e);
     }
   }
@@ -2296,6 +2384,8 @@ function generateScriptFromConceptFallback(conceptPrompt, shotCount = 5) {
 
 export async function enhanceCraftSlotWithLLM(craftKey, currentValue, shotContext = {}) {
   const apiKey = getApiKey();
+  const signal = shotContext.signal;
+  assertParseNotAborted(signal);
   const shotDesc = shotContext.actionEnvContext || shotContext.sceneShotId || 'Cinematic Shot';
   const genreKey = shotContext.genreKey || shotContext.presetProfile || '';
   const projectTitle = shotContext.projectTitle || '';
@@ -2330,13 +2420,14 @@ Project: "${projectTitle || 'Untitled'}"
 ${referenceBlock ? `${referenceBlock}\n` : ''}
 Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 25 words). Do NOT wrap in quotes or code blocks. Do not name movies unless essential to a technical grammar.`;
 
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const text = safeTrim(extractGeminiResponseText(data));
         if (text) return text.replace(/^"|"$/g, '');
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM craft enhancer fallback:", err);
     }
   }
@@ -2344,8 +2435,10 @@ Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 
   return currentValue ? `[Enhanced] ${currentValue}` : `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
 }
 
-export async function enhanceEntireShotWithLLM(shot) {
+export async function enhanceEntireShotWithLLM(shot, options = {}) {
   const apiKey = getApiKey();
+  const signal = options.signal;
+  assertParseNotAborted(signal);
 
   if (apiKey && shot) {
     try {
@@ -2358,7 +2451,7 @@ Return ONLY a valid JSON object representing the enhanced shot with the same 26 
 
 Do NOT use markdown codeblocks. Return JSON object ONLY.`;
 
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2369,6 +2462,7 @@ Do NOT use markdown codeblocks. Return JSON object ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM shot enhancer fallback:", err);
     }
   }
@@ -2376,8 +2470,10 @@ Do NOT use markdown codeblocks. Return JSON object ONLY.`;
   return shot ? normalizeShotTo26Crafts(shot, 0, shot.actionEnvContext || '') : shot;
 }
 
-export async function composeCharacterPersonaWithLLM(characterName, tag, role, rawNotes = '', shots = [], projectTitle = '') {
+export async function composeCharacterPersonaWithLLM(characterName, tag, role, rawNotes = '', shots = [], projectTitle = '', options = {}) {
   const apiKey = getApiKey();
+  const signal = options.signal;
+  assertParseNotAborted(signal);
 
   const prompt = `You are a Master Screenwriter and Film Narrative Analyst for High-End Cinema.
 Extract the COMPLETE story arc for character "${characterName}" from the following film script context ("${projectTitle}"):
@@ -2407,7 +2503,7 @@ Do NOT output markdown blocks or extra text. Return valid JSON ONLY.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 });
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -2420,6 +2516,7 @@ Do NOT output markdown blocks or extra text. Return valid JSON ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM character composition fallback:", err);
     }
   }
@@ -3097,8 +3194,10 @@ Return valid JSON ONLY.`;
   };
 }
 
-export async function composeHybridVisionMergeWithLLM(projectTitle = '', humanVision = {}, aiVision = {}) {
+export async function composeHybridVisionMergeWithLLM(projectTitle = '', humanVision = {}, aiVision = {}, options = {}) {
   const apiKey = getApiKey();
+  const signal = options.signal;
+  assertParseNotAborted(signal);
   const prompt = `You are a Master Creative Director & Cinema Synthesizer.
 Project: "${projectTitle}"
 
@@ -3127,7 +3226,7 @@ Return valid JSON ONLY.`;
 
   if (apiKey) {
     try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 });
+      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.15 }, { signal });
       if (response && response.ok) {
         const data = await response.json();
         const responseText = extractGeminiResponseText(data);
@@ -3140,6 +3239,7 @@ Return valid JSON ONLY.`;
         }
       }
     } catch (err) {
+      if (isParseAbortError(err)) throw err;
       console.warn("LLM hybrid vision merge error:", err);
     }
   }

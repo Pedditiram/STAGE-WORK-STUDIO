@@ -240,7 +240,7 @@ export function importFountainOrTxt(text) {
 /**
  * Detect + import by filename / mime / content.
  */
-export async function importScreenplayFile(file, { extractPdf } = {}) {
+export async function importScreenplayFile(file, { extractPdf, signal } = {}) {
   if (!file) throw new Error('No file');
   const name = String(file.name || '').toLowerCase();
   const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
@@ -251,7 +251,7 @@ export async function importScreenplayFile(file, { extractPdf } = {}) {
     if (typeof extractPdf !== 'function') {
       throw new Error('PDF extract unavailable');
     }
-    const text = await extractPdf(file);
+    const text = await extractPdf(file, { signal });
     return { text: importFountainOrTxt(text), format: 'pdf' };
   }
 

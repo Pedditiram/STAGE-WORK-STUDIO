@@ -33,6 +33,7 @@ import {
   IconNav as NavMark
 } from './StudioIcons';
 import { PinBarButton } from './HoverPinBar';
+import StudioProfileControl from './StudioProfileControl';
 import HeaderDriveMenu from './HeaderDriveMenu';
 import HeaderSaveMenu from './HeaderSaveMenu';
 import {
@@ -81,6 +82,8 @@ export default function Header({
   onOpenNavigatorShortcutHelp,
   onOpenStudioBrain,
   onOpenLoginModal,
+  onSwitchAccount,
+  onLogout,
   onOpenInvestorDeck,
   appVersionMode = 'local',
   onOpenAppVersionModal,
@@ -334,19 +337,12 @@ export default function Header({
   const userColorGradient = getUserGradient(userName);
 
   return (
-      <header className="sticky top-0 z-40 sps-ui-chrome bg-[var(--sps-bg)]/88 backdrop-blur-xl border-b border-[var(--sps-border)] shrink-0 w-full min-w-0 text-xs">
+      <header className={`sticky top-0 z-40 sps-ui-chrome bg-[var(--sps-bg)]/88 backdrop-blur-xl border-b border-[var(--sps-border)] shrink-0 w-full min-w-0 text-xs ${isProfileOpen ? 'is-menu-open' : ''}`}>
       {notice ? (
         <div className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+8px)] z-[70] sps-chip bg-[var(--sps-surface)] text-[var(--sps-text)] shadow-lg max-w-[min(90vw,28rem)] text-center normal-case tracking-normal">
           {notice}
         </div>
       ) : null}
-      {/* Click outside backdrop when profile dropdown is open */}
-      {isProfileOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[3px]" 
-          onClick={() => setIsProfileOpen(false)} 
-        />
-      )}
 
       <div
         className="sps-header-bar w-full min-w-0 relative"
@@ -784,230 +780,43 @@ export default function Header({
             </button>
           )}
 
-          <div className="sps-header-profile shrink-0 relative">
-            <button
-              type="button"
-              onClick={() => {
+          <StudioProfileControl
+            className="sps-header-profile"
+            onSwitchAccount={onSwitchAccount}
+            onLogout={onLogout}
+            onOpenLogin={onOpenLoginModal}
+            onOpenChange={(open) => {
+              setIsProfileOpen(open);
+              if (open) {
                 setIsActiveUsersOpen(false);
                 setCurrentUser(getLoggedInUser());
-                setIsProfileOpen(!isProfileOpen);
-              }}
-              className="sps-icon-btn"
-              title="Profile"
-            >
-              <span className="sps-avatar">{firstLetter}</span>
-            </button>
-
-            {/* Profile & Designation Fixed High Z-Index Dropdown Menu (Theme Adaptive: Paper Light & Dark Cyber Modes) */}
-            {isProfileOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40 bg-black/10 dark:bg-black/30" 
-                  onClick={() => setIsProfileOpen(false)} 
-                />
-                <div className="sps-dropdown sps-panel-enter fixed top-12 right-2 sm:right-4 w-[min(100vw-1rem,20rem)] sm:w-80 max-h-[min(85dvh,40rem)] overflow-y-auto z-50 p-4 space-y-3.5 text-xs text-left">
-                
-                <div className="flex items-center gap-3 pb-3 border-b border-[var(--sps-border)]">
-                  <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${userColorGradient} flex items-center justify-center text-white font-semibold text-base shrink-0 tracking-wider`}>
-                    {firstLetter}
-                  </div>
-                  <div className="flex flex-col min-w-0 leading-snug">
-                    <span className="font-display text-lg truncate block tracking-tight">{userName}</span>
-                    <span className="text-xs block mt-0.5 text-[var(--sps-gold)]">{userDesignation}</span>
-                    <span className="text-[11px] block mt-0.5 text-[var(--sps-muted)]">{userRole}</span>
-                    <span className="text-[10.5px] truncate block mt-0.5 text-[var(--sps-muted)]">{authEmail}</span>
-                  </div>
-                </div>
-
-                {/* Investor Presentation Slideshow Showcase Button */}
+              }
+            }}
+            extraMenu={(close) => (
+              <div className="px-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setIsProfileOpen(false); if (onOpenInvestorDeck) onOpenInvestorDeck(); }}
+                  onClick={() => { close(); if (onOpenInvestorDeck) onOpenInvestorDeck(); }}
                   className="w-full py-2.5 px-3 sps-btn sps-btn-primary text-xs flex items-center justify-between"
                 >
                   <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+                    <Sparkles className="w-4 h-4" />
                     Investor Deck & Studio Showcase
                   </span>
-                  <span className="text-[10px] bg-slate-950 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                    {isGuest ? 'Guest OK' : 'Showcase'}
-                  </span>
+                  <span className="text-[10px] font-mono font-bold">{isGuest ? 'Guest OK' : 'Showcase'}</span>
                 </button>
-
-                {/* Projects Shared / Allotted Section — collaborators only */}
-                {!isGuest && (
-                <div className="space-y-1.5">
-                  <span className={`text-xs font-bold block flex items-center gap-1.5 font-sans ${colorTheme === 'paper' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    <FolderKanban className="w-3.5 h-3.5 text-amber-500" />
-                    Projects Shared & Allotted ({allottedProjects.length}):
-                  </span>
-                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                {!isGuest && allottedProjects.length > 0 ? (
+                  <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
                     {allottedProjects.map((proj, pIdx) => (
-                      <div key={pIdx} className={`p-2 rounded-xl border flex items-center justify-between text-[11px] shadow-sm ${
-                        colorTheme === 'paper' ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
-                      }`}>
-                        <span className="font-bold truncate max-w-[160px] font-sans">{proj}</span>
-                        <span className="text-[9.5px] bg-emerald-600 text-white px-2 py-0.5 rounded-md font-bold shrink-0 shadow-sm">
-                          Access
-                        </span>
+                      <div key={pIdx} className="sps-chip text-[10px] w-full justify-between">
+                        <span className="truncate">{proj}</span>
                       </div>
                     ))}
                   </div>
-                </div>
-                )}
-
-                {isGuest && (
-                  <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
-                    colorTheme === 'paper' ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900/80 border-cyan-500/25 text-slate-300'
-                  }`}>
-                    {lookOnly
-                      ? 'Guest look-only is on. Walk Writer, Matrix, Form, and desks — nothing saves. Sign in to edit.'
-                      : 'Guest view is limited to the Investor Deck unless the owner turns on Guest Browse in Settings. Request access from'}
-                    {!lookOnly && (
-                      <>
-                        {' '}
-                        <a href="mailto:pedditiram@gmail.com" className="text-cyan-500 font-semibold underline-offset-2 hover:underline">
-                          pedditiram@gmail.com
-                        </a>
-                        {' '}or log in below.
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Quick Action & Login / Logout Controls */}
-                <div className={`space-y-2 pt-2 border-t ${colorTheme === 'paper' ? 'border-slate-200' : 'border-slate-800'}`}>
-                  {/* Tools tucked from dense header (<2xl) */}
-                  {!isGuest && (
-                  <div className="2xl:hidden grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setIsProfileOpen(false); onExportProject?.(); }}
-                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
-                        colorTheme === 'paper'
-                          ? 'bg-slate-100 text-slate-900 border-slate-300'
-                          : 'bg-slate-900 text-slate-100 border-slate-800'
-                      }`}
-                    >
-                      <Download className="w-3.5 h-3.5 text-cyan-500" /> Export
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsProfileOpen(false);
-                        onChangeColorTheme?.(colorTheme === 'paper' ? 'dark' : 'paper');
-                      }}
-                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
-                        colorTheme === 'paper'
-                          ? 'bg-slate-100 text-slate-900 border-slate-300'
-                          : 'bg-slate-900 text-slate-100 border-slate-800'
-                      }`}
-                    >
-                      {colorTheme === 'paper' ? <Moon className="w-3.5 h-3.5" /> : <Scroll className="w-3.5 h-3.5 text-amber-600" />}
-                      Theme
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setIsProfileOpen(false); onOpenStudioBrain?.(); }}
-                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
-                        colorTheme === 'paper'
-                          ? 'bg-slate-100 text-slate-900 border-slate-300'
-                          : 'bg-slate-900 text-slate-100 border-slate-800'
-                      }`}
-                    >
-                      <Brain className="w-3.5 h-3.5 text-violet-500" /> Brain
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setIsProfileOpen(false); onOpenHelpModal?.(); }}
-                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 border text-xs ${
-                        colorTheme === 'paper'
-                          ? 'bg-slate-100 text-slate-900 border-slate-300'
-                          : 'bg-slate-900 text-slate-100 border-slate-800'
-                      }`}
-                    >
-                      <HelpCircle className="w-3.5 h-3.5 text-cyan-500" /> Help
-                    </button>
-                  </div>
-                  )}
-
-                  {!isGuest && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      if (!isAdminLoggedIn) {
-                        showNotice('Sign in as studio admin to open Settings.');
-                        onOpenLoginModal?.();
-                        return;
-                      }
-                      if (onOpenAdminModal) onOpenAdminModal();
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition-all border text-xs shadow-sm ${
-                      colorTheme === 'paper' 
-                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300' 
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-100 border-slate-800'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-amber-500" /> Admin & Project Settings</span>
-                  </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => { setIsProfileOpen(false); if (onOpenHelpModal) onOpenHelpModal(); }}
-                    className={`w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition-all border text-xs shadow-sm ${
-                      colorTheme === 'paper' 
-                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border-slate-300' 
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-100 border-slate-800'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-cyan-600" /> Help & User Guide</span>
-                  </button>
-
-                  {/* Gmail Login / Logout Trigger */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      if (isGuest) {
-                        if (onOpenLoginModal) onOpenLoginModal();
-                        return;
-                      }
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('sps_user_manually_logged_out', 'true');
-                        localStorage.removeItem('sps_authorized_user_email');
-                        localStorage.setItem('sps_is_admin_logged_in', 'false');
-                        try {
-                          sessionStorage.removeItem('sps_session_authed');
-                        } catch {
-                          /* ignore */
-                        }
-                        window.history.replaceState({}, '', window.location.pathname);
-                        window.dispatchEvent(new Event('sps_collaborators_updated'));
-                        if (onOpenLoginModal) {
-                          onOpenLoginModal();
-                        } else {
-                          window.location.reload();
-                        }
-                      }
-                    }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl font-black flex items-center justify-between transition-all border text-xs shadow-md cursor-pointer ${
-                      isGuest
-                        ? 'bg-gradient-to-r from-cyan-500 to-sky-500 hover:brightness-110 text-slate-950 border-cyan-300'
-                        : 'bg-red-600 hover:bg-red-500 text-white border-red-400'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">{isGuest ? 'Login / Request Access' : 'Logout / Switch account'}</span>
-                  </button>
-                </div>
-
-                <div className={`pt-2 border-t text-[10px] text-center font-bold ${colorTheme === 'paper' ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'}`}>
-                  Gmail Authorization • Cloud Room <strong className="text-amber-600 font-mono">{roomId || 'SPS-CLOUD-8821'}</strong>
-                </div>
+                ) : null}
               </div>
-            </>
-          )}
+            )}
+          />
           </div>
         </div>
       </div>

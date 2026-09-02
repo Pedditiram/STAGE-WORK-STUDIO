@@ -54,7 +54,26 @@ export default function CampaignKitModal({
 
   const kit = useMemo(() => {
     void seed;
-    return buildCampaignKit({ shots, projectTitle, genreKey, category: channel, tone, lang, density });
+    try {
+      return buildCampaignKit({ shots, projectTitle, genreKey, category: channel, tone, lang, density });
+    } catch (err) {
+      console.error('[CampaignKit] build failed', err);
+      return {
+        kind: 'campaign',
+        projectTitle,
+        genreKey,
+        category: channel,
+        channel,
+        tone,
+        lang,
+        density,
+        spine: { title: projectTitle, logline: '', dialogues: [], hashtags: [], pillars: [] },
+        research: { insight: String(err?.message || err), audience: {}, messageHouse: {}, platforms: [], colorType: [], lookNotes: [], risks: [], legal: [], pressQ: [] },
+        markets: [],
+        units: [],
+        shotSourceCount: 0
+      };
+    }
   }, [shots, projectTitle, genreKey, channel, tone, lang, density, seed]);
 
   const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
@@ -64,7 +83,8 @@ export default function CampaignKitModal({
   } = useExportLifecyclePref('campaign');
   const exportBlocked = campaignLifecycleStrict && !exportLife.exportReady;
 
-  const activeUnit = kit.units.find((u) => u.id === unitId) || kit.units[0];
+  const units = Array.isArray(kit?.units) ? kit.units : [];
+  const activeUnit = units.find((u) => u.id === unitId) || units[0];
 
   const copyText = useCallback(async (text, key) => {
     try {
@@ -78,7 +98,7 @@ export default function CampaignKitModal({
 
   const slug = String(kit.projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
   const roomId = resolveCollabRoomId();
-  const lifeNote = `${kit.units.length}u · ${kit.tone}/${kit.density}/${kit.lang} · ${kit.category}${roomId ? ` · room:${roomId}` : ''}`;
+  const lifeNote = `${units.length}u · ${kit.tone}/${kit.density}/${kit.lang} · ${kit.category}${roomId ? ` · room:${roomId}` : ''}`;
 
   const handleExportPdf = useCallback(() => {
     if (exportBlocked) {
@@ -180,7 +200,7 @@ export default function CampaignKitModal({
             Campaign Kit
           </h2>
           <p className="text-[11px] text-[var(--sps-muted)] truncate m-0">
-            {kit.units.length} units · Print / Digital / Video · {kit.shotSourceCount} shots · {PRODUCT}
+            {units.length} units · Print / Digital / Video · {kit.shotSourceCount} shots · {PRODUCT}
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
@@ -392,7 +412,7 @@ export default function CampaignKitModal({
 
         {tab === 'research' && (
           <div className="h-full overflow-y-auto p-4 space-y-4 max-w-4xl sps-atelier-pane">
-            <p className="text-[15px] leading-relaxed m-0">{kit.research.insight}</p>
+            <p className="text-[15px] leading-relaxed m-0">{kit.research?.insight}</p>
             <p className="text-[13px] leading-relaxed m-0">{kit.research.positioning}</p>
             <p className="text-[12px] text-[var(--sps-muted)] m-0">{kit.research.question}</p>
             <div className="grid sm:grid-cols-2 gap-3">
@@ -405,7 +425,7 @@ export default function CampaignKitModal({
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                ['Primary', kit.research.audience.primary],
+                ['Primary', kit.research?.audience?.primary],
                 ['Secondary', kit.research.audience.secondary],
                 ['Do not chase', kit.research.audience.anti],
                 ['Occasion', kit.research.audience.occasion],

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pin } from 'lucide-react';
+import StudioProfileControl from './StudioProfileControl';
 
 /** Labeled pin — stops auto-minimize. Use on every studio bar. */
 export function PinBarButton({ pinned, onToggle, label = 'bar', title: titleBase }) {
@@ -46,6 +47,7 @@ export default function HoverPinBar({
     return defaultPinned;
   });
   const [hoverOpen, setHoverOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const leaveTimer = useRef(null);
 
   useEffect(() => {
@@ -63,13 +65,14 @@ export default function HoverPinBar({
     if (!pinned) setHoverOpen(true);
   };
   const onLeave = () => {
+    if (profileOpen) return;
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
     leaveTimer.current = setTimeout(() => setHoverOpen(false), 160);
   };
 
   return (
     <div
-      className={`sps-hover-chrome ${pinned ? 'is-pinned' : 'is-collapsed'}${!pinned && hoverOpen ? ' is-hover-open' : ''} ${className}`}
+      className={`sps-hover-chrome ${pinned || profileOpen ? 'is-pinned' : 'is-collapsed'}${!pinned && hoverOpen ? ' is-hover-open' : ''}${profileOpen ? ' is-menu-open' : ''} ${className}`}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -94,6 +97,7 @@ export default function HoverPinBar({
           label={pinLabel}
           title={pinTitle}
         />
+        <StudioProfileControl onOpenChange={setProfileOpen} />
       </div>
     </div>
   );

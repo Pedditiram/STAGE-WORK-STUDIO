@@ -19,9 +19,11 @@ const indexPath = path.join(root, 'index.html');
 const backupPath = path.join(root, '.index.html.electron-bak');
 
 const args = process.argv.slice(2);
-let builderArgs = ['--mac'];
-if (args.includes('--dir')) builderArgs = ['--mac', '--dir'];
-if (args.includes('--dmg')) builderArgs = ['--mac', 'dmg'];
+const archEnv = String(process.env.SWS_ELECTRON_ARCH || 'arm64').toLowerCase();
+const archFlag = archEnv === 'x64' || archEnv === 'intel' ? '--x64' : '--arm64';
+let builderArgs = ['--mac', archFlag];
+if (args.includes('--dir')) builderArgs = ['--mac', '--dir', archFlag];
+if (args.includes('--dmg')) builderArgs = ['--mac', 'dmg', archFlag];
 
 function run(cmd, cmdArgs, env = {}) {
   const res = spawnSync(cmd, cmdArgs, {

@@ -13,6 +13,7 @@ import {
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import { createZipArchive } from '../utils/zipUtils';
+import StudioProfileControl from './StudioProfileControl';
 import { saveExportBlob } from '../utils/saveExportFile';
 import { composeCharacterPersonaWithLLM, extractProjectCharactersWithLLM, extractCharacterReferenceSheets } from '../services/aiScriptParser';
 import { readLockedImageFile } from '../utils/continuitySpine';
@@ -888,6 +889,7 @@ Costume locked: ${outfit}. ${lock.genre}. Photoreal cinema, ${lock.world || 'sce
               )}
             </button>
 
+            <StudioProfileControl />
             {!asRoom ? (
             <button
               type="button"

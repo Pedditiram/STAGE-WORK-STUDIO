@@ -4,7 +4,7 @@ import {
   RefreshCw, Download, ExternalLink, ShieldAlert, Sparkles, 
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders, Maximize2,
   Brain, Camera, Music2, Ratio, KeyRound, Play, Archive, RotateCcw, ChevronDown,
-  LayoutGrid, PanelLeft, Settings, Lock, LogOut
+  LayoutGrid, PanelLeft, Settings, Lock
 } from 'lucide-react';
 import { 
   composeDirectorPsychologyWithLLM, composeHybridVisionMergeWithLLM,
@@ -60,12 +60,12 @@ import {
 import { optimizePosterDataUrl } from '../utils/projectPosterImage';
 import ProjectDrivePanel from './ProjectDrivePanel';
 import { PinBarButton } from './HoverPinBar';
+import StudioProfileControl from './StudioProfileControl';
 import {
   getCurrentUserEmail,
   getCurrentUserProfile,
   isGuestSession,
   canGuestBrowseApp,
-  isStudioAdmin,
   canAccessProject,
   canCreateOrDeleteProjects,
   filterAccessibleProjects,
@@ -76,8 +76,7 @@ import {
 import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
-import { readOpenScreenplayText } from '../utils/screenplayInterop';
-import AiScriptBreakdownPanel from './AiScriptBreakdownPanel';
+import { PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 
 const LIBRARY_VIEW_KEY = 'sps_project_library_view';
 const CONSOLE_TOOLBAR_PIN_KEY = 'sps_pin_project_console_toolbar';
@@ -114,6 +113,7 @@ export default function ProjectConsoleModal({
   onOpenLogin,
   onOpenAdminSettings,
   onLogout,
+  onSwitchAccount,
   onOpenNavigatorShortcutHelp,
   onApplyShots
 }) {
@@ -1516,6 +1516,7 @@ export default function ProjectConsoleModal({
   const consoleScrollRef = useRef(null);
   const lastConsoleScrollRef = useRef(0);
   const [consoleToolbarHidden, setConsoleToolbarHidden] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [consoleToolbarPinned, setConsoleToolbarPinned] = useState(() => {
     try {
       return localStorage.getItem(CONSOLE_TOOLBAR_PIN_KEY) !== 'false';
@@ -1533,7 +1534,7 @@ export default function ProjectConsoleModal({
   }, [consoleToolbarPinned]);
 
   const handleConsoleScroll = useCallback((e) => {
-    if (consoleToolbarPinned) return;
+    if (consoleToolbarPinned || profileMenuOpen) return;
     const y = e.currentTarget.scrollTop;
     const delta = y - lastConsoleScrollRef.current;
     if (delta < -4) {
@@ -1542,26 +1543,36 @@ export default function ProjectConsoleModal({
       setConsoleToolbarHidden(true);
     }
     lastConsoleScrollRef.current = y;
-  }, [consoleToolbarPinned]);
+  }, [consoleToolbarPinned, profileMenuOpen]);
 
   useEffect(() => {
     if (!isOpen) {
       setConsoleToolbarHidden(false);
+      setProfileMenuOpen(false);
       lastConsoleScrollRef.current = 0;
     }
   }, [isOpen]);
 
   useEffect(() => {
+    if (!profileMenuOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setProfileMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [profileMenuOpen]);
+
+  useEffect(() => {
     const root = consoleScrollRef.current;
     if (!root || !isOpen) return undefined;
     const onWheel = (e) => {
-      if (consoleToolbarPinned) return;
+      if (consoleToolbarPinned || profileMenuOpen) return;
       if (e.deltaY < -2) setConsoleToolbarHidden(false);
       else if (e.deltaY > 2) setConsoleToolbarHidden(true);
     };
     root.addEventListener('wheel', onWheel, { passive: true });
     return () => root.removeEventListener('wheel', onWheel);
-  }, [isOpen, consoleToolbarPinned]);
+  }, [isOpen, consoleToolbarPinned, profileMenuOpen]);
 
   useEffect(() => {
     if (!assetFoldersProjId) return undefined;
@@ -1904,7 +1915,7 @@ export default function ProjectConsoleModal({
   // 8. SHARE & COPY LINK
   const shareableUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}${window.location.pathname}?room=${roomId}`
-    : `https://stage-production-studio.vercel.app?room=${roomId}`;
+    : `${PRODUCTION_ORIGIN}?room=${roomId}`;
 
   const copyShareLink = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -1916,14 +1927,14 @@ export default function ProjectConsoleModal({
 
   return (
     <div className={`sps-overlay sps-project-console-overlay is-full ${isVaultFullscreen ? 'is-full' : ''}`}>
-      <div className="sps-shell sps-atelier-room sps-project-console-shell">
+      <div className={`sps-shell sps-atelier-room sps-project-console-shell ${profileMenuOpen ? 'is-menu-open' : ''}`}>
         
         {!isVaultFullscreen && (
           <>
           <div
             className={`sps-project-console-toolbar sps-modal-head sps-project-console-head flex-row items-center gap-2 ${
-              consoleToolbarHidden ? 'is-minimized' : ''
-            }`}
+              consoleToolbarHidden && !profileMenuOpen ? 'is-minimized' : ''
+            } ${profileMenuOpen ? 'is-menu-open' : ''}`}
           >
           <div className="flex items-center gap-1.5 overflow-x-auto sps-header-scroll min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mr-0.5 shrink-0">
@@ -1984,33 +1995,7 @@ export default function ProjectConsoleModal({
             )}
           </div>
 
-          <div className="flex items-center gap-1 min-w-0 shrink-0">
-            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[10px] font-mono max-w-[9rem]" style={{ color: 'var(--sps-muted)' }} title={currentUserEmail || ''}>
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-              <span className="truncate">{currentUserEmail || 'Studio'}</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (isGuestSession()) {
-                  onOpenLogin?.();
-                  return;
-                }
-                if (typeof onLogout === 'function') {
-                  onLogout();
-                  return;
-                }
-                onOpenLogin?.();
-              }}
-              className="sps-btn text-[10px] shrink-0 py-1 px-2"
-              title={isGuestSession() ? 'Sign in' : 'Log out / switch account'}
-              aria-label={isGuestSession() ? 'Sign in' : 'Log out'}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">{isGuestSession() ? 'Login' : 'Logout'}</span>
-            </button>
-
+          <div className="flex items-center gap-1 shrink-0 flex-nowrap">
             <button
               type="button"
               onClick={() => onOpenNavigatorShortcutHelp?.()}
@@ -2082,6 +2067,16 @@ export default function ProjectConsoleModal({
             >
               {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
             </button>
+
+            <StudioProfileControl
+              onSwitchAccount={onSwitchAccount}
+              onLogout={onLogout}
+              onOpenLogin={onOpenLogin}
+              onOpenChange={(open) => {
+                setProfileMenuOpen(open);
+                if (open) setConsoleToolbarHidden(false);
+              }}
+            />
 
             <button
               type="button"

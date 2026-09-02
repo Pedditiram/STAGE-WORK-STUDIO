@@ -53,7 +53,8 @@ export const SWS_NODE_IO = Object.freeze({
     inputs: ['prompt', 'negative_prompt', 'system_instruction'].map((name) => ({ name, type: 'STRING' })),
     outputs: [
       { name: 'prompt', type: 'STRING' },
-      { name: 'negative_prompt', type: 'STRING' }
+      { name: 'negative_prompt', type: 'STRING' },
+      { name: 'system_instruction', type: 'STRING' }
     ]
   },
   [SWS_COMFY_NODE_CLASSES.REFERENCE]: {

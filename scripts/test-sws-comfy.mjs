@@ -208,6 +208,29 @@ const clientSrc = fs.readFileSync(path.join(root, 'src/services/comfyuiClient.js
 if (clientSrc.includes('missingComfyClassStatusLine') && clientSrc.includes('Missing Seedance / ComfyUI-SWS classes')) {
   pass('Send-to-Comfy missing-class status line helper');
 } else fail('missingComfyClassStatusLine helper missing');
+if (clientSrc.includes('installedComfyClassCount')) {
+  pass('Send-to-Comfy installed class count helper');
+} else fail('installedComfyClassCount helper missing');
+
+const modalSrc = fs.readFileSync(path.join(root, 'src/components/SwsComfyWorkflowModal.jsx'), 'utf8');
+if (
+  modalSrc.includes('installedClassCount') &&
+  modalSrc.includes('comfyuiVersion') &&
+  modalSrc.includes('offerPullLatest') &&
+  modalSrc.includes('History already has a viewable output')
+) {
+  pass('Send records version + class count and offers Pull latest');
+} else fail('Send debug/Pull-after-Send offer missing');
+
+const promptNode = py.match(/class SWSPrompt:[\s\S]*?(?=\nclass )/);
+if (
+  promptNode &&
+  promptNode[0].includes('RETURN_TYPES = ("STRING", "STRING", "STRING")') &&
+  promptNode[0].includes('RETURN_NAMES = ("prompt", "negative_prompt", "system_instruction")') &&
+  promptNode[0].includes('return (prompt, negative_prompt, system_instruction)')
+) {
+  pass('SWS Prompt Python third output is system_instruction');
+} else fail('SWS Prompt Python does not return system_instruction');
 
 const filmQueueSrc = fs.readFileSync(path.join(root, 'src/utils/comfyFilmQueue.js'), 'utf8');
 if (filmQueueSrc.includes('composedSource')) pass('film queue progress carries composedSource');

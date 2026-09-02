@@ -43,7 +43,7 @@ export function hasNativeStudioFs() {
 export const APP_VERSION = '1.0.0';
 export const BUILD_YEAR = 2026;
 
-const PRODUCTION_ORIGIN = 'https://www.stageworkstudio.com';
+export const PRODUCTION_ORIGIN = 'https://www.stageworkstudio.com';
 
 /** Same-origin /api on Vite/Vercel; Vercel origin from the packaged Electron file:// app. */
 export function studioApiUrl(path) {

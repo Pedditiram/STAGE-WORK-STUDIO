@@ -10,3 +10,9 @@ docs
 storage
 settings
 projects
+ComfyUI-SWS
+ComfyUI-SWS.zip
+tmp-*.json
+.env
+.env.*
+*.local

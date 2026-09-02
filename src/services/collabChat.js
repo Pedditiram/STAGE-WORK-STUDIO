@@ -3,7 +3,7 @@
  * Syncs via /api/sync?type=chat&roomId=… with localStorage + BroadcastChannel fallback.
  */
 
-import { getNativeSyncUrl, fetchSyncJson } from './cloudSync';
+import { getNativeSyncUrl, fetchSyncJson, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { assertExportAllowed, logExportSuccess, resolveCollabRoomId, EXPORT_LIFECYCLE, exportDownloadText } from '../utils/exportGate';
 import { canUseSaasFeature } from '../utils/saasControl';
@@ -210,6 +210,19 @@ export function subscribeToCollabChat(roomId, callback) {
     refresh();
   }, POLL_MS);
 
+  let lastChatTick = '';
+  const unsubTick = subscribeToCollabTick(key, '', (tick, reason) => {
+    if (cancelled || reason === 'init') {
+      lastChatTick = `${tick?.chat?.lastId || ''}|${tick?.chat?.count || 0}|${tick?.chat?.revision || 0}`;
+      return;
+    }
+    const sig = `${tick?.chat?.lastId || ''}|${tick?.chat?.count || 0}|${tick?.chat?.revision || 0}`;
+    if (sig && sig !== lastChatTick) {
+      lastChatTick = sig;
+      refresh();
+    }
+  });
+
   const onVis = () => {
     if (cancelled) return;
     if (typeof document !== 'undefined' && !document.hidden) refresh();
@@ -242,6 +255,7 @@ export function subscribeToCollabChat(roomId, callback) {
   return () => {
     cancelled = true;
     clearInterval(timer);
+    if (typeof unsubTick === 'function') unsubTick();
     window.removeEventListener('storage', onStorage);
     document.removeEventListener('visibilitychange', onVis);
     window.removeEventListener('focus', onVis);

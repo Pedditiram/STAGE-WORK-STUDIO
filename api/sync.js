@@ -11,7 +11,7 @@
  *   (aliases) KV_REST_API_URL / KV_REST_API_TOKEN
  *             UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
  * Uses Upstash command-array REST: POST baseUrl with ["GET"|"SET", key, value?]
- * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence | sps:screenplay
+ * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence | sps:screenplay | sps:ticks
  * Without KV env vars the API safely falls back to JSONBlob (+ RESTFUL best-effort).
  */
 
@@ -34,6 +34,15 @@ let lastProjectsDurableOk = false;
 let lastCollaboratorsDurableOk = false;
 let lastRoomsDurableOk = false;
 let lastChatDurableOk = false;
+let memoryTicks = {
+  rooms: {},
+  chat: {},
+  screenplay: {},
+  projects: { stamp: '' },
+  collaborators: { stamp: '' },
+  updatedAt: ''
+};
+let ticksHydrated = false;
 
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
 const RESTFUL_PROJECTS_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92555';
@@ -242,6 +251,107 @@ function revisionOf(payload) {
   const r = typeof payload?.revision === 'number' ? payload.revision : 0;
   if (r) return r;
   return Date.parse(payload?.lastUpdated || '') || 0;
+}
+
+function mergeTickMaps(base = {}, extra = {}) {
+  const out = { ...(base || {}) };
+  Object.entries(extra || {}).forEach(([id, stamp]) => {
+    const prev = out[id];
+    const prevRev = typeof prev?.revision === 'number' ? prev.revision : 0;
+    const nextRev = typeof stamp?.revision === 'number' ? stamp.revision : 0;
+    const prevAt = Date.parse(prev?.lastUpdated || '') || 0;
+    const nextAt = Date.parse(stamp?.lastUpdated || '') || 0;
+    if (!prev || nextRev > prevRev || (nextRev === prevRev && nextAt >= prevAt)) {
+      out[id] = stamp;
+    }
+  });
+  return out;
+}
+
+async function loadTicks() {
+  if (kvConfigured()) {
+    try {
+      const data = await kvGet('ticks');
+      if (data && typeof data === 'object') {
+        memoryTicks = {
+          rooms: mergeTickMaps(data.rooms, memoryTicks.rooms),
+          chat: mergeTickMaps(data.chat, memoryTicks.chat),
+          screenplay: mergeTickMaps(data.screenplay, memoryTicks.screenplay),
+          projects:
+            (Date.parse(memoryTicks.projects?.lastUpdated || '') || 0) >=
+            (Date.parse(data.projects?.lastUpdated || '') || 0)
+              ? memoryTicks.projects
+              : data.projects || memoryTicks.projects,
+          collaborators:
+            (Date.parse(memoryTicks.collaborators?.lastUpdated || '') || 0) >=
+            (Date.parse(data.collaborators?.lastUpdated || '') || 0)
+              ? memoryTicks.collaborators
+              : data.collaborators || memoryTicks.collaborators,
+          updatedAt: data.updatedAt || memoryTicks.updatedAt
+        };
+        ticksHydrated = true;
+      }
+    } catch (e) {}
+  }
+  return memoryTicks;
+}
+
+async function persistTicks() {
+  memoryTicks.updatedAt = new Date().toISOString();
+  ticksHydrated = true;
+  if (!kvConfigured()) return false;
+  try {
+    return await kvSet('ticks', memoryTicks);
+  } catch (e) {
+    return false;
+  }
+}
+
+function stampRoomTick(roomId, room) {
+  if (!roomId) return;
+  memoryTicks.rooms[roomId] = {
+    revision: revisionOf(room),
+    lastUpdated: room?.lastUpdated || new Date().toISOString(),
+    shotCount: Array.isArray(room?.shots) ? room.shots.length : 0
+  };
+}
+
+function stampChatTick(roomId, messages) {
+  if (!roomId) return;
+  const list = Array.isArray(messages) ? messages : [];
+  const last = list[list.length - 1];
+  memoryTicks.chat[roomId] = {
+    revision: list.length,
+    lastUpdated: last?.createdAt || new Date().toISOString(),
+    lastId: last?.id || '',
+    count: list.length
+  };
+}
+
+function stampScreenplayTick(docKey, doc) {
+  if (!docKey) return;
+  memoryTicks.screenplay[docKey] = {
+    revision: typeof doc?.revision === 'number' ? doc.revision : revisionOf(doc),
+    lastUpdated: doc?.lastUpdated || new Date().toISOString()
+  };
+}
+
+function stampProjectsTick(projects) {
+  const list = Array.isArray(projects) ? projects : [];
+  memoryTicks.projects = {
+    stamp: `${list.length}:${Date.now()}`,
+    count: list.length,
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+function stampCollaboratorsTick(users) {
+  const list = Array.isArray(users) ? users : [];
+  memoryTicks.collaborators = {
+    stamp: `${list.length}:${Date.now()}`,
+    count: list.length,
+    lastUpdated: new Date().toISOString()
+  };
 }
 
 function isNewerRevision(incoming, existing) {
@@ -1153,6 +1263,52 @@ export default async function handler(req, res) {
       return sendJson(req, res, { success: true, ...(await kvMigrationStatus()) });
     }
 
+    if (type === 'tick') {
+      const projectTitle = String(req.query.project || '').trim();
+      await loadTicks();
+      const docKey = screenplayDocKey(safeRoomId, projectTitle);
+      if (!memoryTicks.rooms[safeRoomId]) {
+        await hydrateRoomsFromDurable();
+        const room = memoryRooms[safeRoomId];
+        if (room) stampRoomTick(safeRoomId, room);
+      }
+      if (!memoryTicks.chat[safeRoomId]) {
+        const loaded = await loadChatStore();
+        if (loaded.ok && loaded.chat) {
+          memoryChat = { ...memoryChat, ...loaded.chat };
+          stampChatTick(safeRoomId, memoryChat[safeRoomId] || []);
+        }
+      }
+      if (!memoryTicks.screenplay[docKey]) {
+        const loaded = await loadScreenplayStore();
+        if (loaded.ok && loaded.screenplay) {
+          memoryScreenplay = { ...memoryScreenplay, ...loaded.screenplay };
+        }
+        const doc = memoryScreenplay[docKey] || null;
+        if (doc) stampScreenplayTick(docKey, doc);
+      }
+      if (!memoryTicks.projects?.stamp) {
+        await hydrateProjectsFromDurable();
+        stampProjectsTick(memoryProjects);
+      }
+      if (!memoryTicks.collaborators?.stamp) {
+        await hydrateCollaboratorsFromDurable();
+        stampCollaboratorsTick(memoryCollaborators);
+      }
+      await persistTicks();
+      return sendJson(req, res, {
+        success: true,
+        kvConfigured: kvConfigured(),
+        roomId: safeRoomId,
+        room: memoryTicks.rooms[safeRoomId] || { revision: 0, lastUpdated: '', shotCount: 0 },
+        chat: memoryTicks.chat[safeRoomId] || { revision: 0, lastId: '', count: 0 },
+        screenplay: memoryTicks.screenplay[docKey] || { revision: 0, lastUpdated: '' },
+        projects: memoryTicks.projects || { stamp: '', count: 0 },
+        collaborators: memoryTicks.collaborators || { stamp: '', count: 0 },
+        updatedAt: memoryTicks.updatedAt || ''
+      });
+    }
+
     if (type === 'projects') {
       const { ok } = await hydrateProjectsFromDurable({ force: memoryProjects.length === 0 });
       if (!ok && memoryProjects.length === 0) {
@@ -1313,6 +1469,9 @@ export default async function handler(req, res) {
 
         const durableOk = await saveProjectsStore(memoryProjects, memoryDeletedTitles);
         lastProjectsDurableOk = durableOk;
+        await loadTicks();
+        stampProjectsTick(memoryProjects);
+        await persistTicks();
         return res.status(200).json({
           success: true,
           projects: memoryProjects,
@@ -1359,6 +1518,9 @@ export default async function handler(req, res) {
           durableOk = true;
         } catch (e) {}
         lastCollaboratorsDurableOk = durableOk;
+        await loadTicks();
+        stampCollaboratorsTick(memoryCollaborators);
+        await persistTicks();
         return res.status(200).json({
           success: true,
           users: memoryCollaborators,
@@ -1430,6 +1592,9 @@ export default async function handler(req, res) {
         }
       }
 
+      await loadTicks();
+      stampChatTick(safeRoomId, merged);
+      await persistTicks();
       return res.status(200).json({
         success: true,
         messages: merged,
@@ -1460,6 +1625,9 @@ export default async function handler(req, res) {
         durableOk = false;
       }
 
+      await loadTicks();
+      stampScreenplayTick(docKey, merged);
+      await persistTicks();
       return res.status(200).json({
         success: true,
         screenplay: merged,
@@ -1511,6 +1679,9 @@ export default async function handler(req, res) {
         }
       }
 
+      await loadTicks();
+      stampRoomTick(safeRoomId, mergedPayload);
+      await persistTicks();
       return res.status(200).json({
         success: true,
         data: mergedPayload,

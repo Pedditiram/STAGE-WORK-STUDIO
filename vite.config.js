@@ -276,6 +276,60 @@ function localDiskVaultPlugin() {
           return;
         }
 
+        if (req.url && req.url.startsWith('/api/desktop-trial')) {
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 200;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.end();
+            return;
+          }
+          try {
+            const u = new URL(req.url, 'http://localhost');
+            const body = req.method === 'POST' ? await readJsonBody(req) : {};
+            const fakeReq = {
+              method: req.method,
+              body,
+              query: Object.fromEntries(u.searchParams),
+              url: req.url,
+              headers: req.headers,
+            };
+            const fakeRes = {
+              statusCode: 200,
+              setHeader(k, v) {
+                res.setHeader(k, v);
+                return this;
+              },
+              status(code) {
+                this.statusCode = code;
+                res.statusCode = code;
+                return this;
+              },
+              json(payload) {
+                res.statusCode = this.statusCode || 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Cache-Control', 'no-store');
+                res.end(JSON.stringify(payload));
+                return this;
+              },
+              end(chunk) {
+                res.statusCode = this.statusCode || res.statusCode;
+                if (chunk != null) res.end(chunk);
+                else res.end();
+                return this;
+              }
+            };
+            const trialMod = await import('./api/desktop-trial.js');
+            const trialHandler = trialMod.default || trialMod;
+            await trialHandler(fakeReq, fakeRes);
+          } catch (err) {
+            return sendJson(res, 500, { success: false, error: err?.message || 'Desktop trial failed' });
+          }
+          return;
+        }
+
         if (req.url && req.url.startsWith('/api/saas')) {
           if (req.method === 'OPTIONS') {
             res.statusCode = 200;
@@ -1071,6 +1125,11 @@ export default defineConfig({
     tailwindcss(),
     localDiskVaultPlugin()
   ],
+  build: {
+    sourcemap: false,
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 1500
+  },
   optimizeDeps: {
     include: ['pdfjs-dist']
   },

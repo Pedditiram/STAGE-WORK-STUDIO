@@ -16,7 +16,8 @@ import {
   parseRawScriptToShots,
   extractMasterScriptSynopsisWithLLM,
   getLastParseMeta,
-  extractTextFromPDF
+  extractTextFromPDF,
+  isParseAbortError
 } from '../services/aiScriptParser';
 import {
   applyElementToCurrentLine,
@@ -323,6 +324,8 @@ export default function ScreenplayEditor({
   const [elementBarHoverOpen, setElementBarHoverOpen] = useState(false);
   const writerChromeLeaveRef = useRef(null);
   const elementBarLeaveRef = useRef(null);
+  const writerParseAbortRef = useRef(null);
+  const writerSynopsisAbortRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -334,6 +337,8 @@ export default function ScreenplayEditor({
   useEffect(() => () => {
     if (writerChromeLeaveRef.current) clearTimeout(writerChromeLeaveRef.current);
     if (elementBarLeaveRef.current) clearTimeout(elementBarLeaveRef.current);
+    try { writerParseAbortRef.current?.abort(); } catch { /* ignore */ }
+    try { writerSynopsisAbortRef.current?.abort(); } catch { /* ignore */ }
   }, []);
   const [caretPos, setCaretPos] = useState(0);
   const [rightDrawer, setRightDrawer] = useState(null); // 'find' | 'versions' | 'intel' | null
@@ -1037,14 +1042,18 @@ export default function ScreenplayEditor({
 
   const handleAIExtractSynopsis = async () => {
     try {
+      writerSynopsisAbortRef.current?.abort();
+      const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      writerSynopsisAbortRef.current = ac;
       setIsGeneratingSynopsis(true);
-      const aiResult = await extractMasterScriptSynopsisWithLLM(scriptText);
+      const aiResult = await extractMasterScriptSynopsisWithLLM(scriptText, { signal: ac?.signal });
       if (aiResult && aiResult.trim()) {
         const cleanRes = aiResult.trim();
         setLlmAutoSynopsis(cleanRes);
         localStorage.setItem('sps_extracted_master_story', cleanRes);
       }
     } catch (err) {
+      if (isParseAbortError(err)) return;
       console.warn('Error auto-generating Script Synopsis:', err);
     } finally {
       setIsGeneratingSynopsis(false);
@@ -1144,7 +1153,10 @@ export default function ScreenplayEditor({
       }
       setIsAutoParsing(true);
       setParseStatusMsg('⚡ Stage Work Studio Engine parsing screenplay to 26-craft matrix...');
-      const parsedShots = await parseRawScriptToShots(textToParse);
+      writerParseAbortRef.current?.abort();
+      const parseAc = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      writerParseAbortRef.current = parseAc;
+      const parsedShots = await parseRawScriptToShots(textToParse, { signal: parseAc?.signal });
       const meta = getLastParseMeta();
       if (parsedShots && Array.isArray(parsedShots) && parsedShots.length > 0) {
         saveStoryPackage(
@@ -1175,6 +1187,10 @@ export default function ScreenplayEditor({
         setParseStatusMsg(meta?.warning || '⚠️ No shots produced — existing matrix left unchanged');
       }
     } catch (err) {
+      if (isParseAbortError(err)) {
+        setParseStatusMsg('Parse stopped — existing matrix left unchanged');
+        return;
+      }
       console.warn('Screenplay live parse error:', err);
       setParseStatusMsg(`⚠️ Sync failed: ${err?.message || 'error'} — existing matrix left unchanged`);
     } finally {
@@ -1477,7 +1493,8 @@ export default function ScreenplayEditor({
     try {
       setImportMsg('Importing…');
       const { text, format } = await importScreenplayFile(file, {
-        extractPdf: extractTextFromPDF
+        extractPdf: extractTextFromPDF,
+        signal: writerParseAbortRef.current?.signal
       });
       applyScriptText(text);
       setImportMsg(`Imported ${format.toUpperCase()}`);

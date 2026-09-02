@@ -230,7 +230,7 @@ export default function AiScriptBreakdownPanel({
 
     try {
       let extractedText = '';
-      const imported = await importScreenplayFile(file, { extractPdf: extractTextFromPDF });
+      const imported = await importScreenplayFile(file, { extractPdf: extractTextFromPDF, signal });
       extractedText = imported?.text || '';
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 
@@ -300,9 +300,11 @@ export default function AiScriptBreakdownPanel({
         setParseStatusBanner(`✓ Parsed ${meta.shotCount || parsedShots.length} shots (Built-In cinema engine)`);
       } else {
         setParseStatusBanner(
-          meta?.error === 'MISSING_API_KEY' || meta?.usedFallback
-            ? (meta.warning || 'Offline heuristic parse used.')
-            : (meta?.shotCount ? `✓ Parsed ${meta.shotCount} shots (${CRAFT_COUNT} crafts)` : '')
+          meta?.error === 'LLM_TIMEOUT'
+            ? (meta.warning || 'LLM timed out. Offline heuristic breakdown used.')
+            : meta?.error === 'MISSING_API_KEY' || meta?.usedFallback
+              ? (meta.warning || 'Offline heuristic parse used.')
+              : (meta?.shotCount ? `✓ Parsed ${meta.shotCount} shots (${CRAFT_COUNT} crafts)` : '')
         );
       }
 
@@ -424,6 +426,8 @@ export default function AiScriptBreakdownPanel({
         setParseStatusBanner(`✓ Expanded ${meta.shotCount || parsedShots.length} shots · ${meta.sequenceCount || ''} sequences · ${meta.runtimeMinutes || ''} min feature`);
       } else if (meta?.source === 'built_in' || meta?.source === 'built_in_expand') {
         setParseStatusBanner(`✓ Parsed ${meta.shotCount || parsedShots.length} shots (Built-In cinema engine)`);
+      } else if (meta?.error === 'LLM_TIMEOUT') {
+        setParseStatusBanner(meta.warning || 'LLM timed out. Offline heuristic breakdown used.');
       } else if (meta?.error === 'MISSING_API_KEY') {
         setParseStatusBanner(meta.warning);
       } else {

@@ -6,6 +6,7 @@ import {
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
+import DesktopTrialModal from './DesktopTrialModal';
 import { CATEGORY, LINE, PRODUCT } from '../constants/brand';
 import { exportDownloadText, assertExportAllowed, logExportSuccess, EXPORT_LIFECYCLE, resolveCollabRoomId } from '../utils/exportGate';
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
@@ -143,6 +144,7 @@ export default function InvestorDeckModal({
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [enterKey, setEnterKey] = useState(0);
   const [accessOpen, setAccessOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
 
   const exportLife = useMemo(
     () => lifecycleExportReadiness(shots, projectTitle),
@@ -509,6 +511,13 @@ export default function InvestorDeckModal({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setTrialOpen(true)}
+                    className="sps-btn text-sm"
+                  >
+                    <Download className="w-4 h-4" /> Download desktop trial
+                  </button>
+                  <button
+                    type="button"
                     onClick={openLogin}
                     className="sps-btn sps-btn-primary text-sm"
                   >
@@ -572,6 +581,7 @@ export default function InvestorDeckModal({
         </div>
       </div>
       <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
+      <DesktopTrialModal isOpen={trialOpen} onClose={() => setTrialOpen(false)} />
     </div>
   );
 }

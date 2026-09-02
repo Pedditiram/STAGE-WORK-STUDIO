@@ -21,6 +21,7 @@ import { getAuthorizedUsers, getCurrentUserEmail } from '../utils/projectPermiss
 import { checkoutCreditPack, grantCreditPack } from '../services/saasGenerateClient';
 import { summarizeAllGenerationJobs } from '../utils/generationJobs';
 import ExportLifecycleHub from './ExportLifecycleHub';
+import DesktopTrialAdminSection from './DesktopTrialAdminSection';
 import {
   fetchCloudSyncHealth,
   fetchKvMigrationStatus,
@@ -130,6 +131,8 @@ export default function SaasAdminPanel() {
           Account, license, device, and features only. Stage Work Studio never controls the user&apos;s computer or files.
         </p>
       </div>
+
+      <DesktopTrialAdminSection />
 
       <div className="p-2.5 rounded-lg border border-zinc-800 bg-zinc-900/80 flex items-center justify-between gap-2 flex-wrap">
         <div>

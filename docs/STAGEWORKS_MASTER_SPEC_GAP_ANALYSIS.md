@@ -2386,10 +2386,15 @@ Stage, SaaS                     Review → Continuity → Export
 2. Comfy: contract `systemInstruction` stays a third field (never folded into prompt or negative) — **Done** (`comfyPromptComposer.js`, `swsWorkflowContract.js`, Seedance SYSTEM INSTRUCTION widget, `swsWorkflowValidator.js`)  
 3. Comfy: film-queue progress shows `composedSource` for the shot currently sending — **Done** (`comfyFilmQueue.js`, `SwsComfyWorkflowModal.jsx`)  
 
+### P411 — Debug version + class count · Pull after Send · SWS Prompt third output
+1. Comfy: curl/probe `127.0.0.1:8188` from Send records `comfyuiVersion` + installed class count in Debug — **Done** (`installedComfyClassCount`, `debugPanel` in `SwsComfyWorkflowModal.jsx`)  
+2. Comfy: after Send, offer Pull latest if history already has a viewable output — **Done** (`offerPullLatest`, `SwsComfyWorkflowModal.jsx`)  
+3. Comfy: SWS Prompt Python returns `system_instruction` as a third output (not dropped) — **Done** (`SWSPrompt` in `sws_nodes.py`, `SWS_NODE_IO` in `swsComfyFrontend.js`)  
+
 ### Recommended next slice
-1. **P411** — Comfy: curl/probe `127.0.0.1:8188` from Send records `comfyuiVersion` + installed class count in Debug  
-2. **P411** — Comfy: after Send, offer Pull latest if history already has a viewable output  
-3. **P411** — Comfy: SWS Prompt Python returns `system_instruction` as a third output (not dropped)  
+1. **P412** — Comfy: Debug panel lists `installedClassCount` next to missing required class names  
+2. **P412** — Comfy: Pull latest disabled hint when history is empty after Send  
+3. **P412** — Comfy: SWS Video Provider accepts optional `system_instruction` from Prompt slot 2  
 
 
 

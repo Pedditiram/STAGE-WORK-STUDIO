@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
+import DesktopTrialModal from './DesktopTrialModal';
 import StudioTourOverlay from './StudioTourOverlay';
 import { LINE, PRODUCT } from '../constants/brand';
 import { pickPresentationOpening } from '../utils/presentationOpening';
@@ -157,6 +158,7 @@ export default function DemoModeView({ onOpenLogin }) {
   const [playing, setPlaying] = useState(true);
   const [tick, setTick] = useState(0);
   const [accessOpen, setAccessOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const slide = slides[i];
   const Icon = slide.Icon;
@@ -329,6 +331,9 @@ export default function DemoModeView({ onOpenLogin }) {
               <button type="button" className="sps-btn text-xs" onClick={() => setAccessOpen(true)}>
                 Request access
               </button>
+              <button type="button" className="sps-btn text-xs" onClick={() => setTrialOpen(true)}>
+                Download desktop trial
+              </button>
               <button type="button" className="sps-btn text-xs" onClick={() => setTourOpen(true)}>
                 Demo mode
               </button>
@@ -337,6 +342,7 @@ export default function DemoModeView({ onOpenLogin }) {
         </div>
       </div>
       <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
+      <DesktopTrialModal isOpen={trialOpen} onClose={() => setTrialOpen(false)} />
       <StudioTourOverlay isOpen={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   );

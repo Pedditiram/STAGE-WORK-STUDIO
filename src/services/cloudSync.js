@@ -16,9 +16,11 @@ export const PRODUCTION_SYNC_ORIGIN = 'https://www.stageworkstudio.com';
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
 const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-43e0-74db-bb8d-6211e85dc74e';
 
-/** Active-tab room poll. Hidden tabs back off hard to save Vercel quota. */
+/** Active-tab room poll fallback. Hidden tabs back off. Tick poll is ~2s when KV ticks exist. */
 const POLL_MS_ACTIVE = 12000;
 const POLL_MS_HIDDEN = 60000;
+const TICK_MS_ACTIVE = 2000;
+const TICK_MS_HIDDEN = 15000;
 
 let db = null;
 let broadcastChannel = null;
@@ -180,6 +182,119 @@ async function pullNativeRoom(roomId) {
   return resObj?.data || null;
 }
 
+export function serializeCollabTick(tick) {
+  if (!tick || typeof tick !== 'object') return '';
+  return [
+    tick.room?.revision,
+    tick.room?.lastUpdated,
+    tick.chat?.revision,
+    tick.chat?.lastId,
+    tick.chat?.count,
+    tick.screenplay?.revision,
+    tick.screenplay?.lastUpdated,
+    tick.projects?.stamp,
+    tick.collaborators?.stamp
+  ].join('|');
+}
+
+export async function pullCollabTick(roomId, projectTitle = '') {
+  const base = getNativeSyncUrl();
+  return fetchJson(
+    `${base}?type=tick&roomId=${encodeURIComponent(roomId || 'SPS-CLOUD-8821')}&project=${encodeURIComponent(projectTitle || '')}`
+  );
+}
+
+const collabTickListeners = new Map();
+
+function collabTickBucketKey(roomId) {
+  return String(roomId || 'SPS-CLOUD-8821');
+}
+
+/**
+ * Shared 2s collab tick (one network poll per room, many subscribers).
+ * callback(tick, reason) where reason is 'init' | 'change' | 'focus'
+ */
+export function subscribeToCollabTick(roomId, projectTitle, callback) {
+  if (typeof callback !== 'function') return () => {};
+  const bucketKey = collabTickBucketKey(roomId);
+  let entry = collabTickListeners.get(bucketKey);
+  if (!entry) {
+    entry = {
+      roomId: roomId || 'SPS-CLOUD-8821',
+      projectTitle: projectTitle || '',
+      callbacks: new Set(),
+      timer: null,
+      lastSig: '',
+      cancelled: false
+    };
+    collabTickListeners.set(bucketKey, entry);
+
+    const poll = async (reason = 'poll') => {
+      if (entry.cancelled) return;
+      try {
+        const tick = await pullCollabTick(entry.roomId, entry.projectTitle);
+        if (!tick || tick.success === false) return;
+        const sig = serializeCollabTick(tick);
+        const changed = Boolean(sig) && sig !== entry.lastSig;
+        const first = !entry.lastSig;
+        if (changed) entry.lastSig = sig;
+        if (first || changed || reason === 'focus') {
+          entry.callbacks.forEach((cb) => {
+            try {
+              cb(tick, first ? 'init' : changed ? 'change' : reason);
+            } catch (e) {}
+          });
+        }
+      } catch (e) {}
+    };
+
+    const schedule = () => {
+      if (entry.timer) clearInterval(entry.timer);
+      const ms =
+        isBrowser() && typeof document !== 'undefined' && document.hidden
+          ? TICK_MS_HIDDEN
+          : TICK_MS_ACTIVE;
+      entry.timer = setInterval(() => poll('poll'), ms);
+    };
+
+    const onVis = () => {
+      if (entry.cancelled) return;
+      if (typeof document !== 'undefined' && document.hidden) {
+        schedule();
+        return;
+      }
+      poll('focus');
+      schedule();
+    };
+
+    entry.poll = poll;
+    entry.schedule = schedule;
+    entry.onVis = onVis;
+    poll('init');
+    schedule();
+    if (isBrowser()) {
+      document.addEventListener('visibilitychange', onVis);
+      window.addEventListener('focus', onVis);
+      window.addEventListener('pageshow', onVis);
+    }
+  } else if (projectTitle && !entry.projectTitle) {
+    entry.projectTitle = projectTitle;
+  }
+  entry.callbacks.add(callback);
+  return () => {
+    entry.callbacks.delete(callback);
+    if (entry.callbacks.size > 0) return;
+    entry.cancelled = true;
+    if (entry.timer) clearInterval(entry.timer);
+    if (isBrowser() && entry.onVis) {
+      document.removeEventListener('visibilitychange', entry.onVis);
+      window.removeEventListener('focus', entry.onVis);
+      window.removeEventListener('pageshow', entry.onVis);
+    }
+    collabTickListeners.delete(bucketKey);
+  };
+}
+
 /** Write room to native /api/sync — returns server JSON (may include skipped:'stale'). */
 async function pushNativeRoom(roomId, payload) {
   const base = getNativeSyncUrl();
@@ -255,7 +370,7 @@ async function pushHubRoom(roomId, payload) {
  * Subscribe to a collaboration room.
  * Invite links must use the same roomId string the host publishes to.
  */
-export function subscribeToCloudRoom(roomId, onDataReceived) {
+export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') {
   if (typeof onDataReceived !== 'function' || !roomId) return () => {};
 
   initFirebaseIfConfigured();
@@ -312,9 +427,10 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   };
   if (broadcastChannel) broadcastChannel.addEventListener('message', handleBroadcast);
 
-  // 4. Network poll — always hit Vercel/native (cloud is source of truth)
+  // 4. Network — 2s KV tick, full room pull when revision changes; 12s safety net
   let pollTimer = null;
   let cancelled = false;
+  let lastRoomTick = '';
 
   const pollCloudDatabase = async () => {
     if (cancelled) return;
@@ -354,6 +470,19 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   pollCloudDatabase();
   schedulePoll();
 
+  const unsubTick = subscribeToCollabTick(roomId, projectTitle, (tick, reason) => {
+    if (cancelled) return;
+    const sig = `${tick?.room?.revision || 0}|${tick?.room?.lastUpdated || ''}`;
+    if (reason === 'init') {
+      lastRoomTick = sig;
+      return;
+    }
+    if (sig && sig !== lastRoomTick) {
+      lastRoomTick = sig;
+      pollCloudDatabase();
+    }
+  });
+
   if (isBrowser()) {
     document.addEventListener('visibilitychange', onVisibilityOrFocus);
     window.addEventListener('focus', onVisibilityOrFocus);
@@ -378,6 +507,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived) {
   return () => {
     cancelled = true;
     if (pollTimer) clearInterval(pollTimer);
+    if (typeof unsubTick === 'function') unsubTick();
     if (isBrowser()) {
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', onVisibilityOrFocus);

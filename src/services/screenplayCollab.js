@@ -2,7 +2,7 @@
  * Multi-writer screenplay collaboration — scene-locked co-write + presence.
  * Syncs via /api/sync?type=screenplay&roomId=… with localStorage + BroadcastChannel.
  */
-import { getNativeSyncUrl, fetchSyncJson } from './cloudSync';
+import { getNativeSyncUrl, fetchSyncJson, subscribeToCollabTick } from './cloudSync';
 import { extractSceneOutline } from '../utils/screenplayFormat';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 
@@ -431,6 +431,7 @@ export function subscribeToScreenplayCollab(roomId, projectTitle, callback) {
   const key = roomId || 'SPS-CLOUD-8821';
   let cancelled = false;
   let timer = null;
+  let lastSpTick = '';
 
   const emit = async () => {
     if (cancelled) return;
@@ -443,6 +444,18 @@ export function subscribeToScreenplayCollab(roomId, projectTitle, callback) {
     if (typeof document !== 'undefined' && document.hidden) return;
     emit();
   }, POLL_MS);
+
+  const unsubTick = subscribeToCollabTick(key, projectTitle, (tick, reason) => {
+    if (cancelled || reason === 'init') {
+      lastSpTick = `${tick?.screenplay?.revision || 0}|${tick?.screenplay?.lastUpdated || ''}`;
+      return;
+    }
+    const sig = `${tick?.screenplay?.revision || 0}|${tick?.screenplay?.lastUpdated || ''}`;
+    if (sig && sig !== lastSpTick) {
+      lastSpTick = sig;
+      emit();
+    }
+  });
 
   let bc = null;
   if ('BroadcastChannel' in window) {
@@ -469,6 +482,7 @@ export function subscribeToScreenplayCollab(roomId, projectTitle, callback) {
   return () => {
     cancelled = true;
     if (timer) clearInterval(timer);
+    if (typeof unsubTick === 'function') unsubTick();
     document.removeEventListener('visibilitychange', onVis);
     try {
       bc?.close();

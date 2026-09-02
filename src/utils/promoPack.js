@@ -200,7 +200,7 @@ function pickBeats(shots, structure, targetSec, { projectTitle = '' } = {}) {
   const beats = [];
   let t = 0;
 
-  structure.forEach((seg) => {
+  (Array.isArray(structure) ? structure : []).forEach((seg) => {
     const budget = Math.max(2, Math.round(targetSec * seg.share));
     const ranked = active
       .map((shot, idx) => {
@@ -551,7 +551,7 @@ export function buildPromoPack({
       createdAt: new Date().toISOString()
     };
   }
-  const { beats, totalSec } = pickBeats(liveShots, template.structure, template.durationSec, {
+  const { beats, totalSec } = pickBeats(liveShots, template.structure || [], template.durationSec, {
     projectTitle
   });
   const captions = buildCaptions(projectTitle, template, beats);
