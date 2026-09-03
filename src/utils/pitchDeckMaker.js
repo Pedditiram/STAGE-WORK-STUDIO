@@ -237,7 +237,7 @@ export function collectPitchFacts({
     contact: {
       company: PRODUCT,
       product: PRODUCT,
-      email: 'pedditiram@gmail.com',
+      email: '',
       phone: '',
       website: typeof window !== 'undefined' ? window.location.origin : ''
     }

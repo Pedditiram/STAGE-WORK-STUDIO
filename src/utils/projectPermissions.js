@@ -306,11 +306,17 @@ export function areAllConsolesOff(email = getCurrentUserEmail()) {
 }
 
 export function isPresentationMode() {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
-    return localStorage.getItem(PRESENTATION_MODE_KEY) === 'true';
+    const raw = localStorage.getItem(PRESENTATION_MODE_KEY);
+    if (raw === null) {
+      // Default to presentation mode on first visit / unauthenticated entry
+      const authed = sessionStorage.getItem('sps_session_authed') === '1';
+      return !authed;
+    }
+    return raw === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 

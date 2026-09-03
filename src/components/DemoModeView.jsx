@@ -132,7 +132,7 @@ const REST_SLIDES = [
     ],
     beats: [
       'Turn Presentation mode off when the lights come up.',
-      `Access and partnership: ${OWNER_EMAIL}`,
+      'Access and partnership: Studio Access & Admin Console',
       LINE,
     ],
     Icon: Clapperboard,

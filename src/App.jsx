@@ -213,13 +213,16 @@ const INITIAL_SHOTS = [
 ];
 
 function shouldBootWithSplash() {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === 'undefined') return false;
   try {
-    // Local / Vite / Electron: branded launch on every real page load.
+    // When entering the URL unauthenticated, start immediately with presentation mode
+    if (sessionStorage.getItem('sps_session_authed') !== '1') {
+      return false;
+    }
     if (isLocalStudioHost()) return true;
     return sessionStorage.getItem('sps_splash_done') !== '1';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -448,10 +451,11 @@ export default function App() {
   // Default active view tab: 'canvas' | 'spreadsheet' | 'form'
   const [activeView, setActiveView] = useState(() => {
     if (typeof window !== 'undefined') {
+      const authed = sessionStorage.getItem('sps_session_authed') === '1';
+      if (!authed || isPresentationMode() || areAllConsolesOff()) return 'demo';
       const savedCanvas = localStorage.getItem('sps_enable_canvas_tab');
       const canShowCanvas = savedCanvas === 'true';
       const saved = localStorage.getItem('sps_active_view');
-      if (areAllConsolesOff()) return 'demo';
       if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || saved === 'promo' || saved === 'campaign' || saved === 'storyboard' || saved === 'pitch' || saved === 'budget' || saved === 'demo' || (saved === 'canvas' && canShowCanvas))) {
         if (saved === 'budget' && typeof window !== 'undefined') {
           try {
@@ -463,7 +467,7 @@ export default function App() {
       }
       return 'spreadsheet';
     }
-    return 'spreadsheet';
+    return 'demo';
   });
 
   // Mirror desk tab across localhost ↔ Electron via shared disk prefs
@@ -3634,12 +3638,9 @@ export default function App() {
           ? 'theme-paper text-[var(--sps-text)]' 
           : 'bg-transparent text-[var(--sps-text)] theme-dark'
     }`} style={{ fontFamily: 'var(--sps-font)' }}>
-      {/* Cinematic Studio Splash Launch Screen */}
       {showSplash && (
         <SplashScreen
           onFinish={() => {
-            setProjectConsoleInitialTab('library');
-            setIsProjectConsoleOpen(true);
             setShowSplash(false);
             (async () => {
               try {
@@ -3655,12 +3656,14 @@ export default function App() {
                   sessionStorage.setItem('sps_session_authed', '1');
                   sessionStorage.setItem('sps_login_prompted', '1');
                   setIsLoginModalOpen(false);
+                  setProjectConsoleInitialTab('library');
+                  setIsProjectConsoleOpen(true);
                   return;
                 }
               } catch {
                 /* ignore */
               }
-              // Start with presentation mode for first-time visitors
+              // Start with presentation mode for visitors
               setPresentationMode(true);
               setIsLoginModalOpen(true);
             })();

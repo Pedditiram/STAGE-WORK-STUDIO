@@ -148,16 +148,16 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
         if (onUnlock) onUnlock();
       }, 1200);
     } else {
-      setOtpError('Invalid OTP code. Please enter the 6-digit Security OTP sent to your email by Primary Admin (pedditiram@gmail.com).');
+      setOtpError('Invalid OTP code. Please enter the 6-digit Security OTP sent to your email by the Primary Admin.');
     }
   };
 
   const handleSendAuthorizationRequest = () => {
     const userMail = inputEmail.trim() || invitedEmail.trim() || 'collaborator@studio.com';
     const subject = `🔐 1-Time Studio Access Authorization Request from ${userMail}`;
-    const body = `Hello Primary Admin (pedditiram@gmail.com),\n\nI am requesting 1-Time Access Authorization to open and collaborate on Stage Work Studio — AI Cinema Production OS.\n\n📌 My Credentials:\n📧 Email ID: ${userMail}\n🔑 Production Room ID: ${invitedRoom || 'SPS-CLOUD-8821'}\n\nPlease generate and send me my 6-Digit Authorization OTP code.`;
+    const body = `Hello Studio Admin,\n\nI am requesting 1-Time Access Authorization to open and collaborate on Stage Work Studio — AI Cinema Production OS.\n\n📌 My Credentials:\n📧 Email ID: ${userMail}\n🔑 Production Room ID: ${invitedRoom || 'SPS-CLOUD-8821'}\n\nPlease generate and send me my 6-Digit Authorization OTP code.`;
     
-    window.open(`mailto:pedditiram@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
     setRequestSent(true);
   };
 

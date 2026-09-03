@@ -106,7 +106,7 @@ const DECK_SLIDES = [
     kind: 'cta',
     title: 'Request access. Join the slate.',
     subtitle: 'Prospects see this showcase. Collaborators unlock the full studio.',
-    highlight: 'Owner · Pedditi Ram · pedditiram@gmail.com'
+    highlight: 'Owner · Stage Work Studio'
   }
 ];
 

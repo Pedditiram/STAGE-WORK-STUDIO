@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles, Monitor } from 'lucide-react';
+import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, UserPlus, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles, Monitor, Loader2 } from 'lucide-react';
 import {
   getCurrentUserEmail,
   isStudioAdmin,
@@ -17,9 +16,14 @@ import StageWorksMark from './StageWorksMark';
 import { CATEGORY, PRODUCT } from '../constants/brand';
 
 export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpenAppDemo, onOpenDesktopTrial, overlayMode = 'default' }) {
-  const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'admin' | 'guest'
+  const [loginMode, setLoginMode] = useState('signin'); // 'signin' | 'signup' | 'guest' | 'admin'
   const [emailInput, setEmailInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
+  const [signUpName, setSignUpName] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpRole, setSignUpRole] = useState('');
+  const [signUpOtp, setSignUpOtp] = useState('');
+  const [isSubmittingSignUp, setIsSubmittingSignUp] = useState(false);
   const [adminIdInput, setAdminIdInput] = useState('');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -34,7 +38,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     if (remembered) setEmailInput(remembered);
     setErrorMsg('');
     setSuccessMsg('');
-    setLoginMode('gmail');
+    setLoginMode('signin');
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -237,9 +241,69 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setErrorMsg('Invalid Admin ID or Password. Owner recovery: use the Sign In tab with the Owner email.');
   };
 
-  const fillQuickAccount = (email) => {
-    setEmailInput(email);
+  const handleSignUp = async (e) => {
+    e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
+    const cleanEmail = normalizeEmail(signUpEmail);
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMsg('Please enter a valid collaborator email address.');
+      return;
+    }
+    const cleanName = signUpName.trim() || cleanEmail.split('@')[0].toUpperCase();
+    const otpVal = signUpOtp.trim();
+
+    // If OTP provided and matches an issued OTP or URL OTP, immediately authenticate
+    if (otpVal && /^\d{6}$/.test(otpVal)) {
+      const urlOtp = new URLSearchParams(window.location.search).get('otp') || '';
+      let issuedOtps = {};
+      try {
+        issuedOtps = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
+      } catch (err) {}
+      const issued = issuedOtps[cleanEmail] || issuedOtps[localStorage.getItem('sps_cloud_room_id') || ''] || '';
+      if (otpVal === urlOtp || otpVal === String(issued)) {
+        let authorizedUsers = [];
+        try {
+          authorizedUsers = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
+        } catch (err) {}
+        const newUser = {
+          name: cleanName,
+          designation: signUpRole.trim() || 'Collaborator',
+          email: cleanEmail,
+          role: 'Editor',
+          allottedProjects: [],
+          status: 'Active'
+        };
+        authorizedUsers.push(newUser);
+        localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
+        completeLogin(cleanEmail, `Account verified. Welcome to Stage Work Studio, ${cleanName}!`);
+        return;
+      }
+    }
+
+    setIsSubmittingSignUp(true);
+    try {
+      const res = await fetch('/api/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          email: cleanEmail,
+          role: signUpRole.trim() || 'Collaborator',
+          message: 'Sign-up access request from Stage Work Studio client'
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok || data?.success) {
+        setSuccessMsg(data?.message || 'Access request sent to Studio Owner. Enter your invite OTP once received.');
+      } else {
+        setErrorMsg(data?.error || 'Could not send sign-up request. Please try again.');
+      }
+    } catch {
+      setSuccessMsg('Sign-up submitted. Ask the Studio Owner for your 6-digit invite OTP to enter.');
+    } finally {
+      setIsSubmittingSignUp(false);
+    }
   };
 
   const isSwitch = overlayMode === 'switch';
@@ -277,11 +341,29 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           <button
             type="button"
             role="tab"
-            aria-selected={loginMode === 'gmail'}
-            onClick={() => { setLoginMode('gmail'); setErrorMsg(''); setSuccessMsg(''); }}
+            aria-selected={loginMode === 'signin'}
+            onClick={() => { setLoginMode('signin'); setErrorMsg(''); setSuccessMsg(''); }}
           >
             <Mail className="w-4 h-4 shrink-0" />
             Sign In
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={loginMode === 'signup'}
+            onClick={() => { setLoginMode('signup'); setErrorMsg(''); setSuccessMsg(''); }}
+          >
+            <UserPlus className="w-4 h-4 shrink-0" />
+            Sign Up
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={loginMode === 'guest'}
+            onClick={() => { setLoginMode('guest'); setErrorMsg(''); setSuccessMsg(''); }}
+          >
+            <Eye className="w-4 h-4 shrink-0" />
+            Sign in as Guest
           </button>
           <button
             type="button"
@@ -291,15 +373,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           >
             <ShieldCheck className="w-4 h-4 shrink-0" />
             Studio Admin
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={loginMode === 'guest'}
-            onClick={() => { setLoginMode('guest'); setErrorMsg(''); setSuccessMsg(''); }}
-          >
-            <Eye className="w-4 h-4 shrink-0" />
-            Guest
           </button>
         </div>
 
@@ -318,28 +391,39 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
             </div>
           )}
 
-          {loginMode === 'gmail' ? (
+          {loginMode === 'signin' ? (
             <form onSubmit={handleGmailLogin} className="space-y-4">
               {rememberedEmail && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmailInput(rememberedEmail);
-                    setErrorMsg('');
-                    setSuccessMsg('');
-                    localStorage.removeItem('sps_user_manually_logged_out');
-                    completeLogin(
-                      rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
-                        ? 'pedditiram@gmail.com'
-                        : rememberedEmail,
-                      `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}`
-                    );
-                  }}
-                  className="sps-btn w-full"
-                >
-                  <UserCheck className="w-4 h-4" />
-                  <span className="truncate">Continue as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}</span>
-                </button>
+                <div className="p-2.5 rounded-lg border border-[var(--sps-gold)]/40 bg-[var(--sps-gold)]/5">
+                  <span className="text-[10px] font-semibold block uppercase tracking-wider mb-2" style={{ color: 'var(--sps-gold)' }}>
+                    Recent session
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailInput(rememberedEmail);
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                      localStorage.removeItem('sps_user_manually_logged_out');
+                      completeLogin(
+                        rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
+                          ? 'pedditiram@gmail.com'
+                          : rememberedEmail,
+                        `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}`
+                      );
+                    }}
+                    className="sps-btn sps-btn-primary w-full flex items-center justify-between"
+                    style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <UserCheck className="w-4 h-4 shrink-0" />
+                      <span className="truncate font-semibold text-xs">
+                        Sign in as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}
+                      </span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 shrink-0" />
+                  </button>
+                </div>
               )}
 
               <div>
@@ -380,16 +464,118 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 <span>Launch studio workspace</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
+
+              <div className="flex items-center justify-between text-[11px] pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('signup'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className="text-[var(--sps-gold)] hover:underline font-semibold"
+                >
+                  New collaborator? Sign Up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('guest'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className="text-[var(--sps-muted)] hover:underline"
+                >
+                  Browse as Guest
+                </button>
+              </div>
+
               {onOpenDesktopTrial ? (
                 <button
                   type="button"
-                  className="sps-btn w-full"
+                  className="sps-btn w-full mt-2"
                   onClick={() => onOpenDesktopTrial()}
                 >
                   <Monitor className="w-4 h-4" />
                   <span>Download desktop trial</span>
                 </button>
               ) : null}
+            </form>
+          ) : loginMode === 'signup' ? (
+            <form onSubmit={handleSignUp} className="space-y-3.5">
+              <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
+                Request access to Stage Work Studio. If you already received a 6-digit invite code from the Studio Owner, enter it below for instant activation.
+              </p>
+
+              <div>
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <User className="w-3.5 h-3.5" />
+                  Full name
+                </label>
+                <input
+                  type="text"
+                  value={signUpName}
+                  onChange={(e) => setSignUpName(e.target.value)}
+                  placeholder="e.g. Christopher Nolan"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <Mail className="w-3.5 h-3.5" />
+                  Collaborator email
+                </label>
+                <input
+                  type="email"
+                  value={signUpEmail}
+                  onChange={(e) => setSignUpEmail(e.target.value)}
+                  placeholder="collaborator@email.com"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  Studio role / Department
+                </label>
+                <input
+                  type="text"
+                  value={signUpRole}
+                  onChange={(e) => setSignUpRole(e.target.value)}
+                  placeholder="Director, Producer, DOP, Lead Editor..."
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  Invite OTP <span className="font-normal">(optional — instant unlock if provided)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={signUpOtp}
+                  onChange={(e) => setSignUpOtp(e.target.value)}
+                  placeholder="6-digit code"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs text-center tracking-[0.35em] font-semibold"
+                  style={{ fontFamily: 'var(--sps-font-mono)' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingSignUp}
+                className="sps-btn sps-btn-primary w-full"
+                style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
+              >
+                {isSubmittingSignUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                <span>{isSubmittingSignUp ? 'Submitting request…' : 'Complete Sign Up'}</span>
+              </button>
+
+              <div className="text-center text-[11px] pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('signin'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className="text-[var(--sps-gold)] hover:underline font-semibold"
+                >
+                  Already have access? Sign In
+                </button>
+              </div>
             </form>
           ) : loginMode === 'admin' ? (
             <form onSubmit={handleAdminLogin} className="space-y-4">
@@ -451,7 +637,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 title="Browse rooms without editing or saving"
               >
                 <Eye className="w-4 h-4" />
-                <span>Continue as guest</span>
+                <span>Sign in as Guest</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
