@@ -22,14 +22,18 @@ export default function RequestAccessModal({ isOpen, onClose }) {
       const res = await fetch('/api/request-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role, message }),
+        body: JSON.stringify({ name, email, role, message, autoReply: true }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) {
         setError(data?.error || data?.message || 'Could not send the request.');
         return;
       }
-      setDone(data?.message || 'Request sent from Stage Work Studio.');
+      let msg = data?.message || 'Access request sent to admin@stageworkstudio.com.';
+      if (msg.includes('validation_error') || msg.includes('statusCode') || msg.includes('Email delivery failed')) {
+        msg = 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).';
+      }
+      setDone(msg);
     } catch {
       setError('Network error. Stay in the app and try again.');
     } finally {

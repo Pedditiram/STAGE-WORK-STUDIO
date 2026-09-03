@@ -147,18 +147,85 @@ export default async function handler(req, res) {
       }
     }
 
-    if (adminSend.emailed) {
-      await sendResend({
+    let autoReplySend = null;
+    const enableAutoReply = body.autoReply !== false && process.env.SPS_DISABLE_AUTO_REPLY !== 'true';
+
+    if (enableAutoReply) {
+      const autoReplySubject = 'Stage Work Studio — Access Request Received & Under Review';
+      const autoReplyHtml = `
+        <div style="background:#0c0a09;color:#f5f2eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;border:1px solid #27221d;border-radius:12px;box-sizing:border-box;">
+          <div style="border-bottom:1px solid #241f1a;padding-bottom:18px;margin-bottom:24px;">
+            <p style="margin:0 0 6px;color:#c9a36a;font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;">
+              Stage Work Studio · AI Cinema Production OS
+            </p>
+            <h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-0.01em;color:#fdfbf7;">
+              Access Request Received &amp; Under Review
+            </h1>
+          </div>
+          <div style="font-size:14px;line-height:1.65;color:#d4cec3;">
+            <p style="margin:0 0 16px;">
+              Dear ${name ? escapeHtml(name) : 'Collaborator'},
+            </p>
+            <p style="margin:0 0 16px;">
+              Thank you for showing interest in <strong>Stage Work Studio (SWS)</strong>. We have successfully received your access request for the <strong>${escapeHtml(role || 'Creative Production')}</strong> workstation profile.
+            </p>
+            <p style="margin:0 0 16px;">
+              Your application is currently under executive review by our studio administration team. Workstation access allocations and production slate permissions are provisioned in accordance with active studio protocols to ensure a secure, synchronized creative environment.
+            </p>
+            <div style="background:#171411;border:1px solid #383127;border-left:3px solid #c9a36a;border-radius:6px;padding:14px 16px;margin:20px 0;">
+              <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#c9a36a;text-transform:uppercase;letter-spacing:0.12em;">
+                Status: Application In Review
+              </p>
+              <p style="margin:0;font-size:13px;color:#e8e2d7;">
+                Our administration team is provisioning your workspace allotment. We will be sending your official <strong>Access Confirmation &amp; Invite Verification Key</strong> to this email address in a moment.
+              </p>
+            </div>
+            <p style="margin:0 0 16px;">
+              Upon confirmation, you will be able to launch the cloud production environment, connect to allotted project slates, and initiate real-time AI cinema workflows directly through both our web and desktop applications.
+            </p>
+            <p style="margin:0 0 24px;">
+              If you have questions regarding your production slate or require immediate assistance, feel free to reply directly to this email or reach out to studio administration at <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;font-weight:600;">admin@stageworkstudio.com</a>.
+            </p>
+          </div>
+          <div style="border-top:1px solid #241f1a;padding-top:20px;margin-top:28px;">
+            <p style="margin:0;font-size:13px;font-weight:600;color:#fdfbf7;">Executive Administration &amp; Operations</p>
+            <p style="margin:2px 0 0;font-size:12px;color:#8a8275;">Stage Work Studio — AI Cinema Production OS</p>
+            <p style="margin:8px 0 0;font-size:11px;color:#635d54;">
+              <a href="https://www.stageworkstudio.com" style="color:#8a8275;text-decoration:none;">www.stageworkstudio.com</a> · <a href="mailto:admin@stageworkstudio.com" style="color:#8a8275;text-decoration:none;">admin@stageworkstudio.com</a>
+            </p>
+          </div>
+        </div>
+      `;
+      const autoReplyText = `Stage Work Studio — Access Request Received & Under Review\n\nDear ${name || 'Collaborator'},\n\nThank you for showing interest in Stage Work Studio (SWS). We have successfully received your access request for the ${role || 'Creative Production'} workstation profile.\n\nYour application is currently under executive review by our studio administration team. Workstation access allocations and production slate permissions are provisioned in accordance with active studio protocols to ensure a secure, synchronized creative environment.\n\nSTATUS: Application In Review\nOur administration team is provisioning your workspace allotment. We will be sending your official Access Confirmation & Invite Verification Key to this email address in a moment.\n\nUpon confirmation, you will be able to launch the cloud production environment, connect to allotted project slates, and initiate real-time AI cinema workflows directly through both our web and desktop applications.\n\nFor questions, contact studio administration at admin@stageworkstudio.com.\n\nSincerely,\nExecutive Administration & Operations\nStage Work Studio — AI Cinema Production OS\nwww.stageworkstudio.com · admin@stageworkstudio.com`;
+
+      autoReplySend = await sendResend({
         to: email,
-        subject: 'Stage Work Studio — we received your access request',
-        text: `Hi${name ? ` ${name}` : ''},\n\nYour request to join Stage Work Studio was sent to the studio admin. They will follow up at ${email}.\n\n— Stage Work Studio`,
-        html: `<p>Hi${name ? ` ${escapeHtml(name)}` : ''},</p><p>Your request to join Stage Work Studio was sent to the studio admin. They will follow up at ${escapeHtml(email)}.</p><p>— Stage Work Studio</p>`,
+        subject: autoReplySubject,
+        html: autoReplyHtml,
+        text: autoReplyText,
+        replyTo: adminTo,
       });
+
+      // If Resend is restricted to sandbox testing (only pedditiram@gmail.com allowed),
+      // send a preview copy to pedditiram@gmail.com so the admin sees the auto-reply email.
+      if (!autoReplySend.emailed && autoReplySend.error && autoReplySend.error.includes('pedditiram@gmail.com')) {
+        await sendResend({
+          to: 'pedditiram@gmail.com',
+          subject: `[Auto-Reply Preview for ${email}] ${autoReplySubject}`,
+          html: `<div style="background:#1e1b18;padding:12px;border-left:4px solid #c9a36a;margin-bottom:14px;font-family:sans-serif;font-size:12px;color:#f4ecde;">` +
+                `<strong>Auto-Reply Preview for ${escapeHtml(email)}</strong><br>` +
+                `This corporate auto-reply email is configured for new applicants. When <strong>stageworkstudio.com</strong> is verified at <a href="https://resend.com/domains" style="color:#38bdf8;">resend.com/domains</a>, it delivers directly to the applicant's inbox.` +
+                `</div>` + autoReplyHtml,
+          text: `[Auto-Reply Preview for ${email}]\n\n` + autoReplyText,
+          replyTo: adminTo,
+        });
+      }
     }
 
     return res.status(200).json({
       success: true,
       emailed: Boolean(adminSend.emailed),
+      autoReplySent: Boolean(autoReplySend?.emailed),
       queued: true,
       configured: Boolean(adminSend.configured),
       message: 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).',

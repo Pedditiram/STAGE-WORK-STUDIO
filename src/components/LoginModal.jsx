@@ -302,7 +302,8 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           name: cleanName,
           email: cleanEmail,
           role: signUpRole.trim() || 'Collaborator',
-          message: 'Sign-up access request from Stage Work Studio client'
+          message: 'Sign-up access request from Stage Work Studio client',
+          autoReply: true
         }),
       });
       const data = await res.json().catch(() => ({}));
