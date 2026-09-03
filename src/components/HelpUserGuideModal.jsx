@@ -401,7 +401,7 @@ function buildGuideSections(isAdmin) {
               <strong>Cloud / rooms</strong> — sync health, invite links.
             </li>
             <li>
-              Owner email <code>pedditiram@gmail.com</code> is always Enterprise.
+              The Owner email (set in Admin Settings) is always Enterprise.
             </li>
           </ul>
         </div>

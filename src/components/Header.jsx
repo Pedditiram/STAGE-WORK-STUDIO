@@ -297,7 +297,7 @@ export default function Header({
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Owner' : 'Editor');
   const firstLetter = userName.trim().charAt(0).toUpperCase() || 'P';
   const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PEDD';
-  const authEmail = currentUser.email || (isAdminLoggedIn ? 'pedditiram@gmail.com' : 'user@gmail.com');
+  const authEmail = currentUser.email || (isAdminLoggedIn ? 'Studio Owner' : 'user@gmail.com');
   // Owner: live library titles only. Collaborators: allotted ∩ live (drops deleted 002, etc.)
   const liveLibrary = getLiveProjectLibrary();
   const allottedProjects = isGuest

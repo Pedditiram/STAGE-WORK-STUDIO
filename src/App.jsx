@@ -714,7 +714,7 @@ export default function App() {
         e.preventDefault();
         if (isGuestSession() && !canGuestBrowseApp()) {
           alert(
-            '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from pedditiram@gmail.com.'
+            '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
           );
           setIsProjectConsoleOpen(false);
           setIsInvestorDeckOpen(true);
@@ -2625,7 +2625,7 @@ export default function App() {
 
   const guestBlock = (label) => {
     alert(
-      `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from pedditiram@gmail.com.`
+      `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Owner.`
     );
     setIsInvestorDeckOpen(true);
   };
@@ -3615,7 +3615,7 @@ export default function App() {
     openNewProject: () => {
       if (isGuestSession() && !canGuestBrowseApp()) {
         alert(
-          '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from pedditiram@gmail.com.'
+          '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
         );
         setIsInvestorDeckOpen(true);
         return;
@@ -3660,6 +3660,8 @@ export default function App() {
               } catch {
                 /* ignore */
               }
+              // Start with presentation mode for first-time visitors
+              setPresentationMode(true);
               setIsLoginModalOpen(true);
             })();
           }}
@@ -3725,7 +3727,7 @@ export default function App() {
           onOpenProjectConsole={() => {
             if (isGuestSession() && !canGuestBrowseApp()) {
               alert(
-                '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from pedditiram@gmail.com.'
+                '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
               );
               setIsInvestorDeckOpen(true);
               return;

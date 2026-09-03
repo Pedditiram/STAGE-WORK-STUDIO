@@ -1625,14 +1625,14 @@ export default function ProjectConsoleModal({
   const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
     if (!proj?.title) return false;
     if (isGuestSession() && !canGuestBrowseApp()) {
-      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from pedditiram@gmail.com.`);
+      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from the studio Owner.`);
       onClose?.();
       if (onOpenInvestorDeck) onOpenInvestorDeck();
       return false;
     }
 
     if (!guestLook && !checkIsProjectAllotted(proj.title)) {
-      alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask the studio Owner (pedditiram@gmail.com) to allot this project to your profile in Admin Settings.`);
+      alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask the studio Owner to allot this project to your profile in Admin Settings.`);
       return false;
     }
     // Always prefer full disk copy so Electron + browser open the same Matrix
@@ -1713,7 +1713,7 @@ export default function ProjectConsoleModal({
   const handleCreateProject = (e) => {
     e.preventDefault();
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner (pedditiram@gmail.com) can create new projects.");
+      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner can create new projects.");
       return;
     }
     if (!newTitle.trim()) return;
@@ -1804,7 +1804,7 @@ export default function ProjectConsoleModal({
   // 5. ARCHIVE PROJECT (PRIMARY ADMIN & OWNER) — remove from library, keep in Archive for restore
   const handleDeleteProject = (projId) => {
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner (pedditiram@gmail.com) can archive projects.");
+      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner can archive projects.");
       return;
     }
 
@@ -2143,7 +2143,7 @@ export default function ProjectConsoleModal({
               )}
               {visibleProjectLibrary.length === 0 && (
                 <div className="sps-project-library-banner w-full p-6 border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono">
-                  No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Owner (pedditiram@gmail.com) to allot a project in Admin Settings.
+                  No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Owner to allot a project in Admin Settings.
                 </div>
               )}
 
@@ -2706,7 +2706,7 @@ export default function ProjectConsoleModal({
             ) : (
               <div className="max-w-xl mx-auto p-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono space-y-2">
                 <p className="font-bold">Project creation is Owner-only.</p>
-                <p>Editors and Viewers can only open allotted projects. Only Owner (pedditiram@gmail.com) can create, delete, duplicate, or import projects.</p>
+                <p>Editors and Viewers can only open allotted projects. Only the studio Owner can create, delete, duplicate, or import projects.</p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('library')}

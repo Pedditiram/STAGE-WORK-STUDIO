@@ -131,7 +131,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
       // Owner path: pedditiram@gmail.com email session (no weak password bypass required)
       if (PRIMARY_ADMIN_EMAILS.includes(cleanEmail) || cleanEmail === 'pedditiram@gmail.com') {
-        completeLogin('pedditiram@gmail.com', 'Logged in as Primary Admin & Studio Owner (Pedditi Ram).');
+        completeLogin('pedditiram@gmail.com', 'Logged in as Primary Admin & Studio Owner.');
         return;
       }
 
@@ -143,7 +143,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
       if (matchedUser) {
         if (matchedUser.status === 'Suspended') {
-          setErrorMsg('Access Suspended. Contact Studio Admin (pedditiram@gmail.com) to reactivate.');
+          setErrorMsg('Access Suspended. Contact Studio Admin to reactivate.');
           return;
         }
         completeLogin(
@@ -229,12 +229,12 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
     if (!customConfigured) {
       setErrorMsg(
-        'No strong Admin password is configured. Sign in via Email / Gmail as pedditiram@gmail.com (Owner), then set a strong password in Admin Settings.'
+        'No strong Admin password is configured. Sign in via the Owner email (Email / Gmail tab), then set a strong password in Admin Settings.'
       );
       return;
     }
 
-    setErrorMsg('Invalid Admin ID or Password. Owner recovery: Email / Gmail as pedditiram@gmail.com.');
+    setErrorMsg('Invalid Admin ID or Password. Owner recovery: use the Sign In tab with the Owner email.');
   };
 
   const fillQuickAccount = (email) => {
@@ -281,7 +281,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
             onClick={() => { setLoginMode('gmail'); setErrorMsg(''); setSuccessMsg(''); }}
           >
             <Mail className="w-4 h-4 shrink-0" />
-            Email / Gmail
+            Sign In
           </button>
           <button
             type="button"
@@ -332,13 +332,13 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                       rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
                         ? 'pedditiram@gmail.com'
                         : rememberedEmail,
-                      `Continuing as ${rememberedEmail}`
+                      `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}`
                     );
                   }}
                   className="sps-btn w-full"
                 >
                   <UserCheck className="w-4 h-4" />
-                  <span className="truncate">Continue as {rememberedEmail}</span>
+                  <span className="truncate">Continue as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}</span>
                 </button>
               )}
 
@@ -355,19 +355,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                   className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
                   required
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-semibold block uppercase tracking-wider" style={{ color: 'var(--sps-muted)' }}>Quick accounts</span>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => fillQuickAccount('pedditiram@gmail.com')}
-                    className="sps-btn text-[10px]"
-                  >
-                    pedditiram@gmail.com
-                  </button>
-                </div>
               </div>
 
               <div>
@@ -436,7 +423,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                   required
                 />
                 <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
-                  Owner lockout escape: use Email / Gmail with pedditiram@gmail.com.
+                  Owner lockout escape: use the Sign In tab with the Owner email.
                   Weak defaults (admin / admin123) are disabled in production.
                 </p>
               </div>
