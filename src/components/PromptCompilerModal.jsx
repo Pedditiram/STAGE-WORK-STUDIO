@@ -997,67 +997,62 @@ ${mainPrompt}`;
           </div>
         ) : null}
 
-        {/* Format Selector Tabs & Toolbars (Hidden in Distraction-Free Fullscreen Reader Mode) */}
-        {!isFullscreen && (
-          <>
-            <div className="px-4 py-3 border-b border-[var(--sps-border)] flex flex-wrap items-center gap-2 bg-[var(--sps-surface)]/60">
-              <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compile format">
-                <button type="button" role="tab" aria-selected={formatMode === 'comfyui_seedance'} onClick={() => setFormatMode('comfyui_seedance')}>
-                  Video
-                </button>
-                <button type="button" role="tab" aria-selected={formatMode === 'first_last_frame'} onClick={() => setFormatMode('first_last_frame')}>
-                  First / Last
-                </button>
-                <button type="button" role="tab" aria-selected={formatMode === 'seedream_beat_breakdown'} onClick={() => setFormatMode('seedream_beat_breakdown')}>
-                  Beats
-                </button>
-                <button type="button" role="tab" aria-selected={formatMode === 'json'} onClick={() => setFormatMode('json')}>
-                  JSON
-                </button>
-                <button type="button" role="tab" aria-selected={formatMode === 'csv'} onClick={() => setFormatMode('csv')}>
-                  CSV
-                </button>
-              </div>
-              <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compiler view">
-                <button type="button" role="tab" aria-selected={viewMode === 'cards'} onClick={() => setViewMode('cards')}>Cards</button>
-                <button type="button" role="tab" aria-selected={viewMode === 'single'} onClick={() => setViewMode('single')}>Full script</button>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportPrintPack}
-                  disabled={exportBlocked}
-                  className="sps-btn text-xs disabled:opacity-40"
-                  title={exportBlocked ? exportLife.message : 'Print compiled prompts as PDF pack'}
-                >
-                  <Download className="w-4 h-4" />
-                  Print PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadZipPackage}
-                  disabled={exportBlocked}
-                  className="sps-btn text-xs disabled:opacity-40"
-                  title={exportBlocked ? exportLife.message : `Download all ${shotList.length} prompts as ZIP`}
-                >
-                  <Archive className="w-4 h-4" />
-                  ZIP
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportAllIndividualFiles}
-                  disabled={exportBlocked}
-                  className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
-                  title={exportBlocked ? exportLife.message : `Save ${shotList.length} TXT files`}
-                >
-                  <FolderDown className="w-4 h-4" />
-                  Save TXT
-                </button>
-              </div>
-            </div>
-
-          </>
-        )}
+        {/* Format Selector Tabs & Toolbars — pinned & visible in fullscreen */}
+        <div className="px-4 py-3 border-b border-[var(--sps-border)] flex flex-wrap items-center gap-2 bg-[var(--sps-surface)]/60">
+          <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compile format">
+            <button type="button" role="tab" aria-selected={formatMode === 'comfyui_seedance'} onClick={() => setFormatMode('comfyui_seedance')}>
+              Video
+            </button>
+            <button type="button" role="tab" aria-selected={formatMode === 'first_last_frame'} onClick={() => setFormatMode('first_last_frame')}>
+              First / Last
+            </button>
+            <button type="button" role="tab" aria-selected={formatMode === 'seedream_beat_breakdown'} onClick={() => setFormatMode('seedream_beat_breakdown')}>
+              Beats
+            </button>
+            <button type="button" role="tab" aria-selected={formatMode === 'json'} onClick={() => setFormatMode('json')}>
+              JSON
+            </button>
+            <button type="button" role="tab" aria-selected={formatMode === 'csv'} onClick={() => setFormatMode('csv')}>
+              CSV
+            </button>
+          </div>
+          <div className="sps-tabs sps-tabs-compact" role="tablist" aria-label="Compiler view">
+            <button type="button" role="tab" aria-selected={viewMode === 'cards'} onClick={() => setViewMode('cards')}>Cards</button>
+            <button type="button" role="tab" aria-selected={viewMode === 'single'} onClick={() => setViewMode('single')}>Full script</button>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportPrintPack}
+              disabled={exportBlocked}
+              className="sps-btn text-xs disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : 'Print compiled prompts as PDF pack'}
+            >
+              <Download className="w-4 h-4" />
+              Print PDF
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadZipPackage}
+              disabled={exportBlocked}
+              className="sps-btn text-xs disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : `Download all ${shotList.length} prompts as ZIP`}
+            >
+              <Archive className="w-4 h-4" />
+              ZIP
+            </button>
+            <button
+              type="button"
+              onClick={handleExportAllIndividualFiles}
+              disabled={exportBlocked}
+              className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
+              title={exportBlocked ? exportLife.message : `Save ${shotList.length} TXT files`}
+            >
+              <FolderDown className="w-4 h-4" />
+              Save TXT
+            </button>
+          </div>
+        </div>
 
         {/* Modal Output Body */}
         <div className="sps-modal-body p-5 flex-1 overflow-y-auto">

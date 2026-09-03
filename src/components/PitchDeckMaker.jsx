@@ -410,7 +410,7 @@ export default function PitchDeckMaker({
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       <HoverPinBar
         storageKey="sps_pin_pitch_tools_v2"
-        defaultPinned={false}
+        defaultPinned={true}
         pinLabel="Pitch tools"
         ariaLabel="Show pitch tools"
         wrap={false}

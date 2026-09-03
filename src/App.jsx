@@ -3719,8 +3719,8 @@ export default function App() {
           }}
         />
       )}
-      {/* Top Header Bar — hide in fullscreen, boot splash, or project console */}
-      {!isFullscreen && !studioShellHidden && (
+      {/* Top Header Bar — visible & pinned by default even in fullscreen */}
+      {!studioShellHidden && (
         <div
           className={`sps-hover-chrome sps-app-hover-chrome ${
             headerMinimized && !headerPinned ? 'is-collapsed' : 'is-pinned'
@@ -3853,7 +3853,7 @@ export default function App() {
         </div>
       )}
 
-      {isGuestSession() && canGuestBrowseApp() && !isFullscreen && !studioShellHidden && (
+      {isGuestSession() && canGuestBrowseApp() && !studioShellHidden && (
         <div className="shrink-0 px-3 py-1.5 text-[11px] text-center border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)]" style={{ color: 'var(--sps-muted)' }}>
           Guest playground — dummy film only. Play in the rooms. Studio titles stay locked. Sign in for the real library.
         </div>

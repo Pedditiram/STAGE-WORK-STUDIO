@@ -1930,7 +1930,7 @@ export default function ProjectConsoleModal({
     <div className={`sps-overlay sps-project-console-overlay is-full ${isVaultFullscreen ? 'is-full' : ''}`}>
       <div className={`sps-shell sps-atelier-room sps-project-console-shell ${profileMenuOpen ? 'is-menu-open' : ''}`}>
         
-        {!isVaultFullscreen && (
+        {(!isVaultFullscreen || consoleToolbarPinned) && (
           <>
           <div
             className={`sps-project-console-toolbar sps-modal-head sps-project-console-head flex-row items-center gap-2 ${
