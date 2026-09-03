@@ -11,8 +11,8 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Stage Work Studio Error Boundary caught an error:", error, errorInfo);
-    this.setState({ errorInfo });
+    console.error("STAGE_WORK_STUDIO_ERROR_CAUGHT:", error?.message || String(error), "\nStack:", error?.stack, "\nComponentStack:", errorInfo?.componentStack);
+    this.errorInfo = errorInfo;
   }
 
   handleResetApp = () => {
