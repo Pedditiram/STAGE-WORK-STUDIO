@@ -231,7 +231,7 @@ export function registerThisDevice(email) {
     devices.push(row);
   } else {
     if (row.status === 'DISABLED') {
-      return { ok: false, error: 'This device was deactivated by the studio owner.' };
+      return { ok: false, error: 'This device was deactivated by the studio admin.' };
     }
     row.lastSeen = new Date().toISOString();
   }
@@ -248,7 +248,7 @@ export function heartbeat(email) {
   const clean = String(email || '').trim().toLowerCase();
   const lic = getLicense(clean);
   if (lic.status === 'DISABLED' || lic.status === 'REVOKED') {
-    return { ok: false, reason: 'license', message: 'License revoked. Sign in is blocked until the owner restores access.' };
+    return { ok: false, reason: 'license', message: 'License revoked. Sign in is blocked until the admin restores access.' };
   }
   const deviceId = getDeviceId();
   const dev = (lic.devices || []).find((d) => d.id === deviceId);
@@ -259,7 +259,7 @@ export function heartbeat(email) {
     const map = readJson(FORCE_LOGOUT_KEY, {});
     delete map[clean];
     writeJson(FORCE_LOGOUT_KEY, map);
-    return { ok: false, reason: 'logout', message: 'Owner forced a sign-out.' };
+    return { ok: false, reason: 'logout', message: 'Admin forced a sign-out.' };
   }
   registerThisDevice(clean);
   return { ok: true, license: getLicense(clean) };
@@ -387,7 +387,7 @@ export function managedCreditStatus(email) {
 export function assertCanGenerate(email, { consumeRate = false } = {}) {
   const clean = String(email || sessionEmail()).trim().toLowerCase();
   if (!canUseSaasFeature('generate', clean)) {
-    return { ok: false, message: 'Generation is off for this license. Owner can enable it in Settings → SaaS.' };
+    return { ok: false, message: 'Generation is off for this license. Admin can enable it in Settings → SaaS.' };
   }
   const lic = getLicense(clean);
   if (resolveApiMode(clean) === 'managed' && clean !== OWNER_EMAIL && (lic.credits || 0) <= 0) {
@@ -404,7 +404,7 @@ export function assertCanGenerate(email, { consumeRate = false } = {}) {
 export function assertCanExport(email) {
   const clean = String(email || sessionEmail()).trim().toLowerCase();
   if (canUseSaasFeature('export', clean)) return { ok: true };
-  return { ok: false, message: 'Export is not on this plan. Owner can enable it in Settings → SaaS.' };
+  return { ok: false, message: 'Export is not on this plan. Admin can enable it in Settings → SaaS.' };
 }
 
 export function resolveLlmApiKey(provider) {

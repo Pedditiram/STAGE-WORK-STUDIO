@@ -55,7 +55,7 @@ export default function RequestAccessModal({ isOpen, onClose }) {
         </div>
         <form className="p-4 space-y-3" onSubmit={submit}>
           <p className="text-[12px] m-0" style={{ color: 'var(--sps-muted)' }}>
-            Stage Work Studio sends this to the owner. Mail stays inside the app — no external mail client.
+            Stage Work Studio sends this to the admin (admin@stageworkstudio.com). Mail stays inside the app — no external mail client.
           </p>
           <label className="block space-y-1">
             <span className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--sps-muted)' }}>Name</span>

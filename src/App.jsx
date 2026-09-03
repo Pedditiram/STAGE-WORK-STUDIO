@@ -659,7 +659,7 @@ export default function App() {
   const updateShotsWithHistory = (newShots) => {
     if (isGuestSession() && !canGuestBrowseApp()) return false;
     if (!canEditProjects()) {
-      alert('🔒 READ-ONLY ACCESS:\nYour access level is Viewer. You can open allotted projects but cannot edit them. Ask the studio Owner to upgrade you to Editor.');
+      alert('🔒 READ-ONLY ACCESS:\nYour access level is Viewer. You can open allotted projects but cannot edit them. Ask the studio Admin to upgrade you to Editor.');
       return false;
     }
     if (!canAccessProject(projectTitle) && !canCreateOrDeleteProjects()) {
@@ -718,7 +718,7 @@ export default function App() {
         e.preventDefault();
         if (isGuestSession() && !canGuestBrowseApp()) {
           alert(
-            '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
+            '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
           );
           setIsProjectConsoleOpen(false);
           setIsInvestorDeckOpen(true);
@@ -1174,7 +1174,7 @@ export default function App() {
       lastOpenAt = now;
       if (isGuestSession()) {
         alert(
-          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio owner.\n\nOpen the Investor Deck, request access, or log in.'
+          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio admin.\n\nOpen the Investor Deck, request access, or log in.'
         );
         setIsAdminModalOpen(false);
         setIsInvestorDeckOpen(true);
@@ -1387,7 +1387,7 @@ export default function App() {
       'sps_export_project': () => electronMenuRef.current.exportProject?.(),
       'sps_import_project': () => {
         if (!canCreateOrDeleteProjects()) {
-          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can import projects.');
+          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
           return;
         }
         const input = document.createElement('input');
@@ -1398,7 +1398,7 @@ export default function App() {
       },
       'sps_new_project': () => {
         if (!canCreateOrDeleteProjects()) {
-          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can create projects. Open Project Console to edit an allotted project.');
+          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create projects. Open Project Console to edit an allotted project.');
           return;
         }
         electronMenuRef.current.openNewProject?.();
@@ -2629,7 +2629,7 @@ export default function App() {
 
   const guestBlock = (label) => {
     alert(
-      `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Owner.`
+      `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Admin.`
     );
     setIsInvestorDeckOpen(true);
   };
@@ -2666,7 +2666,7 @@ export default function App() {
   const openBudgetConsole = () => {
     if (isGuestSession()) return guestBlock('Budget');
     if (!canAccessBudgetConsole()) {
-      alert('Budget console is off, or this account is not granted access.\n\nOwner: Settings → Budget console on, then check Budget console on the user.');
+      alert('Budget console is off, or this account is not granted access.\n\nAdmin: Settings → Budget console on, then check Budget console on the user.');
       return;
     }
     goStudioRoom('budget');
@@ -3287,7 +3287,7 @@ export default function App() {
   const executeApplyAIShots = (aiShots, titleToApply, mode, baseShots = [], extraElements = null) => {
     const nextTitle = titleToApply || projectTitle;
     if (!canEditProjects()) {
-      alert('🔒 READ-ONLY ACCESS:\nViewers cannot apply AI shots. Ask the studio Owner to upgrade you to Editor.');
+      alert('🔒 READ-ONLY ACCESS:\nViewers cannot apply AI shots. Ask the studio Admin to upgrade you to Editor.');
       return;
     }
     if (!Array.isArray(aiShots) || aiShots.length === 0) {
@@ -3302,7 +3302,7 @@ export default function App() {
       } catch (e) {}
       const exists = Array.isArray(library) && library.some((p) => String(p?.title || '').toLowerCase() === String(nextTitle || '').toLowerCase());
       if (!exists || !canAccessProject(nextTitle)) {
-        alert('🔒 ACCESS RESTRICTED:\nYou can only edit projects allotted to your account. Ask the studio Owner to allot a project or create a new one.');
+        alert('🔒 ACCESS RESTRICTED:\nYou can only edit projects allotted to your account. Ask the studio Admin to allot a project or create a new one.');
         return;
       }
     }
@@ -3573,7 +3573,7 @@ export default function App() {
 
   const importJSONProject = (e) => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can import projects.');
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
       if (e?.target) e.target.value = '';
       return;
     }
@@ -3619,7 +3619,7 @@ export default function App() {
     openNewProject: () => {
       if (isGuestSession() && !canGuestBrowseApp()) {
         alert(
-          '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
+          '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
         );
         setIsInvestorDeckOpen(true);
         return;
@@ -3730,7 +3730,7 @@ export default function App() {
           onOpenProjectConsole={() => {
             if (isGuestSession() && !canGuestBrowseApp()) {
               alert(
-                '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Owner.'
+                '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
               );
               setIsInvestorDeckOpen(true);
               return;

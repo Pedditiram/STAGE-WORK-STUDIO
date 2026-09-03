@@ -216,7 +216,7 @@ export default function Header({
         return {
           name: cleanAuth.split('@')[0],
           designation: 'Collaborator',
-          role: isStudioAdmin(cleanAuth) ? 'Owner' : 'Email Authorized Collaborator',
+          role: isStudioAdmin(cleanAuth) ? 'Admin' : 'Email Authorized Collaborator',
           email: cleanAuth,
           allottedProjects: allotted === null ? ['All Studio Projects (Full Access)'] : allotted
         };
@@ -228,7 +228,7 @@ export default function Header({
         name: 'Pedditi Ram',
         designation: 'Lead Director',
         email: 'pedditiram@gmail.com',
-        role: 'Owner',
+        role: 'Admin',
         isStudioAdmin: true,
         allottedProjects: ['All Studio Projects (Full Access)']
       };
@@ -294,10 +294,10 @@ export default function Header({
 
   const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
-  const userRole = currentUser.role || (isAdminLoggedIn ? 'Owner' : 'Editor');
+  const userRole = currentUser.role || (isAdminLoggedIn ? 'Admin' : 'Editor');
   const firstLetter = userName.trim().charAt(0).toUpperCase() || 'P';
   const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PEDD';
-  const authEmail = currentUser.email || (isAdminLoggedIn ? 'Studio Owner' : 'user@gmail.com');
+  const authEmail = currentUser.email || (isAdminLoggedIn ? 'Studio Admin' : 'user@gmail.com');
   // Owner: live library titles only. Collaborators: allotted ∩ live (drops deleted 002, etc.)
   const liveLibrary = getLiveProjectLibrary();
   const allottedProjects = isGuest

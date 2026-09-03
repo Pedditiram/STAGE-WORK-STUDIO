@@ -75,7 +75,7 @@ export default function ByokKeysPanel() {
       setPackNote('Stripe checkout opened in a new tab.');
       return;
     }
-    setPackNote(res.message || 'Stripe is not configured — ask the studio owner to grant credits.');
+    setPackNote(res.message || 'Stripe is not configured — ask the studio admin to grant credits.');
   };
 
   return (

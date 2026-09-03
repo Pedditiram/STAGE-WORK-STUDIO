@@ -931,7 +931,7 @@ export default function ProjectConsoleModal({
 
   const handleOpenProjectFolder = async () => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can open project folders.');
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can open project folders.');
       return;
     }
 
@@ -982,7 +982,7 @@ export default function ProjectConsoleModal({
 
   const handleBackupFileImport = async (e) => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can import projects.');
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
       if (e.target) e.target.value = '';
       return;
     }
@@ -1625,14 +1625,14 @@ export default function ProjectConsoleModal({
   const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
     if (!proj?.title) return false;
     if (isGuestSession() && !canGuestBrowseApp()) {
-      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from the studio Owner.`);
+      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from the studio Admin.`);
       onClose?.();
       if (onOpenInvestorDeck) onOpenInvestorDeck();
       return false;
     }
 
     if (!guestLook && !checkIsProjectAllotted(proj.title)) {
-      alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask the studio Owner to allot this project to your profile in Admin Settings.`);
+      alert(`🔒 PROJECT ACCESS RESTRICTED:\n'${proj.title}' has not been allotted to your account (${currentUserEmail}). Please ask the studio Admin to allot this project to your profile in Admin Settings.`);
       return false;
     }
     // Always prefer full disk copy so Electron + browser open the same Matrix
@@ -1709,11 +1709,11 @@ export default function ProjectConsoleModal({
     });
   };
 
-  // 2. CREATE NEW PROJECT (PRIMARY ADMIN & OWNER AUTHORIZED RULE)
+  // 2. CREATE NEW PROJECT (PRIMARY ADMIN AUTHORIZED RULE)
   const handleCreateProject = (e) => {
     e.preventDefault();
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner can create new projects.");
+      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create new projects.");
       return;
     }
     if (!newTitle.trim()) return;
@@ -1782,7 +1782,7 @@ export default function ProjectConsoleModal({
   // 4. DUPLICATE PROJECT (admin only — creates a new project)
   const handleDuplicateProject = (proj) => {
     if (!isPrimaryOwner) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Owner can create or duplicate projects.');
+      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create or duplicate projects.');
       return;
     }
     const dupId = `proj_${Date.now()}`;
@@ -1801,10 +1801,10 @@ export default function ProjectConsoleModal({
     setProjectLibrary(prev => [...prev, dupObj]);
   };
 
-  // 5. ARCHIVE PROJECT (PRIMARY ADMIN & OWNER) — remove from library, keep in Archive for restore
+  // 5. ARCHIVE PROJECT (PRIMARY ADMIN) — remove from library, keep in Archive for restore
   const handleDeleteProject = (projId) => {
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Owner can archive projects.");
+      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Admin can archive projects.");
       return;
     }
 
@@ -1849,7 +1849,7 @@ export default function ProjectConsoleModal({
 
   const handleRestoreArchivedProject = (archiveId) => {
     if (!isPrimaryOwner) {
-      alert('🔒 Only the studio Owner can restore archived projects.');
+      alert('🔒 Only the studio Admin can restore archived projects.');
       return;
     }
     const restored = restoreProjectFromArchive(archiveId);
@@ -2143,7 +2143,7 @@ export default function ProjectConsoleModal({
               )}
               {visibleProjectLibrary.length === 0 && (
                 <div className="sps-project-library-banner w-full p-6 border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono">
-                  No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Owner to allot a project in Admin Settings.
+                  No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Admin to allot a project in Admin Settings.
                 </div>
               )}
 
@@ -2705,8 +2705,8 @@ export default function ProjectConsoleModal({
             </form>
             ) : (
               <div className="max-w-xl mx-auto p-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono space-y-2">
-                <p className="font-bold">Project creation is Owner-only.</p>
-                <p>Editors and Viewers can only open allotted projects. Only the studio Owner can create, delete, duplicate, or import projects.</p>
+                <p className="font-bold">Project creation is Admin-only.</p>
+                <p>Editors and Viewers can only open allotted projects. Only the studio Admin can create, delete, duplicate, or import projects.</p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('library')}

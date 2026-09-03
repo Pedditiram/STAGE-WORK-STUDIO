@@ -424,7 +424,7 @@ export function buildFilmPitchSlides(projectTitle, shots = []) {
         'Creative partnership and/or production finance conversation',
         'Look-dev and key-art stills from the locked Matrix',
         'A dated follow-up: table, room, or term sheet',
-        'Contact: Studio Owner (see Admin Settings)'
+        'Contact: Studio Admin (see Admin Settings)'
       ],
       footer: `${title} · Pitch book · Stage Work Studio`
     }

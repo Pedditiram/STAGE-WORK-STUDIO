@@ -28,7 +28,7 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         setError(data?.error || 'Could not queue the request.');
         return;
       }
-      setDone(data.message || 'Request queued for the studio owner.');
+      setDone(data.message || 'Request queued for the studio admin.');
     } catch {
       setError('Network error. Stay in the app and try again.');
     } finally {

@@ -27,12 +27,12 @@ function readAccount() {
   const guest = isGuestSession(email);
   const name = (
     profile?.name
-    || (email === 'pedditiram@gmail.com' ? 'Studio Owner' : '')
+    || (email === 'pedditiram@gmail.com' ? 'Studio Admin' : '')
     || (email ? email.split('@')[0] : '')
     || (guest ? 'Guest' : 'Studio')
   ).trim();
   const designation = getDesignationForEmail(email) || profile?.designation || (isStudioAdmin(email) ? 'Lead Director' : '');
-  const role = profile?.role || (isStudioAdmin(email) ? 'Owner' : '');
+  const role = profile?.role || (isStudioAdmin(email) ? 'Admin' : '');
   let planLabel = '';
   try {
     planLabel = getPlan(getLicense(email)?.plan)?.label || '';

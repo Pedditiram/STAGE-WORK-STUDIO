@@ -135,7 +135,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
       // Owner path: pedditiram@gmail.com email session (no weak password bypass required)
       if (PRIMARY_ADMIN_EMAILS.includes(cleanEmail) || cleanEmail === 'pedditiram@gmail.com') {
-        completeLogin('pedditiram@gmail.com', 'Logged in as Primary Admin & Studio Owner.');
+        completeLogin('pedditiram@gmail.com', 'Logged in as Primary Admin & Studio Admin.');
         return;
       }
 
@@ -200,7 +200,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
         return;
       }
 
-      setErrorMsg('Email not authorized. Ask the studio Owner for an invite OTP or allotment.');
+      setErrorMsg('Email not authorized. Ask the studio Admin for an invite OTP or allotment.');
     }
   };
 
@@ -233,12 +233,12 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
     if (!customConfigured) {
       setErrorMsg(
-        'No strong Admin password is configured. Sign in via the Owner email (Email / Gmail tab), then set a strong password in Admin Settings.'
+        'No strong Admin password is configured. Sign in via the Admin email (Sign In tab), then set a strong password in Admin Settings.'
       );
       return;
     }
 
-    setErrorMsg('Invalid Admin ID or Password. Owner recovery: use the Sign In tab with the Owner email.');
+    setErrorMsg('Invalid Admin ID or Password. Admin recovery: use the Sign In tab with the Admin email.');
   };
 
   const handleSignUp = async (e) => {
@@ -295,12 +295,12 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok || data?.success) {
-        setSuccessMsg(data?.message || 'Access request sent to Studio Owner. Enter your invite OTP once received.');
+        setSuccessMsg(data?.message || 'Access request sent to Studio Admin. Enter your invite OTP once received.');
       } else {
         setErrorMsg(data?.error || 'Could not send sign-up request. Please try again.');
       }
     } catch {
-      setSuccessMsg('Sign-up submitted. Ask the Studio Owner for your 6-digit invite OTP to enter.');
+      setSuccessMsg('Sign-up submitted. Ask the Studio Admin for your 6-digit invite OTP to enter.');
     } finally {
       setIsSubmittingSignUp(false);
     }
@@ -409,7 +409,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                         rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
                           ? 'pedditiram@gmail.com'
                           : rememberedEmail,
-                        `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}`
+                        `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Admin' : rememberedEmail}`
                       );
                     }}
                     className="sps-btn sps-btn-primary w-full flex items-center justify-between"
@@ -418,7 +418,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                     <div className="flex items-center gap-2 min-w-0">
                       <UserCheck className="w-4 h-4 shrink-0" />
                       <span className="truncate font-semibold text-xs">
-                        Sign in as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Owner' : rememberedEmail}
+                        Sign in as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Admin' : rememberedEmail}
                       </span>
                     </div>
                     <ArrowRight className="w-4 h-4 shrink-0" />
@@ -496,7 +496,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           ) : loginMode === 'signup' ? (
             <form onSubmit={handleSignUp} className="space-y-3.5">
               <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
-                Request access to Stage Work Studio. If you already received a 6-digit invite code from the Studio Owner, enter it below for instant activation.
+                Request access to Stage Work Studio. If you already received a 6-digit invite code from the Studio Admin, enter it below for instant activation.
               </p>
 
               <div>
@@ -582,7 +582,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
               <div>
                 <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
                   <Shield className="w-3.5 h-3.5" />
-                  Admin owner ID
+                  Admin ID
                 </label>
                 <input
                   type="text"
@@ -609,7 +609,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                   required
                 />
                 <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
-                  Owner lockout escape: use the Sign In tab with the Owner email.
+                  Admin lockout escape: use the Sign In tab with the Admin email.
                   Weak defaults (admin / admin123) are disabled in production.
                 </p>
               </div>

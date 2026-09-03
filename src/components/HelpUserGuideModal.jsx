@@ -126,7 +126,7 @@ function buildGuideSections(isAdmin) {
               <li>
                 <strong>Open a project file from disk</strong> — Project Console top bar →{' '}
                 <strong>Open Project File</strong> (same as Import Backup). Choose a <code>.sps</code> or{' '}
-                <code>.json</code> backup. Studio owners see this button; collaborators open films they were given from
+                <code>.json</code> backup. Studio admins see this button; collaborators open films they were given from
                 the library cards.
               </li>
             </ol>
@@ -377,14 +377,14 @@ function buildGuideSections(isAdmin) {
     sections.push({
       id: 'admin',
       icon: Settings,
-      title: '11. Admin Settings (owners only)',
+      title: '11. Admin Settings (admins only)',
       badge: 'ADMIN',
       keywords: 'admin settings saas byok keys credits collaborators revoke devices stripe',
       content: (
         <div className="space-y-3 text-[11px]">
           <Callout title="Visible only to studio admins">
             Collaborators do not see this chapter. Open the <strong>gear</strong> in the top bar after signing in as
-            owner.
+            admin.
           </Callout>
           <ul className="list-disc pl-4 space-y-2 m-0" style={{ color: 'var(--sps-muted)' }}>
             <li>
@@ -395,13 +395,13 @@ function buildGuideSections(isAdmin) {
               <strong>SaaS</strong> — plans, credits, device revoke, feature flags (generate / export / collab).
             </li>
             <li>
-              <strong>Collaborators</strong> — invite emails, allot projects, Owner vs Editor.
+              <strong>Collaborators</strong> — invite emails, allot projects, Admin vs Editor.
             </li>
             <li>
               <strong>Cloud / rooms</strong> — sync health, invite links.
             </li>
             <li>
-              The Owner email (set in Admin Settings) is always Enterprise.
+              The Admin email (set in Admin Settings) is always Enterprise.
             </li>
           </ul>
         </div>

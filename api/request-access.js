@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const OWNER_EMAIL = 'pedditiram@gmail.com';
+const ADMIN_EMAIL = 'admin@stageworkstudio.com';
 
 function resendApiKey() {
   return process.env.SPS_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'A valid email is required.' });
     }
 
-    const ownerTo = normalizeEmail(process.env.SPS_ACCESS_TO_EMAIL) || OWNER_EMAIL;
+    const adminTo = normalizeEmail(process.env.SPS_ACCESS_TO_EMAIL) || ADMIN_EMAIL;
     const record = {
       id: `req_${Date.now()}`,
       name: name || '—',
@@ -121,20 +121,20 @@ export default async function handler(req, res) {
     `;
     const text = `Stage Work Studio access request\n\nName: ${record.name}\nEmail: ${record.email}\nRole: ${record.role}\n\n${record.message}`;
 
-    const ownerSend = await sendResend({
-      to: ownerTo,
+    const adminSend = await sendResend({
+      to: adminTo,
       subject,
       html,
       text,
       replyTo: email,
     });
 
-    if (ownerSend.emailed) {
+    if (adminSend.emailed) {
       await sendResend({
         to: email,
         subject: 'Stage Work Studio — we received your access request',
-        text: `Hi${name ? ` ${name}` : ''},\n\nYour request to join Stage Work Studio was sent to the studio owner. They will follow up at ${email}.\n\n— Stage Work Studio`,
-        html: `<p>Hi${name ? ` ${escapeHtml(name)}` : ''},</p><p>Your request to join Stage Work Studio was sent to the studio owner. They will follow up at ${escapeHtml(email)}.</p><p>— Stage Work Studio</p>`,
+        text: `Hi${name ? ` ${name}` : ''},\n\nYour request to join Stage Work Studio was sent to the studio admin. They will follow up at ${email}.\n\n— Stage Work Studio`,
+        html: `<p>Hi${name ? ` ${escapeHtml(name)}` : ''},</p><p>Your request to join Stage Work Studio was sent to the studio admin. They will follow up at ${escapeHtml(email)}.</p><p>— Stage Work Studio</p>`,
       });
     }
 

@@ -62,8 +62,10 @@ function queryOf(req) {
   }
 }
 
+const ADMIN_EMAIL = 'admin@stageworkstudio.com';
+
 function adminInbox() {
-  return normalizeEmail(process.env.SPS_ACCESS_TO_EMAIL) || OWNER_EMAIL;
+  return normalizeEmail(process.env.SPS_ACCESS_TO_EMAIL) || ADMIN_EMAIL;
 }
 
 function isSaasAdmin(email) {
@@ -148,7 +150,7 @@ export default async function handler(req, res) {
 
     if (action === 'list' && req.method === 'POST') {
       if (!isSaasAdmin(body.actor)) {
-        return res.status(403).json({ success: false, error: 'Only the studio owner can list trial requests.' });
+        return res.status(403).json({ success: false, error: 'Only the studio admin can list trial requests.' });
       }
       const { state, backend } = await readTrialState();
       const release = resolveReleaseUrl(state);
@@ -166,7 +168,7 @@ export default async function handler(req, res) {
 
     if (action === 'set-release-url' && req.method === 'POST') {
       if (!isSaasAdmin(body.actor)) {
-        return res.status(403).json({ success: false, error: 'Only the studio owner can set the desktop release URL.' });
+        return res.status(403).json({ success: false, error: 'Only the studio admin can set the desktop release URL.' });
       }
       const url = String(body.releaseUrl || '').trim();
       if (url && !isHttpsUrl(url)) {
@@ -282,8 +284,8 @@ async function createRequest(req, res, body) {
     await sendResend({
       to: email,
       subject: 'Stage Work Studio — we received your desktop trial request',
-      text: `Hi${name ? ` ${name}` : ''},\n\nYour desktop trial request was sent to the studio owner. After they approve, a download link will arrive at ${email}. The unsigned Mac build is not public until then.\n\n— Stage Work Studio`,
-      html: `<p>Hi${name ? ` ${escapeHtml(name)}` : ''},</p><p>Your desktop trial request was sent to the studio owner. After they approve, a download link will arrive at ${escapeHtml(email)}.</p><p>— Stage Work Studio</p>`,
+      text: `Hi${name ? ` ${name}` : ''},\n\nYour desktop trial request was sent to the studio admin. After they approve, a download link will arrive at ${email}. The unsigned Mac build is not public until then.\n\n— Stage Work Studio`,
+      html: `<p>Hi${name ? ` ${escapeHtml(name)}` : ''},</p><p>Your desktop trial request was sent to the studio admin. After they approve, a download link will arrive at ${escapeHtml(email)}.</p><p>— Stage Work Studio</p>`,
     });
   }
 
@@ -295,16 +297,16 @@ async function createRequest(req, res, body) {
     durable: wrote.durable,
     backend: wrote.backend || backend,
     message: ownerSend.emailed
-      ? 'Request sent. Check your inbox for a confirmation. The owner must approve before a download link is issued.'
+      ? 'Request sent. Check your inbox for a confirmation. The admin must approve before a download link is issued.'
       : ownerSend.configured
-        ? `Request queued. Email delivery failed: ${ownerSend.error || 'unknown'}. The owner can still approve in Settings → SaaS.`
-        : 'Request queued in SaaS admin. Set SPS_RESEND_API_KEY on the server to email the owner automatically.',
+        ? `Request queued. Email delivery failed: ${ownerSend.error || 'unknown'}. The admin can still approve in Settings → SaaS.`
+        : 'Request queued in SaaS admin. Set SPS_RESEND_API_KEY on the server to email the admin automatically.',
   });
 }
 
 async function decide(req, res, body, status) {
   if (!isSaasAdmin(body.actor)) {
-    return res.status(403).json({ success: false, error: 'Only the studio owner can approve or deny trial requests.' });
+    return res.status(403).json({ success: false, error: 'Only the studio admin can approve or deny trial requests.' });
   }
   const id = String(body.requestId || body.id || '').trim();
   if (!id) return res.status(400).json({ success: false, error: 'requestId required' });
@@ -336,8 +338,8 @@ async function decide(req, res, body, status) {
     requesterSend = await sendResend({
       to: row.email,
       subject: 'Stage Work Studio — desktop trial not approved',
-      text: `Hi${row.name ? ` ${row.name}` : ''},\n\nThe studio owner did not approve a desktop trial for ${row.email} at this time. You can request again later or write ${adminInbox()}.\n\n— Stage Work Studio`,
-      html: `<p>Hi${row.name ? ` ${escapeHtml(row.name)}` : ''},</p><p>The studio owner did not approve a desktop trial for ${escapeHtml(row.email)} at this time.</p><p>— Stage Work Studio</p>`,
+      text: `Hi${row.name ? ` ${row.name}` : ''},\n\nThe studio admin did not approve a desktop trial for ${row.email} at this time. You can request again later or write ${adminInbox()}.\n\n— Stage Work Studio`,
+      html: `<p>Hi${row.name ? ` ${escapeHtml(row.name)}` : ''},</p><p>The studio admin did not approve a desktop trial for ${escapeHtml(row.email)} at this time.</p><p>— Stage Work Studio</p>`,
     });
     row.requesterEmailed = Boolean(requesterSend.emailed);
   }
@@ -362,7 +364,7 @@ async function decide(req, res, body, status) {
 
 async function resendApproved(req, res, body) {
   if (!isSaasAdmin(body.actor)) {
-    return res.status(403).json({ success: false, error: 'Only the studio owner can resend download mail.' });
+    return res.status(403).json({ success: false, error: 'Only the studio admin can resend download mail.' });
   }
   const id = String(body.requestId || body.id || '').trim();
   const { state } = await readTrialState();

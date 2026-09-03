@@ -65,7 +65,7 @@ export default function DesktopTrialAdminSection() {
       </p>
       {meta ? (
         <p className="text-[10px] font-mono text-zinc-500 m-0">
-          Inbox {meta.adminInbox || 'Studio Owner'}
+          Inbox {meta.adminInbox || 'Studio Admin'}
           {meta.mailConfigured ? ' · Resend on' : ' · Resend off (SPS_RESEND_API_KEY)'}
           {meta.kvConfigured ? ' · KV durable' : ' · KV off (queue is local/fs only)'}
         </p>

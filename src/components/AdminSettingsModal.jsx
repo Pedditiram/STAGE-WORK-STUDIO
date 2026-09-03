@@ -563,13 +563,13 @@ export default function AdminSettingsModal({
       } catch (err) {}
       setIsAdminLoggedIn(true);
       setErrorMsg('');
-      setResetSuccessMsg('Unlocked via Owner email session (pedditiram@gmail.com). Set a strong Admin password below.');
+      setResetSuccessMsg('Unlocked via Admin email session (pedditiram@gmail.com). Set a strong Admin password below.');
       return;
     }
 
     if (!customConfigured) {
       setErrorMsg(
-        'No strong Admin password configured. Sign in as pedditiram@gmail.com (Owner) via the main Login, then reopen Admin Settings.'
+        'No strong Admin password configured. Sign in as pedditiram@gmail.com (Admin) via the main Login, then reopen Admin Settings.'
       );
       return;
     }
@@ -583,71 +583,62 @@ export default function AdminSettingsModal({
     const inputClean = recoveryEmailInput.trim().toLowerCase();
     const targetClean = authorizedEmail.trim().toLowerCase();
 
-    if (inputClean !== targetClean && inputClean !== 'pedditiram@gmail.com') {
-      setOtpError(`Access Denied. '${recoveryEmailInput}' is not the authorized admin email.`);
+    if (!inputClean || inputClean !== targetClean) {
+      setOtpError(`Please enter the exact authorized admin email: ${authorizedEmail}`);
       return;
     }
 
-    // Generate 6-digit security code — always keep in-UI so Owner is never locked out
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtpCode(code);
+    // Generate 6-digit security code — always keep in-UI so Admin is never locked out
+    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+    setGeneratedOtpCode(otpCode);
     setOtpSentSuccess(true);
+    setOtpError('');
 
-    // Best-effort Resend delivery when SPS_RESEND_API_KEY is configured on Vercel
     try {
-      const res = await fetch(studioApiUrl('/api/send-otp'), {
+      await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: inputClean || targetClean,
-          otp: code,
-          purpose: 'recovery',
-          authorizedEmail: targetClean
-        })
+        body: JSON.stringify({ email: targetClean, otp: otpCode }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (data?.emailed) {
-        setOtpError('');
-      } else if (data?.fallback) {
-        // In-UI OTP remains visible — no error; optional hint only
-      }
-    } catch (err) {
-      // Swallow — in-UI OTP is the authoritative fallback
+    } catch {
+      /* ignore */
     }
   };
 
   const handleVerifyOtpAndResetPass = (e) => {
     e.preventDefault();
     setOtpError('');
-    if (otpVerificationInput.trim() !== generatedOtpCode) {
-      setOtpError('Invalid 6-digit verification code. Please re-check.');
+    if (otpVerificationInput.trim() !== generatedOtpCode.trim()) {
+      setOtpError('Invalid OTP Code. Please re-enter the 6-digit code shown above.');
       return;
     }
 
     const newPassToSet = newPassAfterOtp.trim();
     if (!isStrongAdminPassword(newPassToSet)) {
-      setOtpError('New password must be at least 10 characters and not a common weak default (admin123, etc.).');
+      setOtpError(
+        'Password too weak. Must be at least 10 characters and cannot be a common default (admin, password, sps2026, 1234567890).'
+      );
       return;
     }
 
-    localStorage.setItem('sps_custom_admin_id', 'studio-owner');
+    localStorage.setItem('sps_custom_admin_id', 'studio-admin');
     localStorage.setItem('sps_custom_admin_password', newPassToSet);
-    setCustomAdminId('studio-owner');
+    setCustomAdminId('studio-admin');
     setCustomAdminPassword(newPassToSet);
-    setAdminIdInput('studio-owner');
+    setAdminIdInput('studio-admin');
     setAdminPasswordInput('');
-    setNewAdminId('studio-owner');
+    setNewAdminId('studio-admin');
 
     setIsForgotPassOpen(false);
     setOtpSentSuccess(false);
     setOtpVerificationInput('');
     setGeneratedOtpCode('');
     setNewPassAfterOtp('');
-    setResetSuccessMsg(`✓ Password updated for ${authorizedEmail}. New Admin ID: studio-owner`);
+    setResetSuccessMsg(`✓ Password updated for ${authorizedEmail}. New Admin ID: studio-admin`);
   };
 
   const handleClearWeakAdminDefaults = () => {
-    // Remove legacy weak credentials — Owner email session remains the unlock path
+    // Remove legacy weak credentials — Admin email session remains the unlock path
     localStorage.removeItem('sps_custom_admin_id');
     localStorage.removeItem('sps_custom_admin_password');
     setCustomAdminId('');
@@ -657,7 +648,7 @@ export default function AdminSettingsModal({
     setNewAdminId('');
     setErrorMsg('');
     setResetSuccessMsg(
-      '✓ Weak defaults cleared. Sign in as pedditiram@gmail.com (Owner), then set a strong Admin password.'
+      '✓ Weak defaults cleared. Sign in as pedditiram@gmail.com (Admin), then set a strong Admin password.'
     );
   };
 
@@ -1230,7 +1221,7 @@ export default function AdminSettingsModal({
       date: todayIso,
       dateFormatted: todayFormatted,
       time: nowStr,
-      user: 'Admin Owner',
+      user: 'Studio Admin',
       action: `Revoked access for ${userToRemove?.name || 'Collaborator'} (${userToRemove?.email || userToRemove?.phone || ''})`,
       status: 'system'
     };
@@ -1239,7 +1230,7 @@ export default function AdminSettingsModal({
 
   const handleRoleChange = (targetUser, newRole) => {
     if (String(targetUser?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com') {
-      alert('🔒 pedditiram@gmail.com is the default Admin/Owner and cannot be demoted.');
+      alert('🔒 pedditiram@gmail.com is the default Admin and cannot be demoted.');
       setAuthorizedUsers((prev) => persistAuthorizedUsersAndNotify(prev, { notify: false }));
       return;
     }
@@ -1273,7 +1264,7 @@ export default function AdminSettingsModal({
       date: todayIso,
       dateFormatted: todayFormatted,
       time: nowStr,
-      user: 'Admin Owner',
+      user: 'Studio Admin',
       action: `Changed access level for ${targetUser?.name || 'User'} to ${accessLevel}${isOwnerRole ? ' (create/delete enabled)' : ' (no create/delete)'}`,
       status: 'system'
     };
@@ -1796,7 +1787,7 @@ export default function AdminSettingsModal({
                 </div>
                 <h4 className="text-base font-bold text-white">Admin Authentication Required</h4>
                 <p className="text-xs text-zinc-400">
-                  Unlock with a strong custom Admin password, or sign in as Owner
+                  Unlock with a strong custom Admin password, or sign in as Admin
                   (<span className="text-cyan-300">pedditiram@gmail.com</span>) via main Login first — weak defaults are disabled.
                 </p>
               </div>
@@ -1827,7 +1818,7 @@ export default function AdminSettingsModal({
                       onClick={handleClearWeakAdminDefaults}
                       className="w-full py-1 px-2 rounded text-zinc-400 hover:text-zinc-200 text-[11px] font-mono underline"
                     >
-                      Clear weak legacy defaults (require Owner email + strong password)
+                      Clear weak legacy defaults (require Admin email + strong password)
                     </button>
                   </div>
                 </div>
@@ -1882,7 +1873,7 @@ export default function AdminSettingsModal({
                       <div className="p-2.5 rounded bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs space-y-1">
                         <p className="font-bold">✓ Security Verification Code generated for {authorizedEmail}!</p>
                         <p className="text-[10px] text-zinc-400">
-                          If Resend is configured on Vercel, the code was also emailed. In-UI OTP always works (Owner unlock path).
+                          If Resend is configured on Vercel, the code was also emailed. In-UI OTP always works (Admin unlock path).
                         </p>
                         <p className="font-mono bg-zinc-950 p-1 rounded text-center text-amber-300 text-sm tracking-widest font-bold">
                           OTP: {generatedOtpCode}
@@ -1941,7 +1932,7 @@ export default function AdminSettingsModal({
                   type="text"
                   value={adminIdInput}
                   onChange={(e) => setAdminIdInput(e.target.value)}
-                  placeholder="Custom Admin ID (optional if Owner session active)"
+                  placeholder="Custom Admin ID (optional if Admin session active)"
                   className="w-full bg-zinc-900 text-white border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1952,7 +1943,7 @@ export default function AdminSettingsModal({
                   type="password"
                   value={adminPasswordInput}
                   onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  placeholder="Strong custom password (optional if Owner session)"
+                  placeholder="Strong custom password (optional if Admin session)"
                   className="w-full bg-zinc-900 text-white border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1965,7 +1956,7 @@ export default function AdminSettingsModal({
                 Authenticate & Unlock Settings
               </button>
               <p className="text-[10px] text-zinc-500 text-center leading-relaxed">
-                Owner path: Login as pedditiram@gmail.com → open Settings → Authenticate (password optional while Owner session is active).
+                Admin path: Login as pedditiram@gmail.com → open Settings → Authenticate (password optional while Admin session is active).
               </p>
             </form>
           ) : (
@@ -2167,7 +2158,7 @@ export default function AdminSettingsModal({
                       <strong className="text-cyan-300">pedditiram@gmail.com</strong>
                     </div>
                     <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800/80 font-bold">
-                      ✓ Verified App Owner
+                      ✓ Verified Studio Admin
                     </span>
                   </div>
 
@@ -3329,7 +3320,7 @@ export default function AdminSettingsModal({
                                       className="accent-amber-500"
                                     />
                                     <span>
-                                      {level === 'Owner' && '👑 Owner — create / delete / full library'}
+                                      {level === 'Owner' && '👑 Admin — create / delete / full library'}
                                       {level === 'Editor' && '✏️ Editor — edit allotted projects only'}
                                       {level === 'Viewer' && '👁️ Viewer — read-only allotted projects'}
                                     </span>
@@ -3337,7 +3328,7 @@ export default function AdminSettingsModal({
                                 ))}
                               </div>
                               <p className="text-[10px] text-zinc-500 mt-1">
-                                Only <strong className="text-amber-300">Owner</strong> can create or delete projects.
+                                Only <strong className="text-amber-300">Admin</strong> can create or delete projects.
                               </p>
                             </div>
                           </div>
@@ -3497,9 +3488,9 @@ export default function AdminSettingsModal({
                                   {String(user.email || '').toLowerCase() === 'pedditiram@gmail.com' ? (
                                     <span
                                       className="text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold bg-amber-950 text-amber-300 border-amber-600 shadow-sm"
-                                      title="Default studio Admin / Owner — cannot be demoted"
+                                      title="Default studio Admin — cannot be demoted"
                                     >
-                                      👑 Admin / Owner (Default)
+                                      👑 Studio Admin (Default)
                                     </span>
                                   ) : (
                                     <select
@@ -3512,9 +3503,9 @@ export default function AdminSettingsModal({
                                             ? 'text-amber-300 border-amber-700'
                                             : 'text-emerald-300 border-emerald-700'
                                       }`}
-                                      title="Owner = create/delete; Editor = edit allotted; Viewer = read-only"
+                                      title="Admin = create/delete; Editor = edit allotted; Viewer = read-only"
                                     >
-                                      <option value="Owner">👑 Owner (Create / Delete)</option>
+                                      <option value="Owner">👑 Admin (Create / Delete)</option>
                                       <option value="Editor">✏️ Editor (Allotted Only)</option>
                                       <option value="Viewer">👁️ Viewer (Read-Only)</option>
                                     </select>

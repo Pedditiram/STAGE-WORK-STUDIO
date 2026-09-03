@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     if (action === 'grant-credits') {
       const actor = String(body.actor || '').trim().toLowerCase();
       if (actor !== OWNER_EMAIL) {
-        return res.status(403).json({ success: false, error: 'Only the studio owner can grant credits.' });
+        return res.status(403).json({ success: false, error: 'Only the studio admin can grant credits.' });
       }
       const pack = CREDIT_PACKS.find((p) => p.id === body.packId);
       const amount = pack ? pack.credits : Number(body.credits) || 0;
