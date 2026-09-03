@@ -25,8 +25,8 @@ export default function RequestAccessModal({ isOpen, onClose }) {
         body: JSON.stringify({ name, email, role, message }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok && !data?.success) {
-        setError(data?.error || 'Could not send the request.');
+      if (!res.ok || !data?.success) {
+        setError(data?.error || data?.message || 'Could not send the request.');
         return;
       }
       setDone(data?.message || 'Request sent from Stage Work Studio.');

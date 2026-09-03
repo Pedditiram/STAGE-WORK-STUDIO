@@ -140,22 +140,21 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      emailed: Boolean(ownerSend.emailed),
+      emailed: Boolean(adminSend.emailed),
       queued: true,
-      configured: Boolean(ownerSend.configured),
-      message: ownerSend.emailed
+      configured: Boolean(adminSend.configured),
+      message: adminSend.emailed
         ? 'Request sent. Check your inbox for a confirmation.'
-        : ownerSend.configured
-          ? `Request saved in the studio vault. Email delivery failed: ${ownerSend.error || 'unknown'}`
-          : 'Request saved in the studio vault. Set SPS_RESEND_API_KEY on the server to email the owner automatically.',
+        : adminSend.configured
+          ? `Request saved in the studio vault. Email delivery failed: ${adminSend.error || 'unknown'}`
+          : 'Request saved in the studio vault. Set SPS_RESEND_API_KEY on the server to email the admin automatically.',
     });
   } catch (e) {
-    return res.status(200).json({
-      success: true,
+    return res.status(500).json({
+      success: false,
       emailed: false,
       queued: false,
-      error: e.message || 'Send failed',
-      message: 'Could not send from the app. Try again in a moment.',
+      error: e.message || 'Could not send from the app. Try again in a moment.',
     });
   }
 }
