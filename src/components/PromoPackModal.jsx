@@ -209,10 +209,10 @@ export default function PromoPackModal({
   }, [draft, basePack, editMode, projectTitle]);
 
   useEffect(() => {
-    if (!isOpen || lookOnly) return undefined;
-    const t = window.setTimeout(() => persistPack(), 500);
+    if (!isOpen || lookOnly || !hasUnsavedChanges) return undefined;
+    const t = window.setTimeout(() => persistPack(), 800);
     return () => window.clearTimeout(t);
-  }, [isOpen, lookOnly, persistPack]);
+  }, [isOpen, lookOnly, hasUnsavedChanges, persistPack]);
 
   const handleRequestClose = useCallback(async () => {
     persistPack();

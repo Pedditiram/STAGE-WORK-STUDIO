@@ -462,7 +462,8 @@ export function compileMasterCinemaPromoPrompt({
   beatIndex = 0,
   projectTitle = 'Project',
   template = {},
-  aspectRatio = '2.39:1'
+  aspectRatio = '2.39:1',
+  shots = []
 } = {}) {
   const merged = mergePromoBeatOntoShot(shot, beat);
   if (!merged.sceneShotId && beat.sceneShotId) merged.sceneShotId = beat.sceneShotId;
@@ -478,7 +479,8 @@ export function compileMasterCinemaPromoPrompt({
       segment: beat.segmentLabel || 'Beat',
       aspect,
       vertical: !!template.vertical
-    }
+    },
+    shots: Array.isArray(shots) ? shots : []
   });
 
   return {
@@ -500,7 +502,8 @@ function buildPromptPack(projectTitle, template, beats, shots = [], aspectRatio 
       beatIndex: i,
       projectTitle,
       template,
-      aspectRatio
+      aspectRatio,
+      shots
     });
     return {
       index: i + 1,

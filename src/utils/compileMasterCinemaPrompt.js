@@ -512,11 +512,12 @@ export function compileMasterCinemaCompilerPrompt(
     constraintParts.push('Promo beat — one event, theatrical continuity, hard end state');
   }
   if (charLocks.length) constraintParts.unshift(...charLocks.map((l) => `Lock ${l}`));
-  lookSheetLines(shot, shots, shotIdx).forEach((line) => constraintParts.unshift(line));
-  continuityStateLines(shot, shots, shotIdx, { projectTitle }).forEach((line) =>
+  const safeShots = Array.isArray(shots) ? shots : [];
+  lookSheetLines(shot, safeShots, shotIdx).forEach((line) => constraintParts.unshift(line));
+  continuityStateLines(shot, safeShots, shotIdx, { projectTitle }).forEach((line) =>
     constraintParts.unshift(line)
   );
-  const bridgedNote = Array.isArray(shots) ? bridgeLine(shot, shots, shotIdx) : '';
+  const bridgedNote = bridgeLine(shot, safeShots, shotIdx);
   if (bridgedNote) constraintParts.unshift(bridgedNote);
 
   // Compact narrative paragraph (also used as imagePrompt / 3D stage context)

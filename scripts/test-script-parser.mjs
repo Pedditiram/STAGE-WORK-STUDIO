@@ -48,6 +48,7 @@ const {
   splitScreenplayForLlmParse,
   closeUnterminatedJsonStrings,
   isParseAbortError,
+  fetchWithTimeout,
   ensureShotDurationCraft,
   synthesizeFullAppElementsFromScript,
   classifyLlmFailureCode,
@@ -95,6 +96,7 @@ try {
   assert(safeParseJsonArray('{"shots":[{"a":1}]}')?.length === 1, 'wrapped shots object');
   assert(safeParseJsonArray('{"data":{"shots":[{"a":1}]}}')?.[0]?.a === 1, 'nested data.shots');
   assert(safeParseJsonArray('{"result":[{"a":1}]}')?.[0]?.a === 1, 'result array wrapper');
+  assert(safeParseJsonArray('```json\n{"payload":{"data":{"shots":[{"a":7}]}}}\n```')?.[0]?.a === 7, 'fenced payload.data.shots');
   assert(
     Array.isArray(safeParseJsonArray('[{"sceneShotId":"SC01_SH01","sceneSynopsis":"cut off')) &&
       safeParseJsonArray('[{"sceneShotId":"SC01_SH01","sceneSynopsis":"cut off')[0].sceneShotId === 'SC01_SH01',
@@ -258,21 +260,39 @@ The fort is just beyond the next hill.`;
   const numberedShots = await parseRawScriptToShots(numbered);
   assert(numberedShots.some((s) => /^SC12_/.test(s.sceneShotId)), 'production slug 12 maps to SC12');
   assert(numberedShots.some((s) => /^SC14_/.test(s.sceneShotId)), 'production slug 14 maps to SC14');
+  const dottedNum = `12. INT. HOUSE - DAY\n\nDust on the floor.\n\n12.INT. KITCHEN - DAY\n\nA kettle ticks.\n`;
+  assert(looksLikeScreenplayForParse(dottedNum), '12. INT and glued 12.INT are screenplay');
+  const dottedShots = await parseRawScriptToShots(dottedNum);
+  assert(dottedShots.some((s) => /^SC12_/.test(s.sceneShotId)), '12. INT maps to SC12');
+  assert(dottedShots.some((s) => /kettle|KITCHEN|Dust/i.test(JSON.stringify(s))), 'glued 12.INT still yields action');
   const withCut = `INT. ROOM - DAY\n\nRAMA waits.\n\nCUT TO:\n\nEXT. YARD - DAY\n\nSITA waits.\n`;
   const cutShots = await parseRawScriptToShots(withCut);
   assert(!cutShots.some((s) => /^CUT TO/i.test(String(s.actionEnvContext || ''))), 'CUT TO is not a Matrix shot');
   assert(cutShots.some((s) => /^SC02_/.test(s.sceneShotId)), 'slug after CUT TO is still a new scene');
+  const fadeBlack = `INT. ROOM - DAY\n\nRAMA waits.\n\nFADE TO BLACK.\n\nEXT. YARD - DAY\n\nSITA waits.\n`;
+  const fadeShots = await parseRawScriptToShots(fadeBlack);
+  assert(!fadeShots.some((s) => /FADE TO BLACK/i.test(String(s.actionEnvContext || ''))), 'FADE TO BLACK is not a Matrix shot');
+  const voCue = `RAMA (V.O.)\nThe forest remembers.\n\nSITA (O.S.)\nHold the gate.\n`;
+  assert(isFountainCharacterCue('RAMA (V.O.)'), 'V.O. cue is a speaker');
+  const voShots = await parseRawScriptToShots(voCue);
+  assert(voShots.some((s) => /RAMA|forest remembers/i.test(JSON.stringify(s))), 'V.O. dialogue lands in crafts');
+  const intExt = `INT/EXT. PORCH - NIGHT\n\nRain on the boards.\n`;
+  assert(looksLikeScreenplayForParse(intExt), 'INT/EXT is a screenplay slug');
+  const intExtShots = await parseRawScriptToShots(intExt);
+  assert(intExtShots.length >= 1 && intExtShots.some((s) => /Rain|PORCH|boards/i.test(JSON.stringify(s))), 'INT/EXT slug parses');
   const incompleteSlug = `INT.\n\nSomeone waits in the dark.\n`;
   const incompleteShots = await parseRawScriptToShots(incompleteSlug);
   assert(incompleteShots.length >= 1, 'incomplete INT. still yields a shot');
   assert(incompleteShots.every((s) => s.sceneShotId && s.shotDurationAndImages), 'incomplete slug still has id+duration');
-  const chrome = `EXT. ROAD - DAY\n\n/* producer note: skip this */\n[[draft note]]\n2.\nThe her-\nmitage door hangs open.\n\n(MORE)\n`;
+  const chrome = `EXT. ROAD - DAY\n\n/* producer note: skip this */\n[[draft note]]\n2.\n- 12 -\n(12)\nPage 3 of 40\nThe her- \n mitage door hangs open.\n\n(MORE)\n`;
   const scrubbed = scrubScreenplayChrome(prepareScriptTextForParse(chrome));
   assert(!/producer note/i.test(scrubbed), 'boneyard stripped');
   assert(!/draft note/i.test(scrubbed), 'fountain notes stripped');
+  assert(!/page\s+3/i.test(scrubbed), 'page N of M stripped');
+  assert(!/^\s*-?\s*12\s*-?\s*$/m.test(scrubbed), 'dash page number stripped');
   assert(/hermitage/i.test(scrubbed), 'PDF hyphen wrap rejoined');
   const chromeShots = await parseRawScriptToShots(chrome);
-  assert(!chromeShots.some((s) => /producer note|draft note|\(MORE\)/i.test(JSON.stringify(s))), 'chrome is not a Matrix shot');
+  assert(!chromeShots.some((s) => /producer note|draft note|\(MORE\)|Page 3/i.test(JSON.stringify(s))), 'chrome is not a Matrix shot');
   assert(chromeShots.some((s) => /hermitage/i.test(JSON.stringify(s))), 'hyphen-rejoined action survives');
   const twoInt = `INT FOREST - DAY\nRAMA waits.\n\nINT HERMITAGE - NIGHT\nSITA waits.\n`;
   const twoShots = await parseRawScriptToShots(twoInt);
@@ -323,8 +343,12 @@ The fort is just beyond the next hill.`;
     'bilingual names/dialogue survive'
   );
   store.set('sps_library_shots_sentinel', 'KEEP');
+  store.set('sps_current_shots', 'KEEP');
+  store.set('sps_library_shots', 'KEEP');
   await parseRawScriptToShots(SAMPLE);
   assert(store.get('sps_library_shots_sentinel') === 'KEEP', 'parse must not write Matrix library keys');
+  assert(store.get('sps_current_shots') === 'KEEP', 'parse must not write sps_current_shots');
+  assert(store.get('sps_library_shots') === 'KEEP', 'parse must not write sps_library_shots');
   const brokenFdx = `<?xml version="1.0"?><FinalDraft DocumentType="Script"><Content><Paragraph Type="Action"><Text>Unclosed`;
   assert(/Unclosed/i.test(prepareScriptTextForParse(brokenFdx)), 'broken FDX still yields text');
 
@@ -366,6 +390,44 @@ The fort is just beyond the next hill.`;
   store.delete('sps_api_key');
   store.delete('sps_llm_provider');
   globalThis.fetch = origFetch;
+  console.log('OK');
+
+  console.log('--- timeout ≠ abort ---');
+  const hangFetch = origFetch;
+  globalThis.fetch = () => new Promise(() => {});
+  let timeoutErr = null;
+  try {
+    await fetchWithTimeout('https://example.invalid/llm', { method: 'POST', body: '{}' }, 60);
+  } catch (e) {
+    timeoutErr = e;
+  }
+  assert(timeoutErr?.code === 'LLM_TIMEOUT', `expected LLM_TIMEOUT got ${timeoutErr?.code}`);
+  assert(!isParseAbortError(timeoutErr), 'timeout must not classify as user abort');
+  const userAc = new AbortController();
+  const userP = fetchWithTimeout('https://example.invalid/llm', { signal: userAc.signal }, 5000);
+  userAc.abort();
+  let userAbortErr = null;
+  try {
+    await userP;
+  } catch (e) {
+    userAbortErr = e;
+  }
+  assert(isParseAbortError(userAbortErr) && userAbortErr.code === 'PARSE_ABORTED', 'user abort stays PARSE_ABORTED');
+  store.set('sps_api_key', 'test-not-a-real-key');
+  store.set('sps_llm_provider', 'google_gemini');
+  const conceptAc = new AbortController();
+  const conceptP = generateScriptFromConcept('a forest oath', 3, { signal: conceptAc.signal });
+  conceptAc.abort();
+  let conceptHangAborted = false;
+  try {
+    await conceptP;
+  } catch (e) {
+    conceptHangAborted = isParseAbortError(e);
+  }
+  assert(conceptHangAborted, 'concept generate with key does not invent fallback after abort');
+  store.delete('sps_api_key');
+  store.delete('sps_llm_provider');
+  globalThis.fetch = hangFetch;
   console.log('OK');
 
   console.log('\nALL PARSER DRY-RUN CHECKS PASSED');

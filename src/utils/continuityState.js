@@ -87,8 +87,13 @@ export function resolveCharacterKeysForShot(shot, registry = null) {
 
 export function resolveStateAtShot(charKey, charProfile, shots, shotIndex) {
   let state = baseStateFromCharacter(charProfile);
-  for (let i = 0; i <= shotIndex; i++) {
-    const patch = getPatchFromShot(shots[i], charKey);
+  const shotList = Array.isArray(shots) ? shots : [];
+  if (!shotList.length || shotIndex == null || shotIndex < 0) return state;
+  const max = Math.min(shotIndex, shotList.length - 1);
+  for (let i = 0; i <= max; i++) {
+    const s = shotList[i];
+    if (!s) continue;
+    const patch = getPatchFromShot(s, charKey);
     if (patch) {
       CONTINUITY_FIELDS.forEach((field) => {
         if (patch[field] != null && String(patch[field]).trim()) {
@@ -113,20 +118,22 @@ export function resolveContinuityForShot({
   projectTitle = '',
   spine = null
 } = {}) {
-  const spineNode = resolveShotSpine(shot, shotIndex, shots, spine || readActiveProductionSpine());
+  const safeShots = Array.isArray(shots) ? shots : [];
+  const safeIndex = typeof shotIndex === 'number' && Number.isFinite(shotIndex) ? shotIndex : 0;
+  const spineNode = resolveShotSpine(shot, safeIndex, safeShots, spine || readActiveProductionSpine());
   const entries = resolveCharacterKeysForShot(shot).map(({ key, char }) => {
     const prevState =
-      shotIndex > 0
-        ? resolveStateAtShot(key, char, shots, shotIndex - 1)
+      safeIndex > 0
+        ? resolveStateAtShot(key, char, safeShots, safeIndex - 1)
         : baseStateFromCharacter(char);
-    const state = resolveStateAtShot(key, char, shots, shotIndex);
+    const state = resolveStateAtShot(key, char, safeShots, safeIndex);
     const patch = getPatchFromShot(shot, key);
     const deltas = diffContinuityStates(prevState, state);
     const implicitChange = deltas.length > 0 && !patch;
     return {
       key,
-      name: char.name || char.tag || key,
-      tag: char.tag || '',
+      name: char?.name || char?.tag || key,
+      tag: char?.tag || '',
       prevState,
       state,
       patch,

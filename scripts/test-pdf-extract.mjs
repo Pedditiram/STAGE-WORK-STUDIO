@@ -89,8 +89,10 @@ const {
   lightSanitizePdfExtractedText,
   extractPagesTextFromPdfObj,
   parseRawScriptToShots,
-  getLastParseMeta
+  getLastParseMeta,
+  scrubScreenplayChrome
 } = await import(pathToFileURL(bundle).href);
+const { joinPdfTextItems } = await import(pathToFileURL(path.join(root, 'src/utils/repairTeluguPdfText.js')).href);
 
 try {
   console.log('--- garbage detectors ---');
@@ -118,6 +120,17 @@ try {
   assert(fs.readdirSync(publicCmaps).length > 50, 'public/cmaps looks empty');
   assert(fs.existsSync(publicFonts), 'public/standard_fonts missing');
   assert(fs.readdirSync(publicFonts).length > 5, 'public/standard_fonts looks empty');
+  console.log('OK');
+
+  console.log('--- hyphen wrap + page numbers ---');
+  const wrapItems = [
+    { str: 'The her-', transform: [1, 0, 0, 1, 50, 700] },
+    { str: 'mitage door hangs open.', transform: [1, 0, 0, 1, 50, 680] }
+  ];
+  const joinedWrap = joinPdfTextItems(wrapItems);
+  assert(/hermitage/i.test(joinedWrap), `hyphen wrap join got: ${joinedWrap}`);
+  const paged = scrubScreenplayChrome('EXT. ROAD - DAY\n\n- 12 -\nPage 2 of 9\nDust hangs.\n');
+  assert(!/Page 2/i.test(paged) && /Dust hangs/i.test(paged), 'PDF page chrome stripped');
   console.log('OK');
 
   console.log('--- pdf.js extract minimal PDF (legacy + local cMaps) ---');
