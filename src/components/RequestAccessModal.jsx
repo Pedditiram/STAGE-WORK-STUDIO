@@ -47,7 +47,7 @@ export default function RequestAccessModal({ isOpen, onClose }) {
         <div className="sps-modal-head">
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] m-0" style={{ color: 'var(--sps-gold)' }}>{PRODUCT}</p>
-            <h3 className="text-sm font-semibold m-0 font-display" style={{ color: 'var(--sps-text)' }}>Request access</h3>
+            <h3 className="text-sm font-semibold m-0 font-display" style={{ color: 'var(--sps-text)' }}>Sign up</h3>
           </div>
           <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />

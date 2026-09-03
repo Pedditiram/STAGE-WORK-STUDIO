@@ -965,6 +965,7 @@ export default function App() {
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
   const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginInitialMode, setLoginInitialMode] = useState('signin');
   const [isDesktopTrialOpen, setIsDesktopTrialOpen] = useState(false);
 
   useEffect(() => {
@@ -3870,7 +3871,10 @@ export default function App() {
 
           {activeView === 'demo' && (
             <DemoModeView
-              onOpenLogin={() => setIsLoginModalOpen(true)}
+              onOpenLogin={(mode = 'signin') => {
+                setLoginInitialMode(mode);
+                setIsLoginModalOpen(true);
+              }}
             />
           )}
           
@@ -4277,15 +4281,18 @@ export default function App() {
       <LoginModal
         isOpen={isLoginModalOpen}
         overlayMode={loginOverlayMode}
+        initialMode={loginInitialMode}
         onClose={() => {
           setIsLoginModalOpen(false);
           setLoginOverlayMode('default');
+          setLoginInitialMode('signin');
         }}
         setIsAdminLoggedIn={handleSetAdminLoggedIn}
         onOpenAppDemo={() => setIsStudioTourOpen(true)}
         onOpenDesktopTrial={() => {
           setIsLoginModalOpen(false);
           setLoginOverlayMode('default');
+          setLoginInitialMode('signin');
           setIsDesktopTrialOpen(true);
         }}
       />

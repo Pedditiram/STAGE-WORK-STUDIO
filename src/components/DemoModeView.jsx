@@ -325,11 +325,11 @@ export default function DemoModeView({ onOpenLogin }) {
               </button>
               <span className="sps-pres-meta text-[11px] ml-1">← →  ·  space</span>
               <span className="flex-1" />
-              <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.()}>
-                Login
+              <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.('signin')}>
+                Sign in
               </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => setAccessOpen(true)}>
-                Request access
+              <button type="button" className="sps-btn text-xs" onClick={() => (onOpenLogin ? onOpenLogin('signup') : setAccessOpen(true))}>
+                Sign up
               </button>
               <button type="button" className="sps-btn text-xs" onClick={() => setTrialOpen(true)}>
                 Download desktop trial
