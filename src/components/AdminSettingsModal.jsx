@@ -7,7 +7,7 @@ import {
   exportAppSettingsToFile, importAppSettingsFromFile,
   saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
-import { STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS } from '../utils/projectPermissions';
+import { PRIMARY_ADMIN_EMAILS, STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS } from '../utils/projectPermissions';
 import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import GoogleDrivePanel from './GoogleDrivePanel';
