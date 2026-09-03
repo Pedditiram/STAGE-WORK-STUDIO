@@ -67,4 +67,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Platform info
   platform: process.platform,
+
+  // Fullscreen controls
+  setFullScreen: (flag) => ipcRenderer.invoke('window:setFullScreen', flag),
+  toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),
+  isFullScreen: () => ipcRenderer.invoke('window:isFullScreen'),
 });

@@ -558,8 +558,8 @@ export default function App() {
   const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
   const [projectConsoleInitialVault, setProjectConsoleInitialVault] = useState('director');
 
-  // App-Wide 100% Native Fullscreen State
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // App-Wide 100% Native Fullscreen State — starts in full screen at launch
+  const [isFullscreen, setIsFullscreen] = useState(true);
   const [headerMinimized, setHeaderMinimized] = useState(() => {
     try {
       if (localStorage.getItem('sps_pin_app_header') !== 'false') return false;
@@ -614,6 +614,13 @@ export default function App() {
     const targetState = typeof enable === 'boolean' ? enable : !isFullscreen;
     setIsFullscreen(targetState);
 
+    // Sync native window fullscreen if running in desktop Electron app
+    if (window.electronAPI?.setFullScreen) {
+      try {
+        await window.electronAPI.setFullScreen(targetState);
+      } catch (err) {}
+    }
+
     try {
       if (targetState) {
         const elem = document.documentElement;
@@ -633,6 +640,47 @@ export default function App() {
       }
     } catch (e) {}
   };
+
+  // Automatically trigger Cmd+Enter full screen at launch (desktop app + webapp)
+  useEffect(() => {
+    // 1. Electron Desktop App native window fullscreen
+    if (window.electronAPI?.setFullScreen) {
+      window.electronAPI.setFullScreen(true).catch(() => {});
+    }
+
+    // 2. Web browser: attempt native fullscreen immediately
+    const triggerNativeFullscreen = async () => {
+      try {
+        const elem = document.documentElement;
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (elem.requestFullscreen) {
+            await elem.requestFullscreen();
+          } else if (elem.webkitRequestFullscreen) {
+            await elem.webkitRequestFullscreen();
+          }
+        }
+      } catch (err) {
+        // Browser requires a user gesture on initial page load
+      }
+    };
+
+    triggerNativeFullscreen();
+
+    // 3. Fallback to trigger native browser fullscreen on first user interaction
+    const onFirstUserInteraction = () => {
+      triggerNativeFullscreen();
+    };
+
+    window.addEventListener('click', onFirstUserInteraction, { once: true });
+    window.addEventListener('keydown', onFirstUserInteraction, { once: true });
+    window.addEventListener('pointerdown', onFirstUserInteraction, { once: true });
+
+    return () => {
+      window.removeEventListener('click', onFirstUserInteraction);
+      window.removeEventListener('keydown', onFirstUserInteraction);
+      window.removeEventListener('pointerdown', onFirstUserInteraction);
+    };
+  }, []);
 
   // Sync native fullscreen exit
   useEffect(() => {

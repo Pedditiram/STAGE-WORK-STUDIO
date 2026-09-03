@@ -161,6 +161,7 @@ function createWindow() {
     titleBarStyle: 'default',
     backgroundColor: '#0b0a09',
     autoHideMenuBar: true,
+    fullscreen: true,
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       nodeIntegration: false,
@@ -213,6 +214,9 @@ function createWindow() {
   loadApp();
 
   mainWindow.once('ready-to-show', () => {
+    try {
+      mainWindow.setFullScreen(true);
+    } catch (err) {}
     mainWindow.show();
     mainWindow.focus();
   });
@@ -372,7 +376,31 @@ function buildMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-// ─── IPC Handlers (for file save/open dialogs) ────────────────────────
+// ─── IPC Handlers (Window Controls & File Dialogs) ───────────────────
+ipcMain.handle('window:setFullScreen', async (_, flag) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setFullScreen(Boolean(flag));
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+ipcMain.handle('window:toggleFullScreen', async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const next = !mainWindow.isFullScreen();
+    mainWindow.setFullScreen(next);
+    return next;
+  }
+  return false;
+});
+
+ipcMain.handle('window:isFullScreen', async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
 ipcMain.handle('dialog:saveFile', async (_, { defaultName, content }) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     defaultPath: defaultName || 'sps_project.json',
