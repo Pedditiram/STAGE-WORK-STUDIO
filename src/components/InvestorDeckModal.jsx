@@ -20,7 +20,7 @@ import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { createZipArchive } from '../utils/zipUtils';
 import { saveExportBlob } from '../utils/saveExportFile';
 
-const OWNER_EMAIL = 'pedditiram@gmail.com';
+const OWNER_EMAIL = 'admin@stageworkstudio.com';
 const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
 const DECK_SLIDES = [

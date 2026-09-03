@@ -223,11 +223,13 @@ export default function Header({
       }
     }
 
-    if (isAdminLoggedIn && isStudioAdmin(getCurrentUserEmail() || 'pedditiram@gmail.com')) {
+    if (isAdminLoggedIn && isStudioAdmin(getCurrentUserEmail() || 'admin@stageworkstudio.com')) {
+      const activeEmail = getCurrentUserEmail() || 'admin@stageworkstudio.com';
+      const isPedditi = activeEmail.toLowerCase() === 'pedditiram@gmail.com';
       return {
-        name: 'Pedditi Ram',
-        designation: 'Lead Director',
-        email: 'pedditiram@gmail.com',
+        name: isPedditi ? 'Pedditi Ram' : 'Studio Admin',
+        designation: isPedditi ? 'Lead Director & Cinematographer' : 'Studio Admin & Executive Producer',
+        email: activeEmail,
         role: 'Admin',
         isStudioAdmin: true,
         allottedProjects: ['All Studio Projects (Full Access)']

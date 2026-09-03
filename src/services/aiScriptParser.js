@@ -69,11 +69,12 @@ const LLM_TIMEOUT_MS = 55000;
 const LLM_MAX_RETRIES = 2;
 
 export function isParseAbortError(err) {
+  if (!err) return false;
+  if (err.code === 'LLM_TIMEOUT' || err.name === 'TimeoutError') return false;
   return Boolean(
-    err &&
-      (err.name === 'AbortError' ||
-        err.code === 'PARSE_ABORTED' ||
-        /aborted|The operation was aborted/i.test(String(err.message || '')))
+    err.name === 'AbortError' ||
+      err.code === 'PARSE_ABORTED' ||
+      /aborted|The operation was aborted/i.test(String(err.message || ''))
   );
 }
 
@@ -86,15 +87,26 @@ export function assertParseNotAborted(signal) {
   }
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_TIMEOUT_MS) {
+function makeParseAbortError() {
+  const err = new Error('Parse stopped by user.');
+  err.name = 'AbortError';
+  err.code = 'PARSE_ABORTED';
+  return err;
+}
+
+function makeLlmTimeoutError(timeoutMs) {
+  const err = new Error(`LLM request timed out after ${Math.round(timeoutMs / 1000)}s`);
+  err.name = 'TimeoutError';
+  err.code = 'LLM_TIMEOUT';
+  return err;
+}
+
+/** Exported so tests can prove timeout ≠ user abort without a 55s wait. */
+export async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_TIMEOUT_MS) {
   const external = options.signal;
-  if (external?.aborted) {
-    const err = new Error('Parse stopped by user.');
-    err.name = 'AbortError';
-    err.code = 'PARSE_ABORTED';
-    throw err;
-  }
+  if (external?.aborted) throw makeParseAbortError();
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timedOut = false;
   const onExternalAbort = () => {
     try {
       controller?.abort();
@@ -107,6 +119,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_TIMEOUT_MS) {
   }
   const timer = controller
     ? setTimeout(() => {
+        timedOut = true;
         try {
           controller.abort();
         } catch (_) {
@@ -120,13 +133,17 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = LLM_TIMEOUT_MS) {
       signal: controller ? controller.signal : external
     });
     return res;
+  } catch (e) {
+    if (external?.aborted) throw makeParseAbortError();
+    if (timedOut) throw makeLlmTimeoutError(timeoutMs);
+    throw e;
   } finally {
     if (timer) clearTimeout(timer);
     if (external && controller) external.removeEventListener('abort', onExternalAbort);
   }
 }
 
-async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, retries = LLM_MAX_RETRIES } = {}) {
+export async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, retries = LLM_MAX_RETRIES } = {}) {
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -142,16 +159,12 @@ async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, r
         return res;
       }
     } catch (e) {
-      if (isParseAbortError(e) || options.signal?.aborted) {
-        const err = new Error('Parse stopped by user.');
-        err.name = 'AbortError';
-        err.code = 'PARSE_ABORTED';
-        throw err;
+      if (options.signal?.aborted || (isParseAbortError(e) && e?.code === 'PARSE_ABORTED')) {
+        throw makeParseAbortError();
       }
-      lastErr = e;
-      if (e?.name === 'AbortError') {
-        lastErr = new Error(`LLM request timed out after ${Math.round(timeoutMs / 1000)}s`);
-        lastErr.code = 'LLM_TIMEOUT';
+      lastErr = e?.code === 'LLM_TIMEOUT' ? e : e;
+      if (e?.name === 'AbortError' && e?.code !== 'PARSE_ABORTED') {
+        lastErr = makeLlmTimeoutError(timeoutMs);
       }
     }
     if (attempt < retries) {
@@ -164,13 +177,15 @@ async function fetchWithRetry(url, options = {}, { timeoutMs = LLM_TIMEOUT_MS, r
 }
 
 /** Extract and parse JSON array from LLM text; repair truncated trailing commas / fences. */
-function unwrapShotArrayFromObject(obj) {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-  const bags = [obj.shots, obj.data, obj.result, obj.items, obj.breakdown];
+function unwrapShotArrayFromObject(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) || depth > 3) return null;
+  const bags = [obj.shots, obj.data, obj.result, obj.items, obj.breakdown, obj.payload, obj.response, obj.content];
   for (const inner of bags) {
     if (Array.isArray(inner) && inner.length) return inner;
-    if (inner && typeof inner === 'object' && Array.isArray(inner.shots) && inner.shots.length) {
-      return inner.shots;
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+      if (Array.isArray(inner.shots) && inner.shots.length) return inner.shots;
+      const nested = unwrapShotArrayFromObject(inner, depth + 1);
+      if (nested) return nested;
     }
   }
   return null;
@@ -646,7 +661,7 @@ export function looksLikeUsableScriptText(text) {
 }
 
 const HEURISTIC_SLUGLINE_RE =
-  /(?:^|\n)\s*(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|సీన్|దృశ్యం|SCENE\s+\d+|SC\.?\s*\d+)/gi;
+  /(?:^|\n)\s*(?:\d{1,3}[.)]?\s*)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|సీన్|దృశ్యం|SCENE\s+\d+|SC\.?\s*\d+)/gi;
 
 /**
  * Cap offline heuristic cards so garbage PDFs / bible dumps cannot flood the Matrix preview.
@@ -713,6 +728,7 @@ export async function extractPagesTextFromPdfObj(pdf, { signal } = {}) {
         const heavy = sanitizePdfExtractedText(pageText);
         cleanPageText = safeTrim(heavy) || lightSanitizePdfExtractedText(pageText);
       }
+      cleanPageText = scrubScreenplayChrome(cleanPageText);
       if (safeTrim(cleanPageText)) {
         extractedPagesText.push(cleanPageText);
       } else if (pageTextItems > 0 && pageRawChars === 0) {
@@ -1059,6 +1075,7 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
     } catch (e) {
       if (isParseAbortError(e) || options.signal?.aborted) throw e;
       lastError = e?.message || String(e);
+      if (e?.code === 'LLM_TIMEOUT') lastFatal = false;
       console.warn('Gemini API endpoint attempt failed:', lastError);
       if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(lastError)) {
         lastFatal = true;
@@ -1074,13 +1091,13 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
   throw err;
 }
 
-/** INT/EXT (optional leading scene number) plus Fountain transitions. */
+/** INT/EXT (optional leading scene number, glued `12.INT` OK) plus Fountain transitions. */
 const SLUGLINE_START =
-  /^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|FADE IN|FADE OUT|CUT TO|SMASH CUT|DISSOLVE TO|MATCH CUT)\b/i;
+  /^(?:\d{1,3}[.)]?\s*)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|FADE IN|FADE OUT|CUT TO|SMASH CUT|DISSOLVE TO|MATCH CUT)\b/i;
 const TRANSITION_ONLY_RE =
-  /^(?:FADE (?:IN|OUT)|CUT TO|SMASH CUT|DISSOLVE TO|MATCH CUT|BACK TO(?: SCENE)?)\s*[:.]?\s*$/i;
+  /^(?:FADE (?:IN|OUT|TO BLACK|TO WHITE)|CUT TO(?: BLACK)?|SMASH CUT|DISSOLVE TO(?: BLACK)?|MATCH CUT|WIPE TO|BACK TO(?: SCENE)?)\s*[:.]?\s*$/i;
 const NUMBERED_SCENE_SLUG_RE =
-  /^\s*(?:SC(?:ENE)?\.?\s*)?(\d{1,3})\s*[.)]?\s*(?:INT|EXT|I\/E|EST)\b/i;
+  /^\s*(?:SC(?:ENE)?\.?\s*)?(\d{1,3})\s*[.)]?\s*(?:INT|EXT|I\/E|INT\/EXT|EST)\b/i;
 const FOUNTAIN_NOT_CUE_RE =
   /^(MORE|CONT'?D|CONTINUED|THE END|END OF|OMITTED|NIGHT|DAY|DAWN|DUSK|LATER|PRESENT|CAST)$/i;
 
@@ -1109,9 +1126,11 @@ export function scrubScreenplayChrome(text) {
   s = s.replace(/\u00AD/g, '');
   s = s.replace(/\/\*[\s\S]*?\*\//g, '\n');
   s = s.replace(/\[\[[\s\S]*?\]\]/g, '');
-  s = s.replace(/([A-Za-z\u0C00-\u0C7F])-\n([A-Za-z\u0C00-\u0C7F])/g, '$1$2');
+  s = s.replace(/([A-Za-z\u0C00-\u0C7F])-\s*\n\s*([A-Za-z\u0C00-\u0C7F])/g, '$1$2');
   s = s.replace(/^[ \t]*={3,}[ \t]*$/gm, '');
-  s = s.replace(/^[ \t]*\d{1,3}\.?[ \t]*$/gm, '');
+  s = s.replace(/^[ \t]*[-–—]?\s*\d{1,3}\s*[-–—][ \t]*$/gm, '');
+  s = s.replace(/^[ \t]*\(\s*\d{1,3}\s*\)[ \t]*$/gm, '');
+  s = s.replace(/^[ \t]*(?:page\s+)?\d{1,3}(?:\s+of\s+\d{1,3})?[.)]?[ \t]*$/gim, '');
   s = s.replace(/^[ \t]*\(?(?:MORE|CONTINUED)\)?[ \t]*:?[ \t]*$/gim, '');
   return s.replace(/\n{3,}/g, '\n\n');
 }
@@ -1149,7 +1168,7 @@ export function splitScreenplayForLlmParse(scriptText, maxChars = LLM_PARSE_CHUN
   if (!text) return [];
   if (text.length <= maxChars) return [text];
   const sceneBits = text.split(
-    /(?=\n(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|SCENE\s+\d+|SC\.\s*\d+|FADE IN)\b)/i
+    /(?=\n(?:\d{1,3}[.)]?\s*)?(?:INT\.?|EXT\.?|INT\/EXT\.?|I\/E\.?|EST\.?|SCENE\s+\d+|SC\.\s*\d+|FADE IN)\b)/i
   );
   const parts = [];
   let buf = '';
@@ -1246,7 +1265,7 @@ export function isFountainCharacterCue(line) {
 export function looksLikeScreenplayForParse(text) {
   const t = safeTrim(text);
   if (!t) return false;
-  if (/^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t)) return true;
+  if (/^(?:\d{1,3}[.)]?\s*)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t)) return true;
   if (/^(సీన్|దృశ్యం)\s*\d/m.test(t)) return true;
   if (/\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t)) return true;
   const cues = t.split(/\n/).filter((line) => isFountainCharacterCue(line)).length;
@@ -1260,7 +1279,7 @@ export function isPremiseBrief(text) {
   if (!t) return false;
   if (looksLikeScreenplayForParse(t)) return false;
   const words = t.split(/\s+/).filter(Boolean).length;
-  const hasHeadings = /^(?:\d{1,3}\.?\s+)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t);
+  const hasHeadings = /^(?:\d{1,3}[.)]?\s*)?(?:INT\.?|EXT\.?|INT\/EXT|I\/E|EST\.?|FADE IN)/im.test(t);
   const hasShotTags = /\bSC\d{2}_SH|\bSHOT\s*\d+|\[SHOT\s*S/i.test(t);
   if (hasHeadings && t.length > 2800) return false;
   if (hasShotTags && t.length > 1800) return false;
@@ -1981,7 +2000,7 @@ function smartSegmentTextIntoShots(scriptText) {
   }
 
   // Regex splitting by Scene Headers, Shot Headers, or Paragraph Breaks
-  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:\d{1,3}\.?\s+)?(?:EXT\.?|INT\.?|I\/E\.?|EST\.?)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
+  const segmentRegex = /(?:\n\s*)+(?=(?:SC\.\s*\d+|SC\s*\d+|SCENE\s*\d+|సీన్\s*\d+|దృశ్యం\s*\d+|BLOCK\s*[-:\s]?\d+|BLOCK\b|PART\s*\d+|1st\s+half|2nd\s+half|INTERMISSION|(?:\d{1,3}[.)]?\s*)?(?:EXT\.?|INT\.?|INT\/EXT\.?|I\/E\.?|EST\.?)|SHOT\s*\d+|SHOT\b|SH\d+|S\d{1,2}-[A-Z0-9]+|\[SHOT|\[Camera:))/i;
 
   let rawSegments = cleanScript.split(segmentRegex).map(b => safeTrim(b)).filter(Boolean);
 
@@ -2046,7 +2065,7 @@ function parseRawScriptFallback(scriptText) {
     }
 
     // Detect Scene Header (e.g. SCENE 1, SC 01, EXT. DANDAKA, INT. ROOM, సీన్ 1, 1. EXT., ACT I, ACT II)
-    const sceneHeaderMatch = cleanBlock.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+)|సీన్\s*(\d+)|దృశ్యం\s*(\d+)|BLOCK\s*[-:\s]?(\d+)|ACT\s*([I|V|X\d]+)|(?:EXT\.?|INT\.?)\s*([A-Za-z0-9_\s-]+))/i);
+    const sceneHeaderMatch = cleanBlock.match(/(?:SC\.\s*(\d+)|SC\s*(\d+)|SCENE\s*(\d+)|సీన్\s*(\d+)|దృశ్యం\s*(\d+)|BLOCK\s*[-:\s]?(\d+)|ACT\s*([I|V|X\d]+)|(?:EXT\.?|INT\.?|INT\/EXT\.?|I\/E\.?)\s*([A-Za-z0-9_\s-]+))/i);
     const numberedSlugMatch = cleanBlock.match(NUMBERED_SCENE_SLUG_RE);
 
     let isHeaderBlockOnly = false;
@@ -2072,7 +2091,7 @@ function parseRawScriptFallback(scriptText) {
         }
       } else if (!textLower.startsWith('shot') && !textLower.startsWith('sh') && !textLower.startsWith('s0') && !textLower.startsWith('s1')) {
         // New EXT/INT slug — with or without the conventional period. Do not bump SC on the first slug.
-        if (cleanBlock.length < 80 && /(?:^|\n)\s*(?:int|ext)\b/i.test(cleanBlock)) {
+        if (cleanBlock.length < 80 && /(?:^|\n)\s*(?:int|ext|i\/e|int\/ext)\b/i.test(cleanBlock)) {
           intExtSlugCount += 1;
           if (intExtSlugCount > 1) {
             currentSceneNum++;
@@ -2318,8 +2337,10 @@ Return ONLY valid JSON array without markdown code blocks.`;
   if (apiKey) {
     try {
       const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
+      assertParseNotAborted(signal);
       if (response && response.ok) {
         const data = await response.json();
+        assertParseNotAborted(signal);
         const responseText = extractGeminiResponseText(data);
         const parsed = safeParseJsonArray(responseText);
         if (parsed?.length) {
@@ -2327,11 +2348,12 @@ Return ONLY valid JSON array without markdown code blocks.`;
         }
       }
     } catch (e) {
-      if (isParseAbortError(e)) throw e;
+      if (isParseAbortError(e) || signal?.aborted) throw makeParseAbortError();
       console.warn("Google Gemini concept generator fallback:", e);
     }
   }
 
+  assertParseNotAborted(signal);
   return generateScriptFromConceptFallback(conceptPrompt, shotCount).map((s, idx) => normalizeShotTo26Crafts(s, idx, conceptPrompt));
 }
 

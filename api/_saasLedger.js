@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-export const OWNER_EMAIL = 'pedditiram@gmail.com';
+export const OWNER_EMAIL = 'admin@stageworkstudio.com';
+export const OWNER_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+export function isOwner(email) {
+  const clean = String(email || '').trim().toLowerCase();
+  return clean === OWNER_EMAIL || clean === 'pedditiram@gmail.com' || OWNER_EMAILS.includes(clean);
+}
 
 export const CREDIT_PACKS = [
   { id: 'pack_100', credits: 100, usd: 9, label: '100 credits' },
@@ -53,10 +58,10 @@ export function getOrCreateRow(email) {
     ? list[idx]
     : {
         email: clean,
-        plan: clean === OWNER_EMAIL ? 'enterprise' : 'studio',
+        plan: isOwner(clean) ? 'enterprise' : 'studio',
         status: 'ACTIVE',
         apiMode: 'byok',
-        credits: clean === OWNER_EMAIL ? 999999 : 25000,
+        credits: isOwner(clean) ? 999999 : 25000,
         devices: [],
         heartbeats: [],
       };
@@ -72,7 +77,7 @@ export function saveRow(list, idx, row) {
 
 export function checkServerRate(email, planId) {
   const clean = String(email || '').trim().toLowerCase();
-  if (clean === OWNER_EMAIL) return { ok: true };
+  if (isOwner(clean)) return { ok: true };
   const max = PLAN_RATE[planId] || 8;
   const now = Date.now();
   const arr = (rateHits.get(clean) || []).filter((t) => now - t < 60_000);
@@ -86,7 +91,7 @@ export function checkServerRate(email, planId) {
 
 export function consumeServerCredits(email, n = 1) {
   const { list, idx, row, clean } = getOrCreateRow(email);
-  if (clean === OWNER_EMAIL) return { ok: true, credits: row.credits, skipped: true };
+  if (isOwner(clean)) return { ok: true, credits: row.credits, skipped: true };
   if (row.apiMode !== 'managed') return { ok: true, credits: row.credits, skipped: true };
   const cost = Math.max(1, Math.floor(Number(n) || 1));
   if ((row.credits || 0) < cost) return { ok: false, error: 'No managed credits' };
@@ -117,7 +122,7 @@ export function grantFromStripeSession(session) {
 export function activateDesktopTrialLicense(email) {
   const { list, idx, row, clean } = getOrCreateRow(email);
   const isNew = idx < 0;
-  if (clean === OWNER_EMAIL) {
+  if (isOwner(clean)) {
     row.plan = 'enterprise';
     row.status = 'ACTIVE';
     row.desktopTrialApprovedAt = new Date().toISOString();

@@ -274,5 +274,5 @@ export function joinPdfTextItems(items, { yBreak = 3.5 } = {}) {
     if (y !== null) lastY = y;
   }
   flush();
-  return lines.join('\n');
+  return lines.join('\n').replace(/([A-Za-z\u0C00-\u0C7F])-\s*\n\s*([A-Za-z\u0C00-\u0C7F])/g, '$1$2');
 }

@@ -1064,7 +1064,7 @@ export default function App() {
         return;
       }
       if (!email) {
-        markCollaboratorSession('pedditiram@gmail.com');
+        markCollaboratorSession('admin@stageworkstudio.com');
       }
       try {
         sessionStorage.setItem('sps_session_authed', '1');

@@ -71,7 +71,7 @@ function adminInbox() {
 function isSaasAdmin(email) {
   const clean = normalizeEmail(email);
   if (!clean) return false;
-  if (clean === OWNER_EMAIL) return true;
+  if (clean === OWNER_EMAIL || clean === 'admin@stageworkstudio.com' || clean === 'pedditiram@gmail.com') return true;
   if (clean === adminInbox()) return true;
   const extra = String(process.env.SPS_SAAS_ADMIN_EMAILS || '')
     .split(',')

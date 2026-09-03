@@ -98,8 +98,14 @@ export const CREDIT_PACKS = [
 ];
 
 const RATE_KEY = 'sps_saas_rate';
-const OWNER_EMAIL = 'pedditiram@gmail.com';
-export { OWNER_EMAIL };
+const OWNER_EMAIL = 'admin@stageworkstudio.com';
+const OWNER_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+export { OWNER_EMAIL, OWNER_EMAILS };
+
+export function isOwner(email) {
+  const clean = String(email || '').trim().toLowerCase();
+  return clean === OWNER_EMAIL || clean === 'pedditiram@gmail.com' || OWNER_EMAILS.includes(clean);
+}
 
 export const BYOK_PROVIDERS = [
   { id: 'openai', label: 'OpenAI' },
@@ -162,7 +168,7 @@ export function saveAllLicenses(list, { silent = false } = {}) {
 }
 
 function defaultLicense(email) {
-  const owner = email === OWNER_EMAIL;
+  const owner = isOwner(email);
   return {
     email,
     plan: owner ? 'enterprise' : 'studio',
@@ -219,7 +225,7 @@ export function registerThisDevice(email) {
   let row = devices.find((d) => d.id === deviceId);
   if (!row) {
     const activeCount = devices.filter((d) => d.status !== 'DISABLED').length;
-    if (activeCount >= plan.devices && clean !== OWNER_EMAIL) {
+    if (activeCount >= plan.devices && !isOwner(clean)) {
       return { ok: false, error: `Device limit reached for ${plan.label} (${plan.devices}).` };
     }
     row = {
@@ -323,7 +329,7 @@ export function addCredits(email, amount) {
 export function consumeManagedCredit(email, n = 1) {
   const clean = String(email || sessionEmail()).trim().toLowerCase();
   const cost = Math.max(1, Math.floor(Number(n) || 1));
-  if (clean === OWNER_EMAIL) return { ok: true, credits: getLicense(clean).credits, skipped: true };
+  if (isOwner(clean)) return { ok: true, credits: getLicense(clean).credits, skipped: true };
   const lic = getLicense(clean);
   if (lic.apiMode !== 'managed') return { ok: true, credits: lic.credits, skipped: true };
   if ((lic.credits || 0) < cost) {
@@ -336,7 +342,7 @@ export function consumeManagedCredit(email, n = 1) {
 
 export function checkRateLimit(email, kind = 'generate') {
   const clean = String(email || sessionEmail()).trim().toLowerCase();
-  if (clean === OWNER_EMAIL) return { ok: true, remaining: 99, max: 99 };
+  if (isOwner(clean)) return { ok: true, remaining: 99, max: 99 };
   const plan = getPlan(getLicense(clean).plan);
   const max = kind === 'generate' ? (plan.rateGeneratePerMin || 8) : 30;
   const now = Date.now();
@@ -360,7 +366,7 @@ export function managedCreditStatus(email) {
   const lic = getLicense(clean);
   const mode = resolveApiMode(clean);
   const credits = Number(lic.credits) || 0;
-  if (mode !== 'managed' || clean === OWNER_EMAIL) {
+  if (mode !== 'managed' || isOwner(clean)) {
     return { relevant: false, credits, level: 'ok', message: '', mode };
   }
   if (credits <= 0) {
@@ -390,7 +396,7 @@ export function assertCanGenerate(email, { consumeRate = false } = {}) {
     return { ok: false, message: 'Generation is off for this license. Admin can enable it in Settings → SaaS.' };
   }
   const lic = getLicense(clean);
-  if (resolveApiMode(clean) === 'managed' && clean !== OWNER_EMAIL && (lic.credits || 0) <= 0) {
+  if (resolveApiMode(clean) === 'managed' && !isOwner(clean) && (lic.credits || 0) <= 0) {
     return { ok: false, message: 'No managed credits. Buy a pack in Settings → SaaS, or switch to BYOK in API keys.' };
   }
   if (!consumeRate) return { ok: true, credits: lic.credits };
@@ -459,7 +465,7 @@ export function setApiMode(email, mode) {
 
 export function canUseSaasFeature(feature, email) {
   const clean = String(email || '').trim().toLowerCase();
-  if (clean === OWNER_EMAIL) return true;
+  if (isOwner(clean)) return true;
   const lic = getLicense(clean);
   if (lic.status === 'DISABLED' || lic.status === 'REVOKED') return false;
   if (lic.flags && lic.flags[feature] === false) return false;
@@ -470,7 +476,7 @@ export function canUseSaasFeature(feature, email) {
 
 export function canUseSaasConsole(consoleId, email) {
   const clean = String(email || '').trim().toLowerCase();
-  if (clean === OWNER_EMAIL) return true;
+  if (isOwner(clean)) return true;
   const lic = getLicense(clean);
   if (lic.status === 'DISABLED' || lic.status === 'REVOKED') return false;
   const plan = getPlan(lic.plan);

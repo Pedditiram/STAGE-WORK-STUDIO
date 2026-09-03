@@ -11,7 +11,8 @@
  * so the client can keep showing the OTP in-UI (Owner never locked out).
  */
 
-const PRIMARY_ADMIN_EMAIL = 'pedditiram@gmail.com';
+const PRIMARY_ADMIN_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+const PRIMARY_ADMIN_EMAIL = 'admin@stageworkstudio.com';
 
 function resendApiKey() {
   return process.env.SPS_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
@@ -66,16 +67,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'OTP must be a 6-digit code' });
     }
 
-    if (purpose === 'recovery' && to !== PRIMARY_ADMIN_EMAIL && to !== normalizeEmail(body.authorizedEmail)) {
-      // Soft guard — still allow Owner recovery path
-      if (to !== PRIMARY_ADMIN_EMAIL) {
-        return res.status(403).json({
-          success: false,
-          emailed: false,
-          fallback: true,
-          error: 'Recovery OTP can only be emailed to the authorized admin email'
-        });
-      }
+    if (purpose === 'recovery' && !PRIMARY_ADMIN_EMAILS.includes(to) && to !== normalizeEmail(body.authorizedEmail)) {
+      return res.status(403).json({
+        success: false,
+        emailed: false,
+        fallback: true,
+        error: 'Recovery OTP can only be emailed to the authorized admin email'
+      });
     }
 
     if (!emailConfigured()) {

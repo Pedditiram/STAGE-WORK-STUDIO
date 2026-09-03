@@ -14,7 +14,11 @@ import { isGuestPlayTitle, getGuestPlayProject } from './guestPlayground';
 import { canUseSaasConsole } from './saasControl';
 import { PRODUCTION_ORIGIN } from './runtimeEnv';
 
-export const PRIMARY_ADMIN_EMAILS = ['pedditiram@gmail.com'];
+export const DEFAULT_ADMIN_EMAIL = 'admin@stageworkstudio.com';
+export const PRIMARY_ADMIN_EMAILS = [
+  'admin@stageworkstudio.com',
+  'pedditiram@gmail.com'
+];
 
 /** Job-title designations only — never imply create/delete rights */
 export const STUDIO_DESIGNATIONS = [
@@ -715,16 +719,19 @@ export function markCollaboratorSession(email) {
 }
 
 /** Default Owner/Admin profile for the primary studio email. */
+/** Default Owner/Admin profile for the primary studio email. */
 export function getPrimaryAdminProfile() {
   return {
-    name: 'Pedditi Ram',
-    designation: 'Lead Director',
-    email: 'pedditiram@gmail.com',
+    name: 'Studio Admin',
+    designation: 'Studio Admin & Executive Producer',
+    email: 'admin@stageworkstudio.com',
     role: 'Owner',
     isStudioAdmin: true,
     status: 'Active',
     allottedProjects: ['All Studio Projects (Full Access)'],
     verifiedAt: 'Primary Admin (default)',
+    budgetAccess: true,
+    allProjectAccess: true,
   };
 }
 
@@ -749,45 +756,80 @@ export function purgeWeakAdminCredentials() {
 }
 
 /**
- * Always keep pedditiram@gmail.com as Owner/Admin in the collaborators list.
+ * Always keep admin@stageworkstudio.com and pedditiram@gmail.com as Owner/Admin in the collaborators list.
  * Call whenever loading or syncing authorized users in Admin Settings.
  */
 export function ensurePrimaryAdminUser(users) {
-  const list = Array.isArray(users) ? [...users] : [];
-  const primary = 'pedditiram@gmail.com';
-  const idx = list.findIndex(
-    (u) => String(u?.email || '').trim().toLowerCase() === primary
-  );
-  const defaults = getPrimaryAdminProfile();
+  let list = Array.isArray(users) ? [...users] : [];
 
-  if (idx === -1) {
-    list.unshift(defaults);
-  } else {
-    list[idx] = {
-      ...defaults,
-      ...list[idx],
-      email: primary,
-      name: list[idx].name || defaults.name,
+  const requiredAdmins = [
+    {
+      name: 'Studio Admin',
+      designation: 'Studio Admin & Executive Producer',
+      email: 'admin@stageworkstudio.com',
       role: 'Owner',
       isStudioAdmin: true,
-      status: list[idx].status === 'Suspended' ? 'Active' : (list[idx].status || 'Active'),
-      allottedProjects:
-        Array.isArray(list[idx].allottedProjects) && list[idx].allottedProjects.length > 0
-          ? list[idx].allottedProjects
-          : defaults.allottedProjects,
-    };
+      status: 'Active',
+      allottedProjects: ['All Studio Projects (Full Access)'],
+      verifiedAt: 'Primary Admin (default)',
+      budgetAccess: true,
+      allProjectAccess: true,
+    },
+    {
+      name: 'Pedditi Ram',
+      designation: 'Lead Director & Cinematographer',
+      email: 'pedditiram@gmail.com',
+      role: 'Owner',
+      isStudioAdmin: true,
+      status: 'Active',
+      allottedProjects: ['All Studio Projects (Full Access)'],
+      verifiedAt: 'Studio Admin',
+      budgetAccess: true,
+      allProjectAccess: true,
+    },
+  ];
 
-    // Keep primary admin first in Settings
-    if (idx !== 0) {
-      const [adminUser] = list.splice(idx, 1);
-      list.unshift(adminUser);
+  for (const admin of requiredAdmins) {
+    const idx = list.findIndex(
+      (u) => String(u?.email || '').trim().toLowerCase() === admin.email
+    );
+    if (idx === -1) {
+      list.push(admin);
+    } else {
+      list[idx] = {
+        ...admin,
+        ...list[idx],
+        email: admin.email,
+        name: list[idx].name || admin.name,
+        role: 'Owner',
+        isStudioAdmin: true,
+        status: 'Active',
+        allottedProjects:
+          Array.isArray(list[idx].allottedProjects) && list[idx].allottedProjects.length > 0
+            ? list[idx].allottedProjects
+            : admin.allottedProjects,
+        budgetAccess: true,
+        allProjectAccess: true,
+      };
     }
+  }
+
+  // Ensure admin@stageworkstudio.com is first, pedditiram@gmail.com is second
+  const adminIdx = list.findIndex(u => String(u?.email || '').trim().toLowerCase() === 'admin@stageworkstudio.com');
+  if (adminIdx > 0) {
+    const [u] = list.splice(adminIdx, 1);
+    list.unshift(u);
+  }
+  const ramIdx = list.findIndex(u => String(u?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com');
+  if (ramIdx > 1) {
+    const [u] = list.splice(ramIdx, 1);
+    list.splice(1, 0, u);
   }
 
   // Clear stale isStudioAdmin on Editor/Viewer; keep it only for Owner
   for (let i = 0; i < list.length; i++) {
     const email = String(list[i]?.email || '').trim().toLowerCase();
-    if (email === primary) continue;
+    if (PRIMARY_ADMIN_EMAILS.includes(email)) continue;
     list[i] = sanitizeAuthorizedUserFlags(list[i]);
   }
 

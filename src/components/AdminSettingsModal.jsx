@@ -454,7 +454,7 @@ export default function AdminSettingsModal({
       const email = String(localStorage.getItem('sps_authorized_user_email') || '')
         .trim()
         .toLowerCase();
-      return email === 'pedditiram@gmail.com';
+      return email === 'admin@stageworkstudio.com' || email === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(email);
     } catch (e) {
       return false;
     }
@@ -504,7 +504,7 @@ export default function AdminSettingsModal({
 
   // Authorized Admin Email for Stage Work Studio
   const [authorizedEmail, setAuthorizedEmail] = useState(() => {
-    return localStorage.getItem('sps_authorized_admin_email') || 'pedditiram@gmail.com';
+    return localStorage.getItem('sps_authorized_admin_email') || 'admin@stageworkstudio.com';
   });
 
   // Password Recovery via Email OTP state
@@ -525,10 +525,11 @@ export default function AdminSettingsModal({
     const storedPass = localStorage.getItem('sps_custom_admin_password') || '';
     const customConfigured = Boolean(storedId && storedPass && isStrongAdminPassword(storedPass));
 
-    // Path A: Owner email session already active (Gmail login as pedditiram@gmail.com)
+    // Path A: Owner email session already active
     if (ownerEmailSessionActive() && !idInput && !passInput) {
       try {
-        localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        const currentEmail = localStorage.getItem('sps_authorized_user_email') || 'admin@stageworkstudio.com';
+        localStorage.setItem('sps_authorized_user_email', currentEmail);
         localStorage.setItem('sps_is_admin_logged_in', 'true');
         window.dispatchEvent(new Event('sps_collaborators_updated'));
       } catch (err) {}
@@ -538,14 +539,15 @@ export default function AdminSettingsModal({
       return;
     }
 
-    // Path B: Strong custom Admin ID + password only (weak defaults / hardcoded bypasses removed)
+    // Path B: Strong custom Admin ID + password only
     if (
       customConfigured &&
       idInput.toLowerCase() === storedId.toLowerCase() &&
       passInput === storedPass
     ) {
       try {
-        localStorage.setItem('sps_authorized_user_email', 'pedditiram@gmail.com');
+        const currentEmail = localStorage.getItem('sps_authorized_user_email') || 'admin@stageworkstudio.com';
+        localStorage.setItem('sps_authorized_user_email', currentEmail);
         localStorage.setItem('sps_is_admin_logged_in', 'true');
         window.dispatchEvent(new Event('sps_collaborators_updated'));
       } catch (err) {}
@@ -563,13 +565,13 @@ export default function AdminSettingsModal({
       } catch (err) {}
       setIsAdminLoggedIn(true);
       setErrorMsg('');
-      setResetSuccessMsg('Unlocked via Admin email session (pedditiram@gmail.com). Set a strong Admin password below.');
+      setResetSuccessMsg('Unlocked via Admin email session. Set a strong Admin password below.');
       return;
     }
 
     if (!customConfigured) {
       setErrorMsg(
-        'No strong Admin password configured. Sign in as pedditiram@gmail.com (Admin) via the main Login, then reopen Admin Settings.'
+        'No strong Admin password configured. Sign in as admin@stageworkstudio.com via the main Login, then reopen Admin Settings.'
       );
       return;
     }
@@ -583,7 +585,8 @@ export default function AdminSettingsModal({
     const inputClean = recoveryEmailInput.trim().toLowerCase();
     const targetClean = authorizedEmail.trim().toLowerCase();
 
-    if (!inputClean || inputClean !== targetClean) {
+    const isAllowedAdmin = inputClean === targetClean || inputClean === 'admin@stageworkstudio.com' || inputClean === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(inputClean);
+    if (!inputClean || !isAllowedAdmin) {
       setOtpError(`Please enter the exact authorized admin email: ${authorizedEmail}`);
       return;
     }
@@ -1201,8 +1204,9 @@ export default function AdminSettingsModal({
   };
 
   const handleRemoveCollaborator = (userToRemove) => {
-    if (String(userToRemove?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com') {
-      alert('🔒 Cannot remove the primary admin (pedditiram@gmail.com).');
+    const em = String(userToRemove?.email || '').trim().toLowerCase();
+    if (em === 'admin@stageworkstudio.com' || em === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(em)) {
+      alert('🔒 Cannot remove the primary studio admin.');
       return;
     }
     setAuthorizedUsers(prev =>
@@ -1229,8 +1233,9 @@ export default function AdminSettingsModal({
   };
 
   const handleRoleChange = (targetUser, newRole) => {
-    if (String(targetUser?.email || '').trim().toLowerCase() === 'pedditiram@gmail.com') {
-      alert('🔒 pedditiram@gmail.com is the default Admin and cannot be demoted.');
+    const em = String(targetUser?.email || '').trim().toLowerCase();
+    if (em === 'admin@stageworkstudio.com' || em === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(em)) {
+      alert('🔒 Studio Admin accounts are permanent and cannot be demoted.');
       setAuthorizedUsers((prev) => persistAuthorizedUsersAndNotify(prev, { notify: false }));
       return;
     }
@@ -1857,7 +1862,7 @@ export default function AdminSettingsModal({
                           type="email"
                           value={recoveryEmailInput}
                           onChange={(e) => setRecoveryEmailInput(e.target.value)}
-                          placeholder="pedditiram@gmail.com"
+                          placeholder={authorizedEmail || 'admin@stageworkstudio.com'}
                           className="w-full bg-zinc-950 text-white border border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-mono"
                         />
                       </div>
@@ -2155,7 +2160,7 @@ export default function AdminSettingsModal({
                     <div className="flex items-center gap-2">
                       <Server className="w-4 h-4 text-cyan-400 shrink-0" />
                       <span className="text-zinc-400">Authorized Recovery Email:</span>
-                      <strong className="text-cyan-300">pedditiram@gmail.com</strong>
+                      <strong className="text-cyan-300">{authorizedEmail || 'admin@stageworkstudio.com'}</strong>
                     </div>
                     <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800/80 font-bold">
                       ✓ Verified Studio Admin
@@ -3484,11 +3489,11 @@ export default function AdminSettingsModal({
                                     ))}
                                   </select>
 
-                                  {/* Access Level — pedditiram@gmail.com locked as Owner/Admin */}
-                                  {String(user.email || '').toLowerCase() === 'pedditiram@gmail.com' ? (
+                                  {/* Access Level — Primary Studio Admins locked as Owner/Admin */}
+                                  {(PRIMARY_ADMIN_EMAILS.includes(String(user.email || '').toLowerCase()) || String(user.email || '').toLowerCase() === 'admin@stageworkstudio.com' || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com') ? (
                                     <span
                                       className="text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold bg-amber-950 text-amber-300 border-amber-600 shadow-sm"
-                                      title="Default studio Admin — cannot be demoted"
+                                      title="Primary Studio Admin — cannot be demoted"
                                     >
                                       👑 Studio Admin (Default)
                                     </span>
@@ -3583,8 +3588,8 @@ export default function AdminSettingsModal({
                                     <label className="flex items-center gap-1.5 text-[10px] font-bold cursor-pointer" style={{ color: 'var(--sps-text)' }}>
                                       <input
                                         type="checkbox"
-                                        checked={user.budgetAccess === true || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
-                                        disabled={String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
+                                        checked={user.budgetAccess === true || PRIMARY_ADMIN_EMAILS.includes(String(user.email || '').toLowerCase()) || String(user.email || '').toLowerCase() === 'admin@stageworkstudio.com' || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
+                                        disabled={PRIMARY_ADMIN_EMAILS.includes(String(user.email || '').toLowerCase()) || String(user.email || '').toLowerCase() === 'admin@stageworkstudio.com' || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com'}
                                         onChange={(e) => {
                                           const on = e.target.checked;
                                           setUserConsoleEnabled(userEmail, 'budget', on);
@@ -3709,7 +3714,7 @@ export default function AdminSettingsModal({
                                 {isSuspended ? '🔴 Access Suspended' : '🟢 Active Access'}
                               </button>
 
-                              {String(user.email || '').toLowerCase() !== 'pedditiram@gmail.com' && (
+                              {!(PRIMARY_ADMIN_EMAILS.includes(String(user.email || '').toLowerCase()) || String(user.email || '').toLowerCase() === 'admin@stageworkstudio.com' || String(user.email || '').toLowerCase() === 'pedditiram@gmail.com') && (
                               <button
                                 type="button"
                                 onClick={() => {

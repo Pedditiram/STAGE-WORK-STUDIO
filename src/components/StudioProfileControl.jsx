@@ -27,7 +27,7 @@ function readAccount() {
   const guest = isGuestSession(email);
   const name = (
     profile?.name
-    || (email === 'pedditiram@gmail.com' ? 'Studio Admin' : '')
+    || (isStudioAdmin(email) ? 'Studio Admin' : '')
     || (email ? email.split('@')[0] : '')
     || (guest ? 'Guest' : 'Studio')
   ).trim();

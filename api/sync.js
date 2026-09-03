@@ -54,8 +54,9 @@ const JSONBLOB_CHAT_URL = 'https://jsonblob.com/api/jsonBlob/019ff04a-bc89-7b5a-
 /** Dedicated presence blob — must NOT share the rooms hub (size + wipe risk). */
 const JSONBLOB_PRESENCE_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-7ff2-7974-93c5-6c3abaa2cf10';
 const MAX_CHAT_MESSAGES = 400;
-const PRESENCE_TTL_MS = 120000;
-const PRIMARY_ADMIN_EMAIL = 'pedditiram@gmail.com';
+const DEFAULT_ADMIN_EMAIL = 'admin@stageworkstudio.com';
+const PRIMARY_ADMIN_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+const PRIMARY_ADMIN_EMAIL = 'admin@stageworkstudio.com';
 const FETCH_TIMEOUT_MS = 12000;
 const JSONBLOB_CIRCUIT_MS = 20000;
 /** Circuit breaker — stop thrashing JSONBlob PUTs after 429 / hard failures. */
@@ -413,34 +414,51 @@ function filterDeletedProjects(projects, deleted = memoryDeletedTitles) {
 
 function ensurePrimaryAdmin(users) {
   const list = Array.isArray(users) ? users.map((u) => ({ ...u })) : [];
-  const idx = list.findIndex(
-    (u) => String(u?.email || '').trim().toLowerCase() === PRIMARY_ADMIN_EMAIL
-  );
-  const defaults = {
-    name: 'Pedditi Ram',
-    designation: 'Lead Director',
-    email: PRIMARY_ADMIN_EMAIL,
-    role: 'Owner',
-    isStudioAdmin: true,
-    status: 'Active',
-    allottedProjects: ['All Studio Projects (Full Access)'],
-    verifiedAt: 'Primary Admin (default)'
-  };
-  if (idx === -1) {
-    list.unshift(defaults);
-  } else {
-    list[idx] = {
-      ...defaults,
-      ...list[idx],
-      email: PRIMARY_ADMIN_EMAIL,
+  const required = [
+    {
+      name: 'Studio Admin',
+      designation: 'Studio Admin & Executive Producer',
+      email: 'admin@stageworkstudio.com',
       role: 'Owner',
       isStudioAdmin: true,
-      status: list[idx].status === 'Suspended' ? 'Active' : list[idx].status || 'Active'
-    };
-    if (idx !== 0) {
-      const [admin] = list.splice(idx, 1);
-      list.unshift(admin);
+      status: 'Active',
+      allottedProjects: ['All Studio Projects (Full Access)'],
+      verifiedAt: 'Primary Admin (default)'
+    },
+    {
+      name: 'Pedditi Ram',
+      designation: 'Lead Director & Cinematographer',
+      email: 'pedditiram@gmail.com',
+      role: 'Owner',
+      isStudioAdmin: true,
+      status: 'Active',
+      allottedProjects: ['All Studio Projects (Full Access)'],
+      verifiedAt: 'Studio Admin'
     }
+  ];
+
+  for (const adm of required) {
+    const idx = list.findIndex(
+      (u) => String(u?.email || '').trim().toLowerCase() === adm.email
+    );
+    if (idx === -1) {
+      list.push(adm);
+    } else {
+      list[idx] = {
+        ...adm,
+        ...list[idx],
+        email: adm.email,
+        role: 'Owner',
+        isStudioAdmin: true,
+        status: list[idx].status === 'Suspended' ? 'Active' : list[idx].status || 'Active'
+      };
+    }
+  }
+
+  const aIdx = list.findIndex(u => String(u?.email || '').trim().toLowerCase() === 'admin@stageworkstudio.com');
+  if (aIdx > 0) {
+    const [u] = list.splice(aIdx, 1);
+    list.unshift(u);
   }
   return list;
 }

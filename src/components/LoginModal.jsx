@@ -145,9 +145,9 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
       localStorage.removeItem('sps_user_manually_logged_out');
 
-      // Owner path: pedditiram@gmail.com email session (no weak password bypass required)
-      if (PRIMARY_ADMIN_EMAILS.includes(cleanEmail) || cleanEmail === 'pedditiram@gmail.com') {
-        completeLogin('pedditiram@gmail.com', 'Logged in as Primary Admin & Studio Admin.');
+      // Admin path: admin@stageworkstudio.com or pedditiram@gmail.com
+      if (PRIMARY_ADMIN_EMAILS.includes(cleanEmail) || cleanEmail === 'admin@stageworkstudio.com' || cleanEmail === 'pedditiram@gmail.com') {
+        completeLogin(cleanEmail, 'Logged in as Studio Admin (Full studio control unlocked).');
         return;
       }
 
@@ -239,7 +239,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
       idInput.toLowerCase() === storedId.toLowerCase() &&
       passInput === storedPass
     ) {
-      completeLogin('pedditiram@gmail.com', 'Admin authentication successful. Full studio control unlocked.');
+      completeLogin('admin@stageworkstudio.com', 'Admin authentication successful. Full studio control unlocked.');
       return;
     }
 
@@ -422,11 +422,10 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                       setErrorMsg('');
                       setSuccessMsg('');
                       localStorage.removeItem('sps_user_manually_logged_out');
+                      const isAdmin = PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'admin@stageworkstudio.com' || rememberedEmail === 'pedditiram@gmail.com';
                       completeLogin(
-                        rememberedEmail === 'pedditiram@gmail.com' || PRIMARY_ADMIN_EMAILS.includes(rememberedEmail)
-                          ? 'pedditiram@gmail.com'
-                          : rememberedEmail,
-                        `Continuing as ${PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Admin' : rememberedEmail}`
+                        rememberedEmail,
+                        `Continuing as ${isAdmin ? 'Studio Admin' : rememberedEmail}`
                       );
                     }}
                     className="sps-btn sps-btn-primary w-full flex items-center justify-between"
@@ -435,7 +434,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                     <div className="flex items-center gap-2 min-w-0">
                       <UserCheck className="w-4 h-4 shrink-0" />
                       <span className="truncate font-semibold text-xs">
-                        Sign in as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Admin' : rememberedEmail}
+                        Sign in as {PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'admin@stageworkstudio.com' || rememberedEmail === 'pedditiram@gmail.com' ? 'Studio Admin' : rememberedEmail}
                       </span>
                     </div>
                     <ArrowRight className="w-4 h-4 shrink-0" />

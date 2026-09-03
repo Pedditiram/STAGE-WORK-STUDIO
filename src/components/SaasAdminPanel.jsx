@@ -36,7 +36,7 @@ import { estimateLocalStorageUsage, pruneLocalStoragePressure } from '../utils/s
 export default function SaasAdminPanel() {
   const users = getAuthorizedUsers();
   const actor = getCurrentUserEmail();
-  const [email, setEmail] = useState(() => users[0]?.email || 'pedditiram@gmail.com');
+  const [email, setEmail] = useState(() => users[0]?.email || 'admin@stageworkstudio.com');
   const [note, setNote] = useState('');
   const [tick, bump] = useState(0);
   const [syncHealth, setSyncHealth] = useState(() => readCloudSyncHealth());
@@ -330,7 +330,7 @@ export default function SaasAdminPanel() {
                   setNote('Stripe checkout opened.');
                   return;
                 }
-                if (String(actor).toLowerCase() === 'pedditiram@gmail.com') {
+                if (String(actor).toLowerCase() === 'admin@stageworkstudio.com' || String(actor).toLowerCase() === 'pedditiram@gmail.com' || isStudioAdmin(actor)) {
                   addCredits(email, pack.credits);
                   const grant = await grantCreditPack(email, pack.id, actor);
                   setNote(grant.success

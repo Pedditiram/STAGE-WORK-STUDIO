@@ -19,7 +19,7 @@ import StudioTourOverlay from './StudioTourOverlay';
 import { LINE, PRODUCT } from '../constants/brand';
 import { pickPresentationOpening } from '../utils/presentationOpening';
 
-const OWNER_EMAIL = 'pedditiram@gmail.com';
+const OWNER_EMAIL = 'admin@stageworkstudio.com';
 const SLIDE_MS = 8000;
 const OPEN_SLIDE_MS = 14000;
 
