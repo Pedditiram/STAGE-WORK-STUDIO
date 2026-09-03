@@ -293,10 +293,10 @@ export default function GenerateDeskModal({
   const engineOptions = useMemo(() => listModelAdapters(), [modelEngine]);
   const engineToastLabel =
     engineOptions.find((a) => a.id === modelEngine)?.label || modelEngine || 'engine';
+  const engineOptionTitle = (label) => `${label} · ${engineToastLabel}`;
   const engineSelectLabelTitle = engineAriaTransition
     ? `Generation engine · ${engineAriaTransition}`
     : engineOptionTitle('Generation engine');
-  const engineOptionTitle = (label) => `${label} · ${engineToastLabel}`;
   const isLocalExport = modelEngine === MODEL_ENGINES.LOCAL_EXPORT;
   const isReplicate = modelEngine === MODEL_ENGINES.REPLICATE;
   const isSeedance =

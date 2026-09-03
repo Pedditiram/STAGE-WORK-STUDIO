@@ -286,8 +286,6 @@ export default function PromoPackModal({
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, [isOpen, fullscreen]);
 
-  if (!asRoom && !isOpen) return null;
-
   const handleCopyCaptions = async () => {
     const text = (pack.captions || []).join('\n');
     try {
@@ -310,7 +308,7 @@ export default function PromoPackModal({
   };
 
   const slug = String(projectTitle || 'project')
-    .replace(/[^\w\-]+/g, '_')
+    .replace(/[^\w-]+/g, '_')
     .slice(0, 40);
   const roomId = resolveCollabRoomId();
   const lifeNote = `${pack.template?.id || 'promo'} · ${isManual ? 'manual' : 'auto'} · ${
@@ -402,6 +400,8 @@ export default function PromoPackModal({
 
   const fieldClass =
     'w-full rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[11px] text-[var(--sps-text)] px-2 py-1.5 focus:outline-none focus:border-[var(--sps-gold)] placeholder:text-[var(--sps-muted)]';
+
+  if (!asRoom && !isOpen) return null;
 
   if (minimized && !asRoom) {
     return (

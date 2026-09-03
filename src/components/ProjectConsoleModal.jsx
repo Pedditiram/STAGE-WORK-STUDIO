@@ -59,6 +59,7 @@ import {
 } from '../utils/projectAssetRootsClient';
 import { optimizePosterDataUrl } from '../utils/projectPosterImage';
 import ProjectDrivePanel from './ProjectDrivePanel';
+import AiScriptBreakdownPanel from './AiScriptBreakdownPanel';
 import { PinBarButton } from './HoverPinBar';
 import StudioProfileControl from './StudioProfileControl';
 import {
@@ -1486,9 +1487,6 @@ export default function ProjectConsoleModal({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-  if (isGuestSession() && !canGuestBrowseApp()) return null;
-
   // EVALUATE CURRENT USER PERMISSIONS & ALLOTTED PROJECTS
   const currentUserEmail = getCurrentUserEmail();
   const currentUserProfile = getCurrentUserProfile(currentUserEmail);
@@ -1924,6 +1922,9 @@ export default function ProjectConsoleModal({
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
+
+  if (!isOpen) return null;
+  if (isGuestSession() && !canGuestBrowseApp()) return null;
 
   return (
     <div className={`sps-overlay sps-project-console-overlay is-full ${isVaultFullscreen ? 'is-full' : ''}`}>
