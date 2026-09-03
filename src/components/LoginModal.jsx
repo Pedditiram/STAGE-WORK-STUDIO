@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, ShieldCheck, CheckCircle2, AlertCircle, User, UserCheck, UserPlus, Zap, Shield, ArrowRight, Film, Eye, Clapperboard, Sparkles, Monitor, Loader2 } from 'lucide-react';
 import {
   getCurrentUserEmail,
