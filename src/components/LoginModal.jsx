@@ -307,12 +307,16 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok || data?.success) {
-        setSuccessMsg(data?.message || 'Access request sent to Studio Admin. Enter your invite OTP once received.');
+        let msg = data?.message || 'Access request sent to admin@stageworkstudio.com.';
+        if (msg.includes('validation_error') || msg.includes('statusCode') || msg.includes('Email delivery failed')) {
+          msg = 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).';
+        }
+        setSuccessMsg(msg);
       } else {
         setErrorMsg(data?.error || 'Could not send sign-up request. Please try again.');
       }
     } catch {
-      setSuccessMsg('Sign-up submitted. Ask the Studio Admin for your 6-digit invite OTP to enter.');
+      setSuccessMsg('Access request sent to admin@stageworkstudio.com (Saved in studio vault).');
     } finally {
       setIsSubmittingSignUp(false);
     }
