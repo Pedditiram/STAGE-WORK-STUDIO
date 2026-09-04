@@ -35,17 +35,23 @@
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "beforeBuild": "./scripts/electron-before-build.js",
-    "electronLanguages": ["en"],
+    "electronLanguages": [
+      "en"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         }
       ],
       "icon": "build/icon.icns",
@@ -120,6 +126,7 @@
     "electron-builder": "^26.15.7",
     "esbuild": "^0.28.2",
     "oxlint": "^1.71.0",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "vite": "^8.1.1",
     "wait-on": "^8.0.5"

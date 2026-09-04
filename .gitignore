@@ -34,4 +34,6 @@ release-old/
 # Local vaults (may contain API keys and film data)
 storage/
 tmp-*.json
+screenshots/
+*.zip
 
