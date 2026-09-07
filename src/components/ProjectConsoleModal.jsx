@@ -1272,17 +1272,25 @@ export default function ProjectConsoleModal({
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    const onProjectsUpdated = () => {
+    const onProjectsUpdated = (e) => {
+      if (e?.detail?.source === 'ProjectConsoleModal') return;
       try {
         const saved = readLocalProjectLibrary();
         if (!Array.isArray(saved) || !saved.length) return;
-        setProjectLibrary((prev) => mergeLibraryPreservingUnion(saved, prev));
+        setProjectLibrary((prev) => {
+          const currentList = Array.isArray(prev) ? prev : [];
+          const savedKey = saved.map((p) => String(p?.title || '').trim().toUpperCase()).join('|');
+          const prevKey = currentList.map((p) => String(p?.title || '').trim().toUpperCase()).join('|');
+          if (savedKey === prevKey) return prev;
+          return mergeLibraryPreservingUnion(saved, currentList);
+        });
         setArchivedProjects(getArchivedProjects());
       } catch {
         /* ignore */
       }
     };
-    const onArchiveUpdated = () => {
+    const onArchiveUpdated = (e) => {
+      if (e?.detail?.source === 'ProjectConsoleModal') return;
       try {
         setArchivedProjects(getArchivedProjects());
       } catch {
@@ -1363,6 +1371,7 @@ export default function ProjectConsoleModal({
             if (
               activeKey &&
               activeKey !== 'STAGE PRODUCTION STUDIO' &&
+              !isProjectTitleDeleted(activeKey) &&
               !map.has(activeKey)
             ) {
               const fromHeal =
@@ -1382,7 +1391,6 @@ export default function ProjectConsoleModal({
                   shots: []
                 }
               );
-              clearDeletedProjectTitles([currentProjectTitle]);
             }
 
             let merged = filterOutDeletedProjects(Array.from(map.values()));
@@ -1411,7 +1419,7 @@ export default function ProjectConsoleModal({
         setArchivedProjects(getArchivedProjects());
       }).catch(() => {});
     }
-  }, [isOpen, initialTab, currentProjectTitle]);
+  }, [isOpen, initialTab]);
 
   // Persist library changes locally & push to Cloud Database
   useEffect(() => {
@@ -1421,7 +1429,7 @@ export default function ProjectConsoleModal({
     writeLocalProjectLibrary(projectLibrary);
     // Defer past React commit so AdminSettingsModal listeners don't setState mid-render
     const t = setTimeout(() => {
-      window.dispatchEvent(new Event('sps_projects_updated'));
+      window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
       // Never push huge data: posters to cloud — keep idb/http refs only
       const forCloud = (Array.isArray(projectLibrary) ? projectLibrary : []).map((p) => {
         const slim = slimProjectForLocalMirror(p);
@@ -1655,12 +1663,14 @@ export default function ProjectConsoleModal({
     } catch {
       /* use in-memory proj */
     }
-    try {
-      const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
-      const parked = writeWorkspaceOntoLibrary(saved, currentProjectTitle);
-      safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(parked)));
-    } catch {
-      /* ignore */
+    if (currentProjectTitle && !isProjectTitleDeleted(currentProjectTitle)) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+        const parked = writeWorkspaceOntoLibrary(saved, currentProjectTitle);
+        safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(parked)));
+      } catch {
+        /* ignore */
+      }
     }
     if (setProjectTitle) setProjectTitle(openProj.title);
     if (setTargetModel) setTargetModel(openProj.targetModel);
@@ -1812,7 +1822,7 @@ export default function ProjectConsoleModal({
   };
 
   // 5. ARCHIVE PROJECT (PRIMARY ADMIN) — remove from library, keep in Archive for restore
-  const handleDeleteProject = (projId) => {
+  const handleDeleteProject = async (projId) => {
     if (!isPrimaryOwner) {
       alert("🔒 ACCESS RESTRICTED:\nOnly the studio Admin can archive projects.");
       return;
@@ -1856,13 +1866,13 @@ export default function ProjectConsoleModal({
           localStorage.setItem('sps_active_project_title', nextProj.title);
           localStorage.setItem('sps_project_title', nextProj.title);
         } catch (e) {}
-        softSwitchProject(nextProj);
+        await softSwitchProject(nextProj);
       }
 
       setProjectLibrary(updated);
       try {
         safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
-        window.dispatchEvent(new Event('sps_projects_updated'));
+        window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
         syncProjectLibraryToCloud(updated);
       } catch (e) {}
     }
