@@ -1670,7 +1670,7 @@ export default function App() {
       if (projectTitle && Array.isArray(persistableShots) && persistableShots.length > 0) {
         try {
           if (isProjectTitleDeleted(projectTitle)) {
-            clearDeletedProjectTitles([projectTitle]);
+            return;
           }
           if (!canAccessProject(projectTitle)) return;
           const savedLibStr = localStorage.getItem('sps_project_library');
@@ -1745,22 +1745,35 @@ export default function App() {
           ? projectTitle
           : '';
       if (activeTitle && shots && shots.length > 0) {
-        if (isProjectTitleDeleted(activeTitle)) clearDeletedProjectTitles([activeTitle]);
-        const exists = updatedProjs.some((p) => p.title === activeTitle);
-        if (!exists) {
-          updatedProjs = [
-            {
-              id: `proj_${Date.now()}`,
-              title: activeTitle,
-              description: `Cinema Production Studio Project with ${shots.length} shots`,
-              targetModel: targetModel || 'SPS Direct Cinema 2.0',
-              aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-              roomId: roomIdForProject(activeTitle, effectiveRoomId),
-              lastModified: new Date().toLocaleDateString(),
-              shots: shots,
-            },
-            ...updatedProjs,
-          ];
+        if (isProjectTitleDeleted(activeTitle)) {
+          const nextLive = updatedProjs.find((p) => p && p.title && !isProjectTitleDeleted(p.title));
+          if (nextLive) {
+            setProjectTitle(nextLive.title);
+            if (Array.isArray(nextLive.shots)) setShots(nextLive.shots);
+            if (nextLive.targetModel) setTargetModel(nextLive.targetModel);
+            if (nextLive.aspectRatio) setAspectRatio(nextLive.aspectRatio);
+            safeLocalStorageSetItem('sps_current_project_title', nextLive.title);
+            safeLocalStorageSetItem('sps_active_project_title', nextLive.title);
+            safeLocalStorageSetItem('sps_project_title', nextLive.title);
+            safeLocalStorageSetItem('sps_current_shots', JSON.stringify(nextLive.shots || []));
+          }
+        } else {
+          const exists = updatedProjs.some((p) => p.title === activeTitle);
+          if (!exists) {
+            updatedProjs = [
+              {
+                id: `proj_${Date.now()}`,
+                title: activeTitle,
+                description: `Cinema Production Studio Project with ${shots.length} shots`,
+                targetModel: targetModel || 'SPS Direct Cinema 2.0',
+                aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+                roomId: roomIdForProject(activeTitle, effectiveRoomId),
+                lastModified: new Date().toLocaleDateString(),
+                shots: shots,
+              },
+              ...updatedProjs,
+            ];
+          }
         }
       }
 

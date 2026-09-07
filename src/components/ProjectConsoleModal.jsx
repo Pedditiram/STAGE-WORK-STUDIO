@@ -1277,12 +1277,24 @@ export default function ProjectConsoleModal({
         const saved = readLocalProjectLibrary();
         if (!Array.isArray(saved) || !saved.length) return;
         setProjectLibrary((prev) => mergeLibraryPreservingUnion(saved, prev));
+        setArchivedProjects(getArchivedProjects());
+      } catch {
+        /* ignore */
+      }
+    };
+    const onArchiveUpdated = () => {
+      try {
+        setArchivedProjects(getArchivedProjects());
       } catch {
         /* ignore */
       }
     };
     window.addEventListener('sps_projects_updated', onProjectsUpdated);
-    return () => window.removeEventListener('sps_projects_updated', onProjectsUpdated);
+    window.addEventListener('sps_project_archive_updated', onArchiveUpdated);
+    return () => {
+      window.removeEventListener('sps_projects_updated', onProjectsUpdated);
+      window.removeEventListener('sps_project_archive_updated', onArchiveUpdated);
+    };
   }, [isOpen, mergeLibraryPreservingUnion]);
 
   // Sync tab if initialTab updates on open & fetch latest cloud projects
@@ -1646,7 +1658,7 @@ export default function ProjectConsoleModal({
     try {
       const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
       const parked = writeWorkspaceOntoLibrary(saved, currentProjectTitle);
-      safeLocalStorageSetItem('sps_project_library', JSON.stringify(parked));
+      safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(parked)));
     } catch {
       /* ignore */
     }
@@ -1832,16 +1844,27 @@ export default function ProjectConsoleModal({
         }
       } catch (e) {}
 
+      const isCurrentActive =
+        activeProjectId === projId ||
+        titlesMatch(deletedTitle, currentProjectTitle);
+
+      const nextProj = updated[0];
+
+      if (isCurrentActive && nextProj) {
+        try {
+          localStorage.setItem('sps_current_project_title', nextProj.title);
+          localStorage.setItem('sps_active_project_title', nextProj.title);
+          localStorage.setItem('sps_project_title', nextProj.title);
+        } catch (e) {}
+        softSwitchProject(nextProj);
+      }
+
       setProjectLibrary(updated);
       try {
         safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
         window.dispatchEvent(new Event('sps_projects_updated'));
         syncProjectLibraryToCloud(updated);
       } catch (e) {}
-
-      if (activeProjectId === projId) {
-        handleSwitchProject(updated[0]);
-      }
     }
   };
 
