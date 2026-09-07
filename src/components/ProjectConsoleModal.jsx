@@ -2183,13 +2183,21 @@ export default function ProjectConsoleModal({
                     const hasPoster = Boolean(posterSrc);
 
                     return (
-                      <button
+                      <div
                         key={proj.id || `gallery_${projIdx}`}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         className={`sps-project-gallery-cell ${isActive ? 'is-active' : ''}`}
                         onClick={() => {
                           if (isActive) onClose();
                           else handleSwitchProject(proj);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (isActive) onClose();
+                            else handleSwitchProject(proj);
+                          }
                         }}
                         onDoubleClick={(e) => {
                           e.preventDefault();
@@ -2223,11 +2231,32 @@ export default function ProjectConsoleModal({
                             <span className="sps-project-gallery-fallback-hint">Double-tap to add poster</span>
                           </div>
                         )}
-                        {isActive ? (
-                          <span className="sps-project-gallery-active" aria-hidden="true">Active</span>
-                        ) : null}
+                        <div className="sps-project-gallery-topbar">
+                          {isActive ? (
+                            <span className="sps-project-gallery-active" aria-hidden="true">Active</span>
+                          ) : (
+                            <span />
+                          )}
+                          {isPrimaryOwner && (
+                            <button
+                              type="button"
+                              className="sps-project-gallery-archive-btn"
+                              title={`Archive project "${proj.title}"`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProject(proj.id);
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                            >
+                              <Archive className="w-3 h-3" />
+                              <span>Archive</span>
+                            </button>
+                          )}
+                        </div>
                         <span className="sps-project-gallery-label">{proj.title}</span>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
