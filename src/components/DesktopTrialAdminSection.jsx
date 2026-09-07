@@ -13,6 +13,8 @@ export default function DesktopTrialAdminSection() {
   const [meta, setMeta] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [downloadUrls, setDownloadUrls] = useState({});
+  const [copiedId, setCopiedId] = useState('');
 
   const load = useCallback(async () => {
     const data = await listDesktopTrialRequests(actor);
@@ -35,10 +37,22 @@ export default function DesktopTrialAdminSection() {
     setNote('');
     try {
       const data = await decideDesktopTrial({ actor, requestId, action });
+      if (data?.downloadUrl) {
+        setDownloadUrls((prev) => ({ ...prev, [requestId]: data.downloadUrl }));
+      }
       setNote(data?.message || data?.error || '');
       await load();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleCopyLink = (requestId) => {
+    const url = downloadUrls[requestId];
+    if (url) {
+      navigator.clipboard?.writeText(url);
+      setCopiedId(requestId);
+      setTimeout(() => setCopiedId(''), 2500);
     }
   };
 
@@ -59,15 +73,14 @@ export default function DesktopTrialAdminSection() {
     <div className="p-2.5 rounded-lg border border-amber-500/30 bg-zinc-900/80 space-y-2">
       <p className="text-[10px] uppercase tracking-widest text-amber-400 m-0">Desktop trial requests</p>
       <p className="text-[11px] text-zinc-400 m-0 leading-relaxed">
-        Email request → you are notified → Approve emails the same address a tokenized download.
+        Email request → you are notified → Approve emails the same address a tokenized download link.
         Do not upload the ~500MB .app to Vercel. Host a GitHub Release (or signed HTTPS URL) and paste it below.
-        Local <span className="font-mono">release/mac-arm64/</span> is this machine only.
       </p>
       {meta ? (
-        <p className="text-[10px] font-mono text-zinc-500 m-0">
-          Inbox {meta.adminInbox || 'Studio Admin'}
-          {meta.mailConfigured ? ' · Resend on' : ' · Resend off (SPS_RESEND_API_KEY)'}
-          {meta.kvConfigured ? ' · KV durable' : ' · KV off (queue is local/fs only)'}
+        <p className="text-[10px] font-mono text-zinc-400 m-0">
+          Official Studio Mailbox: <span className="text-amber-300 font-semibold">{meta.adminInbox || 'admin@stageworkstudio.com'}</span>
+          {meta.mailConfigured ? ' · Mail delivery active' : ' · Mail delivery offline (Configure Titan SMTP or SPS_RESEND_API_KEY)'}
+          {meta.kvConfigured ? ' · KV queue durable' : ' · KV off (queue is local/fs only)'}
         </p>
       ) : null}
 
@@ -109,6 +122,11 @@ export default function DesktopTrialAdminSection() {
                 <button type="button" className="sps-btn text-[10px]" disabled={busy} onClick={() => act(r.id, 'deny')}>
                   Deny
                 </button>
+                {downloadUrls[r.id] && (
+                  <button type="button" className="sps-btn text-[10px] text-amber-300" onClick={() => handleCopyLink(r.id)}>
+                    {copiedId === r.id ? 'Copied Link!' : 'Copy Download Link'}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -125,11 +143,18 @@ export default function DesktopTrialAdminSection() {
                 <p className="text-[10px] font-mono text-zinc-500 m-0 truncate">
                   {r.status} · {r.email} · dl {r.downloadCount || 0}
                 </p>
-                {r.status === 'approved' ? (
-                  <button type="button" className="sps-btn text-[9px]" disabled={busy} onClick={() => act(r.id, 'resend')}>
-                    Resend
-                  </button>
-                ) : null}
+                <div className="flex items-center gap-1 shrink-0">
+                  {downloadUrls[r.id] ? (
+                    <button type="button" className="sps-btn text-[9px] text-amber-300" onClick={() => handleCopyLink(r.id)}>
+                      {copiedId === r.id ? 'Copied!' : 'Copy Link'}
+                    </button>
+                  ) : null}
+                  {r.status === 'approved' ? (
+                    <button type="button" className="sps-btn text-[9px]" disabled={busy} onClick={() => act(r.id, 'resend')}>
+                      Resend
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
         </div>

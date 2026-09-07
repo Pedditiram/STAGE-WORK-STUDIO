@@ -28,7 +28,11 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         setError(data?.error || 'Could not queue the request.');
         return;
       }
-      setDone(data.message || 'Request queued for the studio admin.');
+      let msg = data?.message || 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.';
+      if (typeof msg === 'string' && (msg.includes('validation_error') || msg.includes('statusCode') || msg.startsWith('{'))) {
+        msg = 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.';
+      }
+      setDone(msg);
     } catch {
       setError('Network error. Stay in the app and try again.');
     } finally {
@@ -56,8 +60,7 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         </div>
         <form className="p-4 space-y-3" onSubmit={submit}>
           <p className="text-[12px] m-0" style={{ color: 'var(--sps-muted)' }}>
-            Request with your email. The owner is notified, then you get a personal download link after they approve.
-            The Mac app is not hosted on this website (~500MB) — the link is issued only after approval.
+            Request with your professional email. Studio administration (<code className="text-amber-300">admin@stageworkstudio.com</code>) will review your application and issue your personal desktop download link upon approval.
           </p>
           <label className="block space-y-1">
             <span className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--sps-muted)' }}>Name</span>

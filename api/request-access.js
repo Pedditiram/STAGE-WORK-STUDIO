@@ -9,17 +9,9 @@
 import fs from 'fs';
 import path from 'path';
 
-const ADMIN_EMAIL = 'admin@stageworkstudio.com';
+import { sendResend, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
 
-function resendApiKey() {
-  return process.env.SPS_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
-}
-
-function fromAddress() {
-  const email = process.env.SPS_OTP_FROM_EMAIL || 'onboarding@resend.dev';
-  const name = process.env.SPS_OTP_FROM_NAME || 'Stage Work Studio — AI Cinema Production OS';
-  return `${name} <${email}>`;
-}
+const ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -49,32 +41,6 @@ function persistRequest(record) {
   } catch {
     return false;
   }
-}
-
-async function sendResend({ to, subject, html, text, replyTo }) {
-  const key = resendApiKey();
-  if (!key) return { emailed: false, configured: false };
-  const sendRes = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromAddress(),
-      to: Array.isArray(to) ? to : [to],
-      subject,
-      html,
-      text,
-      ...(replyTo ? { reply_to: replyTo } : {}),
-    }),
-  });
-  if (!sendRes.ok) {
-    const errText = await sendRes.text().catch(() => '');
-    return { emailed: false, configured: true, error: errText.slice(0, 180) };
-  }
-  const data = await sendRes.json().catch(() => ({}));
-  return { emailed: true, configured: true, id: data.id || null };
 }
 
 export default async function handler(req, res) {

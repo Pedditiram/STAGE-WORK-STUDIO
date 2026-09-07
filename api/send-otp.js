@@ -11,22 +11,10 @@
  * so the client can keep showing the OTP in-UI (Owner never locked out).
  */
 
+import { sendResend, mailConfigured, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
+
 const PRIMARY_ADMIN_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
-const PRIMARY_ADMIN_EMAIL = 'admin@stageworkstudio.com';
-
-function resendApiKey() {
-  return process.env.SPS_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
-}
-
-function fromAddress() {
-  const email = process.env.SPS_OTP_FROM_EMAIL || 'onboarding@resend.dev';
-  const name = process.env.SPS_OTP_FROM_NAME || 'Stage Work Studio — AI Cinema Production OS';
-  return `${name} <${email}>`;
-}
-
-function emailConfigured() {
-  return Boolean(resendApiKey());
-}
+const PRIMARY_ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
 
 function normalizeEmail(value) {
   return String(value || '')
@@ -76,14 +64,14 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!emailConfigured()) {
+    if (!mailConfigured()) {
       return res.status(200).json({
         success: true,
         emailed: false,
         fallback: true,
         configured: false,
         message:
-          'Email delivery not configured (set SPS_RESEND_API_KEY on Vercel). Use the in-UI OTP code.'
+          'Email delivery not configured (configure Titan SMTP or SPS_RESEND_API_KEY). Use the in-UI OTP code.'
       });
     }
 
@@ -112,29 +100,21 @@ export default async function handler(req, res) {
 
     const text = `Stage Work Studio — AI Cinema Production OS\n\n${intro}\n\nOTP: ${otp}\n\nIf you did not request this, ignore this email.`;
 
-    const sendRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromAddress(),
-        to: [to],
-        subject,
-        html,
-        text
-      })
+    const mailResult = await sendResend({
+      to,
+      subject,
+      html,
+      text,
+      replyTo: OFFICIAL_STUDIO_EMAIL
     });
 
-    if (!sendRes.ok) {
-      const errText = await sendRes.text().catch(() => '');
+    if (!mailResult.emailed) {
       return res.status(200).json({
         success: true,
         emailed: false,
         fallback: true,
         configured: true,
-        error: `Resend failed (${sendRes.status}). Use the in-UI OTP. ${errText.slice(0, 180)}`
+        error: `Email delivery failed. Use the in-UI OTP.`
       });
     }
 
