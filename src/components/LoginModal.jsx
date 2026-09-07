@@ -13,6 +13,7 @@ import {
   setPresentationMode
 } from '../utils/projectPermissions';
 import { registerThisDevice, getDeviceId } from '../utils/saasControl';
+import { isValidEmail } from '../utils/emailValidation';
 import StageWorksMark from './StageWorksMark';
 import { CATEGORY, PRODUCT } from '../constants/brand';
 
@@ -131,8 +132,8 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setSuccessMsg('');
 
     const cleanEmail = normalizeEmail(explicitEmail || emailInput);
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMsg('Please enter a valid Collaborator Email or Google Mail address.');
+    if (!isValidEmail(cleanEmail)) {
+      setErrorMsg('invalid mail id');
       return;
     }
 
@@ -258,8 +259,8 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setErrorMsg('');
     setSuccessMsg('');
     const cleanEmail = normalizeEmail(signUpEmail);
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMsg('Please enter a valid collaborator email address.');
+    if (!isValidEmail(cleanEmail)) {
+      setErrorMsg('invalid mail id');
       return;
     }
     const cleanName = signUpName.trim() || cleanEmail.split('@')[0].toUpperCase();
@@ -307,17 +308,22 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok || data?.success) {
+      if (res.ok && data?.success) {
         let msg = data?.message || 'Access request sent to admin@stageworkstudio.com.';
         if (msg.includes('validation_error') || msg.includes('statusCode') || msg.includes('Email delivery failed')) {
           msg = 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).';
         }
         setSuccessMsg(msg);
       } else {
-        setErrorMsg(data?.error || 'Could not send sign-up request. Please try again.');
+        const err = String(data?.error || '');
+        if (err.toLowerCase().includes('invalid mail id') || err.toLowerCase().includes('valid email')) {
+          setErrorMsg('invalid mail id');
+        } else {
+          setErrorMsg(err || 'Could not send sign-up request. Please try again.');
+        }
       }
     } catch {
-      setSuccessMsg('Access request sent to admin@stageworkstudio.com (Saved in studio vault).');
+      setErrorMsg('invalid mail id');
     } finally {
       setIsSubmittingSignUp(false);
     }

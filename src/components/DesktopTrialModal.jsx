@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { X, Loader2, CheckCircle2, Monitor } from 'lucide-react';
 import { LINE, PRODUCT } from '../constants/brand';
 import { requestDesktopTrial } from '../services/desktopTrialClient';
+import { isValidEmail } from '../utils/emailValidation';
 
 export default function DesktopTrialModal({ isOpen, onClose }) {
   const [name, setName] = useState('');
@@ -19,13 +20,24 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    setBusy(true);
     setError('');
     setDone('');
+
+    if (!isValidEmail(email)) {
+      setError('invalid mail id');
+      return;
+    }
+
+    setBusy(true);
     try {
       const data = await requestDesktopTrial({ name, email, org, why });
       if (!data?.success) {
-        setError(data?.error || 'Could not queue the request.');
+        const err = String(data?.error || '');
+        if (err.toLowerCase().includes('invalid mail id') || err.toLowerCase().includes('valid email')) {
+          setError('invalid mail id');
+        } else {
+          setError(err || 'Could not queue the request.');
+        }
         return;
       }
       let msg = data?.message || 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.';

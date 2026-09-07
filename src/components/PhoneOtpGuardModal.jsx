@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Mail, ArrowRight, CheckCircle2, Key, AlertCircle, Film, Send } from 'lucide-react';
 import { markCollaboratorSession, isStudioAdmin, getDesignationForEmail, getHomeForDesignation } from '../utils/projectPermissions';
+import { isValidEmail } from '../utils/emailValidation';
 
 export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
   const [isLocked, setIsLocked] = useState(false);
@@ -42,8 +43,8 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
     if (e) e.preventDefault();
 
     const userMail = inputEmail.trim() || invitedEmail.trim();
-    if (!userMail || !userMail.includes('@')) {
-      setOtpError('Please enter a valid collaborator Email Address.');
+    if (!isValidEmail(userMail)) {
+      setOtpError('invalid mail id');
       return;
     }
 

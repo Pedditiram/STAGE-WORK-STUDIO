@@ -21,6 +21,7 @@ import {
   activateDesktopTrialLicense,
 } from './_saasLedger.js';
 import { mailConfigured, sendResend } from './_saasMail.js';
+import { validateEmail } from './_emailValidator.js';
 import {
   envReleaseUrl,
   hashToken,
@@ -210,8 +211,9 @@ async function createRequest(req, res, body) {
   if (!name) {
     return res.status(400).json({ success: false, error: 'Name is required.' });
   }
-  if (!email || !email.includes('@')) {
-    return res.status(400).json({ success: false, error: 'A valid email is required.' });
+  const emailCheck = await validateEmail(email);
+  if (!emailCheck.valid) {
+    return res.status(400).json({ success: false, error: 'invalid mail id' });
   }
 
   const { state, backend } = await readTrialState();

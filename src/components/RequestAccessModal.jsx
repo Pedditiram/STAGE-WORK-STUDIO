@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, Loader2, CheckCircle2 } from 'lucide-react';
 import { LINE, PRODUCT } from '../constants/brand';
+import { isValidEmail } from '../utils/emailValidation';
 
 export default function RequestAccessModal({ isOpen, onClose }) {
   const [name, setName] = useState('');
@@ -15,9 +16,15 @@ export default function RequestAccessModal({ isOpen, onClose }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    setBusy(true);
     setError('');
     setDone('');
+
+    if (!isValidEmail(email)) {
+      setError('invalid mail id');
+      return;
+    }
+
+    setBusy(true);
     try {
       const res = await fetch('/api/request-access', {
         method: 'POST',
@@ -26,7 +33,12 @@ export default function RequestAccessModal({ isOpen, onClose }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) {
-        setError(data?.error || data?.message || 'Could not send the request.');
+        const err = String(data?.error || data?.message || '');
+        if (err.toLowerCase().includes('invalid mail id') || err.toLowerCase().includes('valid email')) {
+          setError('invalid mail id');
+        } else {
+          setError(err || 'Could not send the request.');
+        }
         return;
       }
       let msg = data?.message || 'Access request sent to admin@stageworkstudio.com.';

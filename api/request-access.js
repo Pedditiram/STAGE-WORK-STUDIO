@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { sendResend, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
+import { validateEmail } from './_emailValidator.js';
 
 const ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
 
@@ -59,8 +60,9 @@ export default async function handler(req, res) {
     const role = String(body.role || '').trim().slice(0, 80);
     const message = String(body.message || '').trim().slice(0, 2000);
 
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ success: false, error: 'A valid email is required.' });
+    const emailCheck = await validateEmail(email);
+    if (!emailCheck.valid) {
+      return res.status(400).json({ success: false, error: 'invalid mail id' });
     }
 
     const adminTo = normalizeEmail(process.env.SPS_ACCESS_TO_EMAIL) || ADMIN_EMAIL;

@@ -1,6 +1,6 @@
 {
   "sps_app_version": "2.5",
-  "exported_at": "2026-09-07T12:59:11.284Z",
+  "exported_at": "2026-09-07T13:20:49.674Z",
   "allotted_folder": "/Users/pedditiram/Documents/STAGE STUDIO PRODUCTIONS/SETTINGS",
   "settings": {
     "sps_llm_provider": "google_gemini",
@@ -109,10 +109,23 @@
         "targetModel": "SPS Direct Cinema",
         "aspectRatio": "21:9 Ultrawide",
         "roomId": "sps_untitled",
-        "lastModified": "7/9/2026, 6:29:11 PM",
-        "lastModifiedIso": "2026-09-07T12:59:11.220Z",
+        "lastModified": "7/9/2026, 6:50:49 PM",
+        "lastModifiedIso": "2026-09-07T13:20:49.633Z",
         "shotCount": 0,
-        "posterUrl": "/api/project-poster?name=MVK&v=1788785936119",
+        "posterUrl": "/api/project-poster?name=MVK&v=1788766167585",
+        "shots": []
+      },
+      {
+        "id": "proj_guest_playground",
+        "title": "GUEST PLAYGROUND",
+        "description": "Cinema Production Studio Project with 2 shots",
+        "targetModel": "SPS Direct Cinema",
+        "aspectRatio": "2.39:1 Anamorphic",
+        "roomId": "GUEST-PLAY",
+        "lastModified": "3/9/2026, 12:32:17 PM",
+        "lastModifiedIso": "2026-09-03T07:02:17.547Z",
+        "updatedAt": "2026-09-03T07:02:17.547Z",
+        "shotCount": 0,
         "shots": []
       },
       {
@@ -123,7 +136,7 @@
         "aspectRatio": "2.39:1 Anamorphic",
         "roomId": "sps_test_a",
         "lastModified": "10:38 AM - 3/9/2026",
-        "lastModifiedIso": "2026-09-07T12:52:31.654Z",
+        "lastModifiedIso": "2026-09-03T05:08:36.349Z",
         "updatedAt": "2026-09-03T05:08:36.349Z",
         "shotCount": 0,
         "shots": []
@@ -152,20 +165,7 @@
         "lastModifiedIso": "2026-08-28T14:54:32.488Z",
         "updatedAt": "2026-08-28T14:54:32.488Z",
         "shotCount": 0,
-        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788258609824",
-        "shots": []
-      },
-      {
-        "id": "proj_guest_playground",
-        "title": "GUEST PLAYGROUND",
-        "description": "Cinema Production Studio Project with 2 shots",
-        "targetModel": "SPS Direct Cinema",
-        "aspectRatio": "2.39:1 Anamorphic",
-        "roomId": "GUEST-PLAY",
-        "lastModified": "3/9/2026, 12:32:17 PM",
-        "lastModifiedIso": "2026-09-03T07:02:17.547Z",
-        "updatedAt": "2026-09-03T07:02:17.547Z",
-        "shotCount": 0,
+        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788766167585",
         "shots": []
       }
     ],

@@ -12,6 +12,7 @@
  */
 
 import { sendResend, mailConfigured, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
+import { validateEmail } from './_emailValidator.js';
 
 const PRIMARY_ADMIN_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
 const PRIMARY_ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
@@ -48,8 +49,12 @@ export default async function handler(req, res) {
     const collaboratorName = String(body.name || '').trim();
     const roomId = String(body.roomId || '').trim();
 
-    if (!to || !isAllowedRecipient(to)) {
-      return res.status(400).json({ success: false, error: 'Valid recipient email required' });
+    const emailCheck = await validateEmail(to);
+    if (!emailCheck.valid) {
+      return res.status(400).json({ success: false, error: 'invalid mail id' });
+    }
+    if (!isAllowedRecipient(to)) {
+      return res.status(400).json({ success: false, error: 'invalid mail id' });
     }
     if (!/^\d{6}$/.test(otp)) {
       return res.status(400).json({ success: false, error: 'OTP must be a 6-digit code' });
