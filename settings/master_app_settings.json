@@ -1,6 +1,6 @@
 {
   "sps_app_version": "2.5",
-  "exported_at": "2026-09-07T13:26:03.653Z",
+  "exported_at": "2026-09-07T13:28:45.168Z",
   "allotted_folder": "/Users/pedditiram/Documents/STAGE STUDIO PRODUCTIONS/SETTINGS",
   "settings": {
     "sps_llm_provider": "google_gemini",
@@ -109,10 +109,10 @@
         "targetModel": "SPS Direct Cinema",
         "aspectRatio": "21:9 Ultrawide",
         "roomId": "sps_untitled",
-        "lastModified": "7/9/2026, 6:56:03 PM",
-        "lastModifiedIso": "2026-09-07T13:26:03.589Z",
+        "lastModified": "7/9/2026, 6:58:45 PM",
+        "lastModifiedIso": "2026-09-07T13:28:45.088Z",
         "shotCount": 0,
-        "posterUrl": "/api/project-poster?name=MVK&v=1788766167585",
+        "posterUrl": "/api/project-poster?name=MVK&v=1788787563707",
         "shots": []
       },
       {
@@ -165,7 +165,7 @@
         "lastModifiedIso": "2026-08-28T14:54:32.488Z",
         "updatedAt": "2026-08-28T14:54:32.488Z",
         "shotCount": 0,
-        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788766167585",
+        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788787563707",
         "shots": []
       }
     ],
