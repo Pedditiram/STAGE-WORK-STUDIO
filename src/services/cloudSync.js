@@ -54,10 +54,29 @@ function isProductionHost(hostname = '') {
   );
 }
 
+function isLocalOrLanHost(hostname = '') {
+  const h = String(hostname || '').toLowerCase();
+  return (
+    h === 'localhost' ||
+    h === '127.0.0.1' ||
+    h.startsWith('192.168.') ||
+    h.startsWith('10.') ||
+    h.startsWith('172.16.') ||
+    h.startsWith('172.17.') ||
+    h.startsWith('172.18.') ||
+    h.startsWith('172.19.') ||
+    h.startsWith('172.2') ||
+    h.startsWith('172.30.') ||
+    h.startsWith('172.31.') ||
+    h.endsWith('.local')
+  );
+}
+
 /**
- * Sync API URL. Vercel production is the source of truth.
+ * Sync API URL.
  * - On Vercel / custom prod domain → same-origin /api/sync
- * - On localhost, LAN, Electron file://, tunnels → always hit Vercel so local RECEIVES from cloud
+ * - On LAN or offline local network (without internet) → local Vite server ${origin}/api/sync
+ * - On online localhost/tunnel → cloud source of truth (${PRODUCTION_SYNC_ORIGIN})
  */
 export function getNativeSyncUrl() {
   if (!isBrowser()) return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
@@ -66,7 +85,11 @@ export function getNativeSyncUrl() {
     if (isProductionHost(hostname)) {
       return `${origin}${NATIVE_SYNC_PATH}`;
     }
-    // Local Vite / Electron / tunnel clients hydrate from Vercel, not a private disk store
+    const syncTarget = (localStorage.getItem('sps_sync_target') || localStorage.getItem('sps_sync_mode') || '').toLowerCase();
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if ((syncTarget === 'lan' || syncTarget === 'local' || isOffline) && isLocalOrLanHost(hostname)) {
+      return `${origin}${NATIVE_SYNC_PATH}`;
+    }
     return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
   }
   // file:// Electron package
