@@ -542,6 +542,26 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
   };
 }
 
+export function slimRoomForNetwork(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const shots = Array.isArray(payload.shots)
+    ? payload.shots.map((s) => {
+        if (!s || typeof s !== 'object') return s;
+        const next = { ...s };
+        delete next.generatedImage;
+        delete next.generatedImages;
+        Object.keys(next).forEach((k) => {
+          if (typeof next[k] === 'string' && next[k].startsWith('data:image')) {
+            next[k] = '';
+          }
+        });
+        return next;
+      })
+    : payload.shots;
+  const { projectGeneratedImages, ...rest } = payload;
+  return { ...rest, shots };
+}
+
 export async function publishToCloudRoom(roomId, projectData) {
   if (!roomId) return { success: false, error: 'Missing roomId' };
 
@@ -563,18 +583,21 @@ export async function publishToCloudRoom(roomId, projectData) {
     broadcastChannel.postMessage({ roomId, payload });
   }
 
+  // Network payload: strip heavy base64 data URLs to prevent HTTP 413 on Vercel
+  const networkPayload = slimRoomForNetwork(payload);
+
   let nativeOk = false;
   let skippedStale = false;
   let serverData = null;
   try {
-    const res = await pushNativeRoom(roomId, payload);
+    const res = await pushNativeRoom(roomId, networkPayload);
     if (res?.skipped === 'stale') {
       skippedStale = true;
       serverData = res?.data || null;
       // Do not advance local cursor or hub-write a rejected revision
     } else {
       nativeOk = true;
-      serverData = res?.data || payload;
+      serverData = res?.data || networkPayload;
       state.lastSyncedPayloadStr = JSON.stringify(serverData);
       state.lastAppliedUpdatedAt = serverData.lastUpdated || payload.lastUpdated;
       state.lastAppliedRevision =
@@ -585,13 +608,13 @@ export async function publishToCloudRoom(roomId, projectData) {
   // Hub backup only when native accepted (or native unreachable — then try carefully)
   if (!skippedStale) {
     try {
-      await pushHubRoom(roomId, payload);
+      await pushHubRoom(roomId, networkPayload);
     } catch (e) {}
   }
 
   if (db && !skippedStale) {
     try {
-      await setDoc(doc(db, 'production_rooms', roomId), payload, { merge: true });
+      await setDoc(doc(db, 'production_rooms', roomId), networkPayload, { merge: true });
     } catch (err) {}
   }
 

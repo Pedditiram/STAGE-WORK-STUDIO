@@ -11,6 +11,7 @@ import {
 import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary } from '../utils/projectPermissions';
 import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
+import { slimProjectForLocalMirror } from '../utils/projectWorkspace';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -48,7 +49,7 @@ function pruneAndPersistCollaboratorAllotments(projectLibrary) {
   const pruned = secureCollaboratorList(pruneAllottedProjectsToLibrary(users, live));
   if (JSON.stringify(pruned) === JSON.stringify(users)) return;
   localStorage.setItem('sps_authorized_phone_users', JSON.stringify(pruned));
-  window.dispatchEvent(new Event('sps_collaborators_updated'));
+  window.dispatchEvent(new CustomEvent('sps_collaborators_updated', { detail: { source: 'dbService' } }));
   // Fire-and-forget cloud heal so profile menus on other devices drop dead titles (002, etc.)
   syncCollaboratorsToCloud(pruned);
 }
@@ -80,7 +81,7 @@ function applyCloudCollaborators(users) {
     try {
       localStorage.setItem('sps_collaborators_cloud_synced_at', new Date().toISOString());
     } catch (e) {}
-    window.dispatchEvent(new Event('sps_collaborators_updated'));
+    window.dispatchEvent(new CustomEvent('sps_collaborators_updated', { detail: { source: 'dbService' } }));
   }
   return secured;
 }
@@ -185,7 +186,7 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
   const oldStr = localStorage.getItem('sps_authorized_phone_users');
   if (newStr !== oldStr) {
     localStorage.setItem('sps_authorized_phone_users', newStr);
-    window.dispatchEvent(new Event('sps_collaborators_updated'));
+    window.dispatchEvent(new CustomEvent('sps_collaborators_updated', { detail: { source: 'dbService' } }));
   }
 
   const base = syncApiUrl();
@@ -219,6 +220,14 @@ export async function fetchCollaboratorsFromCloud() {
   const base = syncApiUrl();
   try {
     const res = await fetchJsonTimed(`${base}?type=collaborators`);
+    if (res.status === 304) {
+      const saved = localStorage.getItem('sps_authorized_phone_users');
+      try {
+        return secureCollaboratorList(saved ? JSON.parse(saved) : []);
+      } catch (e) {
+        return [];
+      }
+    }
     if (res.status === 503) {
       // Durable unreachable — keep local, do not wipe
       const saved = localStorage.getItem('sps_authorized_phone_users');
@@ -370,22 +379,23 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   // Never push empty library to cloud — empty overwrite guard on server is backup only
   if (list.length === 0) return;
 
+  const slimmedList = list.map(slimProjectForLocalMirror);
   const deletedTitles = Array.from(readDeletedTitleKeys());
   const payload = {
-    projects: list,
+    projects: slimmedList,
     deletedTitles,
     updatedAt: new Date().toISOString(),
-    totalProjects: list.length
+    totalProjects: slimmedList.length
   };
 
-  const newStr = JSON.stringify(list);
+  const newStr = JSON.stringify(slimmedList);
   const oldStr = localStorage.getItem('sps_project_library');
   if (newStr !== oldStr) {
     safeLocalStorageSetItem('sps_project_library', newStr);
-    window.dispatchEvent(new Event('sps_projects_updated'));
+    window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   }
 
-  pruneAndPersistCollaboratorAllotments(list);
+  pruneAndPersistCollaboratorAllotments(slimmedList);
 
   // Push to Native Vercel Serverless Sync Engine (/api/sync) — authoritative
   try {
@@ -553,7 +563,7 @@ function writeProjectArchive(list) {
   const next = Array.isArray(list) ? list.slice(0, MAX_ARCHIVED_PROJECTS) : [];
   safeLocalStorageSetItem(PROJECT_ARCHIVE_KEY, JSON.stringify(next));
   try {
-    window.dispatchEvent(new Event('sps_project_archive_updated'));
+    window.dispatchEvent(new CustomEvent('sps_project_archive_updated', { detail: { source: 'dbService' } }));
   } catch (e) {}
 }
 
@@ -620,7 +630,7 @@ export function restoreProjectFromArchive(archiveId) {
 
   safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
   writeProjectArchive(archive.filter((_, i) => i !== idx));
-  window.dispatchEvent(new Event('sps_projects_updated'));
+  window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   return restored;
 }
 
@@ -808,7 +818,7 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
     try {
       localStorage.setItem('sps_projects_cloud_synced_at', new Date().toISOString());
     } catch (e) {}
-    window.dispatchEvent(new Event('sps_projects_updated'));
+    window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   }
 
   pruneAndPersistCollaboratorAllotments(finalList);
@@ -828,6 +838,15 @@ export async function fetchProjectLibraryFromCloud() {
   // 1. Try Native Vercel Serverless Sync Engine (authoritative when reachable)
   try {
     const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects`);
+    if (res.status === 304) {
+      // Local library is already up to date with cloud
+      const saved = localStorage.getItem('sps_project_library');
+      try {
+        return saved ? filterOutDeletedProjects(JSON.parse(saved)) : [];
+      } catch (e) {
+        return [];
+      }
+    }
     if (res.status === 503) {
       // Durable hydrate failed — do NOT clear local library
       return processAndStoreProjects([], { cloudAuthoritative: false });

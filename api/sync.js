@@ -210,8 +210,9 @@ function mergeChatMessages(localList, remoteList) {
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match, If-Modified-Since, X-Requested-With, Cache-Control, Pragma');
   res.setHeader('Access-Control-Expose-Headers', 'ETag');
+  res.setHeader('Access-Control-Max-Age', '86400');
   res.setHeader('Cache-Control', 'private, no-cache');
 }
 
@@ -836,12 +837,12 @@ async function loadProjectsStore() {
 }
 
 async function saveProjectsStore(projects, deletedTitles = memoryDeletedTitles) {
-  const payload = {
+  const payload = fitProjectsPayload({
     projects: Array.isArray(projects) ? projects : [],
     deletedTitles: normalizeDeletedTitles(deletedTitles),
     updatedAt: new Date().toISOString(),
     app: 'stage-production-studio'
-  };
+  });
 
   // Empty overwrite guard at durable layer
   if (payload.projects.length === 0 && memoryProjects.length > 0) {
@@ -1271,7 +1272,7 @@ async function migrateKvFromJsonBlob({ force = false } = {}) {
 
 export default async function handler(req, res) {
   setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   const { type = 'room', roomId = 'SPS-CLOUD-8821' } = req.query || {};
   const safeRoomId = String(roomId || 'SPS-CLOUD-8821');

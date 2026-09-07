@@ -922,7 +922,7 @@ export default function ProjectConsoleModal({
       writeLocalProjectLibrary(updated);
       return updated;
     });
-    window.dispatchEvent(new Event('sps_projects_updated'));
+    window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
     const shotsN = importedProj.shots?.length || 0;
     const from = meta.sourceFile || meta.filmRoot || importedProj.openedFromFolder || '';
     alert(

@@ -522,10 +522,11 @@ function localDiskVaultPlugin() {
         // --- Multi-user cloud sync (durable on disk for local + LAN browser collab) ---
         if (req.url && req.url.startsWith('/api/sync')) {
           if (req.method === 'OPTIONS') {
-            res.statusCode = 200;
+            res.statusCode = 204;
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match, If-Modified-Since, X-Requested-With, Cache-Control, Pragma');
+            res.setHeader('Access-Control-Max-Age', '86400');
             res.end();
             return;
           }

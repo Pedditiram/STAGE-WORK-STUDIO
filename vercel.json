@@ -16,7 +16,8 @@
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, If-None-Match" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, If-None-Match, If-Modified-Since, X-Requested-With, Cache-Control, Pragma" },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
       ]
     },
     {
