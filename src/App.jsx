@@ -1663,7 +1663,7 @@ export default function App() {
             library.unshift(updatedProjectData);
           }
 
-          safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(library)));
+          writeLocalProjectLibrary(filterOutDeletedProjects(library));
           learnFromProject({
             projectTitle,
             shots: persistableShots,
@@ -2210,7 +2210,7 @@ export default function App() {
             versions: updatedVersions
           };
 
-          safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+          writeLocalProjectLibrary(library);
 
           const globalBackupsStr = localStorage.getItem('sps_global_project_backups');
           let globalBackups = globalBackupsStr ? JSON.parse(globalBackupsStr) : [];
@@ -2313,7 +2313,7 @@ export default function App() {
           }
 
           library = filterOutDeletedProjects(library);
-          safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+          writeLocalProjectLibrary(library);
           // Always mirror library to Vercel (Local badge does not disable cloud SoT)
           if (library.length > 0) syncProjectLibraryToCloud(library);
         }
@@ -2385,7 +2385,7 @@ export default function App() {
       }
 
       library = filterOutDeletedProjects(library);
-      safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+      writeLocalProjectLibrary(library);
       safeLocalStorageSetItem('sps_current_project_title', projectTitle);
       safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
       safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
@@ -3416,8 +3416,8 @@ export default function App() {
         }
 
         library = filterOutDeletedProjects(library);
-        localStorage.setItem('sps_project_library', JSON.stringify(library));
-        window.dispatchEvent(new Event('sps_projects_updated'));
+        writeLocalProjectLibrary(library);
+        window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'App' } }));
         syncProjectLibraryToCloud(library);
         }
       } catch (e) {}
