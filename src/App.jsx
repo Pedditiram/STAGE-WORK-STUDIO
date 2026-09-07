@@ -641,46 +641,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Automatically trigger Cmd+Enter full screen at launch (desktop app + webapp)
-  useEffect(() => {
-    // 1. Electron Desktop App native window fullscreen
-    if (window.electronAPI?.setFullScreen) {
-      window.electronAPI.setFullScreen(true).catch(() => {});
-    }
 
-    // 2. Web browser: attempt native fullscreen immediately
-    const triggerNativeFullscreen = async () => {
-      try {
-        const elem = document.documentElement;
-        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-          if (elem.requestFullscreen) {
-            await elem.requestFullscreen();
-          } else if (elem.webkitRequestFullscreen) {
-            await elem.webkitRequestFullscreen();
-          }
-        }
-      } catch (err) {
-        // Browser requires a user gesture on initial page load
-      }
-    };
-
-    triggerNativeFullscreen();
-
-    // 3. Fallback to trigger native browser fullscreen on first user interaction
-    const onFirstUserInteraction = () => {
-      triggerNativeFullscreen();
-    };
-
-    window.addEventListener('click', onFirstUserInteraction, { once: true });
-    window.addEventListener('keydown', onFirstUserInteraction, { once: true });
-    window.addEventListener('pointerdown', onFirstUserInteraction, { once: true });
-
-    return () => {
-      window.removeEventListener('click', onFirstUserInteraction);
-      window.removeEventListener('keydown', onFirstUserInteraction);
-      window.removeEventListener('pointerdown', onFirstUserInteraction);
-    };
-  }, []);
 
   // Sync native fullscreen exit
   useEffect(() => {

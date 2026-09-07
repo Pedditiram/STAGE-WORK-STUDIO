@@ -214,9 +214,6 @@ function createWindow() {
   loadApp();
 
   mainWindow.once('ready-to-show', () => {
-    try {
-      mainWindow.setFullScreen(true);
-    } catch (err) {}
     mainWindow.show();
     mainWindow.focus();
   });
