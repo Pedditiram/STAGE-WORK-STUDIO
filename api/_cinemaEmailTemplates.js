@@ -471,3 +471,239 @@ www.stageworkstudio.com | admin@stageworkstudio.com
 
   return { subject, html, text };
 }
+
+/**
+ * Luxury cinema-grade cold promotional outreach email for studios, directors, and producers.
+ */
+export function generateColdPromotionalEmail({
+  name = '',
+  role = 'Director / Producer',
+  studio = '',
+  appUrl = 'https://www.stageworkstudio.com',
+} = {}) {
+  const recipientName = name ? escapeHtml(name) : 'there';
+  const recipientRole = escapeHtml(role);
+  const studioName = studio ? ` at ${escapeHtml(studio)}` : '';
+  const cleanAppUrl = escapeHtml(appUrl);
+
+  const subject = `🎬 For your next slate: Real-time 3D blocking & cinema AI continuity`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stage Work Studio — AI Cinema Production OS</title>
+</head>
+<body style="margin:0;padding:0;background-color:#070605;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e8e2d8;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070605;padding:40px 14px 60px;">
+    <tr>
+      <td align="center">
+        <!-- Main Container -->
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:590px;background-color:#12100d;border:1px solid #29221a;border-radius:16px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,0.8);">
+          
+          <!-- Top Gold Ribbon -->
+          <tr>
+            <td style="background:linear-gradient(90deg, #8d7042, #c9a36a, #e8d4a8, #c9a36a, #8d7042);height:4px;"></td>
+          </tr>
+
+          <!-- Brand Header -->
+          <tr>
+            <td style="padding:36px 36px 20px;text-align:center;">
+              <table border="0" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 16px;">
+                <tr>
+                  <td align="center">
+                    <img src="${LOGO_URL}" width="48" height="48" alt="Stage Work Studio" style="display:block;border-radius:12px;border:1px solid #2e2821;" />
+                  </td>
+                </tr>
+              </table>
+              <span style="display:inline-block;background:#1b1713;border:1px solid #3d3428;color:#c9a36a;font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:12px;">
+                ✦ VIP STUDIO PREVIEW · AI CINEMA OS ✦
+              </span>
+              <h1 style="margin:0;font-size:24px;font-weight:700;color:#fdfbf7;letter-spacing:-0.02em;line-height:1.25;">
+                From Script to Screen at the Speed of Thought
+              </h1>
+              <p style="margin:8px 0 0;font-size:13px;color:#9e9587;">
+                The unified creative operating system built specifically for modern filmmakers.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding:0 36px;">
+              <hr style="border:none;border-top:1px solid #241e17;margin:0;">
+            </td>
+          </tr>
+
+          <!-- Personal Hook -->
+          <tr>
+            <td style="padding:28px 36px 20px;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#f4ecde;">
+                Hi <strong>${recipientName}</strong>,
+              </p>
+              <p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#d6cfc4;">
+                If you're helming productions as a <strong>${recipientRole}</strong>${studioName}, you know the single biggest hurdle in pre-production: the costly lag between script breakdown, visual framing, and keeping 100% character continuity across 80+ shots.
+              </p>
+              <p style="margin:0 0 20px;font-size:14px;line-height:1.65;color:#d6cfc4;">
+                We built <strong>Stage Work Studio (SWS)</strong> to solve this end-to-end — combining native Apple Silicon performance with cinematic AI tooling that respects real film grammar.
+              </p>
+
+              <!-- 4 Value Pillars -->
+              <div style="background:#0c0a09;border:1px solid #282119;border-radius:12px;padding:22px 20px;margin-bottom:24px;">
+                <p style="margin:0 0 16px;font-size:11px;font-weight:700;letter-spacing:0.18em;color:#c9a36a;text-transform:uppercase;">
+                  WHAT MAKES STAGE WORK STUDIO DIFFERENT:
+                </p>
+
+                <!-- Pillar 1 -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:14px;">
+                  <tr>
+                    <td width="32" valign="top" style="font-size:18px;padding-top:2px;">🎥</td>
+                    <td valign="top" style="font-size:13px;line-height:1.55;color:#d4cec3;">
+                      <strong style="color:#fdfbf7;">Direct Cinema 2.0 Engine:</strong>
+                      Real-time 21:9 Ultrawide &amp; 2.39:1 Anamorphic framing, volumetric key-lighting, and Seedance video animations without leaving your slate.
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Pillar 2 -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:14px;">
+                  <tr>
+                    <td width="32" valign="top" style="font-size:18px;padding-top:2px;">📐</td>
+                    <td valign="top" style="font-size:13px;line-height:1.55;color:#d4cec3;">
+                      <strong style="color:#fdfbf7;">Director's 3D Virtual Stage:</strong>
+                      Interactive 3D scene blocking, camera crane angles, and real lens focal previews before a single dollar is spent on rendering.
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Pillar 3 -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:14px;">
+                  <tr>
+                    <td width="32" valign="top" style="font-size:18px;padding-top:2px;">🧬</td>
+                    <td valign="top" style="font-size:13px;line-height:1.55;color:#d4cec3;">
+                      <strong style="color:#fdfbf7;">Intelligent Continuity Matrix:</strong>
+                      Deep Character Bible locking preserves your actors' facial features, wardrobe, and mood consistently across 100+ storyboard shots.
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Pillar 4 -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td width="32" valign="top" style="font-size:18px;padding-top:2px;">🛡️</td>
+                    <td valign="top" style="font-size:13px;line-height:1.55;color:#d4cec3;">
+                      <strong style="color:#fdfbf7;">Local-First Security &amp; Speed:</strong>
+                      Native desktop app running on Apple Silicon. Zero cloud lag, zero wait queues, and 100% intellectual property privacy.
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- CTA Card -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background:linear-gradient(180deg, #181512 0%, #13100d 100%);border:1px solid #382e22;border-left:4px solid #c9a36a;border-radius:10px;margin-bottom:24px;padding:22px 20px;text-align:center;">
+                <tr>
+                  <td>
+                    <h3 style="margin:0 0 6px;font-size:17px;font-weight:600;color:#fff;">
+                      Experience Stage Work Studio
+                    </h3>
+                    <p style="margin:0 0 18px;font-size:12px;color:#9e9587;">
+                      Preloaded with complete production slates (Jai Shri Ram, Malgudi Days, MVK).
+                    </p>
+
+                    <!-- Button -->
+                    <table border="0" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto;">
+                      <tr>
+                        <td align="center" style="border-radius:8px;background:linear-gradient(135deg, #d4af37 0%, #aa842c 100%);box-shadow:0 4px 18px rgba(212,175,55,0.3);">
+                          <a href="${cleanAppUrl}" target="_blank" style="font-size:13px;font-weight:700;color:#0b0a09;text-decoration:none;padding:13px 26px;display:inline-block;letter-spacing:0.04em;">
+                            ⚡ EXPLORE STUDIO OS &amp; GET VIP ACCESS
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:16px 0 0;font-size:11px;color:#857c70;">
+                      Or request a macOS Desktop Trial directly at <a href="${cleanAppUrl}" style="color:#c9a36a;text-decoration:none;">${cleanAppUrl}</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#ccc5b9;">
+                Would you be open to a 5-minute private walk-through on how SWS can accelerate your upcoming slate? Simply hit reply or write directly to <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;font-weight:600;">admin@stageworkstudio.com</a>.
+              </p>
+
+              <!-- Signature -->
+              <div style="background:#0e0d0b;border:1px solid #231f1a;border-radius:10px;padding:16px 18px;">
+                <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#fdfbf7;">
+                  Best regards,
+                </p>
+                <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#c9a36a;">
+                  Pedditi Ram &amp; Studio Administration
+                </p>
+                <p style="margin:0 0 2px;font-size:12px;color:#9e9587;">
+                  Stage Work Studio — AI Cinema Production OS
+                </p>
+                <p style="margin:0 0 2px;font-size:12px;color:#9e9587;">
+                  <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;">admin@stageworkstudio.com</a>
+                </p>
+                <p style="margin:0;font-size:12px;color:#9e9587;">
+                  <a href="${cleanAppUrl}" style="color:#c9a36a;text-decoration:none;">${cleanAppUrl}</a>
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#0b0a09;border-top:1px solid #1c1813;padding:22px 36px;text-align:center;">
+              <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#6b6459;letter-spacing:0.12em;text-transform:uppercase;">
+                STAGE WORK STUDIO · THE OPERATING SYSTEM FOR VISIONARY CINEMA
+              </p>
+              <p style="margin:0;font-size:11px;color:#575147;">
+                <a href="${cleanAppUrl}" style="color:#857c6e;text-decoration:none;">www.stageworkstudio.com</a> &nbsp;|&nbsp; 
+                <a href="mailto:admin@stageworkstudio.com" style="color:#857c6e;text-decoration:none;">admin@stageworkstudio.com</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+"From Script to Screen at the Speed of Thought."
+
+Hi ${name || 'there'},
+
+If you're helming productions as a ${role}${studio ? ` at ${studio}` : ''}, you know the single biggest hurdle in pre-production: the costly lag between script breakdown, visual framing, and keeping 100% character continuity across 80+ shots.
+
+We built Stage Work Studio (SWS) to solve this end-to-end — combining native Apple Silicon performance with cinematic AI tooling that respects real film grammar.
+
+WHAT MAKES STAGE WORK STUDIO DIFFERENT:
+• Direct Cinema 2.0 Engine: Real-time 21:9 Ultrawide & 2.39:1 Anamorphic framing, volumetric key-lighting, and Seedance video animations without leaving your slate.
+• Director's 3D Virtual Stage: Interactive 3D scene blocking, camera crane angles, and real lens focal previews before a single dollar is spent on rendering.
+• Intelligent Continuity Matrix: Deep Character Bible locking preserves your actors' facial features, wardrobe, and mood consistently across 100+ storyboard shots.
+• Local-First Security & Speed: Native desktop app running on Apple Silicon. Zero cloud lag, zero wait queues, and 100% intellectual property privacy.
+
+EXPERIENCE STAGE WORK STUDIO:
+Explore our live production slates (including "Jai Shri Ram" with 80+ shots, "Malgudi Days", and "MVK") directly in the workspace:
+${appUrl}
+
+Would you be open to a 5-minute private walk-through on how SWS can accelerate your upcoming slate? Simply hit reply or write directly to admin@stageworkstudio.com.
+
+Best regards,
+Pedditi Ram & Studio Administration
+Stage Work Studio — AI Cinema Production OS
+admin@stageworkstudio.com
+${appUrl}
+`.trim();
+
+  return { subject, html, text };
+}
