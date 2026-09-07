@@ -561,7 +561,7 @@ export function buildInvestorPitchDeck({
       'Never present unconfirmed talent as attached.',
       [
         `Director — DATA REQUIRED [UNKNOWN]`,
-        `Producer — Pedditi Ram [PROPOSED]`,
+        `Producer — Stage Work Studio [PROPOSED]`,
         `Writer — DATA REQUIRED [UNKNOWN]`,
         chars[0] ? `Lead — ${chars[0].name} [${chars[0].status}]` : 'Lead cast — DATA REQUIRED',
         'Department heads — DATA REQUIRED. Credits must be verified.'

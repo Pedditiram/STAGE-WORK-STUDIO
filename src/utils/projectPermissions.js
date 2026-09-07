@@ -776,7 +776,7 @@ export function ensurePrimaryAdminUser(users) {
       allProjectAccess: true,
     },
     {
-      name: 'Pedditi Ram',
+      name: 'Studio Owner',
       designation: 'Lead Director & Cinematographer',
       email: 'pedditiram@gmail.com',
       role: 'Owner',

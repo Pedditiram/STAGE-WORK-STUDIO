@@ -225,10 +225,9 @@ export default function Header({
 
     if (isAdminLoggedIn && isStudioAdmin(getCurrentUserEmail() || 'admin@stageworkstudio.com')) {
       const activeEmail = getCurrentUserEmail() || 'admin@stageworkstudio.com';
-      const isPedditi = activeEmail.toLowerCase() === 'pedditiram@gmail.com';
       return {
-        name: isPedditi ? 'Pedditi Ram' : 'Studio Admin',
-        designation: isPedditi ? 'Lead Director & Cinematographer' : 'Studio Admin & Executive Producer',
+        name: 'Studio Admin',
+        designation: 'Studio Admin & Executive Producer',
         email: activeEmail,
         role: 'Admin',
         isStudioAdmin: true,
@@ -294,11 +293,11 @@ export default function Header({
     };
   }, [isAdminLoggedIn, projectTitle, isProfileOpen]);
 
-  const userName = currentUser.name || (isAdminLoggedIn ? 'Pedditi Ram' : 'Collaborator');
+  const userName = currentUser.name || (isAdminLoggedIn ? 'Studio Admin' : 'Collaborator');
   const userDesignation = currentUser.designation || 'Lead Director';
   const userRole = currentUser.role || (isAdminLoggedIn ? 'Admin' : 'Editor');
-  const firstLetter = userName.trim().charAt(0).toUpperCase() || 'P';
-  const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PEDD';
+  const firstLetter = userName.trim().charAt(0).toUpperCase() || 'S';
+  const fourLetterName = userName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'STUD';
   const authEmail = currentUser.email || (isAdminLoggedIn ? 'Studio Admin' : 'user@gmail.com');
   // Owner: live library titles only. Collaborators: allotted ∩ live (drops deleted 002, etc.)
   const liveLibrary = getLiveProjectLibrary();

@@ -426,7 +426,7 @@ function ensurePrimaryAdmin(users) {
       verifiedAt: 'Primary Admin (default)'
     },
     {
-      name: 'Pedditi Ram',
+      name: 'Studio Owner',
       designation: 'Lead Director & Cinematographer',
       email: 'pedditiram@gmail.com',
       role: 'Owner',

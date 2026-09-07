@@ -640,7 +640,7 @@ export function generateColdPromotionalEmail({
                   Best regards,
                 </p>
                 <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#c9a36a;">
-                  Pedditi Ram &amp; Studio Administration
+                  Stage Work Studio Administration
                 </p>
                 <p style="margin:0 0 2px;font-size:12px;color:#9e9587;">
                   Stage Work Studio — AI Cinema Production OS
@@ -699,7 +699,7 @@ ${appUrl}
 Would you be open to a 5-minute private walk-through on how SWS can accelerate your upcoming slate? Simply hit reply or write directly to admin@stageworkstudio.com.
 
 Best regards,
-Pedditi Ram & Studio Administration
+Stage Work Studio Administration
 Stage Work Studio — AI Cinema Production OS
 admin@stageworkstudio.com
 ${appUrl}
