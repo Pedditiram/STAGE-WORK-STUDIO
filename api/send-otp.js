@@ -114,17 +114,16 @@ export default async function handler(req, res) {
         emailed: false,
         fallback: true,
         configured: true,
-        error: `Email delivery failed. Use the in-UI OTP.`
+        error: mailResult.error || 'Email delivery failed. Use the in-UI OTP.'
       });
     }
 
-    const data = await sendRes.json().catch(() => ({}));
     return res.status(200).json({
       success: true,
       emailed: true,
       fallback: false,
       configured: true,
-      id: data.id || null,
+      id: mailResult.id || null,
       message: `OTP emailed to ${to}`
     });
   } catch (e) {
