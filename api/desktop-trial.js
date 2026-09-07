@@ -22,6 +22,7 @@ import {
 } from './_saasLedger.js';
 import { mailConfigured, sendResend } from './_saasMail.js';
 import { validateEmail } from './_emailValidator.js';
+import { generateDesktopTrialApprovalEmail } from './_cinemaEmailTemplates.js';
 import {
   envReleaseUrl,
   hashToken,
@@ -265,29 +266,51 @@ async function createRequest(req, res, body) {
   state.requests = [record, ...(state.requests || []).filter((r) => normalizeEmail(r.email) !== email)];
   const wrote = await writeTrialState(state);
 
+  const { subject: applicantSubject, html: applicantHtml, text: applicantText } = generateDesktopTrialApprovalEmail({
+    name: record.name,
+    email: record.email,
+    downloadUrl: directDownloadUrl,
+    expiryDays: 7,
+    maxDownloads: MAX_DOWNLOADS,
+  });
+
   const titanReplyBody =
-`Hi ${record.name || 'there'},
+`STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+"From Script to Screen at the Speed of Thought."
 
-Thank you for your interest in Stage Work Studio!
+Hi ${record.name || 'there'},
 
-Your desktop trial has been approved. You can download the application using your personal, secure link below:
+Welcome to Stage Work Studio! Your Mac Desktop Trial application has been approved with VIP trial privileges.
+
+DIRECT DESKTOP DOWNLOAD LINK:
 ${directDownloadUrl}
 
-(Note: This personal link is valid for 7 days and up to 5 downloads. Sign in with ${record.email} after launch.)
+(Personal License: ${record.email} · Valid for 7 days, up to 5 downloads. Sign in with this email after launch.)
 
-If you have any questions or feedback, feel free to reply directly to this email.
+WHY TOP STUDIOS & DIRECTORS CHOOSE SWS:
+✦ Direct Cinema 2.0 Engine: Real-time 21:9 Ultrawide & 2.39:1 Anamorphic framing with photorealistic volumetric lighting.
+✦ Director's 3D Virtual Stage: Interactive 3D scene blocking, focal length adjustments, and camera crane previews.
+✦ Intelligent Continuity Matrix: Character Bible locks actor facial DNA, wardrobe, and aesthetic consistency across 100+ shots.
+✦ Local-First Security: Zero cloud lag, heavy AI runs on Apple Silicon, your scripts stay private.
 
-Best regards,
-Stage Work Studio Administration
-admin@stageworkstudio.com
-https://www.stageworkstudio.com`;
+INCLUDED IN YOUR TRIAL:
+• Prompt Compiler, Storyboard Grid, and Promo Pack Generator
+• Sample Preloaded Slates: Jai Shri Ram (80+ shots), Malgudi Days, and MVK
+• macOS Install: Right-click Stage Work Studio.app -> Open (or run: xattr -cr "/Applications/Stage Work Studio.app")
+
+If you have questions or need custom enterprise seat allotments, reply directly to admin@stageworkstudio.com.
+
+Warm regards,
+Pedditi Ram & Studio Administration
+Stage Work Studio — AI Cinema Production OS
+www.stageworkstudio.com | admin@stageworkstudio.com`;
 
   const mailtoSubject = encodeURIComponent('Your Stage Work Studio Desktop Trial Access');
   const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
 
   const subject = `[Stage Work Studio] Desktop Trial Request: ${record.name} (${record.email})`;
   const html = `
-    <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
+    <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:580px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
       <p style="margin:0 0 6px;color:#c9a36a;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">Stage Work Studio · Admin Alert</p>
       <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#fff;">New Desktop Trial Request</h1>
 
@@ -347,20 +370,7 @@ https://www.stageworkstudio.com`;
     await writeTrialState(state);
   }
 
-  // Attempt auto-reply confirmation to the applicant
-  const applicantSubject = 'Stage Work Studio — desktop trial request received';
-  const applicantText = `Hi${name ? ` ${name}` : ''},\n\nThank you for requesting a desktop trial of Stage Work Studio (SWS).\n\nYour application has been received by studio administration (admin@stageworkstudio.com) and is currently under review. Once approved, your personalized, secure download link will arrive at ${email}.\n\nFor any questions or immediate production inquiries, reach out to studio administration at admin@stageworkstudio.com.\n\n— Stage Work Studio\nAI Cinema Production OS\nwww.stageworkstudio.com`;
-  const applicantHtml = `
-    <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
-      <p style="margin:0 0 8px;color:#c9a36a;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;">Stage Work Studio · AI Cinema Production OS</p>
-      <h1 style="margin:0 0 16px;font-size:18px;">Desktop Trial Request Received</h1>
-      <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Hi${name ? ` ${escapeHtml(name)}` : ''},</p>
-      <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Thank you for requesting a desktop trial of Stage Work Studio.</p>
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#d6cfc4;">Your application has been received by studio administration (<code>admin@stageworkstudio.com</code>) and is currently under review. Your personalized, secure download link will arrive at <strong>${escapeHtml(email)}</strong>.</p>
-      <p style="margin:20px 0 0;font-size:12px;color:#8a8378;">For questions, contact <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;">admin@stageworkstudio.com</a></p>
-    </div>
-  `;
-
+  // Attempt direct dispatch of the high-conversion cinema approval email to applicant
   try {
     const applicantSend = await sendResend({
       to: email,
@@ -481,21 +491,19 @@ async function resendApproved(req, res, body) {
 }
 
 async function sendRequesterApproved(row, downloadUrl, releaseReady) {
-  const gatekeeper =
-    'macOS may warn because the build is unsigned until a Developer ID cert is used. Right-click the app → Open, or run: xattr -cr "/Applications/Stage Work Studio.app"';
-  const missing = releaseReady
-    ? ''
-    : '\n\nThe owner has not set SPS_DESKTOP_RELEASE_URL yet. The tokenized link will work after they paste a GitHub Release (or other HTTPS) URL in Settings → SaaS.';
+  const { subject, html, text } = generateDesktopTrialApprovalEmail({
+    name: row.name,
+    email: row.email,
+    downloadUrl,
+    expiryDays: 7,
+    maxDownloads: MAX_DOWNLOADS,
+  });
   return sendResend({
     to: row.email,
-    subject: 'Stage Work Studio — your desktop trial is approved',
-    text: `Hi${row.name ? ` ${row.name}` : ''},\n\nYour desktop trial was approved. Sign in with this same email (${row.email}) after install. Cloud is the license authority — the app does not control your computer or delete your files.\n\nDownload (this link is personal; do not share):\n${downloadUrl}\n\n${gatekeeper}${missing}\n\n— Stage Work Studio`,
-    html: `<p>Hi${row.name ? ` ${escapeHtml(row.name)}` : ''},</p>
-      <p>Your desktop trial was approved. Sign in with <strong>${escapeHtml(row.email)}</strong> after install. Cloud is the license authority; the app never controls your computer or deletes your files.</p>
-      <p><a href="${escapeHtml(downloadUrl)}">Download Stage Work Studio (desktop trial)</a></p>
-      <p style="font-size:13px;color:#555;">macOS may warn on an unsigned build. Right-click → Open, or <code>xattr -cr</code> the app.</p>
-      ${releaseReady ? '' : '<p>The owner still needs to set the GitHub Release URL; the tokenized link activates after that.</p>'}
-      <p>— Stage Work Studio</p>`,
+    subject,
+    text,
+    html,
+    replyTo: 'admin@stageworkstudio.com',
   });
 }
 

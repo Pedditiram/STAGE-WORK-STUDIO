@@ -11,6 +11,7 @@ import path from 'path';
 
 import { sendResend, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
 import { validateEmail } from './_emailValidator.js';
+import { generateAccessRequestConfirmationEmail } from './_cinemaEmailTemplates.js';
 
 const ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
 
@@ -148,52 +149,11 @@ https://www.stageworkstudio.com`;
     const enableAutoReply = body.autoReply !== false && process.env.SPS_DISABLE_AUTO_REPLY !== 'true';
 
     if (enableAutoReply) {
-      const autoReplySubject = 'Stage Work Studio — Access Request Received & Under Review';
-      const autoReplyHtml = `
-        <div style="background:#0c0a09;color:#f5f2eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;border:1px solid #27221d;border-radius:12px;box-sizing:border-box;">
-          <div style="border-bottom:1px solid #241f1a;padding-bottom:18px;margin-bottom:24px;">
-            <p style="margin:0 0 6px;color:#c9a36a;font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;">
-              Stage Work Studio · AI Cinema Production OS
-            </p>
-            <h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-0.01em;color:#fdfbf7;">
-              Access Request Received &amp; Under Review
-            </h1>
-          </div>
-          <div style="font-size:14px;line-height:1.65;color:#d4cec3;">
-            <p style="margin:0 0 16px;">
-              Dear ${name ? escapeHtml(name) : 'Collaborator'},
-            </p>
-            <p style="margin:0 0 16px;">
-              Thank you for showing interest in <strong>Stage Work Studio (SWS)</strong>. We have successfully received your access request for the <strong>${escapeHtml(role || 'Creative Production')}</strong> workstation profile.
-            </p>
-            <p style="margin:0 0 16px;">
-              Your application is currently under executive review by our studio administration team. Workstation access allocations and production slate permissions are provisioned in accordance with active studio protocols to ensure a secure, synchronized creative environment.
-            </p>
-            <div style="background:#171411;border:1px solid #383127;border-left:3px solid #c9a36a;border-radius:6px;padding:14px 16px;margin:20px 0;">
-              <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#c9a36a;text-transform:uppercase;letter-spacing:0.12em;">
-                Status: Application In Review
-              </p>
-              <p style="margin:0;font-size:13px;color:#e8e2d7;">
-                Our administration team is provisioning your workspace allotment. We will be sending your official <strong>Access Confirmation &amp; Invite Verification Key</strong> to this email address in a moment.
-              </p>
-            </div>
-            <p style="margin:0 0 16px;">
-              Upon confirmation, you will be able to launch the cloud production environment, connect to allotted project slates, and initiate real-time AI cinema workflows directly through both our web and desktop applications.
-            </p>
-            <p style="margin:0 0 24px;">
-              If you have questions regarding your production slate or require immediate assistance, feel free to reply directly to this email or reach out to studio administration at <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;font-weight:600;">admin@stageworkstudio.com</a>.
-            </p>
-          </div>
-          <div style="border-top:1px solid #241f1a;padding-top:20px;margin-top:28px;">
-            <p style="margin:0;font-size:13px;font-weight:600;color:#fdfbf7;">Executive Administration &amp; Operations</p>
-            <p style="margin:2px 0 0;font-size:12px;color:#8a8275;">Stage Work Studio — AI Cinema Production OS</p>
-            <p style="margin:8px 0 0;font-size:11px;color:#635d54;">
-              <a href="https://www.stageworkstudio.com" style="color:#8a8275;text-decoration:none;">www.stageworkstudio.com</a> · <a href="mailto:admin@stageworkstudio.com" style="color:#8a8275;text-decoration:none;">admin@stageworkstudio.com</a>
-            </p>
-          </div>
-        </div>
-      `;
-      const autoReplyText = `Stage Work Studio — Access Request Received & Under Review\n\nDear ${name || 'Collaborator'},\n\nThank you for showing interest in Stage Work Studio (SWS). We have successfully received your access request for the ${role || 'Creative Production'} workstation profile.\n\nYour application is currently under executive review by our studio administration team. Workstation access allocations and production slate permissions are provisioned in accordance with active studio protocols to ensure a secure, synchronized creative environment.\n\nSTATUS: Application In Review\nOur administration team is provisioning your workspace allotment. We will be sending your official Access Confirmation & Invite Verification Key to this email address in a moment.\n\nUpon confirmation, you will be able to launch the cloud production environment, connect to allotted project slates, and initiate real-time AI cinema workflows directly through both our web and desktop applications.\n\nFor questions, contact studio administration at admin@stageworkstudio.com.\n\nSincerely,\nExecutive Administration & Operations\nStage Work Studio — AI Cinema Production OS\nwww.stageworkstudio.com · admin@stageworkstudio.com`;
+      const { subject: autoReplySubject, html: autoReplyHtml, text: autoReplyText } = generateAccessRequestConfirmationEmail({
+        name,
+        email,
+        role,
+      });
 
       autoReplySend = await sendResend({
         to: email,
