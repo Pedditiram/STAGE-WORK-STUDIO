@@ -40,9 +40,9 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         }
         return;
       }
-      let msg = data?.message || 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.';
+      let msg = data?.message || 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.';
       if (typeof msg === 'string' && (msg.includes('validation_error') || msg.includes('statusCode') || msg.startsWith('{'))) {
-        msg = 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.';
+        msg = 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.';
       }
       setDone(msg);
     } catch {

@@ -22,7 +22,10 @@ import {
 } from './_saasLedger.js';
 import { mailConfigured, sendResend } from './_saasMail.js';
 import { validateEmail } from './_emailValidator.js';
-import { generateDesktopTrialApprovalEmail } from './_cinemaEmailTemplates.js';
+import {
+  generateDesktopTrialApprovalEmail,
+  generateDesktopTrialReceivedEmail,
+} from './_cinemaEmailTemplates.js';
 import {
   envReleaseUrl,
   hashToken,
@@ -266,47 +269,48 @@ async function createRequest(req, res, body) {
   state.requests = [record, ...(state.requests || []).filter((r) => normalizeEmail(r.email) !== email)];
   const wrote = await writeTrialState(state);
 
-  const { subject: applicantSubject, html: applicantHtml, text: applicantText } = generateDesktopTrialApprovalEmail({
+  const { subject: applicantSubject, html: applicantHtml, text: applicantText } = generateDesktopTrialReceivedEmail({
     name: record.name,
     email: record.email,
-    downloadUrl: directDownloadUrl,
-    expiryDays: 7,
-    maxDownloads: MAX_DOWNLOADS,
   });
 
   const titanReplyBody =
-`STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
-"From Script to Screen at the Speed of Thought."
+`Hi ${record.name || 'there'},
 
-Hi ${record.name || 'there'},
+Thank you for requesting access to Stage Work Studio!
 
-Welcome to Stage Work Studio! Your Mac Desktop Trial application has been approved with VIP trial privileges.
+We have received your application for download trial.
 
-DIRECT DESKTOP DOWNLOAD LINK:
+Your access is currently being provisioned. If you have any specific requirements or questions regarding your production slate, please feel free to let us know.
+
+Best regards,
+Stage Work Studio Administration
+admin@stageworkstudio.com
+https://www.stageworkstudio.com`;
+
+  const titanApprovalBody =
+`Hi ${record.name || 'there'},
+
+Thank you for your interest in Stage Work Studio!
+
+Your desktop trial has been approved. You can download the application using your personal, secure link below:
 ${directDownloadUrl}
 
-(Personal License: ${record.email} · Valid for 7 days, up to 5 downloads. Sign in with this email after launch.)
+(Note: This personal link is valid for 7 days and up to 5 downloads. Sign in with ${record.email} after launch.)
 
-WHY TOP STUDIOS & DIRECTORS CHOOSE SWS:
-✦ Direct Cinema 2.0 Engine: Real-time 21:9 Ultrawide & 2.39:1 Anamorphic framing with photorealistic volumetric lighting.
-✦ Director's 3D Virtual Stage: Interactive 3D scene blocking, focal length adjustments, and camera crane previews.
-✦ Intelligent Continuity Matrix: Character Bible locks actor facial DNA, wardrobe, and aesthetic consistency across 100+ shots.
-✦ Local-First Security: Zero cloud lag, heavy AI runs on Apple Silicon, your scripts stay private.
+macOS Installation:
+Right-click "Stage Work Studio.app" -> select Open, or run: xattr -cr "/Applications/Stage Work Studio.app"
 
-INCLUDED IN YOUR TRIAL:
-• Prompt Compiler, Storyboard Grid, and Promo Pack Generator
-• Sample Preloaded Slates: Jai Shri Ram (80+ shots), Malgudi Days, and MVK
-• macOS Install: Right-click Stage Work Studio.app -> Open (or run: xattr -cr "/Applications/Stage Work Studio.app")
+If you have any questions or feedback, feel free to reply directly to this email.
 
-If you have questions or need custom enterprise seat allotments, reply directly to admin@stageworkstudio.com.
+Best regards,
+Stage Work Studio Administration
+admin@stageworkstudio.com
+https://www.stageworkstudio.com`;
 
-Warm regards,
-Pedditi Ram & Studio Administration
-Stage Work Studio — AI Cinema Production OS
-www.stageworkstudio.com | admin@stageworkstudio.com`;
-
-  const mailtoSubject = encodeURIComponent('Your Stage Work Studio Desktop Trial Access');
+  const mailtoSubject = encodeURIComponent('Stage Work Studio — Download Trial Access');
   const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
+  const mailtoApproveUrl = `mailto:${encodeURIComponent(record.email)}?subject=${encodeURIComponent('Your Stage Work Studio Desktop Trial Access')}&body=${encodeURIComponent(titanApprovalBody)}`;
 
   const subject = `[Stage Work Studio] Desktop Trial Request: ${record.name} (${record.email})`;
   const html = `
@@ -326,15 +330,18 @@ www.stageworkstudio.com | admin@stageworkstudio.com`;
         <p style="margin:0 0 12px;font-size:12px;word-break:break-all;font-family:monospace;background:#0d0c0b;padding:8px 10px;border-radius:4px;border:1px solid #332d26;color:#a3e635;">
           ${escapeHtml(directDownloadUrl)}
         </p>
-        <div style="margin-top:12px;">
-          <a href="${escapeHtml(mailtoUrl)}" style="display:inline-block;background:#c9a36a;color:#0b0a09;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;text-decoration:none;">
-            ✉️ Open 1-Click Reply in Titan Mail / Email App
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <a href="${escapeHtml(mailtoUrl)}" style="display:inline-block;background:#c9a36a;color:#0b0a09;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">
+            ✉️ 1-Click Provisioning Reply (Titan)
+          </a>
+          <a href="${escapeHtml(mailtoApproveUrl)}" style="display:inline-block;background:#24201b;border:1px solid #c9a36a;color:#c9a36a;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;text-decoration:none;">
+            🚀 1-Click Send Download Link
           </a>
         </div>
       </div>
 
       <div style="background:#12100e;border:1px solid #29241e;border-radius:8px;padding:14px;margin-bottom:16px;">
-        <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Quick Copy-Paste Template for Titan Webmail:</p>
+        <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Quick Copy Template (Provisioning Response):</p>
         <pre style="margin:0;font-size:12px;line-height:1.5;color:#d1d5db;white-space:pre-wrap;font-family:monospace;background:#080706;padding:10px;border-radius:4px;">${escapeHtml(titanReplyBody)}</pre>
       </div>
 
@@ -370,7 +377,7 @@ www.stageworkstudio.com | admin@stageworkstudio.com`;
     await writeTrialState(state);
   }
 
-  // Attempt direct dispatch of the high-conversion cinema approval email to applicant
+  // Attempt direct dispatch of the trial application received email to applicant
   try {
     const applicantSend = await sendResend({
       to: email,
@@ -390,11 +397,11 @@ www.stageworkstudio.com | admin@stageworkstudio.com`;
   return res.status(200).json({
     success: true,
     queued: true,
-    emailed: Boolean(ownerSend.emailed),
-    configured: Boolean(ownerSend.configured),
+    emailed: Boolean(anyNotified),
+    configured: mailConfigured(),
     durable: wrote.durable,
     backend: wrote.backend || backend,
-    message: 'Your desktop trial request has been received. Our studio administration (admin@stageworkstudio.com) will review your application and issue your personal download link.',
+    message: 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.',
   });
 }
 
