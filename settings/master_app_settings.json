@@ -1,6 +1,6 @@
 {
   "sps_app_version": "2.5",
-  "exported_at": "2026-09-03T05:23:02.825Z",
+  "exported_at": "2026-09-07T12:59:11.284Z",
   "allotted_folder": "/Users/pedditiram/Documents/STAGE STUDIO PRODUCTIONS/SETTINGS",
   "settings": {
     "sps_llm_provider": "google_gemini",
@@ -15,9 +15,23 @@
     "sps_image_gen_engine": "google_gemini_nano",
     "sps_google_image_model": "imagen-3.0-generate-002",
     "sps_color_theme": "paper",
-    "sps_enable_canvas_tab": true,
+    "sps_enable_canvas_tab": false,
     "sps_app_version_mode": "cloud",
     "sps_authorized_phone_users": [
+      {
+        "name": "Studio Admin",
+        "designation": "Studio Admin & Executive Producer",
+        "email": "admin@stageworkstudio.com",
+        "role": "Owner",
+        "isStudioAdmin": true,
+        "status": "Active",
+        "allottedProjects": [
+          "All Studio Projects (Full Access)"
+        ],
+        "verifiedAt": "Primary Admin (default)",
+        "budgetAccess": true,
+        "allProjectAccess": true
+      },
       {
         "name": "Pedditi Ram",
         "designation": "DOP / Cinematographer",
@@ -29,6 +43,8 @@
           "All Studio Projects"
         ],
         "verifiedAt": "Today, 09:00 AM",
+        "budgetAccess": true,
+        "allProjectAccess": true,
         "phone": "+91 9701239649",
         "whatsappPhone": "+91 9701239649",
         "whatsappNotify": true,
@@ -87,6 +103,19 @@
     "sps_authorized_user_email": "pedditiram@gmail.com",
     "sps_project_library": [
       {
+        "id": "proj_mvk",
+        "title": "MVK",
+        "description": "Cinema Production Studio Project with 2 shots",
+        "targetModel": "SPS Direct Cinema",
+        "aspectRatio": "21:9 Ultrawide",
+        "roomId": "sps_untitled",
+        "lastModified": "7/9/2026, 6:29:11 PM",
+        "lastModifiedIso": "2026-09-07T12:59:11.220Z",
+        "shotCount": 0,
+        "posterUrl": "/api/project-poster?name=MVK&v=1788785936119",
+        "shots": []
+      },
+      {
         "id": "proj_malgudi_days",
         "title": "MALGUDI DAYS",
         "description": "Cinema Production Studio Project with 2 shots",
@@ -94,36 +123,22 @@
         "aspectRatio": "2.39:1 Anamorphic",
         "roomId": "sps_test_a",
         "lastModified": "10:38 AM - 3/9/2026",
-        "lastModifiedIso": "2026-09-03T05:08:36.349Z",
+        "lastModifiedIso": "2026-09-07T12:52:31.654Z",
         "updatedAt": "2026-09-03T05:08:36.349Z",
-        "shotCount": 2,
-        "shots": []
-      },
-      {
-        "id": "proj_mvk",
-        "title": "MVK",
-        "description": "Cinema Production Studio Project with 2 shots",
-        "targetModel": "SPS Direct Cinema",
-        "aspectRatio": "21:9 Ultrawide",
-        "roomId": "sps_untitled",
-        "lastModified": "3/9/2026, 10:43:08 AM",
-        "lastModifiedIso": "2026-09-03T05:15:06.500Z",
-        "updatedAt": "2026-09-03T05:13:08.392Z",
-        "shotCount": 2,
-        "posterUrl": "/api/project-poster?name=MVK&v=1788412045917",
+        "shotCount": 0,
         "shots": []
       },
       {
         "id": "proj_jai_shri_ram",
         "title": "JAI SHRI RAM",
-        "description": "Cinema Production Studio Project with 100 shots",
-        "targetModel": "SPS Direct Cinema 2.0",
-        "aspectRatio": "2.39:1 Anamorphic",
+        "description": "Cinema Production Studio Project with 81 shots",
+        "targetModel": "SPS Direct Cinema",
+        "aspectRatio": "21:9 Ultrawide",
         "roomId": "sps_jai_shri_ram",
-        "lastModified": "08:43 PM - 8/28/2026",
-        "lastModifiedIso": "2026-09-03T04:29:13.972Z",
-        "updatedAt": "2026-08-28T15:13:44.467Z",
-        "shotCount": 100,
+        "lastModified": "9/4/2026, 6:42:23 PM",
+        "lastModifiedIso": "2026-09-04T13:12:23.984Z",
+        "updatedAt": "2026-09-04T13:12:23.984Z",
+        "shotCount": 0,
         "shots": []
       },
       {
@@ -136,8 +151,8 @@
         "lastModified": "8/28/2026, 8:24:32 PM",
         "lastModifiedIso": "2026-08-28T14:54:32.488Z",
         "updatedAt": "2026-08-28T14:54:32.488Z",
-        "shotCount": 2,
-        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788412045917",
+        "shotCount": 0,
+        "posterUrl": "/api/project-poster?name=TEST%20A&v=1788258609824",
         "shots": []
       },
       {
@@ -145,10 +160,11 @@
         "title": "GUEST PLAYGROUND",
         "description": "Cinema Production Studio Project with 2 shots",
         "targetModel": "SPS Direct Cinema",
-        "aspectRatio": "21:9 Ultrawide",
+        "aspectRatio": "2.39:1 Anamorphic",
         "roomId": "GUEST-PLAY",
-        "lastModified": "3/9/2026, 10:53:02 AM",
-        "lastModifiedIso": "2026-09-03T05:23:02.772Z",
+        "lastModified": "3/9/2026, 12:32:17 PM",
+        "lastModifiedIso": "2026-09-03T07:02:17.547Z",
+        "updatedAt": "2026-09-03T07:02:17.547Z",
         "shotCount": 0,
         "shots": []
       }
@@ -1481,10 +1497,10 @@
       }
     ],
     "sps_generated_images_map": {},
-    "sps_current_project_title": "GUEST PLAYGROUND",
+    "sps_current_project_title": "MVK",
     "sps_current_target_model": "SPS Direct Cinema",
     "sps_current_aspect_ratio": "21:9 Ultrawide",
-    "sps_is_admin_logged_in": false,
+    "sps_is_admin_logged_in": true,
     "sps_guest_browse_enabled": false,
     "sps_guest_url_enabled": false
   }

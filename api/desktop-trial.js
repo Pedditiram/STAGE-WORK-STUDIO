@@ -238,70 +238,114 @@ async function createRequest(req, res, body) {
     });
   }
 
+  const minted = mintDownloadToken();
+  const origin = publicOrigin(req, body);
+  const directDownloadUrl = `${origin}/api/desktop-trial?action=download&token=${encodeURIComponent(minted.raw)}`;
+
   const record = {
     id: `dtr_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
     name,
     email,
     org,
     why: why || 'I would like a desktop trial of Stage Work Studio.',
-    status: 'pending',
+    status: 'approved', // Pre-approved so personal token is immediately valid for the applicant
     createdAt: new Date().toISOString(),
+    decidedAt: new Date().toISOString(),
+    decidedBy: 'auto-preapproved',
+    tokenHash: minted.hash,
+    tokenExp: minted.exp,
     adminEmailed: false,
     requesterEmailed: false,
     downloadCount: 0,
   };
+  activateDesktopTrialLicense(record.email);
+
   state.requests = [record, ...(state.requests || []).filter((r) => normalizeEmail(r.email) !== email)];
   const wrote = await writeTrialState(state);
 
-  const ownerTo = adminInbox();
-  const origin = publicOrigin(req, body);
-  const subject = 'Stage Work Studio — desktop trial request';
+  const titanReplyBody =
+`Hi ${record.name || 'there'},
+
+Thank you for your interest in Stage Work Studio!
+
+Your desktop trial has been approved. You can download the application using your personal, secure link below:
+${directDownloadUrl}
+
+(Note: This personal link is valid for 7 days and up to 5 downloads. Sign in with ${record.email} after launch.)
+
+If you have any questions or feedback, feel free to reply directly to this email.
+
+Best regards,
+Stage Work Studio Administration
+admin@stageworkstudio.com
+https://www.stageworkstudio.com`;
+
+  const mailtoSubject = encodeURIComponent('Your Stage Work Studio Desktop Trial Access');
+  const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
+
+  const subject = `[Stage Work Studio] Desktop Trial Request: ${record.name} (${record.email})`;
   const html = `
-    <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
-      <p style="margin:0 0 8px;color:#c9a36a;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;">Stage Work Studio</p>
-      <h1 style="margin:0 0 16px;font-size:18px;">Desktop trial request</h1>
-      <p style="margin:0 0 8px;font-size:14px;"><strong>Name:</strong> ${escapeHtml(record.name)}</p>
-      <p style="margin:0 0 8px;font-size:14px;"><strong>Email:</strong> ${escapeHtml(record.email)}</p>
-      <p style="margin:0 0 8px;font-size:14px;"><strong>Org:</strong> ${escapeHtml(record.org || '—')}</p>
-      <p style="margin:16px 0 0;font-size:14px;line-height:1.55;color:#d6cfc4;white-space:pre-wrap;">${escapeHtml(record.why)}</p>
-      <p style="margin:20px 0 0;font-size:13px;">Approve in the web app: Settings → SaaS → Desktop trial. Then a download mail goes to ${escapeHtml(record.email)}.</p>
-      <p style="margin:8px 0 0;font-size:12px;color:#8a8378;">${escapeHtml(origin)}</p>
+    <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
+      <p style="margin:0 0 6px;color:#c9a36a;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">Stage Work Studio · Admin Alert</p>
+      <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#fff;">New Desktop Trial Request</h1>
+
+      <div style="background:#171411;border:1px solid #2e2820;border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Name:</strong> ${escapeHtml(record.name)}</p>
+        <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Email:</strong> <a href="mailto:${escapeHtml(record.email)}" style="color:#38bdf8;">${escapeHtml(record.email)}</a></p>
+        <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Organization:</strong> ${escapeHtml(record.org || 'Independent / Individual')}</p>
+        <p style="margin:0;font-size:14px;"><strong style="color:#c9a36a;">Stated Reason:</strong><br><span style="color:#d6cfc4;white-space:pre-wrap;">${escapeHtml(record.why)}</span></p>
+      </div>
+
+      <div style="background:#1e1a14;border:1px solid #c9a36a;border-left:4px solid #c9a36a;border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#c9a36a;text-transform:uppercase;letter-spacing:0.1em;">Pre-Minted Secure Download Link (Active 7 Days)</p>
+        <p style="margin:0 0 12px;font-size:12px;word-break:break-all;font-family:monospace;background:#0d0c0b;padding:8px 10px;border-radius:4px;border:1px solid #332d26;color:#a3e635;">
+          ${escapeHtml(directDownloadUrl)}
+        </p>
+        <div style="margin-top:12px;">
+          <a href="${escapeHtml(mailtoUrl)}" style="display:inline-block;background:#c9a36a;color:#0b0a09;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;text-decoration:none;">
+            ✉️ Open 1-Click Reply in Titan Mail / Email App
+          </a>
+        </div>
+      </div>
+
+      <div style="background:#12100e;border:1px solid #29241e;border-radius:8px;padding:14px;margin-bottom:16px;">
+        <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Quick Copy-Paste Template for Titan Webmail:</p>
+        <pre style="margin:0;font-size:12px;line-height:1.5;color:#d1d5db;white-space:pre-wrap;font-family:monospace;background:#080706;padding:10px;border-radius:4px;">${escapeHtml(titanReplyBody)}</pre>
+      </div>
+
+      <p style="margin:16px 0 0;font-size:12px;color:#8a8378;line-height:1.5;">
+        • Notice delivered to <strong>admin@stageworkstudio.com</strong> &amp; <strong>pedditiram@gmail.com</strong>.<br>
+        • Reply to the applicant directly via Titan Webmail from <code>admin@stageworkstudio.com</code>. The applicant never sees any other address.
+      </p>
     </div>
   `;
-  const text = `Stage Work Studio desktop trial request\n\nName: ${record.name}\nEmail: ${record.email}\nOrg: ${record.org || '—'}\n\n${record.why}\n\nApprove in Settings → SaaS → Desktop trial.`;
+  const text = `Stage Work Studio desktop trial request\n\nName: ${record.name}\nEmail: ${record.email}\nOrg: ${record.org || '—'}\n\n${record.why}\n\nPre-minted download URL:\n${directDownloadUrl}\n\nReply from admin@stageworkstudio.com using Titan Email.`;
 
-  let ownerSend = await sendResend({
-    to: ownerTo,
-    subject,
-    html,
-    text,
-    replyTo: email,
-  });
+  // Dual delivery to both official studio mailbox and owner account
+  const notifyRecipients = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+  let anyNotified = false;
 
-  // If Resend is in sandbox testing mode (onboarding@resend.dev) and restricts to registered email,
-  // deliver fallback to pedditiram@gmail.com so notification is never lost, while clearly marked for admin@stageworkstudio.com.
-  if (!ownerSend.emailed && ownerSend.error && ownerSend.error.includes('pedditiram@gmail.com')) {
-    const fallback = await sendResend({
-      to: 'pedditiram@gmail.com',
-      subject: `[For admin@stageworkstudio.com] ${subject}`,
-      html: `<div style="background:#1e1b18;padding:12px;border-left:4px solid #c9a36a;margin-bottom:14px;font-family:sans-serif;font-size:12px;color:#f4ecde;">` +
-            `<strong>Desktop Trial Request for admin@stageworkstudio.com</strong><br>` +
-            `Delivered to primary admin inbox. To receive directly at <code>admin@stageworkstudio.com</code>, configure Titan SMTP (<code>SPS_SMTP_PASS</code>) or verify <strong>stageworkstudio.com</strong> at <a href="https://resend.com/domains" style="color:#38bdf8;">resend.com/domains</a>.` +
-            `</div>` + html,
-      text: `[Desktop Trial Request for admin@stageworkstudio.com]\n\n` + text,
-      replyTo: email,
-    });
-    if (fallback.emailed) {
-      ownerSend = fallback;
+  for (const recipient of notifyRecipients) {
+    try {
+      const sRes = await sendResend({
+        to: recipient,
+        subject,
+        html,
+        text,
+        replyTo: record.email,
+      });
+      if (sRes.emailed) anyNotified = true;
+    } catch (err) {
+      console.error(`[DesktopTrial] Notice delivery to ${recipient} failed:`, err?.message || err);
     }
   }
 
-  if (ownerSend.emailed) {
+  if (anyNotified) {
     record.adminEmailed = true;
     await writeTrialState(state);
   }
 
-  // Auto-reply confirmation to the applicant
+  // Attempt auto-reply confirmation to the applicant
   const applicantSubject = 'Stage Work Studio — desktop trial request received';
   const applicantText = `Hi${name ? ` ${name}` : ''},\n\nThank you for requesting a desktop trial of Stage Work Studio (SWS).\n\nYour application has been received by studio administration (admin@stageworkstudio.com) and is currently under review. Once approved, your personalized, secure download link will arrive at ${email}.\n\nFor any questions or immediate production inquiries, reach out to studio administration at admin@stageworkstudio.com.\n\n— Stage Work Studio\nAI Cinema Production OS\nwww.stageworkstudio.com`;
   const applicantHtml = `
@@ -310,34 +354,25 @@ async function createRequest(req, res, body) {
       <h1 style="margin:0 0 16px;font-size:18px;">Desktop Trial Request Received</h1>
       <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Hi${name ? ` ${escapeHtml(name)}` : ''},</p>
       <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">Thank you for requesting a desktop trial of Stage Work Studio.</p>
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#d6cfc4;">Your application has been received by studio administration (<code>admin@stageworkstudio.com</code>) and is currently under review. Once approved, your personalized, secure download link will arrive at <strong>${escapeHtml(email)}</strong>.</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#d6cfc4;">Your application has been received by studio administration (<code>admin@stageworkstudio.com</code>) and is currently under review. Your personalized, secure download link will arrive at <strong>${escapeHtml(email)}</strong>.</p>
       <p style="margin:20px 0 0;font-size:12px;color:#8a8378;">For questions, contact <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;">admin@stageworkstudio.com</a></p>
     </div>
   `;
 
-  let applicantSend = await sendResend({
-    to: email,
-    subject: applicantSubject,
-    text: applicantText,
-    html: applicantHtml,
-    replyTo: 'admin@stageworkstudio.com',
-  });
-
-  if (applicantSend.emailed) {
-    record.requesterEmailed = true;
-    await writeTrialState(state);
-  } else if (applicantSend.error && applicantSend.error.includes('pedditiram@gmail.com')) {
-    // Sandbox preview copy to admin
-    await sendResend({
-      to: 'pedditiram@gmail.com',
-      subject: `[Applicant Auto-Reply Preview: ${email}] ${applicantSubject}`,
-      text: `[Auto-Reply preview for ${email}]\n\n` + applicantText,
-      html: `<div style="background:#1e1b18;padding:12px;border-left:4px solid #c9a36a;margin-bottom:14px;font-family:sans-serif;font-size:12px;color:#f4ecde;">` +
-            `<strong>Auto-Reply Preview for ${escapeHtml(email)}</strong><br>` +
-            `Configure Titan SMTP (<code>SPS_SMTP_PASS</code>) or verify <strong>stageworkstudio.com</strong> at <a href="https://resend.com/domains" style="color:#38bdf8;">resend.com/domains</a> to deliver directly to applicant's inbox.` +
-            `</div>` + applicantHtml,
+  try {
+    const applicantSend = await sendResend({
+      to: email,
+      subject: applicantSubject,
+      text: applicantText,
+      html: applicantHtml,
       replyTo: 'admin@stageworkstudio.com',
     });
+    if (applicantSend.emailed) {
+      record.requesterEmailed = true;
+      await writeTrialState(state);
+    }
+  } catch {
+    // Non-fatal if sandbox restricts direct outbound to applicant
   }
 
   return res.status(200).json({

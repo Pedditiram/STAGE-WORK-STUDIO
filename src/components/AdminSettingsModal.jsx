@@ -651,7 +651,7 @@ export default function AdminSettingsModal({
     setNewAdminId('');
     setErrorMsg('');
     setResetSuccessMsg(
-      '✓ Weak defaults cleared. Sign in as pedditiram@gmail.com (Admin), then set a strong Admin password.'
+      '✓ Weak defaults cleared. Sign in as admin@stageworkstudio.com (Admin), then set a strong Admin password.'
     );
   };
 
@@ -925,7 +925,7 @@ export default function AdminSettingsModal({
         date: todayStr,
         dateFormatted: 'Today, 24 Jul 2026',
         time: '07:08 PM',
-        user: 'Admin Owner (pedditiram@gmail.com)',
+        user: 'Admin Owner (admin@stageworkstudio.com)',
         action: 'Authorized studio collaborator pedditivarshini@gmail.com',
         status: 'verified'
       }
@@ -1793,7 +1793,7 @@ export default function AdminSettingsModal({
                 <h4 className="text-base font-bold text-white">Admin Authentication Required</h4>
                 <p className="text-xs text-zinc-400">
                   Unlock with a strong custom Admin password, or sign in as Admin
-                  (<span className="text-cyan-300">pedditiram@gmail.com</span>) via main Login first — weak defaults are disabled.
+                  (<span className="text-cyan-300">admin@stageworkstudio.com</span>) via main Login first — weak defaults are disabled.
                 </p>
               </div>
 
@@ -1961,7 +1961,7 @@ export default function AdminSettingsModal({
                 Authenticate & Unlock Settings
               </button>
               <p className="text-[10px] text-zinc-500 text-center leading-relaxed">
-                Admin path: Login as pedditiram@gmail.com → open Settings → Authenticate (password optional while Admin session is active).
+                Admin path: Login as admin@stageworkstudio.com → open Settings → Authenticate (password optional while Admin session is active).
               </p>
             </form>
           ) : (

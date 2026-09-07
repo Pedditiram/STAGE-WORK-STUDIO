@@ -88,46 +88,50 @@ export async function sendResend({ to, subject, html, text, replyTo }) {
     reply_to: effectiveReplyTo,
   };
 
-  let sendRes = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    let sendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
 
-  // If Resend fails because stageworkstudio.com is not yet verified in Resend,
-  // automatically retry with onboarding@resend.dev (Resend sandbox address)
-  if (!sendRes.ok && preferredFrom.includes(OFFICIAL_STUDIO_EMAIL)) {
-    const errText = await sendRes.text().catch(() => '');
-    if (errText.includes('domain') || errText.includes('not verified') || errText.includes('validation_error')) {
-      const retryPayload = {
-        ...payload,
-        from: `Stage Work Studio <onboarding@resend.dev>`,
-        reply_to: OFFICIAL_STUDIO_EMAIL,
-      };
-      const retryRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(retryPayload),
-      });
-      if (retryRes.ok) {
-        const data = await retryRes.json().catch(() => ({}));
-        return { emailed: true, configured: true, id: data.id || null, provider: 'resend-sandbox' };
+    // If Resend fails because stageworkstudio.com is not yet verified in Resend,
+    // automatically retry with onboarding@resend.dev (Resend sandbox address)
+    if (!sendRes.ok && preferredFrom.includes(OFFICIAL_STUDIO_EMAIL)) {
+      const errText = await sendRes.text().catch(() => '');
+      if (errText.includes('domain') || errText.includes('not verified') || errText.includes('validation_error')) {
+        const retryPayload = {
+          ...payload,
+          from: `Stage Work Studio <onboarding@resend.dev>`,
+          reply_to: OFFICIAL_STUDIO_EMAIL,
+        };
+        const retryRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(retryPayload),
+        });
+        if (retryRes.ok) {
+          const data = await retryRes.json().catch(() => ({}));
+          return { emailed: true, configured: true, id: data.id || null, provider: 'resend-sandbox' };
+        }
       }
+      return { emailed: false, configured: true, error: errText.slice(0, 180), provider: 'resend' };
     }
-    return { emailed: false, configured: true, error: errText.slice(0, 180), provider: 'resend' };
-  }
 
-  if (!sendRes.ok) {
-    const errText = await sendRes.text().catch(() => '');
-    return { emailed: false, configured: true, error: errText.slice(0, 180), provider: 'resend' };
-  }
+    if (!sendRes.ok) {
+      const errText = await sendRes.text().catch(() => '');
+      return { emailed: false, configured: true, error: errText.slice(0, 180), provider: 'resend' };
+    }
 
-  const data = await sendRes.json().catch(() => ({}));
-  return { emailed: true, configured: true, id: data.id || null, provider: 'resend' };
+    const data = await sendRes.json().catch(() => ({}));
+    return { emailed: true, configured: true, id: data.id || null, provider: 'resend' };
+  } catch (netErr) {
+    return { emailed: false, configured: true, error: netErr?.message || 'Network error during mail delivery', provider: 'resend' };
+  }
 }

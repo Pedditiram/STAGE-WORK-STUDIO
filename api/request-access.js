@@ -74,42 +74,71 @@ export default async function handler(req, res) {
     };
     persistRequest(record);
 
-    const subject = 'Stage Work Studio — Request access';
+    const titanReplyBody =
+`Hi ${record.name || 'there'},
+
+Thank you for requesting access to Stage Work Studio!
+
+We have received your application for the ${record.role || 'Creative Production'} workstation profile.
+
+Your access is currently being provisioned. If you have any specific requirements or questions regarding your production slate, please feel free to let us know.
+
+Best regards,
+Stage Work Studio Administration
+admin@stageworkstudio.com
+https://www.stageworkstudio.com`;
+
+    const mailtoSubject = encodeURIComponent(`Stage Work Studio Access — ${record.name}`);
+    const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
+
+    const subject = `[Stage Work Studio] Access Request: ${record.name} (${record.role})`;
     const html = `
-      <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
-        <p style="margin:0 0 8px;color:#c9a36a;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;">Stage Work Studio</p>
-        <h1 style="margin:0 0 16px;font-size:18px;">Access request</h1>
-        <p style="margin:0 0 8px;font-size:14px;"><strong>Name:</strong> ${escapeHtml(record.name)}</p>
-        <p style="margin:0 0 8px;font-size:14px;"><strong>Email:</strong> ${escapeHtml(record.email)}</p>
-        <p style="margin:0 0 8px;font-size:14px;"><strong>Role / studio:</strong> ${escapeHtml(record.role)}</p>
-        <p style="margin:16px 0 0;font-size:14px;line-height:1.55;color:#d6cfc4;white-space:pre-wrap;">${escapeHtml(record.message)}</p>
+      <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
+        <p style="margin:0 0 6px;color:#c9a36a;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">Stage Work Studio · Admin Alert</p>
+        <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#fff;">New Access Request</h1>
+
+        <div style="background:#171411;border:1px solid #2e2820;border-radius:8px;padding:16px;margin-bottom:20px;">
+          <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Name:</strong> ${escapeHtml(record.name)}</p>
+          <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Email:</strong> <a href="mailto:${escapeHtml(record.email)}" style="color:#38bdf8;">${escapeHtml(record.email)}</a></p>
+          <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Role / Studio:</strong> ${escapeHtml(record.role)}</p>
+          <p style="margin:0;font-size:14px;"><strong style="color:#c9a36a;">Message:</strong><br><span style="color:#d6cfc4;white-space:pre-wrap;">${escapeHtml(record.message)}</span></p>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <a href="${escapeHtml(mailtoUrl)}" style="display:inline-block;background:#c9a36a;color:#0b0a09;font-size:13px;font-weight:700;padding:10px 18px;border-radius:6px;text-decoration:none;">
+            ✉️ Open 1-Click Reply in Titan Mail / Email App
+          </a>
+        </div>
+
+        <div style="background:#12100e;border:1px solid #29241e;border-radius:8px;padding:14px;margin-bottom:16px;">
+          <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;">Quick Copy-Paste Template for Titan Webmail:</p>
+          <pre style="margin:0;font-size:12px;line-height:1.5;color:#d1d5db;white-space:pre-wrap;font-family:monospace;background:#080706;padding:10px;border-radius:4px;">${escapeHtml(titanReplyBody)}</pre>
+        </div>
+
+        <p style="margin:16px 0 0;font-size:12px;color:#8a8378;line-height:1.5;">
+          • Notice delivered to <strong>admin@stageworkstudio.com</strong> &amp; <strong>pedditiram@gmail.com</strong>.<br>
+          • Reply to the applicant directly via Titan Webmail from <code>admin@stageworkstudio.com</code>. The applicant never sees any other address.
+        </p>
       </div>
     `;
-    const text = `Stage Work Studio access request\n\nName: ${record.name}\nEmail: ${record.email}\nRole: ${record.role}\n\n${record.message}`;
+    const text = `Stage Work Studio access request\n\nName: ${record.name}\nEmail: ${record.email}\nRole: ${record.role}\n\n${record.message}\n\nReply from admin@stageworkstudio.com using Titan Email.`;
 
-    let adminSend = await sendResend({
-      to: adminTo,
-      subject,
-      html,
-      text,
-      replyTo: email,
-    });
+    // Dual delivery to both official studio mailbox and owner account
+    const notifyRecipients = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
+    let anyNotified = false;
 
-    // If Resend is in sandbox testing mode (onboarding@resend.dev) and restricts to owner's account email,
-    // deliver to pedditiram@gmail.com so the notification is never missed, while clearly marking it for admin@stageworkstudio.com.
-    if (!adminSend.emailed && adminSend.error && adminSend.error.includes('pedditiram@gmail.com')) {
-      const fallback = await sendResend({
-        to: 'pedditiram@gmail.com',
-        subject: `[For admin@stageworkstudio.com] ${subject}`,
-        html: `<div style="background:#1e1b18;padding:12px;border-left:4px solid #c9a36a;margin-bottom:14px;font-family:sans-serif;font-size:12px;color:#f4ecde;">` +
-              `<strong>Access Request for admin@stageworkstudio.com</strong><br>` +
-              `Delivered to primary admin inbox. To receive directly at <code>admin@stageworkstudio.com</code>, verify <strong>stageworkstudio.com</strong> at <a href="https://resend.com/domains" style="color:#38bdf8;">resend.com/domains</a>.` +
-              `</div>` + html,
-        text: `[Access Request for admin@stageworkstudio.com]\n\n` + text,
-        replyTo: email,
-      });
-      if (fallback.emailed) {
-        adminSend = fallback;
+    for (const recipient of notifyRecipients) {
+      try {
+        const sRes = await sendResend({
+          to: recipient,
+          subject,
+          html,
+          text,
+          replyTo: record.email,
+        });
+        if (sRes.emailed) anyNotified = true;
+      } catch (err) {
+        console.error(`[RequestAccess] Notice delivery to ${recipient} failed:`, err?.message || err);
       }
     }
 
@@ -190,10 +219,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      emailed: Boolean(adminSend.emailed),
+      emailed: Boolean(anyNotified),
       autoReplySent: Boolean(autoReplySend?.emailed),
       queued: true,
-      configured: Boolean(adminSend.configured),
+      configured: true,
       message: 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).',
     });
   } catch (e) {
