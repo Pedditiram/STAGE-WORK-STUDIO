@@ -280,23 +280,30 @@ async function createRequest(req, res, body) {
 
 Hi ${record.name || 'there'},
 
-Your personal desktop build of Stage Work Studio has been approved.
+Welcome to Stage Work Studio! Your Mac Desktop Trial application has been approved with VIP trial privileges.
 
-DOWNLOAD FOR MAC (APPLE SILICON):
+DIRECT DESKTOP DOWNLOAD LINK:
 ${directDownloadUrl}
 
-• License Account: ${record.email}
-• Platform: macOS (Apple Silicon v2.5)
-• Active Access: 7 Days (up to 5 downloads)
-• Workstation Suite: Full Studio OS (Direct Cinema 2.0 · 3D Virtual Stage · Continuity Bible)
+(Personal License: ${record.email} · Valid for 7 days, up to 5 downloads. Sign in with this email after launch.)
 
-First Launch:
-Right-click Stage Work Studio.app -> select Open to initialize, then sign in with ${record.email}.
+WHY TOP STUDIOS & DIRECTORS CHOOSE SWS:
+✦ Direct Cinema 2.0 Engine: Real-time 21:9 Ultrawide & 2.39:1 Anamorphic framing with photorealistic volumetric lighting.
+✦ Director's 3D Virtual Stage: Interactive 3D scene blocking, focal length adjustments, and camera crane previews.
+✦ Intelligent Continuity Matrix: Character Bible locks actor facial DNA, wardrobe, and aesthetic consistency across 100+ shots.
+✦ Local-First Security: Zero cloud lag, heavy AI runs on Apple Silicon, your scripts stay private.
 
-For questions or production inquiries, reply directly to this email.
+INCLUDED IN YOUR TRIAL:
+• Prompt Compiler, Storyboard Grid, and Promo Pack Generator
+• Sample Preloaded Slates: Jai Shri Ram (80+ shots), Malgudi Days, and MVK
+• macOS Install: Right-click Stage Work Studio.app -> Open (or run: xattr -cr "/Applications/Stage Work Studio.app")
 
-Stage Work Studio Operations
-admin@stageworkstudio.com · www.stageworkstudio.com`;
+If you have questions or need custom enterprise seat allotments, reply directly to admin@stageworkstudio.com.
+
+Warm regards,
+Pedditi Ram & Studio Administration
+Stage Work Studio — AI Cinema Production OS
+www.stageworkstudio.com | admin@stageworkstudio.com`;
 
   const mailtoSubject = encodeURIComponent('Your Stage Work Studio Desktop Trial Access');
   const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
