@@ -18,6 +18,7 @@ import DesktopTrialModal from './DesktopTrialModal';
 import StudioTourOverlay from './StudioTourOverlay';
 import { LINE, PRODUCT } from '../constants/brand';
 import { pickPresentationOpening } from '../utils/presentationOpening';
+import { setPresentationMode } from '../utils/projectPermissions';
 
 const OWNER_EMAIL = 'admin@stageworkstudio.com';
 const SLIDE_MS = 8000;
@@ -140,7 +141,7 @@ const REST_SLIDES = [
   },
 ];
 
-export default function DemoModeView({ onOpenLogin }) {
+export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   const [opening] = useState(() => pickPresentationOpening());
   const slides = useMemo(() => {
     const open = {
@@ -325,6 +326,22 @@ export default function DemoModeView({ onOpenLogin }) {
               </button>
               <span className="sps-pres-meta text-[11px] ml-1">← →  ·  space</span>
               <span className="flex-1" />
+              <button
+                type="button"
+                className="sps-btn text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                style={{
+                  background: 'var(--sps-gold, #f59e0b)',
+                  color: '#0a0a0a',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  boxShadow: '0 0 14px rgba(245, 158, 11, 0.25)'
+                }}
+                onClick={() => {
+                  if (typeof onEnterStudio === 'function') onEnterStudio();
+                  else setPresentationMode(false);
+                }}
+              >
+                Enter Studio →
+              </button>
               <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.('signin')}>
                 Sign in
               </button>

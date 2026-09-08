@@ -213,17 +213,7 @@ const INITIAL_SHOTS = [
 ];
 
 function shouldBootWithSplash() {
-  if (typeof window === 'undefined') return false;
-  try {
-    // When entering the URL unauthenticated, start immediately with presentation mode
-    if (sessionStorage.getItem('sps_session_authed') !== '1') {
-      return false;
-    }
-    if (isLocalStudioHost()) return true;
-    return sessionStorage.getItem('sps_splash_done') !== '1';
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 export default function App() {
@@ -448,24 +438,22 @@ export default function App() {
     [presetProfile]
   );
 
-  // Default active view tab: 'canvas' | 'spreadsheet' | 'form'
+  // Default active view tab: 'demo' (Presentation) on launch
   const [activeView, setActiveView] = useState(() => {
     if (typeof window !== 'undefined') {
-      const authed = sessionStorage.getItem('sps_session_authed') === '1';
-      if (!authed || isPresentationMode() || areAllConsolesOff()) return 'demo';
+      if (isPresentationMode() || areAllConsolesOff()) return 'demo';
       const savedCanvas = localStorage.getItem('sps_enable_canvas_tab');
       const canShowCanvas = savedCanvas === 'true';
       const saved = localStorage.getItem('sps_active_view');
-      if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || saved === 'promo' || saved === 'campaign' || saved === 'storyboard' || saved === 'pitch' || saved === 'budget' || saved === 'demo' || (saved === 'canvas' && canShowCanvas))) {
+      if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || saved === 'promo' || saved === 'campaign' || saved === 'storyboard' || saved === 'pitch' || saved === 'budget' || (saved === 'canvas' && canShowCanvas))) {
         if (saved === 'budget' && typeof window !== 'undefined') {
           try {
             if (localStorage.getItem('sps_budget_console_enabled') === 'false') return 'spreadsheet';
           } catch { /* ignore */ }
         }
-        if (saved === 'demo') return 'spreadsheet';
         return saved;
       }
-      return 'spreadsheet';
+      return 'demo';
     }
     return 'demo';
   });
@@ -478,6 +466,7 @@ export default function App() {
       if (cancelled || !prefs?.activeView) return;
       const v = String(prefs.activeView).trim();
       if (!v || v === 'demo') return;
+      if (isPresentationMode()) return;
       setActiveView((cur) => (cur === v ? cur : v));
     })();
     return () => {
@@ -516,7 +505,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (areAllConsolesOff()) {
+    if (isPresentationMode() || areAllConsolesOff()) {
       if (activeView !== 'demo') setActiveView('demo');
       return;
     }
@@ -554,7 +543,7 @@ export default function App() {
   const [isFeatureReelOpen, setIsFeatureReelOpen] = useState(false);
   const [isGenerateDeskOpen, setIsGenerateDeskOpen] = useState(false);
   const [isStudioTourOpen, setIsStudioTourOpen] = useState(false);
-  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(shouldBootWithSplash);
+  const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
   const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
   const [projectConsoleInitialVault, setProjectConsoleInitialVault] = useState('director');
 
@@ -1102,7 +1091,7 @@ export default function App() {
       }
       if (sessionStorage.getItem('sps_session_authed') === '1') return;
       if (localStorage.getItem('sps_user_manually_logged_out') === 'true') {
-        setIsLoginModalOpen(true);
+        if (!isPresentationMode()) setIsLoginModalOpen(true);
         return;
       }
       const email = getCurrentUserEmail();
@@ -1117,7 +1106,9 @@ export default function App() {
     } catch {
       /* ignore */
     }
-    setIsLoginModalOpen(true);
+    if (!isPresentationMode()) {
+      setIsLoginModalOpen(true);
+    }
   }, [showSplash]);
 
   useEffect(() => {
@@ -3848,6 +3839,10 @@ export default function App() {
               onOpenLogin={(mode = 'signin') => {
                 setLoginInitialMode(mode);
                 setIsLoginModalOpen(true);
+              }}
+              onEnterStudio={() => {
+                setPresentationMode(false);
+                setActiveView('spreadsheet');
               }}
             />
           )}

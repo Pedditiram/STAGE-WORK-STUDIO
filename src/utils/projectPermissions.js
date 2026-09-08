@@ -312,11 +312,10 @@ export function areAllConsolesOff(email = getCurrentUserEmail()) {
 export function isPresentationMode() {
   if (typeof window === 'undefined') return true;
   try {
-    const raw = localStorage.getItem(PRESENTATION_MODE_KEY);
+    const raw = sessionStorage.getItem(PRESENTATION_MODE_KEY);
     if (raw === null) {
-      // Default to presentation mode on first visit / unauthenticated entry
-      const authed = sessionStorage.getItem('sps_session_authed') === '1';
-      return !authed;
+      // Default to presentation mode on every launch in browser and local app
+      return true;
     }
     return raw === 'true';
   } catch {
@@ -327,6 +326,7 @@ export function isPresentationMode() {
 export function setPresentationMode(on) {
   if (typeof window === 'undefined') return Boolean(on);
   try {
+    sessionStorage.setItem(PRESENTATION_MODE_KEY, on ? 'true' : 'false');
     localStorage.setItem(PRESENTATION_MODE_KEY, on ? 'true' : 'false');
     window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { presentation: Boolean(on) } }));
     window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { presentation: Boolean(on) } }));

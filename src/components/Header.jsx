@@ -429,6 +429,7 @@ export default function Header({
                     redirectGuest('Writer Console');
                     return;
                   }
+                  if (demoMode) setPresentationMode(false);
                   if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
                   else setActiveView('screenplay');
                 }}
@@ -447,6 +448,7 @@ export default function Header({
                     redirectGuest('Cinema Matrix');
                     return;
                   }
+                  if (demoMode) setPresentationMode(false);
                   setActiveView('spreadsheet');
                 }}
                 title="Matrix"
@@ -464,6 +466,7 @@ export default function Header({
                     redirectGuest('Studio Form');
                     return;
                   }
+                  if (demoMode) setPresentationMode(false);
                   setActiveView('form');
                 }}
                 title="Form"
@@ -481,6 +484,7 @@ export default function Header({
                     redirectGuest('Director Canvas');
                     return;
                   }
+                  if (demoMode) setPresentationMode(false);
                   setActiveView('canvas');
                 }}
                 title="3D Stage"
