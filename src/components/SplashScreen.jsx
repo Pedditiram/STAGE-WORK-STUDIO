@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
 import StageWorksMark from './StageWorksMark';
 import { CATEGORY, LINE, PRODUCT } from '../constants/brand';
-import { APP_VERSION, BUILD_YEAR, isLocalStudioHost } from '../utils/runtimeEnv';
+import { APP_VERSION, APP_VERSION_NAME, BUILD_YEAR, isLocalStudioHost } from '../utils/runtimeEnv';
 
 const BOOT_STEPS = [
   { id: 'mark', label: 'Brand lockup', detail: 'Stage Work Studio mark' },
@@ -170,8 +170,12 @@ export default function SplashScreen({ onFinish }) {
             >
               {local ? 'Local studio' : 'Live'}
             </span>
-            <span className="text-[10px] tabular-nums" style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}>
-              v{APP_VERSION}
+            <span
+              className="text-[10px] tabular-nums"
+              style={{ color: 'var(--sps-muted)', fontFamily: 'var(--sps-font-mono)' }}
+              title={`Stage Work Studio v${APP_VERSION}`}
+            >
+              {APP_VERSION_NAME}
             </span>
           </div>
         </header>
@@ -286,7 +290,7 @@ export default function SplashScreen({ onFinish }) {
             © {BUILD_YEAR} {PRODUCT}. All rights reserved.
           </p>
           <p className="m-0 text-center sm:text-right truncate max-w-full">
-            {local ? `Local · ${host}` : 'stageworkstudio.com'} · Never controls this computer
+            {APP_VERSION_NAME} · {local ? `Local · ${host}` : 'stageworkstudio.com'} · Never controls this computer
           </p>
         </footer>
       </div>
