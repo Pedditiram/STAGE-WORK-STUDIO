@@ -16,6 +16,7 @@ import { registerThisDevice, getDeviceId } from '../utils/saasControl';
 import { isValidEmail } from '../utils/emailValidation';
 import StageWorksMark from './StageWorksMark';
 import { CATEGORY, PRODUCT } from '../constants/brand';
+import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 
 function GoogleIcon({ className = 'w-4 h-4' }) {
   return (
@@ -353,6 +354,13 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
             <div className="min-w-0">
               <h2>{isSwitch ? 'Switch account' : PRODUCT}</h2>
               <p>{isSwitch ? 'Sign in as another user — Projects stay open.' : CATEGORY}</p>
+              <p
+                className="m-0 mt-1 text-[10px] font-mono tabular-nums"
+                style={{ color: 'var(--sps-gold)', letterSpacing: '0.08em' }}
+                title="Build stamp — same label on local and web"
+              >
+                Build {APP_VERSION_NAME}
+              </p>
             </div>
           </div>
           <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close login">
