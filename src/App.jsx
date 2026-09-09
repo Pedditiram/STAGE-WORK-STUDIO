@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import SplashScreen from './components/SplashScreen';
-import { isLocalStudioHost } from './utils/runtimeEnv';
+import { APP_VERSION_NAME, isLocalStudioHost } from './utils/runtimeEnv';
 import Header from './components/Header';
 import {
   STUDIO_SWITCH_ACCOUNT_EVENT,
@@ -4400,6 +4400,26 @@ export default function App() {
           {studioToast}
         </div>
       ) : null}
+
+      {/* Always-visible build stamp (splash is off on web; header often hidden behind Projects) */}
+      {!showSplash && (
+        <button
+          type="button"
+          onClick={() => setIsAppVersionModalOpen(true)}
+          className="fixed bottom-3 left-3 z-[80] px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
+          style={{
+            color: 'var(--sps-gold)',
+            background: 'color-mix(in srgb, var(--sps-bg) 92%, transparent)',
+            borderColor: 'color-mix(in srgb, var(--sps-gold) 50%, transparent)',
+            letterSpacing: '0.08em',
+            backdropFilter: 'blur(8px)',
+          }}
+          title={`Build ${APP_VERSION_NAME} — tap to open Local / Cloud mode`}
+          aria-label={`App build ${APP_VERSION_NAME}`}
+        >
+          {APP_VERSION_NAME}
+        </button>
+      )}
 
       {!isNavigatorOpen && (
         <button

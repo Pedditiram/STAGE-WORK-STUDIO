@@ -77,7 +77,7 @@ import {
 import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
-import { PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
+import { APP_VERSION_NAME, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 
 const LIBRARY_VIEW_KEY = 'sps_project_library_view';
 const CONSOLE_TOOLBAR_PIN_KEY = 'sps_pin_project_console_toolbar';
@@ -1978,6 +1978,17 @@ export default function ProjectConsoleModal({
               <h2 className="text-[13px] font-semibold tracking-tight m-0 shrink-0" style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}>
                 Projects
               </h2>
+              <span
+                className="text-[9px] font-mono tabular-nums shrink-0 px-1.5 py-0.5 border"
+                style={{
+                  color: 'var(--sps-gold)',
+                  borderColor: 'color-mix(in srgb, var(--sps-gold) 45%, transparent)',
+                  letterSpacing: '0.06em',
+                }}
+                title="Build stamp — compare this with local Electron to confirm you are on the same release"
+              >
+                {APP_VERSION_NAME}
+              </span>
             </div>
             <button
               type="button"
