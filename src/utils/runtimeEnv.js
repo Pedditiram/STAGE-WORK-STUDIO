@@ -40,7 +40,14 @@ export function hasNativeStudioFs() {
   return getStudioShell() === 'electron';
 }
 
+/** Semver for packages / Electron / contracts. */
 export const APP_VERSION = '1.0.0';
+/**
+ * Build stamp shown in local + web UI so crews can tell which release is running.
+ * Format: 1.(YYYY-MM-DD) — bump the date whenever you ship a local or web update.
+ */
+export const APP_BUILD_DATE = '2026-09-09';
+export const APP_VERSION_NAME = `1.(${APP_BUILD_DATE})`;
 export const BUILD_YEAR = 2026;
 
 export const PRODUCTION_ORIGIN = 'https://www.stageworkstudio.com';

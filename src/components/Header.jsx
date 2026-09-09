@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { readCloudSyncHealth, syncBackendLabel } from '../utils/cloudSyncHealth';
 import { managedCreditStatus } from '../utils/saasControl';
+import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 import {
   IconScript as Scroll,
   IconMatrix as LayoutGrid,
@@ -403,6 +404,25 @@ export default function Header({
               </button>
             )}
             <span className="text-[10px] text-[var(--sps-muted)] tabular-nums shrink-0">{shotCount}</span>
+            {typeof onOpenAppVersionModal === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onOpenAppVersionModal()}
+                className="sps-chip !normal-case !tracking-normal text-[9px] font-mono shrink-0"
+                title={`Build ${APP_VERSION_NAME} · ${appVersionMode === 'cloud' ? 'Cloud' : 'Local'} mode — click to switch`}
+                aria-label={`App build ${APP_VERSION_NAME}, ${appVersionMode} mode`}
+              >
+                {APP_VERSION_NAME}
+                <span className="opacity-60 ml-1">{appVersionMode === 'cloud' ? 'cloud' : 'local'}</span>
+              </button>
+            ) : (
+              <span
+                className="text-[9px] font-mono text-[var(--sps-muted)] shrink-0 tabular-nums"
+                title={`Build ${APP_VERSION_NAME}`}
+              >
+                {APP_VERSION_NAME}
+              </span>
+            )}
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { HardDrive, Cloud, Sparkles, Check, ShieldCheck, Zap, X } from 'lucide-react';
+import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 
 export default function AppVersionSelectorModal({ isOpen, onClose, currentMode, onSelectMode }) {
   if (!isOpen) return null;
@@ -14,7 +15,7 @@ export default function AppVersionSelectorModal({ isOpen, onClose, currentMode, 
         <div className="sps-modal-head" style={{ margin: '-1.25rem -1.25rem 1rem' }}>
           <div>
             <h2>Stage Work Studio</h2>
-            <p>Local workstation or cloud room</p>
+            <p>Local workstation or cloud room · {APP_VERSION_NAME}</p>
           </div>
           {onClose && (
             <button type="button" onClick={onClose} className="sps-icon-btn" aria-label="Close">
@@ -131,7 +132,7 @@ export default function AppVersionSelectorModal({ isOpen, onClose, currentMode, 
         {/* Modal Launch & Confirm Button */}
         <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
           <div className="text-[11px] text-zinc-400 font-mono">
-            Mode selection can be changed anytime from the top header badge.
+            Build {APP_VERSION_NAME} · change mode anytime from the header badge.
           </div>
           <button
             type="button"
