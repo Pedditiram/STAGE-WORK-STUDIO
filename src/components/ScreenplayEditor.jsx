@@ -490,7 +490,19 @@ export default function ScreenplayEditor({
         reloadFromStorage();
       }
     };
-    const onCustom = () => reloadFromStorage();
+    const onCustom = () => {
+      reloadFromStorage();
+      try {
+        const autoCand =
+          localStorage.getItem('sps_extracted_master_story') ||
+          localStorage.getItem('sps_master_script_story') ||
+          localStorage.getItem('sps_narrative_prose_story') ||
+          '';
+        setLlmAutoSynopsis(autoCand);
+      } catch {
+        /* ignore */
+      }
+    };
     window.addEventListener('storage', onStorage);
     window.addEventListener('sps_screenplay_updated', onCustom);
     return () => {

@@ -30,23 +30,6 @@ const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
 const SAMPLE_SCRIPTS = [
   {
-    title: "Kara-Dhushan War (28 Shots)",
-    script: `PART ONE: Action Script - Kara-Dhushan War: Lord Rama vs. Demon Legion of Janasthana
-ACT I: The Dark Horizon — Demon Legion Arrives
-
-S01-A Aerial · EWS Slow push-in
-Vast Dandaka forest canopy, still and grey. Horizon blackens — fourteen thousand silhouettes crest the ridge. Sky dims to ash, sunlight throttled.
-
-S01-B Low-Angle · WS Crane rise
-Kara — obsidian chariot, tusked stallions. Dhushan flanking, serpent armour. War drums pulse green-black light through smoke. Ground shudders.
-
-S01-C MCU Intercut Quick cuts x3
-Demon eyes — glowing venom-green. Spears raised. Snarling mouths. Cut rapidly: armour, claws, skull banners flapping in unnatural wind.
-
-S01-D OTS Back · WS Static hold
-Over Rama's back — alone at forest's edge in saffron dhoti, divine blue skin. The demon tide approaches. He nocks an arrow — utterly still.`
-  },
-  {
     title: "Cyberpunk Music Video Climax",
     script: `EXT. NEO-TOKYO CONCERT STAGE - NIGHT
 

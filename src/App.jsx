@@ -66,7 +66,7 @@ import {
   patchLibraryProjectBibleFields
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
-import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, resolveCurrentDemoProject } from './utils/demoStudioProject';
+import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject } from './utils/demoStudioProject';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -401,7 +401,6 @@ export default function App() {
         /* ignore */
       }
     }
-    if (hasCast && !needsRename) return;
     if (!hasCast) {
       setShots(demo.shots);
       setPresetProfile(demo.genreKey);
@@ -416,6 +415,16 @@ export default function App() {
         /* ignore */
       }
       applyOpenWorkspace(demo);
+    } else {
+      try {
+        const currentSyn = String(localStorage.getItem('sps_extracted_master_story') || '').trim();
+        if (!demoSynopsisLooksFilled(currentSyn)) {
+          localStorage.setItem('sps_extracted_master_story', demo.extractedMasterStory);
+          window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'demo_synopsis' } }));
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }, [projectTitle, shots]);
 

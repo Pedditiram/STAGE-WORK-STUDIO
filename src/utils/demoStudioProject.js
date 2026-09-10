@@ -25,6 +25,11 @@ export function demoShotsLookFilled(shots) {
   );
 }
 
+export function demoSynopsisLooksFilled(text) {
+  const t = String(text || '');
+  return /\bRavi\b/i.test(t) && /\bLakshmi\b/i.test(t);
+}
+
 function demoPosterUrl(existing) {
   const cur = String(existing || '').trim();
   if (cur && !cur.startsWith('/api/project-poster') && !cur.startsWith('idb:')) return cur;
@@ -674,6 +679,10 @@ FADE OUT.
 THE END
 `;
 
+export const DEMO_PROJECT_SYNOPSIS = `Coastal Andhra, 1986. At a misted village bus stop, Ravi waits beside Subbaiah’s tea stall with a worn leather bag and a folded envelope. The old red government bus arrives. Lakshmi is not on it. Subbaiah asks if he will keep waiting. Ravi says she promised today — and if she does not come, he will wait tomorrow.
+
+Afternoon at the tiled house: Ravi opens a metal box of photographs, a broken wristwatch, and letters tied with red thread. His sister Meena asks why he still keeps them. The envelope is not a new arrival. It holds the last letter. A Godavari sunset flashback: Lakshmi holds the broken watch and vows she will come back when it works. That night Ravi reads the final line — she came back three years ago, and he was already gone. Next morning at the same bus stop he no longer waits. He takes the river photograph, boards the bus, and goes to find her.`;
+
 export const DEMO_PROJECT_CHARACTERS = [
   {
     id: 'demo_ravi',
@@ -771,7 +780,10 @@ export function resolveCurrentDemoProject(project) {
     return {
       ...project,
       title: DEMO_PROJECT_TITLE,
-      posterUrl: demoPosterUrl(project?.posterUrl)
+      posterUrl: demoPosterUrl(project?.posterUrl),
+      extractedMasterStory: demoSynopsisLooksFilled(project?.extractedMasterStory)
+        ? project.extractedMasterStory
+        : built.extractedMasterStory
     };
   }
   return {
@@ -779,7 +791,10 @@ export function resolveCurrentDemoProject(project) {
     id: project?.id || DEMO_PROJECT_ID,
     packOrigin: project?.packOrigin,
     posterUrl: demoPosterUrl(project?.posterUrl),
-    shots: shotsOk ? project.shots.map((s) => ({ ...s })) : built.shots
+    shots: shotsOk ? project.shots.map((s) => ({ ...s })) : built.shots,
+    extractedMasterStory: demoSynopsisLooksFilled(project?.extractedMasterStory)
+      ? project.extractedMasterStory
+      : built.extractedMasterStory
   };
 }
 
@@ -801,6 +816,7 @@ export function buildDemoStudioProject({ name = '' } = {}) {
     scriptGenre: 'Emotional Drama',
     shots: DEMO_PROJECT_SHOTS.map((s) => ({ ...s })),
     screenplayText: DEMO_PROJECT_SCREENPLAY,
+    extractedMasterStory: DEMO_PROJECT_SYNOPSIS,
     characterProfiles: DEMO_PROJECT_CHARACTERS.map((c) => ({ ...c })),
     worldAssets: DEMO_PROJECT_WORLD.map((a) => ({ ...a })),
     posterUrl: DEMO_PROJECT_POSTER_URL,
