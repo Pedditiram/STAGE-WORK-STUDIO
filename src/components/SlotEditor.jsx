@@ -10,6 +10,40 @@ import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import IntensityScaleSelector from './IntensityScaleSelector';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
+import { projectScopedStorageKey } from '../utils/projectWorkspace';
+
+const GENERIC_PALETTE_PRESETS = [
+  { name: 'Warm Earth & Gold', colors: ['#2b2118', '#8b5a2b', '#d4af37', '#f3e6c8'], label: 'Umber, Clay, Gold, Cream' },
+  { name: 'Cool Coastal Mist', colors: ['#1f2a32', '#6b7c82', '#c4b89a', '#e8e2d4'], label: 'Slate, Fog, Sand, Ivory' },
+  { name: 'Celestial Saffron & Royal Blue', colors: ['#ff9933', '#1a365d', '#ffd700', '#8b0000'], label: 'Saffron, Royal Blue, Gold, Crimson' },
+  { name: 'High-Contrast Noir Silver', colors: ['#000000', '#c0c0c0', '#333333', '#e6e6e6'], label: 'Obsidian, Silver, Charcoal, Pearl' },
+  { name: 'Cyberpunk Magenta & Cyan', colors: ['#00ffff', '#ff007f', '#120a2a', '#00ff66'], label: 'Cyan, Magenta, Violet, Acid Green' },
+  { name: 'Dark Fantasy Emerald & Bronze', colors: ['#0b3b17', '#1c1c1c', '#cd7f32', '#4a2e12'], label: 'Moss, Charcoal, Bronze, Mahogany' }
+];
+const NEUTRAL_SWATCHES = ['#2b2b2b', '#8a8175', '#d8cfc0', '#c9a36a'];
+
+function readSlotList(kind, slotKey, title) {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(projectScopedStorageKey(`sps_${kind}_presets`, title) + `::${slotKey}`);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSlotList(kind, slotKey, title, list) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      projectScopedStorageKey(`sps_${kind}_presets`, title) + `::${slotKey}`,
+      JSON.stringify(Array.isArray(list) ? list : [])
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 function SlotEditor({ 
   slotConfig, 
@@ -331,38 +365,16 @@ function SlotEditor({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isModalActive, isFullscreen]);
 
-  // 1. Saved Custom Presets per Slot Key
-  const [userPresets, setUserPresets] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`sps_custom_presets_${slotConfig.key}`);
-        if (stored) return JSON.parse(stored);
-      } catch (e) {}
-    }
-    return [];
-  });
+  // Custom / favorite / hidden presets stay on this film only
+  const [userPresets, setUserPresets] = useState(() => readSlotList('custom', slotConfig.key, projectTitle));
+  const [favoritePresets, setFavoritePresets] = useState(() => readSlotList('favorite', slotConfig.key, projectTitle));
+  const [hiddenPresets, setHiddenPresets] = useState(() => readSlotList('hidden', slotConfig.key, projectTitle));
 
-  // 2. Favorite Presets per Slot Key
-  const [favoritePresets, setFavoritePresets] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`sps_favorite_presets_${slotConfig.key}`);
-        if (stored) return JSON.parse(stored);
-      } catch (e) {}
-    }
-    return [];
-  });
-
-  // 3. Hidden/Deleted Presets per Slot Key
-  const [hiddenPresets, setHiddenPresets] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`sps_hidden_presets_${slotConfig.key}`);
-        if (stored) return JSON.parse(stored);
-      } catch (e) {}
-    }
-    return [];
-  });
+  useEffect(() => {
+    setUserPresets(readSlotList('custom', slotConfig.key, projectTitle));
+    setFavoritePresets(readSlotList('favorite', slotConfig.key, projectTitle));
+    setHiddenPresets(readSlotList('hidden', slotConfig.key, projectTitle));
+  }, [slotConfig.key, projectTitle]);
 
   const handleAddNewPreset = (textToAdd) => {
     const text = (textToAdd || newPresetInput).trim();
@@ -376,11 +388,7 @@ function SlotEditor({
 
     const updated = [text, ...userPresets];
     setUserPresets(updated);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`sps_custom_presets_${slotConfig.key}`, JSON.stringify(updated));
-      } catch (e) {}
-    }
+    writeSlotList('custom', slotConfig.key, projectTitle, updated);
     setNewPresetInput('');
     setSavedToast('✓ Preset Added!');
     setTimeout(() => setSavedToast(false), 2000);
@@ -395,11 +403,7 @@ function SlotEditor({
       updated = [preset, ...favoritePresets];
     }
     setFavoritePresets(updated);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(`sps_favorite_presets_${slotConfig.key}`, JSON.stringify(updated));
-      } catch (e) {}
-    }
+    writeSlotList('favorite', slotConfig.key, projectTitle, updated);
   };
 
   const handleDeletePreset = (preset, e) => {
@@ -408,29 +412,17 @@ function SlotEditor({
     if (userPresets.includes(preset)) {
       const updatedUser = userPresets.filter(p => p !== preset);
       setUserPresets(updatedUser);
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`sps_custom_presets_${slotConfig.key}`, JSON.stringify(updatedUser));
-        } catch (e) {}
-      }
+      writeSlotList('custom', slotConfig.key, projectTitle, updatedUser);
     } else {
       const updatedHidden = [...hiddenPresets, preset];
       setHiddenPresets(updatedHidden);
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`sps_hidden_presets_${slotConfig.key}`, JSON.stringify(updatedHidden));
-        } catch (e) {}
-      }
+      writeSlotList('hidden', slotConfig.key, projectTitle, updatedHidden);
     }
 
     if (favoritePresets.includes(preset)) {
       const updatedFav = favoritePresets.filter(p => p !== preset);
       setFavoritePresets(updatedFav);
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`sps_favorite_presets_${slotConfig.key}`, JSON.stringify(updatedFav));
-        } catch (e) {}
-      }
+      writeSlotList('favorite', slotConfig.key, projectTitle, updatedFav);
     }
   };
 
@@ -745,16 +737,7 @@ function SlotEditor({
 
           {/* DEDICATED COLOR PALETTE & VISUAL SWATCHES ENGINE */}
           {(activeConfig.key === 'colorPaletteSlot' || activeConfig.key === 'subjectColorTag' || activeConfig.key === 'backgroundColorTag') && (() => {
-            const PALETTE_PRESETS = [
-              { name: 'Kara & Dhushan (Venom-Green & Ash)', colors: ['#1a1a1a', '#2d6b2d', '#555555', '#d4af37'], label: 'Ash, Venom-Green, Smoke, Gold' },
-              { name: 'Konaseema Sunset Festival', colors: ['#d4af37', '#b22222', '#8b4513', '#228b22'], label: 'Temple Gold, Crimson, Clay, Emerald' },
-              { name: 'Celestial Saffron & Royal Blue', colors: ['#ff9933', '#1a365d', '#ffd700', '#8b0000'], label: 'Saffron, Royal Blue, Gold, Crimson' },
-              { name: 'High-Contrast Noir Silver', colors: ['#000000', '#c0c0c0', '#333333', '#e6e6e6'], label: 'Obsidian, Silver, Charcoal, Pearl' },
-              { name: 'Cyberpunk Hot Magenta & Cyan', colors: ['#00ffff', '#ff007f', '#120a2a', '#00ff66'], label: 'Cyan, Hot Pink, Violet, Acid Green' },
-              { name: 'Dark Fantasy Emerald & Bronze', colors: ['#0b3b17', '#1c1c1c', '#cd7f32', '#4a2e12'], label: 'Deep Moss, Charcoal, Bronze, Mahogany' }
-            ];
-
-            const hexMatches = (value || '').match(/#[0-9a-fA-F]{6}\b/g) || ['#1a1a1a', '#2d6b2d', '#555555', '#d4af37'];
+            const hexMatches = (value || '').match(/#[0-9a-fA-F]{6}\b/g) || NEUTRAL_SWATCHES;
             const sampleImageMatch = (value || '').match(/SampleImage:\s*([^\s\|\]\)]+)/i);
             const currentSampleImageUrl = sampleImageMatch ? sampleImageMatch[1] : '';
 
@@ -786,73 +769,51 @@ function SlotEditor({
             };
 
             return (
-              <div className="p-3.5 rounded-xl border border-purple-500/40 bg-zinc-900/90 space-y-3 font-mono shadow-md">
-                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🎨</span>
-                    <h4 className="text-xs font-bold text-white">Visual Color Grading Swatches & Sample Reference Image</h4>
-                  </div>
-                  <span className="text-[10px] text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-500/30 font-bold">Interactive Color Engine</span>
+              <div className="sps-form-color-engine">
+                <div className="sps-form-color-engine-head">
+                  <h4>Swatches</h4>
+                  <span>This film only</span>
                 </div>
 
-                {/* CURRENT ACTIVE SWATCHES DISPLAY */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-zinc-300 block">Active Swatch Palette:</span>
-                  <div className="flex flex-wrap items-center gap-2 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
-                    {hexMatches.slice(0, 5).map((hex, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5 bg-zinc-900 px-2 py-1 rounded-md border border-zinc-700/80">
-                        <input
-                          type="color"
-                          value={hex}
-                          onChange={(e) => handleColorChange(idx, e.target.value)}
-                          className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
-                        />
-                        <span className="text-[10px] font-bold text-white uppercase">{hex}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* PALETTE PRESET CARDS */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-amber-400 block">Cinematic Palette Presets:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {PALETTE_PRESETS.map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSelectPalettePreset(preset)}
-                        className="p-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-purple-500 text-left transition-all group cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[11px] font-bold text-zinc-200 group-hover:text-purple-300">{preset.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {preset.colors.map((c, i) => (
-                            <span key={i} className="w-4 h-4 rounded-full border border-black/40 shadow-sm" style={{ backgroundColor: c }} title={c} />
-                          ))}
-                          <span className="text-[9.5px] text-zinc-400 truncate ml-1">{preset.label}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* SAMPLE IMAGE OPTION & PREVIEW */}
-                <div className="space-y-1.5 pt-1 border-t border-zinc-800">
-                  <span className="text-[11px] font-bold text-cyan-300 block">🖼️ Sample Color Grading Reference Image Option:</span>
-                  <div className="flex items-center gap-2">
-                    <label className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm">
-                      <span>📁 Attach Sample Image Swatch</span>
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <div className="sps-form-color-engine-row">
+                  {hexMatches.slice(0, 5).map((hex, idx) => (
+                    <label key={idx} className="sps-form-swatch">
+                      <input
+                        type="color"
+                        value={hex}
+                        onChange={(e) => handleColorChange(idx, e.target.value)}
+                      />
+                      <span>{hex}</span>
                     </label>
-                    {currentSampleImageUrl && (
-                      <div className="flex items-center gap-2 bg-zinc-950 p-1 px-2 rounded-lg border border-purple-500/40">
-                        <img src={currentSampleImageUrl} alt="Sample Color Swatch" className="w-8 h-8 rounded object-cover border border-zinc-700" />
-                        <span className="text-[10px] text-emerald-300 font-bold">✓ Sample Image Attached</span>
-                      </div>
-                    )}
-                  </div>
+                  ))}
+                </div>
+
+                <div className="sps-form-palette-grid">
+                  {GENERIC_PALETTE_PRESETS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectPalettePreset(preset)}
+                      className="sps-form-palette-card"
+                    >
+                      <span className="sps-form-palette-name">{preset.name}</span>
+                      <span className="sps-form-palette-dots">
+                        {preset.colors.map((c, i) => (
+                          <i key={i} style={{ backgroundColor: c }} title={c} />
+                        ))}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="sps-form-color-engine-row">
+                  <label className="sps-quiet-link is-muted">
+                    Attach reference
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  </label>
+                  {currentSampleImageUrl ? (
+                    <img src={currentSampleImageUrl} alt="" className="sps-form-ref-thumb" />
+                  ) : null}
                 </div>
               </div>
             );

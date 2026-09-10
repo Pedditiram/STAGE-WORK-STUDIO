@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import { CRAFT_FOCUS_GROUPS } from '../constants/craftFocusGroups';
 import SlotEditor from './SlotEditor';
 import HoverPinBar from './HoverPinBar';
 import {
@@ -70,14 +71,7 @@ function ColResizeHandle({ colKey, onResizeStart, onReset }) {
   );
 }
 
-const CATEGORIES = [
-  { id: 'all', label: 'All', keys: [] },
-  { id: 'camera', label: 'Camera', keys: ['sceneShotId', 'sceneSynopsis', 'shotComposition', 'cameraMotionTag', 'lensAndFocalLength'] },
-  { id: 'lighting', label: 'Light', keys: ['timeAndLightingEnv', 'directionalLightingAndHighlight', 'subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'colorPaletteSlot'] },
-  { id: 'vfx', label: 'Atmosphere', keys: ['atmosphereVolumetricsTag'] },
-  { id: 'character', label: 'Performance', keys: ['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPsychologyState', 'characterMannerismAndPosture', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks'] },
-  { id: 'audio_optics', label: 'Audio', keys: ['shotDurationAndImages', 'soundFxAndFoley', 'backgroundScoreMood'] }
-];
+const CATEGORIES = CRAFT_FOCUS_GROUPS;
 
 function SpreadsheetView({ 
   slots = SEEDANCE_SLOTS,

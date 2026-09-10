@@ -1,13 +1,17 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Sparkles, Copy, Check, Plus, 
+  Sparkles, 
   Film, Camera, User, Wand2, 
-  Star, Maximize2, Download
+  Star,
+  Volume2,
+  VolumeX,
+  Crosshair
 } from 'lucide-react';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import SlotEditor from './SlotEditor';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
+import { CRAFT_FOCUS_GROUPS, craftInFocusGroup, focusGroupIdForCraft } from '../constants/craftFocusGroups';
 import IntensityScaleSelector from './IntensityScaleSelector';
 import { enhanceCraftSlotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import {
@@ -31,6 +35,7 @@ import {
   toggleShotCharAssetId,
   toggleShotWorldAssetId
 } from '../utils/shotSpec';
+import { projectScopedStorageKey } from '../utils/projectWorkspace';
 
 // Preset configurations for the 26 Crafts
 const CRAFT_PRESETS = {
@@ -147,31 +152,25 @@ const CRAFT_COLOR_MAP = [
   { key: 'editTransitionCut', label: 'Cut/Transition', accent: '#92400e', category: 'Stage 4: Audio & FX' }
 ];
 
-// Form Section Card Component (Theme-Adaptive)
+/** Sign-in pattern section: one title, one short line, fields — no nested chrome cards. */
 const FormSection = ({ title, subtitle, icon: Icon, children }) => (
-  <div className="sps-studio-section rounded-[10px] border border-[var(--sps-border)] p-3 space-y-3 font-mono bg-[var(--sps-surface)]">
-    <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-1.5 flex-wrap gap-2">
-      <div className="flex items-center gap-2.5">
-        <div className="sps-icon-btn pointer-events-none">
-          <Icon className="w-4 h-4" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold font-sans uppercase tracking-wider text-[var(--sps-text)]">
-            {title}
-          </h3>
-          {subtitle && <p className="text-xs font-mono font-medium text-[var(--sps-muted)]">{subtitle}</p>}
-        </div>
+  <section className="sps-form-section">
+    <header className="sps-form-section-head">
+      {Icon ? <Icon className="sps-form-section-icon" aria-hidden /> : null}
+      <div>
+        <h3 className="sps-form-section-title">{title}</h3>
+        {subtitle ? <p className="sps-form-section-sub">{subtitle}</p> : null}
       </div>
-    </div>
-    <div className="space-y-3 pt-1">{children}</div>
-  </div>
+    </header>
+    <div className="sps-form-section-body">{children}</div>
+  </section>
 );
 
 // Individual Craft Input Field Component (Theme-Adaptive High-Contrast + Permanent Highlight + Star Icon Favorites Filter)
 const CraftField = ({
   fieldKey, label, placeholder, rows = 2,
   currentShot, highlightedFieldKey, activeModalSlotKey,
-  favoriteCraftKeys, showFavoritesOnly,
+  favoriteCraftKeys, showFavoritesOnly, focusGroupId = 'all',
   isPaperTheme, colorTheme, shots, activeShotIndex,
   onSelectShot, setHighlightedFieldKey, setActiveModalSlotKey,
   toggleFavoriteCraft, handleFieldChange, handleEnhanceField,
@@ -191,13 +190,15 @@ const CraftField = ({
     };
   }, [fieldKey, label, presets]);
 
-  // If Show Favorites Only mode is enabled, hide un-favorited craft fields
   if (showFavoritesOnly && !isFavorite) {
+    return null;
+  }
+  if (!craftInFocusGroup(fieldKey, focusGroupId)) {
     return null;
   }
 
   return (
-    <div 
+    <div
       id={`craft_field_${fieldKey}`}
       onClick={() => onCraftTap && onCraftTap(fieldKey, false)}
       onDoubleClick={(e) => {
@@ -205,32 +206,25 @@ const CraftField = ({
         e.stopPropagation();
         onCraftTap && onCraftTap(fieldKey, true);
       }}
-      className={`sps-craft-field space-y-2.5 p-3 rounded-[10px] border cursor-pointer ${
-        isHighlighted ? 'is-on' : ''
-      }`}
+      className={`sps-form-field ${isHighlighted ? 'is-on' : ''}`}
     >
-      <div className="flex items-center justify-between gap-2 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <label className={`text-[10px] font-semibold font-mono uppercase tracking-wide px-2 py-0.5 rounded-[7px] border truncate ${
-            isHighlighted
-              ? 'text-[var(--sps-on-gold)] bg-[var(--sps-gold)] border-[var(--sps-gold)]'
-              : 'text-[var(--sps-muted)] bg-[var(--sps-surface)] border-[var(--sps-border)]'
-          }`}>
-            <span>{label}</span>
-          </label>
+      <div className="sps-form-field-top">
+        <label className="sps-form-field-label" htmlFor={`craft_input_${fieldKey}`}>
+          {label}
+        </label>
+        <div className="sps-form-field-actions">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               toggleFavoriteCraft(fieldKey);
             }}
-            className={`sps-icon-btn shrink-0 ${isFavorite ? 'is-on' : ''}`}
+            className={`sps-quiet-link ${isFavorite ? 'is-current' : 'is-muted'}`}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
           >
-            <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+            <Star className={`w-3.5 h-3.5 inline ${isFavorite ? 'fill-current' : ''}`} />
           </button>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
             onClick={(e) => {
@@ -238,71 +232,54 @@ const CraftField = ({
               setHighlightedFieldKey(fieldKey);
               setActiveModalSlotKey(fieldKey);
             }}
-            className="sps-btn sps-btn-compact"
+            className="sps-quiet-link is-muted"
             title="Expand editor (⌘Space)"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
             Expand
           </button>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); handleEnhanceField(fieldKey, label); }}
             disabled={isEnhancingField === fieldKey}
-            className="sps-btn sps-btn-compact sps-btn-primary"
+            className="sps-quiet-link is-muted disabled:opacity-40"
             title="AI enhance this craft"
           >
-            <Sparkles className="w-3.5 h-3.5" />
             {isEnhancingField === fieldKey ? '…' : 'Enhance'}
           </button>
-          <span className="sps-count-pill">{value.length}</span>
         </div>
       </div>
 
-      {/* 🔥 INTERACTIVE INTENSITY SCALE SELECTOR (25%, 50%, 75%, 100%) */}
-      <IntensityScaleSelector 
-        value={value} 
-        onChange={(newVal) => handleFieldChange(fieldKey, newVal)} 
-        craftKey={fieldKey} 
-        isPaperTheme={isPaperTheme} 
+      <IntensityScaleSelector
+        value={value}
+        onChange={(newVal) => handleFieldChange(fieldKey, newVal)}
+        craftKey={fieldKey}
+        isPaperTheme={isPaperTheme}
       />
 
       <textarea
+        id={`craft_input_${fieldKey}`}
         rows={rows}
         value={value}
         onChange={(e) => handleFieldChange(fieldKey, e.target.value)}
-        placeholder={placeholder || `Enter ${label.toLowerCase()} text parameter... (Double-click or Cmd+Space to expand)`}
-        className="w-full rounded-[7px] p-2.5 text-sm font-mono leading-relaxed focus:outline-none border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)]"
+        placeholder={placeholder || `Enter ${label.toLowerCase()}…`}
+        className="sps-form-field-input"
       />
 
-      {presets.length > 0 && (
-        <div 
-          style={isPaperTheme ? { borderColor: '#fef3c7' } : { borderColor: '#18181b' }}
-          className="flex items-center gap-1.5 flex-wrap pt-2 border-t"
-        >
-          <span className={`text-[10px] font-bold uppercase shrink-0 font-sans tracking-wide ${
-            isPaperTheme ? 'text-amber-900/70' : 'text-zinc-500'
-          }`}>
-            Quick Presets:
-          </span>
-          {presets.map((preset, idx) => (
+      {presets.length > 0 ? (
+        <div className="sps-form-presets">
+          {presets.slice(0, 6).map((preset, idx) => (
             <button
               key={idx}
               type="button"
               onClick={(e) => { e.stopPropagation(); handleFieldChange(fieldKey, preset); }}
-              style={
-                value === preset 
-                  ? { backgroundColor: '#f59e0b', color: '#000000', borderColor: '#d97706' } 
-                  : isPaperTheme 
-                    ? { backgroundColor: '#fef3c7', color: '#451a03', borderColor: '#fde68a' }
-                    : { backgroundColor: '#18181b', color: '#e4e4e7', borderColor: '#27272a' }
-              }
-              className="px-2.5 py-1 rounded-lg text-[11px] font-bold font-mono transition-all cursor-pointer border shadow-sm hover:border-amber-500 hover:scale-105"
+              className={`sps-form-preset ${value === preset ? 'is-on' : ''}`}
+              title={preset}
             >
-              {preset}
+              {preset.length > 42 ? `${preset.slice(0, 40)}…` : preset}
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -414,10 +391,10 @@ export default function StudioFormView({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [highlightedFieldKey]);
 
-  // Favorites & Show Favorites Only Filter State — persisted to localStorage
+  const favoriteCraftStoreKey = projectScopedStorageKey('sps_favorite_craft_keys', projectTitle);
   const [favoriteCraftKeys, setFavoriteCraftKeys] = useState(() => {
     try {
-      const saved = localStorage.getItem('sps_favorite_craft_keys');
+      const saved = localStorage.getItem(projectScopedStorageKey('sps_favorite_craft_keys', projectTitle));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -425,16 +402,27 @@ export default function StudioFormView({
     } catch (e) {}
     return ['sceneShotId', 'sceneSynopsis', 'shotComposition', 'cameraMotionTag', 'subjectLightingTag'];
   });
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(() => {
-    return localStorage.getItem('sps_show_favorites_only') === 'true';
-  });
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(favoriteCraftStoreKey);
+      const parsed = saved ? JSON.parse(saved) : [];
+      setFavoriteCraftKeys(Array.isArray(parsed) && parsed.length
+        ? parsed
+        : ['sceneShotId', 'sceneSynopsis', 'shotComposition', 'cameraMotionTag', 'subjectLightingTag']);
+    } catch {
+      setFavoriteCraftKeys(['sceneShotId', 'sceneSynopsis', 'shotComposition', 'cameraMotionTag', 'subjectLightingTag']);
+    }
+    setShowFavoritesOnly(false);
+  }, [favoriteCraftStoreKey]);
 
   const toggleFavoriteCraft = (fieldKey) => {
     setFavoriteCraftKeys(prev => {
       const next = prev.includes(fieldKey)
         ? prev.filter(k => k !== fieldKey)
         : [...prev, fieldKey];
-      localStorage.setItem('sps_favorite_craft_keys', JSON.stringify(next));
+      localStorage.setItem(favoriteCraftStoreKey, JSON.stringify(next));
       return next;
     });
   };
@@ -443,6 +431,33 @@ export default function StudioFormView({
     const next = typeof val === 'boolean' ? val : !showFavoritesOnly;
     setShowFavoritesOnly(next);
     localStorage.setItem('sps_show_favorites_only', String(next));
+  };
+
+  const [focusGroupId, setFocusGroupId] = useState('all');
+  const mutedSlots = currentShot?.mutedSlots && typeof currentShot.mutedSlots === 'object'
+    ? currentShot.mutedSlots
+    : {};
+
+  const toggleMutedCraft = (fieldKey) => {
+    if (!fieldKey || !onUpdateShot) return;
+    if (!assertCanMutateContent(currentShot).ok) return;
+    const prev = currentShot.mutedSlots && typeof currentShot.mutedSlots === 'object'
+      ? currentShot.mutedSlots
+      : {};
+    onUpdateShot(activeShotIndex, {
+      ...currentShot,
+      mutedSlots: { ...prev, [fieldKey]: !prev[fieldKey] }
+    });
+  };
+
+  const handleFocusCraft = (fieldKey) => {
+    if (!fieldKey) return;
+    setHighlightedFieldKey(fieldKey);
+    setFocusGroupId(focusGroupIdForCraft(fieldKey));
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`craft_field_${fieldKey}`);
+      if (element) element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const isPaperTheme = colorTheme === 'paper' || colorTheme === 'light' || !colorTheme;
@@ -590,7 +605,7 @@ export default function StudioFormView({
     clickTimerRef.current = setTimeout(() => {
       const element = document.getElementById(`craft_field_${fieldKey}`);
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
       }
       clickTimerRef.current = null;
     }, 220);
@@ -694,11 +709,13 @@ export default function StudioFormView({
     return CRAFT_COLOR_MAP
       .map(c => {
         if (showFavoritesOnly && !favoriteCraftKeys.includes(c.key)) return null;
+        if (currentShot?.mutedSlots?.[c.key]) return null;
+        if (!craftInFocusGroup(c.key, focusGroupId)) return null;
         return currentShot[c.key] ? `${c.label}: ${currentShot[c.key]}` : null;
       })
       .filter(Boolean)
       .join('. ');
-  }, [currentShot, promptFormat, showFavoritesOnly, favoriteCraftKeys]);
+  }, [currentShot, promptFormat, showFavoritesOnly, favoriteCraftKeys, focusGroupId]);
 
   const handleCopyPrompt = () => {
     if (compiledMasterPrompt && typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -710,7 +727,7 @@ export default function StudioFormView({
 
   const craftProps = {
     currentShot, highlightedFieldKey, activeModalSlotKey,
-    favoriteCraftKeys, showFavoritesOnly,
+    favoriteCraftKeys, showFavoritesOnly, focusGroupId,
     isPaperTheme, colorTheme, shots, activeShotIndex,
     onSelectShot, setHighlightedFieldKey, setActiveModalSlotKey,
     toggleFavoriteCraft, handleFieldChange, handleEnhanceField,
@@ -720,60 +737,56 @@ export default function StudioFormView({
 
 
   return (
-    <div className="sps-studio-form w-full h-full min-h-0 flex flex-col overflow-hidden bg-[var(--sps-bg)] text-[var(--sps-text)]">
-      <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)]">
-        <span className="text-[10px] font-mono text-[var(--sps-muted)] uppercase tracking-wide">
-          Shot lifecycle
-        </span>
-        <LifecycleControls entity={currentShot} onChange={handleLifecycleChange} />
-        {isLifecycleLocked(currentShot) ? (
-          <span className="text-[10px] text-[var(--sps-gold)] font-mono">Craft frozen — unlock to revise</span>
-        ) : null}
-        {spineNode ? (
-          <span className="text-[10px] font-mono text-[var(--sps-muted)] ml-auto">
-            Act {spineNode.act} · Seq {spineNode.sequenceSeq} · {spineNode.sceneTag}
-          </span>
-        ) : null}
-      </div>
-      {(() => {
-        const registry = readActiveAssetRegistry();
-        const chars = registry?.characters || [];
-        const worlds = registry?.world || [];
-        const locked = isLifecycleLocked(currentShot);
-        const spec = shotSpecSummary(currentShot);
-        const boundChars = new Set(spec.charAssetIds || []);
-        const boundWorld = new Set(spec.worldAssetIds || []);
-        if (!chars.length && !worlds.length && !boundChars.size && !boundWorld.size) {
+    <div className="sps-form-desk">
+      <div className="sps-form-desk-chrome">
+        <div className="sps-form-desk-chrome-row">
+          <span className="sps-form-desk-kicker">Shot lifecycle</span>
+          <LifecycleControls entity={currentShot} onChange={handleLifecycleChange} />
+          {isLifecycleLocked(currentShot) ? (
+            <span className="sps-form-desk-note">Craft frozen — unlock to revise</span>
+          ) : null}
+          {spineNode ? (
+            <span className="sps-form-desk-meta">
+              Act {spineNode.act} · Seq {spineNode.sequenceSeq} · {spineNode.sceneTag}
+            </span>
+          ) : null}
+        </div>
+        {(() => {
+          const registry = readActiveAssetRegistry();
+          const chars = registry?.characters || [];
+          const worlds = registry?.world || [];
+          const locked = isLifecycleLocked(currentShot);
+          const spec = shotSpecSummary(currentShot);
+          const boundChars = new Set(spec.charAssetIds || []);
+          const boundWorld = new Set(spec.worldAssetIds || []);
+          if (!chars.length && !worlds.length && !boundChars.size && !boundWorld.size) {
+            return (
+              <p className="sps-form-desk-hint">
+                Asset IDs — open Cast/World, then Relink from Production to mint CHAR_/WORLD_ refs.
+              </p>
+            );
+          }
           return (
-            <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)]">
-              <p className="text-[10px] text-[var(--sps-muted)] m-0">
-                Asset IDs — open Cast/World then Relink from Production dashboard to mint CHAR_/WORLD_ refs.
-              </p>
-            </div>
-          );
-        }
-        return (
-          <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)] space-y-2">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">
-                Shot Spec · assets · crafts {spec.craftPct}%
-              </p>
-              <button
-                type="button"
-                className="sps-btn sps-btn-compact text-[9px] disabled:opacity-40"
-                disabled={locked || !onUpdateShot}
-                title="Infer CHAR_/WORLD_ from @tags on this shot"
-                onClick={() => {
-                  const reg = readActiveAssetRegistry();
-                  if (!reg) return;
-                  onUpdateShot(activeShotIndex, linkShotToAssetRegistry(currentShot, reg));
-                }}
-              >
-                Relink tags
-              </button>
-            </div>
-            {chars.length ? (
-              <div className="flex flex-wrap gap-1">
+            <div className="sps-form-desk-assets">
+              <div className="sps-form-desk-chrome-row">
+                <span className="sps-form-desk-kicker">
+                  Shot Spec · crafts {spec.craftPct}%
+                </span>
+                <button
+                  type="button"
+                  className="sps-quiet-link is-muted disabled:opacity-40"
+                  disabled={locked || !onUpdateShot}
+                  title="Infer CHAR_/WORLD_ from @tags on this shot"
+                  onClick={() => {
+                    const reg = readActiveAssetRegistry();
+                    if (!reg) return;
+                    onUpdateShot(activeShotIndex, linkShotToAssetRegistry(currentShot, reg));
+                  }}
+                >
+                  Relink tags
+                </button>
+              </div>
+              <div className="sps-form-chip-row">
                 {chars.map((c) => {
                   const on = boundChars.has(c.assetId);
                   return (
@@ -782,11 +795,7 @@ export default function StudioFormView({
                       type="button"
                       disabled={locked || !onUpdateShot}
                       title={c.name || c.tag || c.assetId}
-                      className={`text-[9px] font-mono px-1.5 py-0.5 border rounded disabled:opacity-40 ${
-                        on
-                          ? 'border-[var(--sps-gold)] text-[var(--sps-gold)]'
-                          : 'border-[var(--sps-border)] text-[var(--sps-muted)]'
-                      }`}
+                      className={`sps-form-chip ${on ? 'is-on' : ''}`}
                       onClick={() =>
                         onUpdateShot(activeShotIndex, toggleShotCharAssetId(currentShot, c.assetId))
                       }
@@ -795,10 +804,6 @@ export default function StudioFormView({
                     </button>
                   );
                 })}
-              </div>
-            ) : null}
-            {worlds.length ? (
-              <div className="flex flex-wrap gap-1">
                 {worlds.map((w) => {
                   const on = boundWorld.has(w.assetId);
                   return (
@@ -807,11 +812,7 @@ export default function StudioFormView({
                       type="button"
                       disabled={locked || !onUpdateShot}
                       title={w.name || w.tag || w.assetId}
-                      className={`text-[9px] font-mono px-1.5 py-0.5 border rounded disabled:opacity-40 ${
-                        on
-                          ? 'border-cyan-500/70 text-cyan-400'
-                          : 'border-[var(--sps-border)] text-[var(--sps-muted)]'
-                      }`}
+                      className={`sps-form-chip is-world ${on ? 'is-on' : ''}`}
                       onClick={() =>
                         onUpdateShot(activeShotIndex, toggleShotWorldAssetId(currentShot, w.assetId))
                       }
@@ -821,275 +822,326 @@ export default function StudioFormView({
                   );
                 })}
               </div>
-            ) : null}
-          </div>
-        );
-      })()}
-      {continuityBundle.entries.length > 0 ? (
-        <div className="shrink-0 px-3 py-2 border-b border-[var(--sps-border)] bg-[var(--sps-surface)] space-y-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)]">Continuity state</p>
-          {continuityBundle.entries.map((entry) => (
-            <div key={entry.key} className="border border-[var(--sps-border)] rounded-[6px] p-2">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[11px] font-mono font-bold text-[var(--sps-gold)]">{entry.tag || entry.name}</span>
-                {entry.implicitChange ? (
-                  <span className="text-[9px] text-amber-400 font-mono">drift — patch below</span>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            </div>
+          );
+        })()}
+        {continuityBundle.entries.length > 0 ? (
+          <div className="sps-form-continuity">
+            <span className="sps-form-desk-kicker">Continuity</span>
+            {continuityBundle.entries.map((entry) => (
+              <div key={entry.key} className="sps-form-continuity-row">
+                <span className="sps-form-continuity-tag">{entry.tag || entry.name}</span>
                 {['costume', 'injury', 'prop'].map((field) => (
-                  <div key={field}>
-                    <label className="text-[9px] text-[var(--sps-muted)] uppercase">{field}</label>
+                  <label key={field} className="sps-form-continuity-field">
+                    <span>{field}</span>
                     <input
                       type="text"
                       value={entry.patch?.[field] ?? entry.state[field] ?? ''}
                       disabled={isLifecycleLocked(currentShot)}
                       onChange={(e) => patchContinuityField(entry.key, field, e.target.value)}
-                      className="w-full mt-0.5 text-[10px] font-mono border border-[var(--sps-border)] rounded px-1.5 py-1 bg-[var(--sps-bg)] disabled:opacity-50"
                     />
-                  </div>
+                  </label>
                 ))}
               </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {/* MAIN TWO-COLUMN FORM WORKSPACE */}
-      <div className="sps-studio-form-grid flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 md:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3 w-full">
-        {/* LEFT COLUMN: 24 CRAFT PRODUCTION FORM STAGES OR EXPANDED EDITOR (8 Cols) */}
-        <div className="lg:col-span-8 space-y-6">
-          {activeModalSlotKey ? (
-            /* FULL TEXT & PRESET MANAGER WINDOW IN LEFT WORKSPACE */
-            <div className="rounded-[10px] overflow-hidden border border-[var(--sps-border)] bg-[var(--sps-surface)] font-mono">
-              <SlotEditor
-                slotConfig={SEEDANCE_SLOTS.find(s => s.key === activeModalSlotKey) || {
-                  key: activeModalSlotKey,
-                  label: activeModalSlotKey,
-                  presets: CRAFT_PRESETS[activeModalSlotKey] || []
-                }}
-                value={currentShot[activeModalSlotKey] || ''}
-                onChange={(val) => handleFieldChange(activeModalSlotKey, val)}
-                shot={currentShot}
-                readOnly={isLifecycleLocked(currentShot)}
-                embedded={true}
-                compact={false}
-                allSlots={SEEDANCE_SLOTS}
-                genreKey={genreKey}
-                projectTitle={projectTitle}
-                shots={shots}
-                onOpenLlmCommands={onOpenLlmCommands}
-                onUpdateShot={onUpdateShot}
-                totalShotsCount={shots.length}
-                currentShotIndex={activeShotIndex}
-                onNavigateNextShot={() => onSelectShot && onSelectShot(activeShotIndex < shots.length - 1 ? activeShotIndex + 1 : 0)}
-                onNavigatePrevShot={() => onSelectShot && onSelectShot(activeShotIndex > 0 ? activeShotIndex - 1 : shots.length - 1)}
-                onJumpToSlot={(key) => {
-                  setHighlightedFieldKey(key);
-                  setActiveModalSlotKey(key);
-                }}
-                scenesList={scenesList}
-                currentSceneId={currentSceneId}
-                onNavigateNextScene={() => {
-                  if (!onSelectShot || scenesList.length === 0) return;
-                  const targetIdx = (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1)
-                    ? scenesList[currSceneIdx + 1].firstShotIndex
-                    : (scenesList[0]?.firstShotIndex || 0);
-                  onSelectShot(targetIdx);
-                }}
-                onNavigatePrevScene={() => {
-                  if (!onSelectShot || scenesList.length === 0) return;
-                  const targetIdx = currSceneIdx > 0
-                    ? scenesList[currSceneIdx - 1].firstShotIndex
-                    : (scenesList[scenesList.length - 1]?.firstShotIndex || 0);
-                  onSelectShot(targetIdx);
-                }}
-                onJumpToScene={(targetScId) => {
-                  const sc = scenesList.find(s => s.sceneId === targetScId);
-                  if (sc && onSelectShot) onSelectShot(sc.firstShotIndex);
-                }}
-                onCloseForcePopup={() => setActiveModalSlotKey(null)}
-                colorTheme={colorTheme}
-              />
-            </div>
-          ) : (
-            <>
-              {/* STAGE 1: SHOT IDENTITY & SYNOPSIS */}
-              <FormSection title="Stage 1: Shot Identity & Scene Synopsis" subtitle="Set shot ID, narrative context, and temporal duration" icon={Film}>
-                <CraftField fieldKey="sceneSynopsis" label="Scene Synopsis (LLM Auto vs Writer Manual)" placeholder="Enter complete scene context, location, atmospheric setup, and narrative goal..." rows={3} {...craftProps} />
-              </FormSection>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
-              {/* STAGE 2: CINEMATOGRAPHY & CAMERA CRAFT */}
-              <FormSection title="Stage 2: Cinematography & Camera Craft" subtitle="Framing, lens choices, color palettes, and directional lighting" icon={Camera}>
-                <div className="grid grid-cols-1 gap-4">
+      <div className="sps-form-desk-body">
+        <div className="sps-form-pane sps-form-pane-work" data-form-pane="work">
+          <div className="sps-form-pane-inner">
+            {activeModalSlotKey ? (
+              <div className="sps-form-expand-shell">
+                <SlotEditor
+                  slotConfig={SEEDANCE_SLOTS.find(s => s.key === activeModalSlotKey) || {
+                    key: activeModalSlotKey,
+                    label: activeModalSlotKey,
+                    presets: CRAFT_PRESETS[activeModalSlotKey] || []
+                  }}
+                  value={currentShot[activeModalSlotKey] || ''}
+                  onChange={(val) => handleFieldChange(activeModalSlotKey, val)}
+                  shot={currentShot}
+                  readOnly={isLifecycleLocked(currentShot)}
+                  embedded={true}
+                  compact={false}
+                  allSlots={SEEDANCE_SLOTS}
+                  genreKey={genreKey}
+                  projectTitle={projectTitle}
+                  shots={shots}
+                  onOpenLlmCommands={onOpenLlmCommands}
+                  onUpdateShot={onUpdateShot}
+                  totalShotsCount={shots.length}
+                  currentShotIndex={activeShotIndex}
+                  onNavigateNextShot={() => onSelectShot && onSelectShot(activeShotIndex < shots.length - 1 ? activeShotIndex + 1 : 0)}
+                  onNavigatePrevShot={() => onSelectShot && onSelectShot(activeShotIndex > 0 ? activeShotIndex - 1 : shots.length - 1)}
+                  onJumpToSlot={(key) => {
+                    setHighlightedFieldKey(key);
+                    setActiveModalSlotKey(key);
+                  }}
+                  scenesList={scenesList}
+                  currentSceneId={currentSceneId}
+                  onNavigateNextScene={() => {
+                    if (!onSelectShot || scenesList.length === 0) return;
+                    const targetIdx = (currSceneIdx !== -1 && currSceneIdx < scenesList.length - 1)
+                      ? scenesList[currSceneIdx + 1].firstShotIndex
+                      : (scenesList[0]?.firstShotIndex || 0);
+                    onSelectShot(targetIdx);
+                  }}
+                  onNavigatePrevScene={() => {
+                    if (!onSelectShot || scenesList.length === 0) return;
+                    const targetIdx = currSceneIdx > 0
+                      ? scenesList[currSceneIdx - 1].firstShotIndex
+                      : (scenesList[scenesList.length - 1]?.firstShotIndex || 0);
+                    onSelectShot(targetIdx);
+                  }}
+                  onJumpToScene={(targetScId) => {
+                    const sc = scenesList.find(s => s.sceneId === targetScId);
+                    if (sc && onSelectShot) onSelectShot(sc.firstShotIndex);
+                  }}
+                  onCloseForcePopup={() => setActiveModalSlotKey(null)}
+                  colorTheme={colorTheme}
+                />
+              </div>
+            ) : (
+              <>
+                {craftInFocusGroup('sceneSynopsis', focusGroupId) ? (
+                <FormSection title="Identity" subtitle="Shot ID context and scene beat" icon={Film}>
+                  <CraftField fieldKey="sceneSynopsis" label="Scene Synopsis" placeholder="Location, atmosphere, narrative goal…" rows={3} {...craftProps} />
+                </FormSection>
+                ) : null}
+
+                {['shotComposition', 'cameraMotionTag', 'lensAndFocalLength', 'timeAndLightingEnv', 'directionalLightingAndHighlight', 'subjectLightingTag', 'subjectColorTag', 'backgroundLightingTag', 'backgroundColorTag', 'colorPaletteSlot'].some((k) => craftInFocusGroup(k, focusGroupId)) ? (
+                <FormSection title="Camera" subtitle="Framing, lens, light, and palette" icon={Camera}>
                   <CraftField fieldKey="shotComposition" label="Shot Composition & Framing" {...craftProps} />
                   <CraftField fieldKey="cameraMotionTag" label="Camera Motion & Rig" {...craftProps} />
                   <CraftField fieldKey="lensAndFocalLength" label="Lens & Focal Length" {...craftProps} />
-                  <CraftField fieldKey="timeAndLightingEnv" label="Weather & Time Rig (Weather, Timing, Nature/Indoor Env)" {...craftProps} />
-                  <CraftField fieldKey="directionalLightingAndHighlight" label="Light Direction, Shadow Placement & Highlight Rig" {...craftProps} />
+                  <CraftField fieldKey="timeAndLightingEnv" label="Weather & Time Rig" {...craftProps} />
+                  <CraftField fieldKey="directionalLightingAndHighlight" label="Light Direction & Highlight" {...craftProps} />
                   <CraftField fieldKey="subjectLightingTag" label="Subject Lighting" {...craftProps} />
                   <CraftField fieldKey="subjectColorTag" label="Subject Color" {...craftProps} />
                   <CraftField fieldKey="backgroundLightingTag" label="Background Lighting" {...craftProps} />
                   <CraftField fieldKey="backgroundColorTag" label="Background Color" {...craftProps} />
                   <CraftField fieldKey="colorPaletteSlot" label="Color Palette & Grade" {...craftProps} />
-                </div>
-              </FormSection>
+                </FormSection>
+                ) : null}
 
-              {/* STAGE 3: CHARACTER & ACTION PERFORMANCE */}
-              <FormSection title="Stage 3: Character Performance & Action" subtitle="Character ref, expressions, dialogue, and stunt mechanics" icon={User}>
-                <div className="grid grid-cols-1 gap-4">
+                {['characterIdAssetRef', 'coArtistInteraction', 'actionEnvContext', 'characterExpression', 'characterPsychologyState', 'characterMannerismAndPosture', 'characterPlacement', 'characterDialogue', 'characterMovement', 'characterEyeLooks', 'makeupAndHairStyle', 'stuntAndSafetyNotes'].some((k) => craftInFocusGroup(k, focusGroupId)) ? (
+                <FormSection title="Performance" subtitle="Cast, expression, dialogue, and action" icon={User}>
                   <CraftField fieldKey="characterIdAssetRef" label="Character Asset Reference" {...craftProps} />
                   <CraftField fieldKey="coArtistInteraction" label="Co-Artist Interaction" {...craftProps} />
                   <CraftField fieldKey="actionEnvContext" label="Environment Context" {...craftProps} />
                   <CraftField fieldKey="characterExpression" label="Expression & Emotion" {...craftProps} />
-                  <CraftField fieldKey="characterPsychologyState" label="Psychological State & Subconscious Mindframe" {...craftProps} />
-                  <CraftField fieldKey="characterMannerismAndPosture" label="Mannerisms, Body Ticks & Posture Habits" {...craftProps} />
+                  <CraftField fieldKey="characterPsychologyState" label="Psychology & Mindstate" {...craftProps} />
+                  <CraftField fieldKey="characterMannerismAndPosture" label="Mannerisms & Posture" {...craftProps} />
                   <CraftField fieldKey="characterPlacement" label="Spatial Placement" {...craftProps} />
                   <CraftField fieldKey="characterDialogue" label="Character Dialogue" {...craftProps} />
                   <CraftField fieldKey="characterMovement" label="Action Performance" {...craftProps} />
                   <CraftField fieldKey="characterEyeLooks" label="Eye Look & Directing" {...craftProps} />
-                  <CraftField fieldKey="makeupAndHairStyle" label="Makeup & Hair Styling" {...craftProps} />
-                  <CraftField fieldKey="stuntAndSafetyNotes" label="Stunts & Safety Notes" {...craftProps} />
-                </div>
-              </FormSection>
+                  <CraftField fieldKey="makeupAndHairStyle" label="Makeup & Hair" {...craftProps} />
+                  <CraftField fieldKey="stuntAndSafetyNotes" label="Stunts & Safety" {...craftProps} />
+                </FormSection>
+                ) : null}
 
-              {/* STAGE 4: POST-PRODUCTION & SOUND */}
-              <FormSection title="Stage 4: Post-Production, VFX & Audio" subtitle="Volumetrics, CGI breakdown, audio SFX, and score" icon={Wand2}>
-                <div className="grid grid-cols-1 gap-4">
+                {['atmosphereVolumetricsTag', 'vfxCgiBreakdown', 'soundFxAndFoley', 'backgroundScoreMood', 'editTransitionCut'].some((k) => craftInFocusGroup(k, focusGroupId)) ? (
+                <FormSection title="Post & Sound" subtitle="Atmosphere, VFX, audio, and cut" icon={Wand2}>
                   <CraftField fieldKey="atmosphereVolumetricsTag" label="Atmosphere & Volumetrics" {...craftProps} />
-                  <CraftField fieldKey="vfxCgiBreakdown" label="VFX & CGI Breakdown" {...craftProps} />
+                  <CraftField fieldKey="vfxCgiBreakdown" label="VFX & CGI" {...craftProps} />
                   <CraftField fieldKey="soundFxAndFoley" label="Sound FX & Foley" {...craftProps} />
                   <CraftField fieldKey="backgroundScoreMood" label="Background Score Mood" {...craftProps} />
                   <CraftField fieldKey="editTransitionCut" label="Edit Cut & Transition" {...craftProps} />
-                </div>
-              </FormSection>
-            </>
-          )}
+                </FormSection>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* RIGHT COLUMN: STICKY LIVE COMPILED PROMPT CARD (4 Cols) */}
-        <div className="lg:col-span-4 space-y-6">
-            <div className="sps-live-matrix-card rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-surface)] p-3 space-y-2 font-mono overflow-hidden">
-              <div className="border-b border-[var(--sps-border)] pb-2 space-y-2">
-                <div className="sps-compact-toolbar justify-between">
-                  <span className="min-w-0 font-black text-[11px] font-sans uppercase tracking-wider flex items-center gap-1.5 text-[var(--sps-text)]">
-                    <Sparkles className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
-                    <span className="truncate">Live prompt</span>
-                  </span>
-                  <div className="sps-quiet-links">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleFavoritesOnly()}
-                      className={`sps-quiet-link ${showFavoritesOnly ? 'is-current' : 'is-muted'}`}
-                      title={showFavoritesOnly ? `Show all ${SEEDANCE_SLOTS.length} crafts` : 'Show favorites'}
-                    >
-                      {showFavoritesOnly ? 'All crafts' : 'Favorites'}
-                    </button>
-                    {onAddShot ? (
-                      <button type="button" onClick={onAddShot} className="sps-quiet-link is-muted" title="Add shot">
-                        Add shot
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="sps-compact-toolbar">
-                  <div className="flex items-center gap-0.5 p-0.5 rounded-[7px] border border-[var(--sps-border)] bg-[var(--sps-bg)]">
-                    <button
-                      type="button"
-                      onClick={() => { setPromptFormat('crafts'); localStorage.setItem('sps_prompt_format', 'crafts'); }}
-                      className={`sps-btn sps-btn-compact ${promptFormat === 'crafts' ? 'sps-btn-primary' : ''}`}
-                    >
-                      Craft
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPromptFormat('prose'); localStorage.setItem('sps_prompt_format', 'prose'); }}
-                      className={`sps-btn sps-btn-compact ${promptFormat === 'prose' ? 'sps-btn-primary' : ''}`}
-                    >
-                      Prose
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1 px-1.5 h-7 border border-[var(--sps-border)] rounded-[7px] bg-[var(--sps-bg)]" title="Shot">
-                    <span className="text-[10px] font-black uppercase text-[var(--sps-text)]">Shot</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max={shots.length}
-                      value={shotNumberInput}
-                      onChange={(e) => handleShotNumberChange(e.target.value)}
-                      className="w-7 text-center py-0 rounded border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] font-mono font-black text-[11px] focus:outline-none focus:border-[var(--sps-gold)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span className="text-[10px] font-mono font-bold text-[var(--sps-muted)]">/{shots.length}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyPrompt}
-                    className="sps-btn sps-btn-primary sps-btn-compact"
-                    title={copyToast ? 'Copied' : 'Copy prompt'}
-                  >
-                    {copyToast ? 'Copied' : 'Copy'}
+        <aside className="sps-form-pane sps-form-pane-side" data-form-pane="side">
+          <div className="sps-form-pane-inner sps-form-side-card">
+            <div className="sps-form-side-head">
+              <div className="sps-form-side-title">
+                <Sparkles className="w-3.5 h-3.5" aria-hidden />
+                Live prompt
+              </div>
+              <div className="sps-quiet-links">
+                <button
+                  type="button"
+                  onClick={() => handleToggleFavoritesOnly()}
+                  className={`sps-quiet-link ${showFavoritesOnly ? 'is-current' : 'is-muted'}`}
+                  title={showFavoritesOnly ? `Show all ${SEEDANCE_SLOTS.length} crafts` : 'Show favorite crafts only'}
+                >
+                  <Star className={`w-3 h-3 inline ${showFavoritesOnly ? 'fill-current' : ''}`} />
+                  {showFavoritesOnly ? 'All' : 'Favorites'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleMutedCraft(highlightedFieldKey)}
+                  className={`sps-quiet-link ${mutedSlots[highlightedFieldKey] ? 'is-current' : 'is-muted'}`}
+                  title={mutedSlots[highlightedFieldKey] ? 'Unmute focused craft in compile' : 'Mute focused craft in compile'}
+                >
+                  {mutedSlots[highlightedFieldKey] ? <VolumeX className="w-3 h-3 inline" /> : <Volume2 className="w-3 h-3 inline" />}
+                  {mutedSlots[highlightedFieldKey] ? 'Unmute' : 'Mute'}
+                </button>
+                {onAddShot ? (
+                  <button type="button" onClick={onAddShot} className="sps-quiet-link is-muted" title="Add shot">
+                    Add shot
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleExportFormCsv}
-                    disabled={exportBlocked}
-                    className="sps-quiet-link is-muted disabled:opacity-40"
-                    title={exportBlocked ? exportLife.message : 'Export Form craft CSV (all shots)'}
-                  >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportFormPdf}
-                    disabled={exportBlocked}
-                    className="sps-quiet-link is-muted disabled:opacity-40"
-                    title={exportBlocked ? exportLife.message : 'Print Form craft PDF'}
-                  >
-                    PDF
-                  </button>
-                </div>
-                {exportBlocked ? (
-                  <p className="text-[9px] text-[var(--sps-gold)] m-0 leading-snug">
-                    {exportLife.message}
-                  </p>
                 ) : null}
               </div>
+            </div>
 
-              {/* Live Compiled Prompt Text with Interactive Auto-Scroll & Permanent Highlight Sync */}
-              <div className="sps-studio-preview sps-live-matrix p-2 rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg)] text-xs leading-relaxed max-h-[calc(100vh-10rem)] min-h-[520px] overflow-y-auto font-mono">
-                {promptFormat === 'crafts' ? (
-                  <div className="sps-live-matrix-list">
-                    {CRAFT_COLOR_MAP.map(({ key, label, accent }) => {
-                      const val = currentShot[key];
-                      if (!val) return null;
-                      if (showFavoritesOnly && favoriteCraftKeys.includes(key)) return null;
-                      const isSelectedBadge = highlightedFieldKey === key;
-                      return (
+            <div className="sps-form-focus-bar" role="tablist" aria-label="Focus craft group">
+              <span className="sps-form-desk-kicker">Focus</span>
+              {CRAFT_FOCUS_GROUPS.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={focusGroupId === group.id}
+                  onClick={() => setFocusGroupId(group.id)}
+                  className={`sps-quiet-link ${focusGroupId === group.id ? 'is-current' : 'is-muted'}`}
+                  title={
+                    group.id === 'all'
+                      ? 'Show every craft'
+                      : `Focus ${group.label} crafts`
+                  }
+                >
+                  {group.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="sps-form-side-tools">
+              <div className="sps-form-seg">
+                <button
+                  type="button"
+                  onClick={() => { setPromptFormat('crafts'); localStorage.setItem('sps_prompt_format', 'crafts'); }}
+                  className={promptFormat === 'crafts' ? 'is-on' : ''}
+                >
+                  Craft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPromptFormat('prose'); localStorage.setItem('sps_prompt_format', 'prose'); }}
+                  className={promptFormat === 'prose' ? 'is-on' : ''}
+                >
+                  Prose
+                </button>
+              </div>
+              <label className="sps-form-shot-jump">
+                Shot
+                <input
+                  type="number"
+                  min="1"
+                  max={shots.length}
+                  value={shotNumberInput}
+                  onChange={(e) => handleShotNumberChange(e.target.value)}
+                />
+                <span>/{shots.length}</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleCopyPrompt}
+                className="sps-btn sps-btn-primary sps-btn-compact"
+                title={copyToast ? 'Copied' : 'Copy prompt'}
+              >
+                {copyToast ? 'Copied' : 'Copy'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportFormCsv}
+                disabled={exportBlocked}
+                className="sps-quiet-link is-muted disabled:opacity-40"
+                title={exportBlocked ? exportLife.message : 'Export Form craft CSV'}
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={handleExportFormPdf}
+                disabled={exportBlocked}
+                className="sps-quiet-link is-muted disabled:opacity-40"
+                title={exportBlocked ? exportLife.message : 'Print Form craft PDF'}
+              >
+                PDF
+              </button>
+            </div>
+            {exportBlocked ? (
+              <p className="sps-form-desk-note">{exportLife.message}</p>
+            ) : null}
+
+            <div className="sps-form-side-preview">
+              {promptFormat === 'crafts' ? (
+                <div className="sps-live-matrix-list">
+                  {CRAFT_COLOR_MAP.map(({ key, label, accent }) => {
+                    const val = currentShot[key];
+                    const isMutedCraft = Boolean(mutedSlots[key]);
+                    const isFavorite = favoriteCraftKeys.includes(key);
+                    if (!craftInFocusGroup(key, focusGroupId)) return null;
+                    if (!val) return null;
+                    if (showFavoritesOnly && !isFavorite) return null;
+                    const isSelectedBadge = highlightedFieldKey === key;
+                    return (
+                      <div
+                        key={key}
+                        className={`sps-live-matrix-row ${isSelectedBadge ? 'is-on' : ''} ${isMutedCraft ? 'is-muted-craft' : ''}`}
+                        style={{ '--row-accent': accent }}
+                      >
                         <button
                           type="button"
-                          key={key}
                           onClick={() => handleCraftTap(key, false)}
                           onDoubleClick={() => handleCraftTap(key, true)}
-                          className={`sps-live-matrix-row ${isSelectedBadge ? 'is-on' : ''}`}
-                          style={{ '--row-accent': accent }}
-                          title={`Click to focus ${label}. Double-click to expand editor.`}
+                          className="sps-live-matrix-main"
+                          title={`Click to focus ${label}. Double-click to expand.`}
                         >
                           <span className="sps-live-matrix-k">{label}</span>
-                          <span className="sps-live-matrix-v">{val}</span>
+                          <span className="sps-live-matrix-v">{val || '—'}</span>
                         </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="sps-live-matrix-prose">
-                    {compiledMasterPrompt || <span className="italic text-[var(--sps-muted)]">No prompt parameters entered yet…</span>}
-                  </div>
-                )}
-              </div>
+                        <div className="sps-live-matrix-ops">
+                          <button
+                            type="button"
+                            onClick={() => toggleFavoriteCraft(key)}
+                            className={`sps-live-op ${isFavorite ? 'is-on' : ''}`}
+                            title={isFavorite ? `Remove ${label} from favorites` : `Favorite ${label}`}
+                            aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
+                          >
+                            <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleMutedCraft(key)}
+                            className={`sps-live-op ${isMutedCraft ? 'is-on' : ''}`}
+                            title={isMutedCraft ? `Unmute ${label}` : `Mute ${label} from compile`}
+                            aria-label={isMutedCraft ? 'Unmute' : 'Mute'}
+                          >
+                            {isMutedCraft ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleFocusCraft(key)}
+                            className={`sps-live-op ${focusGroupId !== 'all' && focusGroupIdForCraft(key) === focusGroupId && isSelectedBadge ? 'is-on' : ''}`}
+                            title={`Focus ${focusGroupIdForCraft(key) === 'all' ? label : CRAFT_FOCUS_GROUPS.find((g) => g.id === focusGroupIdForCraft(key))?.label || label} group`}
+                            aria-label="Focus"
+                          >
+                            <Crosshair className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="sps-live-matrix-prose">
+                  {compiledMasterPrompt || (
+                    <span className="italic text-[var(--sps-muted)]">No prompt yet — fill crafts on the left.</span>
+                  )}
+                </div>
+              )}
             </div>
-        </div>
+          </div>
+        </aside>
       </div>
-
     </div>
   );
 }

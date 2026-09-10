@@ -63,6 +63,11 @@ export function titlesMatch(a, b) {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 }
 
+/** Per-film localStorage key — never share craft presets / favorites across titles. */
+export function projectScopedStorageKey(base, title) {
+  return `${String(base || 'sps')}::${slugProjectTitle(title)}`;
+}
+
 /** Drop THE LAST LETTER seed from a non-demo title (new films must not inherit the teaching Matrix). */
 export function scrubDemoBleedFromProject(project) {
   if (!project || isDemoProjectTitle(project.title)) return project;
