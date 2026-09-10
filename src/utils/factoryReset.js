@@ -43,8 +43,6 @@ const SETTINGS_KEY_EXACT = new Set([
   'sps_allotted_settings_folder',
   'sps_allotted_storage_folder',
   'sps_is_admin_logged_in',
-  'sps_guest_browse_enabled',
-  'sps_guest_url_enabled',
   'sps_admin_settings_fullscreen',
   'sps_collaboration_activity_log',
   'sps_issued_invite_otps',

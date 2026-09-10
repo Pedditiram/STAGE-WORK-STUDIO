@@ -7,7 +7,7 @@ import {
   exportAppSettingsToFile, importAppSettingsFromFile,
   saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
-import { PRIMARY_ADMIN_EMAILS, STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS, userIsInCloudRoom, addUserToCloudRoom, removeUserFromCloudRoom, setCloudRoomAccessRole, ensureUserCloudRoom, normalizeCloudRoomId } from '../utils/projectPermissions';
+import { PRIMARY_ADMIN_EMAILS, STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS, userIsInCloudRoom, addUserToCloudRoom, removeUserFromCloudRoom, setCloudRoomAccessRole, ensureUserCloudRoom, normalizeCloudRoomId } from '../utils/projectPermissions';
 import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import GoogleDrivePanel from './GoogleDrivePanel';
@@ -31,100 +31,6 @@ function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
     }
   }
   return secured;
-}
-
-function GuestBrowseSwitch() {
-  const [browseOn, setBrowseOn] = React.useState(() => {
-    try {
-      return localStorage.getItem('sps_guest_browse_enabled') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [urlOn, setUrlOn] = React.useState(() => isGuestUrlEnabled());
-  const [copied, setCopied] = React.useState(false);
-  const shareUrl = typeof window !== 'undefined'
-    ? getGuestLookShareUrl()
-    : `${PRODUCTION_ORIGIN}/?guest=1`;
-
-  const Switch = ({ on, onToggle, title }) => (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onToggle}
-      className={`relative w-12 h-7 rounded-full shrink-0 border transition-colors ${
-        on ? 'bg-cyan-500 border-cyan-400' : 'bg-zinc-800 border-zinc-600'
-      }`}
-      title={title}
-    >
-      <span
-        className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-          on ? 'left-5' : 'left-0.5'
-        }`}
-      />
-    </button>
-  );
-
-  return (
-    <div className="p-3 rounded-lg bg-zinc-950 border border-cyan-500/30 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold text-cyan-300 m-0 uppercase tracking-wide">Guest browse</p>
-          <p className="text-[11px] text-zinc-400 m-0 mt-1 leading-relaxed">
-            This device: look-only without signing in. No edits, saves, generate, or Settings.
-          </p>
-        </div>
-        <Switch
-          on={browseOn}
-          title={browseOn ? 'Guest browse on' : 'Guest browse off'}
-          onToggle={() => {
-            const next = !browseOn;
-            setGuestBrowseEnabled(next);
-            setBrowseOn(next);
-          }}
-        />
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold text-cyan-300 m-0 uppercase tracking-wide">Guest URL</p>
-          <p className="text-[11px] text-zinc-400 m-0 mt-1 leading-relaxed">
-            Public look-only link. When this is on, anyone with the URL can walk the rooms.
-          </p>
-        </div>
-        <Switch
-          on={urlOn}
-          title={urlOn ? 'Guest URL on' : 'Guest URL off'}
-          onToggle={() => {
-            const next = !urlOn;
-            setGuestUrlEnabled(next);
-            setUrlOn(next);
-          }}
-        />
-      </div>
-      <div className="flex gap-2 min-w-0">
-        <input
-          readOnly
-          value={shareUrl}
-          className={`flex-1 min-w-0 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-[10px] font-mono ${
-            urlOn ? 'text-cyan-300' : 'text-zinc-500'
-          }`}
-        />
-        <button
-          type="button"
-          className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shrink-0 disabled:opacity-40"
-          disabled={!urlOn}
-          onClick={() => {
-            navigator.clipboard?.writeText(shareUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1800);
-          }}
-        >
-          {copied ? 'Copied' : 'Copy link'}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function ConsoleSwitchThumb({ on, label, onToggle }) {
@@ -2331,8 +2237,6 @@ export default function AdminSettingsModal({
                       <span>{passChangeError}</span>
                     </div>
                   )}
-
-                  <GuestBrowseSwitch />
 
                   <form onSubmit={handleUpdateAdminCredentials} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>

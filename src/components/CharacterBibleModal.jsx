@@ -19,8 +19,7 @@ import { composeCharacterPersonaWithLLM, extractProjectCharactersWithLLM, extrac
 import { readLockedImageFile } from '../utils/continuitySpine';
 import { composeLookFacts, sheetPromptGuard, storyLooksIndianEpic } from '../utils/characterSheetLock';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
-import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
-import { GUEST_PLAY_CHARACTERS } from '../utils/guestPlayground';
+import { isGuestSession } from '../utils/projectPermissions';
 import {
   getActiveCharacterProfiles,
   saveActiveCharacterProfiles
@@ -36,7 +35,6 @@ import LifecycleControls from './LifecycleControls';
 export function getStoredCharacterProfiles() {
   if (typeof window === 'undefined') return [];
   try {
-    if (isGuestSession() && canGuestBrowseApp()) return GUEST_PLAY_CHARACTERS.map((c) => ({ ...c }));
     return getActiveCharacterProfiles();
   } catch (e) {
     return [];
@@ -46,9 +44,7 @@ export function getStoredCharacterProfiles() {
 export function saveStoredCharacterProfiles(profiles, { silent = false, title = '' } = {}) {
   if (typeof window === 'undefined') return;
   try {
-    const email = String(localStorage.getItem('sps_authorized_user_email') || '').trim().toLowerCase();
-    const guest = !email || email === 'guest' || email === 'click to login' || email === 'unauthenticated';
-    if (guest) return;
+    if (isGuestSession()) return;
     saveActiveCharacterProfiles(profiles, { silent, title });
   } catch (e) {}
 }

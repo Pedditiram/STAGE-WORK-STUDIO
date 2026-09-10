@@ -129,11 +129,6 @@ import { bindLastFrameToNext, persistBridges } from './utils/continuitySpine';
 import {
   getCurrentUserEmail,
   isGuestSession,
-  isGuestBrowseEnabled,
-  canGuestBrowseApp,
-  consumeGuestLookFromUrl,
-  hydrateGuestUrlFromServer,
-  enterGuestLookSession,
   isStudioAdmin,
   canAccessProject,
   canCreateOrDeleteProjects,
@@ -159,12 +154,6 @@ import { collaboratorHasPassword, findAuthorizedUser } from './utils/collaborato
 import { assertExportAllowed, logExportSuccess, EXPORT_LIFECYCLE } from './utils/exportGate';
 import DemoModeView from './components/DemoModeView';
 import StudioTourOverlay from './components/StudioTourOverlay';
-import {
-  GUEST_PLAY_TITLE,
-  GUEST_PLAY_ROOM,
-  GUEST_PLAY_SHOTS,
-  getGuestPlayProject
-} from './utils/guestPlayground';
 import StudioNavigator, { NAV_ICONS } from './components/StudioNavigator';
 import MobileGestureHelp from './components/MobileGestureHelp';
 import NavigatorShortcutChip, { openNavigatorShortcutHelp } from './components/NavigatorShortcutChip';
@@ -247,13 +236,6 @@ export default function App() {
 
   const [projectTitle, setProjectTitle] = useState(() => {
     if (typeof window !== 'undefined') {
-      try {
-        const q = new URLSearchParams(window.location.search);
-        const g = String(q.get('guest') || q.get('look') || '').toLowerCase();
-        if (g === '1' || g === 'true' || g === 'yes') return GUEST_PLAY_TITLE;
-      } catch {
-        /* ignore */
-      }
       return localStorage.getItem('sps_current_project_title') || "STAGE PRODUCTION STUDIO";
     }
     return "STAGE PRODUCTION STUDIO";
@@ -385,23 +367,18 @@ export default function App() {
   const [shots, setShots] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        const q = new URLSearchParams(window.location.search);
-        const g = String(q.get('guest') || q.get('look') || '').toLowerCase();
-        if (g === '1' || g === 'true' || g === 'yes') return GUEST_PLAY_SHOTS.map((s) => ({ ...s }));
-      } catch {
-        /* ignore */
-      }
-      // Presentation reel must not JSON.parse a vault-sized shot list on first paint.
-      if (isPresentationMode()) return INITIAL_SHOTS;
-      const saved = localStorage.getItem('sps_current_shots');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.length > 150 ? parsed.slice(0, 150) : parsed;
-          }
-        } catch (e) {}
-      }
+        // Presentation reel must not JSON.parse a vault-sized shot list on first paint.
+        if (isPresentationMode()) return INITIAL_SHOTS;
+        const saved = localStorage.getItem('sps_current_shots');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              return parsed.length > 150 ? parsed.slice(0, 150) : parsed;
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
     }
     return INITIAL_SHOTS;
   });
@@ -700,7 +677,7 @@ export default function App() {
   const [redoStack, setRedoStack] = useState([]);
 
   const updateShotsWithHistory = (newShots) => {
-    if (isGuestSession() && !canGuestBrowseApp()) return false;
+    if (isGuestSession()) return false;
     if (!canEditProjects()) {
       alert('🔒 READ-ONLY ACCESS:\nYour access level is Viewer. You can open allotted projects but cannot edit them. Ask the studio Admin to upgrade you to Editor.');
       return false;
@@ -759,10 +736,8 @@ export default function App() {
       // Cmd+O / Ctrl+O -> Open Projects Library Console
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
-        if (isGuestSession() && !canGuestBrowseApp()) {
-          alert(
-            '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
-          );
+        if (isGuestSession()) {
+          alert('🔒 SIGN IN\n\nCreate an account or sign in to use Projects Console.');
           setIsProjectConsoleOpen(false);
           setPresentationMode(true);
           return;
@@ -827,8 +802,6 @@ export default function App() {
   const [roomId, setRoomId] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const g = String(params.get('guest') || params.get('look') || '').toLowerCase();
-      if (g === '1' || g === 'true' || g === 'yes') return GUEST_PLAY_ROOM;
       const invite = params.get('room');
       if (invite) return invite;
       const savedRoom = localStorage.getItem('sps_current_room_id');
@@ -858,7 +831,6 @@ export default function App() {
     } catch {
       /* ignore */
     }
-    if (roomId === GUEST_PLAY_ROOM) return;
     const next = roomIdForProject(projectTitle, roomId);
     if (!next || next === roomId) return;
     const prev = roomId;
@@ -1119,50 +1091,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    let applying = false;
-    const applyPlay = () => {
-      if (applying) return;
-      if (!canGuestBrowseApp()) return;
-      applying = true;
-      try {
-        const play = getGuestPlayProject();
-        let nextShots = play.shots;
-        try {
-          const saved = JSON.parse(sessionStorage.getItem('sps_guest_play_shots') || 'null');
-          if (Array.isArray(saved) && saved.length) nextShots = saved;
-        } catch {
-          /* ignore */
-        }
-        setProjectTitle(play.title);
-        setShots(nextShots);
-        setTargetModel(play.targetModel);
-        setAspectRatio(play.aspectRatio);
-        setRoomId(GUEST_PLAY_ROOM);
-        setActiveShotIndex(0);
-        if (play.genreKey) setPresetProfile(play.genreKey);
-      } finally {
-        applying = false;
-      }
-    };
-    applyPlay();
-    window.addEventListener('sps_guest_browse_changed', applyPlay);
-    return () => window.removeEventListener('sps_guest_browse_changed', applyPlay);
-  }, []);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await hydrateGuestUrlFromServer();
-      if (cancelled) return;
-      if (!consumeGuestLookFromUrl()) return;
-      setIsLoginModalOpen(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // If splash was skipped (same tab / HMR), restore remembered session — don't re-trap user in login
-  useEffect(() => {
     if (showSplash) return;
     try {
       if (sessionStorage.getItem('sps_login_prompted') === '1') return;
@@ -1170,11 +1098,6 @@ export default function App() {
       if (isDownloadedStudioApp() && !hasAdminGrantedWorkspace()) {
         setPresentationMode(true);
         setIsLoginModalOpen(true);
-        return;
-      }
-      if (consumeGuestLookFromUrl() || canGuestBrowseApp()) {
-        enterGuestLookSession();
-        setIsLoginModalOpen(false);
         return;
       }
       if (sessionStorage.getItem('sps_session_authed') === '1') return;
@@ -1263,7 +1186,7 @@ export default function App() {
       lastOpenAt = now;
       if (isGuestSession()) {
         alert(
-          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio admin.\n\nOpen Presentation, request access, or log in.'
+          '🔒 SIGN IN\n\nSettings require a signed-in collaborator or studio admin.'
         );
         setIsAdminModalOpen(false);
         setPresentationMode(true);
@@ -1593,7 +1516,7 @@ export default function App() {
       }
 
       // 3. Do NOT auto-login / skip LoginModal when a remembered email exists.
-      // Splash onFinish always opens LoginModal so the user can pick Email / Admin / Guest.
+      // Splash onFinish always opens LoginModal so the user can pick Email / Admin.
       // Remembered email stays in localStorage for LoginModal prefilling only.
       setIsAdminLoggedIn(false);
       localStorage.setItem('sps_is_admin_logged_in', 'false');
@@ -2777,7 +2700,7 @@ export default function App() {
       return;
     }
     alert(
-      `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Admin.`
+      `🔒 SIGN IN\n\nCreate an account or sign in to open ${label}.`
     );
     setPresentationMode(true);
   };
@@ -2788,7 +2711,6 @@ export default function App() {
       return false;
     }
     if (!isGuestSession()) return true;
-    if (canGuestBrowseApp()) return true;
     guestBlock(label);
     return false;
   };
@@ -3176,8 +3098,8 @@ export default function App() {
       label: 'Presentation',
       hint: downloadedAppPresentationOnly()
         ? 'Showcase · wait for Admin grant'
-        : isPresentationMode() ? 'On · exit reel' : 'Guest reel',
-      keywords: ['presentation', 'guest', 'demo mode', 'reel', 'showcase', 'investor'],
+        : isPresentationMode() ? 'On · exit reel' : 'Showcase reel',
+      keywords: ['presentation', 'demo mode', 'reel', 'showcase', 'investor'],
       icon: NAV_ICONS.deck,
       run: () => {
         if (isPresentationMode()) {
@@ -3205,15 +3127,6 @@ export default function App() {
               return;
             }
             setPresentationMode(false);
-          }
-        },
-        {
-          id: 'presentation-guest',
-          label: 'Guest look mode',
-          hint: 'Browse without saving',
-          run: () => {
-            enterGuestLookSession();
-            setPresentationMode(true);
           }
         },
       ],
@@ -3899,10 +3812,8 @@ export default function App() {
     exportProject: exportJSONProject,
     importProject: importJSONProject,
     openNewProject: () => {
-      if (isGuestSession() && !canGuestBrowseApp()) {
-        alert(
-          '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
-        );
+      if (isGuestSession()) {
+        alert('🔒 SIGN IN\n\nCreate an account or sign in to use Projects Console.');
         setPresentationMode(true);
         return;
       }
@@ -3926,15 +3837,9 @@ export default function App() {
             setShowSplash(false);
             (async () => {
               try {
-                await hydrateGuestUrlFromServer();
                 if (isDownloadedStudioApp() && !hasAdminGrantedWorkspace()) {
                   setPresentationMode(true);
                   setIsLoginModalOpen(true);
-                  return;
-                }
-                if (consumeGuestLookFromUrl() || canGuestBrowseApp()) {
-                  enterGuestLookSession();
-                  setIsLoginModalOpen(false);
                   return;
                 }
                 const email = getCurrentUserEmail();
@@ -4016,10 +3921,8 @@ export default function App() {
           onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
           onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
           onOpenProjectConsole={() => {
-            if (isGuestSession() && !canGuestBrowseApp()) {
-              alert(
-                '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
-              );
+            if (isGuestSession()) {
+              alert('🔒 SIGN IN\n\nCreate an account or sign in to use Projects Console.');
               setPresentationMode(true);
               return;
             }
@@ -4093,10 +3996,6 @@ export default function App() {
         </Suspense>
       )}
 
-      {isGuestSession() && canGuestBrowseApp() && !studioShellHidden && !presentationDesk && (
-        <div className="shrink-0 px-3 py-1.5 text-[11px] text-center border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)]" style={{ color: 'var(--sps-muted)' }}>
-          Guest playground — dummy film only. Play in the rooms. Studio titles stay locked. Sign in for the real library.
-        </div>
       )}
 
       {/* Main Studio Body View — keep off-screen during splash / project console */}
@@ -4209,7 +4108,7 @@ export default function App() {
                 onOpenGenerate={openGenerateDesk}
                 colorTheme={colorTheme}
                 genreKey={presetProfile}
-                lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                lookOnly={isGuestSession()}
                 projectTitle={projectTitle}
                 onOpenLlmCommands={() => setIsLlmCommandReviewOpen(true)}
               />
@@ -4259,7 +4158,7 @@ export default function App() {
                 projectTitle={projectTitle}
                 aspectRatio={aspectRatio}
                 genreKey={presetProfile}
-                lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                lookOnly={isGuestSession()}
               />
               </Suspense>
             </div>
@@ -4274,7 +4173,7 @@ export default function App() {
                 shots={shots}
                 projectTitle={projectTitle}
                 genreKey={presetProfile}
-                lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                lookOnly={isGuestSession()}
               />
               </Suspense>
             </div>
@@ -4290,7 +4189,7 @@ export default function App() {
                 projectTitle={projectTitle}
                 aspectRatio={aspectRatio}
                 generatedMap={projectGeneratedImages}
-                lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                lookOnly={isGuestSession()}
                 onUpdateShot={handleUpdateShot}
                 onOpenShot={(idx) => {
                   setActiveShotIndex(idx);
@@ -4311,7 +4210,7 @@ export default function App() {
                 projectTitle={projectTitle}
                 aspectRatio={aspectRatio}
                 genreKey={presetProfile}
-                lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                lookOnly={isGuestSession()}
               />
               </Suspense>
             </div>

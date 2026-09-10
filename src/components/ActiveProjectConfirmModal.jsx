@@ -32,9 +32,9 @@ export default function ActiveProjectConfirmModal({
   const canConfirm = titleOk && !mismatch;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md font-mono">
+    <div className="sps-modal-scrim fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md font-mono">
       <div
-        className="relative w-full max-w-lg bg-zinc-950 border border-amber-500/50 text-white rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4"
+        className="sps-paper-gate relative w-full max-w-lg bg-zinc-950 border border-amber-500/50 text-white rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby="sps-active-project-gate-title"

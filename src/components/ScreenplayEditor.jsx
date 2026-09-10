@@ -95,8 +95,7 @@ import {
   hasTeluguScript,
   commitRomanWordBeforeCaret
 } from '../utils/teluguVoiceText';
-import { isGuestSession, canGuestBrowseApp, assertCanWriteScreenplay, isLookOnlySession } from '../utils/projectPermissions';
-import { GUEST_PLAY_SCREENPLAY } from '../utils/guestPlayground';
+import { isGuestSession, assertCanWriteScreenplay, isLookOnlySession } from '../utils/projectPermissions';
 
 const DEFAULT_SAMPLE_SCREENPLAY = `ACT I: THE THREAT OF JANASTHANA — DEMON LEGION ARRIVES
 
@@ -269,13 +268,6 @@ Camera drifts up from Rama — sky cracks to actual blue, actual sun. Saffron an
 
 function readStoredScreenplay(projectTitle) {
   if (typeof window === 'undefined') return DEFAULT_SAMPLE_SCREENPLAY;
-  try {
-    if (isGuestSession() && canGuestBrowseApp()) {
-      return sessionStorage.getItem('sps_guest_play_screenplay') || GUEST_PLAY_SCREENPLAY;
-    }
-  } catch {
-    /* ignore */
-  }
   const saved = readOpenScreenplayText(projectTitle);
   return saved && saved.trim() ? saved : DEFAULT_SAMPLE_SCREENPLAY;
 }

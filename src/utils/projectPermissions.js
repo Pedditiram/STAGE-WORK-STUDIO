@@ -10,11 +10,9 @@
  * Legacy roles Admin / "Director & Owner" map to Owner.
  */
 
-import { isGuestPlayTitle, getGuestPlayProject } from './guestPlayground';
 import { canUseSaasConsole } from './saasControl';
-import { PRODUCTION_ORIGIN, getStudioShell } from './runtimeEnv';
+import { getStudioShell } from './runtimeEnv';
 import { projectLibraryStorageKey } from './tenantScope';
-import { saasAdminHeaders, withSaasAdminBody } from './saasAdminClient';
 
 export const DEFAULT_ADMIN_EMAIL = 'admin@stageworkstudio.com';
 export const PRIMARY_ADMIN_EMAILS = [
@@ -89,8 +87,8 @@ export function normalizeEmail(email) {
 }
 
 /**
- * Guest / unauthenticated session — no studio library writes, editing, admin, or allotments.
- * When Guest Browse is on (Settings), guests may look through rooms read-only.
+ * Unauthenticated session — no studio library writes, editing, admin, or allotments.
+ * Public guest look is removed; visitors sign in or create an account.
  */
 export function isGuestSession(email = getCurrentUserEmail()) {
   const clean = String(email || '').trim().toLowerCase();
@@ -104,138 +102,6 @@ export function isGuestSession(email = getCurrentUserEmail()) {
     return true;
   }
   return false;
-}
-
-export const GUEST_BROWSE_KEY = 'sps_guest_browse_enabled';
-export const GUEST_URL_KEY = 'sps_guest_url_enabled';
-export const GUEST_LOOK_SESSION_KEY = 'sps_guest_look_link';
-
-function guestQueryOn() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const q = new URLSearchParams(window.location.search);
-    const v = String(q.get('guest') || q.get('look') || '').toLowerCase();
-    return v === '1' || v === 'true' || v === 'yes';
-  } catch {
-    return false;
-  }
-}
-
-/** Shareable look-only URL for this origin. */
-export function getGuestLookShareUrl() {
-  if (typeof window === 'undefined') return `${PRODUCTION_ORIGIN}/?guest=1`;
-  const url = new URL(window.location.origin + window.location.pathname);
-  url.searchParams.set('guest', '1');
-  return url.toString();
-}
-
-/** Public ?guest=1 switch — default ON. */
-export function isGuestUrlEnabled() {
-  if (typeof window === 'undefined') return true;
-  try {
-    const pub = sessionStorage.getItem('sps_guest_url_public');
-    if (pub === 'false') return false;
-    if (pub === 'true') return true;
-    const local = localStorage.getItem(GUEST_URL_KEY);
-    if (local === 'false') return false;
-    if (local === 'true') return true;
-    return true;
-  } catch {
-    return true;
-  }
-}
-
-export function setGuestUrlEnabled(on) {
-  if (typeof window === 'undefined') return false;
-  const next = Boolean(on);
-  try {
-    localStorage.setItem(GUEST_URL_KEY, next ? 'true' : 'false');
-    sessionStorage.setItem('sps_guest_url_public', next ? 'true' : 'false');
-    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { urlEnabled: next } }));
-    fetch('/api/guest-access', {
-      method: 'POST',
-      headers: saasAdminHeaders(),
-      body: JSON.stringify(withSaasAdminBody({ urlEnabled: next, actor: getCurrentUserEmail() }))
-    }).catch(() => {});
-    scheduleCloudSettingsPush();
-  } catch {
-    /* ignore */
-  }
-  return next;
-}
-
-export async function hydrateGuestUrlFromServer() {
-  if (typeof window === 'undefined') return isGuestUrlEnabled();
-  try {
-    const res = await fetch('/api/guest-access', { cache: 'no-store' });
-    const data = await res.json();
-    if (typeof data?.urlEnabled === 'boolean') {
-      sessionStorage.setItem('sps_guest_url_public', data.urlEnabled ? 'true' : 'false');
-      window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { urlEnabled: data.urlEnabled } }));
-    }
-  } catch {
-    /* ignore */
-  }
-  return isGuestUrlEnabled();
-}
-
-/** If the visitor opened ?guest=1 / ?look=1 and Guest URL is on, pin look-only for this tab. */
-export function consumeGuestLookFromUrl() {
-  if (typeof window === 'undefined') return false;
-  if (!guestQueryOn() || !isGuestUrlEnabled()) return false;
-  try {
-    sessionStorage.setItem(GUEST_LOOK_SESSION_KEY, '1');
-    sessionStorage.setItem('sps_login_prompted', '1');
-    sessionStorage.setItem('sps_guest_look_session', '1');
-    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: true } }));
-  } catch {
-    /* ignore */
-  }
-  return true;
-}
-
-export function enterGuestLookSession() {
-  if (typeof window === 'undefined') return;
-  try {
-    const prev = getCurrentUserEmail();
-    import('./userSettingsPack')
-      .then((m) => m.activatePackForSession(prev, ''))
-      .catch(() => {});
-    sessionStorage.setItem(GUEST_LOOK_SESSION_KEY, '1');
-    sessionStorage.setItem('sps_login_prompted', '1');
-    sessionStorage.setItem('sps_guest_look_session', '1');
-    localStorage.removeItem('sps_authorized_user_email');
-    window.dispatchEvent(new Event('sps_collaborators_updated'));
-    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: true } }));
-    if (isDownloadedStudioApp()) setPresentationMode(true);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Owner Settings switch, share link, or this-tab guest look. */
-export function isGuestBrowseEnabled() {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (guestQueryOn() && isGuestUrlEnabled()) return true;
-    if (sessionStorage.getItem(GUEST_LOOK_SESSION_KEY) === '1') return true;
-    if (sessionStorage.getItem('sps_guest_look_session') === '1') return true;
-    return localStorage.getItem(GUEST_BROWSE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-export function setGuestBrowseEnabled(on) {
-  if (typeof window === 'undefined') return false;
-  const next = Boolean(on);
-  try {
-    localStorage.setItem(GUEST_BROWSE_KEY, next ? 'true' : 'false');
-    window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: next } }));
-  } catch {
-    /* ignore */
-  }
-  return next;
 }
 
 /** Packaged Electron / file:// download — not localhost Vite in a browser. */
@@ -263,12 +129,6 @@ export function hasAdminGrantedWorkspace(email = getCurrentUserEmail()) {
 /** Downloaded app with no Admin grant: reel only, no editing. */
 export function downloadedAppPresentationOnly(email = getCurrentUserEmail()) {
   return isDownloadedStudioApp() && !hasAdminGrantedWorkspace(email);
-}
-
-/** Guest who may walk rooms / open desks in look-only mode. */
-export function canGuestBrowseApp(email = getCurrentUserEmail()) {
-  if (downloadedAppPresentationOnly(email)) return false;
-  return isGuestSession(email) && isGuestBrowseEnabled();
 }
 
 export const STUDIO_MODULE_KEYS = {
@@ -374,15 +234,8 @@ export function setPresentationMode(on) {
   return next;
 }
 
-/** Real login must leave the reel and guest-look tab. */
+/** Real login must leave the presentation reel. */
 export function exitPresentationForWorkspace() {
-  try {
-    sessionStorage.removeItem(GUEST_LOOK_SESSION_KEY);
-    sessionStorage.removeItem('sps_guest_look_session');
-    sessionStorage.removeItem('sps_guest_look_link');
-  } catch {
-    /* ignore */
-  }
   setPresentationMode(false);
 }
 
@@ -418,7 +271,6 @@ function scheduleCollaboratorsPush() {
 export function collectStudioSettings() {
   return {
     studioModules: getStudioDefaultConsoleMap(),
-    guestUrlEnabled: isGuestUrlEnabled(),
     updatedAt: new Date().toISOString()
   };
 }
@@ -430,26 +282,14 @@ export function applyStudioSettings(settings, { notify = true } = {}) {
     ? settings.studioModules
     : {};
   const hasMods = Object.keys(mods).length > 0;
-  const hasGuest = typeof settings.guestUrlEnabled === 'boolean' && Boolean(settings.updatedAt);
-  if (!hasMods && !hasGuest) return false;
+  if (!hasMods) return false;
   applyingCloudStudioSettings = true;
   try {
     Object.entries(mods).forEach(([id, on]) => {
       if (typeof on === 'boolean') setStudioModuleEnabled(id, on, { silent: true });
     });
-    if (hasGuest) {
-      try {
-        localStorage.setItem(GUEST_URL_KEY, settings.guestUrlEnabled ? 'true' : 'false');
-        sessionStorage.setItem('sps_guest_url_public', settings.guestUrlEnabled ? 'true' : 'false');
-      } catch {
-        /* ignore */
-      }
-    }
     if (notify) {
       window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { source: 'cloud' } }));
-      window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', {
-        detail: { urlEnabled: settings.guestUrlEnabled }
-      }));
     }
   } finally {
     applyingCloudStudioSettings = false;
@@ -699,9 +539,7 @@ export function getAllottedProjectTitles(email = getCurrentUserEmail()) {
 }
 
 export function canAccessProject(projectTitle, email = getCurrentUserEmail()) {
-  if (isGuestSession(email)) {
-    return canGuestBrowseApp(email) && isGuestPlayTitle(projectTitle);
-  }
+  if (isGuestSession(email)) return false;
   if (isStudioOwner(email)) return true;
   const title = String(projectTitle || '').trim();
   if (!title) return false;
@@ -724,7 +562,7 @@ export function canCreateOrDeleteProjects(email = getCurrentUserEmail()) {
 
 /** Owner + Editor may edit allotted projects; Viewer is read-only. */
 export function canEditProjects(email = getCurrentUserEmail()) {
-  if (isGuestSession(email)) return canGuestBrowseApp(email);
+  if (isGuestSession(email)) return false;
   if (isStudioOwner(email)) return true;
   return getAccessLevel(email) === 'Editor';
 }
@@ -735,10 +573,7 @@ export function assertCanWriteScreenplay(projectTitle, email = getCurrentUserEma
     return { ok: false, code: 'LOOK_ONLY', message: 'View only — this account cannot parse or edit the screenplay.' };
   }
   if (isGuestSession(email)) {
-    if (!canGuestBrowseApp(email) || !isGuestPlayTitle(projectTitle)) {
-      return { ok: false, code: 'GUEST', message: 'Guest can only work in Guest Playground.' };
-    }
-    return { ok: true };
+    return { ok: false, code: 'SIGN_IN', message: 'Sign in to parse or edit the screenplay.' };
   }
   if (!canEditProjects(email)) {
     return { ok: false, code: 'NO_EDIT', message: 'Editor access is required to parse a screenplay.' };
@@ -976,9 +811,7 @@ export function pruneAllottedProjectsToLibrary(users, projectLibrary = getLivePr
 }
 
 export function filterAccessibleProjects(projectLibrary, email = getCurrentUserEmail()) {
-  if (isGuestSession(email)) {
-    return canGuestBrowseApp(email) ? [getGuestPlayProject()] : [];
-  }
+  if (isGuestSession(email)) return [];
   const list = Array.isArray(projectLibrary) ? projectLibrary : [];
   if (isStudioOwner(email)) return list;
   return list.filter((p) => canAccessProject(p?.title, email));

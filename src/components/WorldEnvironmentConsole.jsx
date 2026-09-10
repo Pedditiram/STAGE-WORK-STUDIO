@@ -18,8 +18,7 @@ import { readLockedImageFile } from '../utils/continuitySpine';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
 import StudioProfileControl from './StudioProfileControl';
-import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
-import { GUEST_PLAY_WORLD } from '../utils/guestPlayground';
+import { isGuestSession } from '../utils/projectPermissions';
 import {
   getActiveWorldAssets,
   saveActiveWorldAssets
@@ -45,7 +44,6 @@ const INCLUDE_KEY = 'sps_include_world_in_prompt';
 export function getStoredWorldEnvironmentAssets() {
   if (typeof window === 'undefined') return [];
   try {
-    if (isGuestSession() && canGuestBrowseApp()) return GUEST_PLAY_WORLD.map((a) => ({ ...a }));
     return getActiveWorldAssets();
   } catch (e) {
     return [];

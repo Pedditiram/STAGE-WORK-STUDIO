@@ -67,7 +67,6 @@ import {
   getCurrentUserEmail,
   getCurrentUserProfile,
   isGuestSession,
-  canGuestBrowseApp,
   canAccessProject,
   canCreateOrDeleteProjects,
   filterAccessibleProjects,
@@ -130,11 +129,10 @@ export default function ProjectConsoleModal({
   onOpenNavigatorShortcutHelp,
   onApplyShots
 }) {
-  // Guests must never remain in Project Console — redirect to Presentation
+  // Signed-out visitors never remain in Project Console — send them to Presentation
   useEffect(() => {
     if (!isOpen) return;
     if (!isGuestSession()) return;
-    if (canGuestBrowseApp()) return;
     onClose?.();
     if (onOpenInvestorDeck) onOpenInvestorDeck();
     else if (onOpenLogin) onOpenLogin();
@@ -1545,7 +1543,7 @@ export default function ProjectConsoleModal({
   const packFlags = getUserPackFlags(currentUserEmail);
   const packOwnedTitles = getPackOwnedTitles(currentUserEmail);
   const isPrimaryOwner = canCreateOrDeleteProjects(currentUserEmail);
-  const guestLook = canGuestBrowseApp();
+  const guestLook = false;
   const visibleProjectLibrary = filterAccessibleProjects(projectLibrary, currentUserEmail);
   const libraryProjectsForDisplay = useMemo(() => {
     const list = [...visibleProjectLibrary];
@@ -1673,11 +1671,11 @@ export default function ProjectConsoleModal({
     return 'pedditiram';
   };
 
-  // 1. SWITCH PROJECT (WITH ENFORCED GUEST & ALLOTTED PERMISSION GUARD)
+  // 1. SWITCH PROJECT (ALLOTTED PERMISSION GUARD)
   const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
     if (!proj?.title) return false;
-    if (isGuestSession() && !canGuestBrowseApp()) {
-      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view Presentation.\n\nSign in to open '${proj.title}', or request access from the studio Admin.`);
+    if (isGuestSession()) {
+      alert(`🔒 SIGN IN\n\nCreate an account or sign in to open '${proj.title}'.`);
       onClose?.();
       if (onOpenInvestorDeck) onOpenInvestorDeck();
       return false;
@@ -2005,7 +2003,7 @@ export default function ProjectConsoleModal({
   };
 
   if (!isOpen) return null;
-  if (isGuestSession() && !canGuestBrowseApp()) return null;
+  if (isGuestSession()) return null;
 
   return (
     <div className={`sps-overlay sps-project-console-overlay is-full ${isVaultFullscreen ? 'is-full' : ''}`}>

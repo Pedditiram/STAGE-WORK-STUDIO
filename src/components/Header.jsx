@@ -11,7 +11,6 @@ import {
   isStudioOwner,
   getCurrentUserEmail,
   isGuestSession,
-  canGuestBrowseApp,
   canCreateOrDeleteProjects,
   filterAllottedTitlesToLiveLibrary,
   getLiveProjectLibrary,
@@ -233,18 +232,16 @@ export default function Header({
     }
 
     return {
-      name: 'Guest / Unauthenticated',
-      designation: 'Access Panel Required',
-      role: 'Logged Out',
-      email: 'Click to Login',
+      name: 'Sign in',
+      designation: 'Access panel required',
+      role: 'Logged out',
+      email: 'Click to sign in',
       allottedProjects: []
     };
   };
 
   const [currentUser, setCurrentUser] = useState(getLoggedInUser);
   const isGuest = isGuestSession();
-  const [guestBrowse, setGuestBrowse] = useState(() => canGuestBrowseApp());
-  const lookOnly = isGuest && guestBrowse;
   const [notice, setNotice] = useState('');
 
   const showNotice = (msg) => {
@@ -258,8 +255,8 @@ export default function Header({
     onOpenLoginModal?.();
   };
 
-  const withGuestGuard = (label, fn, { allowLook } = { allowLook: true }) => () => {
-    if (isGuest && !(allowLook && guestBrowse)) {
+  const withGuestGuard = (label, fn) => () => {
+    if (isGuest) {
       redirectGuest(label);
       return;
     }
@@ -273,7 +270,6 @@ export default function Header({
   React.useEffect(() => {
     const handleUpdate = () => {
       setCurrentUser(getLoggedInUser());
-      setGuestBrowse(canGuestBrowseApp());
     };
     if (isProfileOpen) {
       handleUpdate();
@@ -281,12 +277,10 @@ export default function Header({
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('sps_collaborators_updated', handleUpdate);
     window.addEventListener('sps_projects_updated', handleUpdate);
-    window.addEventListener('sps_guest_browse_changed', handleUpdate);
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('sps_collaborators_updated', handleUpdate);
       window.removeEventListener('sps_projects_updated', handleUpdate);
-      window.removeEventListener('sps_guest_browse_changed', handleUpdate);
     };
   }, [isAdminLoggedIn, projectTitle, isProfileOpen]);
 
@@ -299,7 +293,7 @@ export default function Header({
   // Owner: live library titles only. Collaborators: allotted ∩ live (drops deleted 002, etc.)
   const liveLibrary = getLiveProjectLibrary();
   const allottedProjects = isGuest
-    ? [projectTitle || 'GUEST PLAYGROUND']
+    ? []
     : isStudioOwner(authEmail)
     ? liveLibrary
         .map((p) => String(p?.title || '').trim())
@@ -359,14 +353,14 @@ export default function Header({
           <button
             type="button"
             onClick={() => {
-              if (isGuest && !lookOnly) {
+              if (isGuest) {
                 redirectGuest('Projects Console');
                 return;
               }
               onOpenProjectConsole?.();
             }}
             className="sps-quiet-link shrink-0"
-            title={isGuest && !lookOnly ? 'Guest: sign in or enable Guest Browse' : 'Projects'}
+            title={isGuest ? 'Sign in to open Projects' : 'Projects'}
           >
             Projects
           </button>
@@ -421,7 +415,7 @@ export default function Header({
                 title="Writer"
                 label="Writer"
                 onClick={() => {
-                  if (isGuest && !lookOnly) {
+                  if (isGuest) {
                     redirectGuest('Writer Console');
                     return;
                   }
@@ -437,7 +431,7 @@ export default function Header({
                 title="Matrix"
                 label="Matrix"
                 onClick={() => {
-                  if (isGuest && !lookOnly) {
+                  if (isGuest) {
                     redirectGuest('Cinema Matrix');
                     return;
                   }
@@ -452,7 +446,7 @@ export default function Header({
                 title="Form"
                 label="Form"
                 onClick={() => {
-                  if (isGuest && !lookOnly) {
+                  if (isGuest) {
                     redirectGuest('Studio Form');
                     return;
                   }
@@ -467,7 +461,7 @@ export default function Header({
                 title="3D Stage"
                 label="Stage"
                 onClick={() => {
-                  if (isGuest && !lookOnly) {
+                  if (isGuest) {
                     redirectGuest('Director Canvas');
                     return;
                   }
@@ -495,16 +489,16 @@ export default function Header({
                 <MastTab selected={activeView === 'pitch'} title="Pitch Deck" label="Pitch" onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)} />
               ) : null}
               {consoleOn('budget') ? (
-                <MastTab selected={activeView === 'budget'} title="Budget" label="Budget" onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })} />
+                <MastTab selected={activeView === 'budget'} title="Budget" label="Budget" onClick={withGuestGuard('Budget', onOpenBudgetConsole)} />
               ) : null}
               {consoleOn('reel') ? (
                 <MastTab selected={activeView === 'reel'} title="Reel" label="Reel" onClick={withGuestGuard('Feature reel', onOpenFeatureReel)} />
               ) : null}
               {consoleOn('compile') ? (
-                <MastTab selected={activeView === 'compile'} title="Compile" label="Compile" onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })} />
+                <MastTab selected={activeView === 'compile'} title="Compile" label="Compile" onClick={withGuestGuard('Prompt Compiler', onOpenCompiler)} />
               ) : null}
               {consoleOn('generate') ? (
-                <MastTab selected={activeView === 'generate'} title="Generate" label="Generate" onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })} />
+                <MastTab selected={activeView === 'generate'} title="Generate" label="Generate" onClick={withGuestGuard('Generate desk', onOpenGenerateDesk)} />
               ) : null}
           </div>
         </div>
@@ -512,7 +506,7 @@ export default function Header({
         <div className="sps-header-rail">
           <HeaderSaveMenu
             quiet
-            lookOnly={lookOnly}
+            lookOnly={isGuest}
             projectTitle={projectTitle}
             autoSaveIntervalId={autoSaveIntervalId}
             onChangeAutoSaveInterval={onChangeAutoSaveInterval}
@@ -645,7 +639,7 @@ export default function Header({
           <button
             type="button"
             onClick={onSaveProject}
-            disabled={isCloudSyncing || lookOnly}
+            disabled={isCloudSyncing || isGuest}
             className={`sps-quiet-link ${isCloudSyncing ? '' : 'is-muted'}`}
             title={
               isCloudSyncing
@@ -675,7 +669,7 @@ export default function Header({
           ) : null}
           <HeaderDriveMenu
             quiet
-            lookOnly={lookOnly}
+            lookOnly={isGuest}
             project={{
               title: projectTitle,
               shots,

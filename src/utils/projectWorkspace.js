@@ -65,18 +65,14 @@ export function titlesMatch(a, b) {
 /**
  * One collab room per film. Stale sps_untitled / leftover sps_<other> ids
  * must not keep two users on different rooms for the same title.
- * Custom invite ids (not sps_*) and GUEST-PLAY are kept.
+ * Custom invite ids (not sps_*) are kept.
  */
 export function roomIdForProject(title, existingRoomId = '') {
   const existing = String(existingRoomId || '').trim();
   const slug = slugProjectTitle(title);
   const canonical = `sps_${slug}`;
 
-  if (existing === 'GUEST-PLAY' || existing.toUpperCase().startsWith('GUEST')) {
-    return existing;
-  }
-
-  if (!existing || existing === LEGACY_SHARED_ROOM || UNTITLED_ROOM_IDS.has(existing)) {
+  if (!existing || existing === LEGACY_SHARED_ROOM || UNTITLED_ROOM_IDS.has(existing) || existing === 'GUEST-PLAY' || existing.toUpperCase().startsWith('GUEST')) {
     return canonical;
   }
 

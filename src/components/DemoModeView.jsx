@@ -117,7 +117,7 @@ const REST_SLIDES = [
     ],
     beats: [
       'Isolated rooms. Slot lock. Live merge without overwrite chaos.',
-      'Allotted titles. No guest walk into the vault.',
+      'Allotted titles. The vault stays behind sign-in.',
       'Invite OTP at the door. The room remembers who held the slot.',
     ],
     Icon: Cloud,
@@ -154,7 +154,7 @@ const PUBLIC_DOOR = {
   welcome: 'Login or request access. The desk stays behind this door.',
   points: [
     { n: 'In', label: 'Registered crew' },
-    { n: 'Out', label: 'Guests stay here' },
+    { n: 'Out', label: 'Public stays here' },
     { n: 'Ask', label: 'Request access' },
   ],
   beats: [

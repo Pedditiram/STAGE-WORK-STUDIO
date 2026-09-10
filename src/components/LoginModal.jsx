@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, CheckCircle2, AlertCircle, UserPlus, Shield, Eye, Loader2 } from 'lucide-react';
+import { X, Lock, CheckCircle2, AlertCircle, UserPlus, Shield, Loader2 } from 'lucide-react';
 import {
   getCurrentUserEmail,
   isStudioAdmin,
@@ -7,11 +7,10 @@ import {
   normalizeEmail,
   getDesignationForEmail,
   getHomeForDesignation,
-  enterGuestLookSession,
   exitPresentationForWorkspace
 } from '../utils/projectPermissions';
 import { registerThisDevice, getDeviceId } from '../utils/saasControl';
-import { activateSelfServeAccount, isSelfServeSession } from '../utils/tenantScope';
+import { activateSelfServeAccount, isSelfServeSession, seedTenantFirstFilm } from '../utils/tenantScope';
 import { isValidEmail } from '../utils/emailValidation';
 import {
   collaboratorHasPassword,
@@ -27,7 +26,7 @@ import LegalDocModal from './LegalDocModal';
 import { PRODUCT } from '../constants/brand';
 
 export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overlayMode = 'default', initialMode = 'signin' }) {
-  const [loginMode, setLoginMode] = useState(initialMode || 'signin'); // 'signin' | 'signup' | 'guest' | 'admin' | 'createpass' | 'changepass'
+  const [loginMode, setLoginMode] = useState(initialMode || 'signin'); // 'signin' | 'signup' | 'admin' | 'createpass' | 'changepass'
   const [emailInput, setEmailInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -64,7 +63,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
     setCurrentPass('');
     setPendingEmail(remembered);
     setPendingMessage('');
-    setLoginMode(initialMode || 'signin');
+    setLoginMode(initialMode === 'guest' ? 'signin' : (initialMode || 'signin'));
     setSignupAwaitingCode(false);
     setSignupAgreed(false);
     setLegalKind(null);
@@ -75,23 +74,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
 
   if (!isOpen) return null;
 
-  const finishGuestSession = (message) => {
-    if (setIsAdminLoggedIn) setIsAdminLoggedIn(false);
-    try {
-      sessionStorage.setItem('sps_login_prompted', '1');
-    } catch {
-      /* ignore */
-    }
-    setSuccessMsg(message);
-    setTimeout(() => onClose(), 350);
-  };
-
-  const startGuestLook = () => {
-    setErrorMsg('');
-    enterGuestLookSession();
-    finishGuestSession('Guest look mode — browse only, nothing saves.');
-  };
-
   const completeLogin = (email, message) => {
     const clean = normalizeEmail(email);
     const gate = registerThisDevice(clean);
@@ -101,6 +83,11 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
     }
     markCollaboratorSession(clean);
     exitPresentationForWorkspace();
+    try {
+      if (isSelfServeSession(clean)) seedTenantFirstFilm(clean);
+    } catch {
+      /* ignore */
+    }
     const admin = isStudioAdmin(clean);
     if (setIsAdminLoggedIn) setIsAdminLoggedIn(admin);
     try {
@@ -502,17 +489,15 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
     loginMode === 'createpass' ? 'Create password'
       : loginMode === 'changepass' ? 'Change password'
         : loginMode === 'signup' ? 'Create account'
-          : loginMode === 'guest' ? 'Guest'
-            : loginMode === 'admin' ? 'Admin'
+          : loginMode === 'admin' ? 'Admin'
               : isSwitch ? 'Switch account' : 'Sign in';
   const subheading =
     loginMode === 'createpass' ? (pendingEmail || emailInput || 'Choose a password for this email.')
       : loginMode === 'changepass' ? (getCurrentUserEmail() || emailInput || 'Update your password.')
         : isSwitch ? 'Projects stay open.'
           : loginMode === 'signup' ? 'We email a code. Nothing is shown here.'
-            : loginMode === 'guest' ? 'Browse only. Nothing saves.'
-              : loginMode === 'admin' ? 'Custom Admin ID lock.'
-                : PRODUCT;
+            : loginMode === 'admin' ? 'Custom Admin ID lock.'
+              : PRODUCT;
   const legalLinks = (
     <p className="sps-login-legal">
       <button type="button" onClick={() => setLegalKind('privacy')}>Privacy</button>
@@ -685,9 +670,6 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
                 <button type="button" className="sps-login-link" onClick={() => goMode('signup')}>
                   Create account
                 </button>
-                <button type="button" className="sps-login-link is-muted" onClick={() => goMode('guest')}>
-                  Guest
-                </button>
               </div>
               {legalLinks}
               <button type="button" className="sps-login-admin" onClick={() => goMode('admin')}>
@@ -786,18 +768,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
                 Use email instead
               </button>
             </form>
-          ) : (
-            <div className="sps-login-form">
-              <button type="button" onClick={startGuestLook} className="sps-btn sps-btn-primary w-full">
-                <Eye className="w-4 h-4" />
-                <span>Continue as guest</span>
-              </button>
-              <button type="button" className="sps-login-link" onClick={() => goMode('signin')}>
-                Sign in
-              </button>
-              {legalLinks}
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
       <LegalDocModal kind={legalKind} onClose={() => setLegalKind(null)} />

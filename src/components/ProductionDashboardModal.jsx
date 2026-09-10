@@ -52,10 +52,8 @@ import {
   lifecycleMeta,
   normalizeLifecycleStatus,
   stepBackProjectLifecycle,
-  unlockProjectLifecycle,
-  GUEST_PLAY_LIFECYCLE_MESSAGE
+  unlockProjectLifecycle
 } from '../utils/productionLifecycle';
-import { isGuestPlayTitle } from '../utils/guestPlayground';
 import {
   getActiveCharacterProfiles,
   getActiveWorldAssets,
@@ -277,7 +275,7 @@ function LifecycleBar({ summary = {} }) {
   );
 }
 
-function ProjectLifecyclePanel({ projectTitle = '', record = {}, onChanged, guestPlayground = false }) {
+function ProjectLifecyclePanel({ projectTitle = '', record = {}, onChanged }) {
   const status = normalizeLifecycleStatus(record?.lifecycleStatus);
   const meta = lifecycleMeta(status);
   const locked = status === 'locked';
@@ -288,17 +286,6 @@ function ProjectLifecyclePanel({ projectTitle = '', record = {}, onChanged, gues
     }
     onChanged?.();
   };
-
-  if (guestPlayground) {
-    return (
-      <div className="rounded-[8px] border border-[var(--sps-border)] p-3 bg-[var(--sps-bg-elevated)] space-y-2">
-        <span className="inline-flex items-center px-2 py-1 border border-[var(--sps-border)] text-[10px] font-mono font-bold uppercase text-[var(--sps-muted)]">
-          Guest playground
-        </span>
-        <p className="text-[10px] text-[var(--sps-muted)] m-0 leading-relaxed">{GUEST_PLAY_LIFECYCLE_MESSAGE}</p>
-      </div>
-    );
-  }
 
   return (
     <div className="rounded-[8px] border border-[var(--sps-border)] p-3 bg-[var(--sps-bg-elevated)] space-y-2">
@@ -382,7 +369,6 @@ export default function ProductionDashboardModal({
   const [auditFilter, setAuditFilter] = useState('all');
   const [exportAuditFilter, setExportAuditFilter] = useState('all');
   const [jobFilter, setJobFilter] = useState('all');
-  const guestPlayground = isGuestPlayTitle(projectTitle);
   const exportLifeGate = useMemo(
     () => lifecycleExportReadiness(shots, projectTitle),
     [shots, projectTitle]
@@ -928,7 +914,6 @@ export default function ProductionDashboardModal({
               projectTitle={projectTitle}
               record={projectLife}
               onChanged={refresh}
-              guestPlayground={guestPlayground}
             />
           </section>
 
@@ -939,7 +924,7 @@ export default function ProductionDashboardModal({
                 Shot lifecycle
               </h3>
               <LifecycleBar summary={shotLife} />
-              {typeof onUpdateShots === 'function' && projectLife?.lifecycleStatus !== 'locked' && !guestPlayground ? (
+              {typeof onUpdateShots === 'function' && projectLife?.lifecycleStatus !== 'locked' ? (
                 <button
                   type="button"
                   className="sps-btn text-[10px]"
@@ -957,14 +942,12 @@ export default function ProductionDashboardModal({
                 >
                   Bulk advance all shots →
                 </button>
-              ) : guestPlayground ? (
-                <p className="text-[10px] text-[var(--sps-muted)]">{GUEST_PLAY_LIFECYCLE_MESSAGE}</p>
               ) : null}
               <p className="text-[11px] text-[var(--sps-muted)]">
                 Characters {snap.assets.characters.total} · World {snap.assets.world.total}
               </p>
               <LifecycleBar summary={snap.assets.characters.lifecycle} />
-              {projectLife?.lifecycleStatus !== 'locked' && !guestPlayground ? (
+              {projectLife?.lifecycleStatus !== 'locked' ? (
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
@@ -1226,7 +1209,7 @@ export default function ProductionDashboardModal({
                   <Download className="w-3 h-3" />
                   Report ZIP
                 </button>
-                {drift.count > 0 && !guestPlayground ? (
+                {drift.count > 0 ? (
                   <>
                     <button
                       type="button"
@@ -1271,7 +1254,7 @@ export default function ProductionDashboardModal({
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <h3 className="text-[11px] uppercase tracking-widest text-[var(--sps-muted)]">Production spine</h3>
-              {spineStale && !guestPlayground ? (
+              {spineStale ? (
                 <button
                   type="button"
                   className="sps-btn sps-btn-compact text-[10px]"

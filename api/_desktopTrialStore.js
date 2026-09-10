@@ -1,6 +1,6 @@
 /**
  * Durable desktop-trial request queue.
- * Prefer KV (same as guest-access / sync). Local fs for Vite.
+ * Prefer KV (same as sync). Local fs for Vite.
  * Never stores the Electron binary — only GitHub/release HTTPS URL + tokens.
  */
 

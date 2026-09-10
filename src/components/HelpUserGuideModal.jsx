@@ -119,7 +119,7 @@ function buildGuideSections(isAdmin) {
             If the website says <strong>Studio updated</strong>, tap <strong>Refresh now</strong> (you do not need a hard refresh).
             Admin can turn on an <strong>Independent settings pack</strong> (your engines/theme) and <strong>Own library</strong> (create/delete only titles you created).
             Allotted studio films stay Admin-owned. Profile → <strong>My settings pack</strong> shows pack status; <strong>Export pack &amp; close account</strong> saves your pack ZIP then removes your login (studio films are not deleted).
-            Guests can look around on the website if Guest Browse is on, but cannot save films.
+            New accounts receive <strong>SWS DESK DEMO</strong> — a filled film so you can walk Writer, Matrix, Form, Cast, and World — plus <strong>MY FIRST FILM</strong> to start your own picture.
           </Step>
           <Step n={2} title="Open Projects">
             Click the <strong>Projects</strong> (folder) button in the top bar. That opens the <strong>Project Console</strong>{' '}

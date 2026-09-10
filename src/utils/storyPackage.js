@@ -7,7 +7,6 @@
 import { isUsableProjectTitle, normalizeProjectTitle } from './activeProjectGate';
 import { safeLocalStorageSetItem } from './safeStorage';
 import { assertProjectWriteGate } from './productionLifecycle';
-import { isGuestPlayTitle } from './guestPlayground';
 import { appendCreativeAudit } from './creativeAuditLog';
 import { titlesMatch } from './projectWorkspace';
 
@@ -399,22 +398,6 @@ export function assertStoryPackageApplyAllowed({
   auditLabel = 'story_package_apply'
 } = {}) {
   const active = normalizeProjectTitle(activeTitle);
-
-  if (isGuestPlayTitle(active)) {
-    const message = 'Guest playground — Story Package apply is disabled. Sign in to apply to a real production.';
-    if (audit) {
-      appendCreativeAudit({
-        projectTitle: active,
-        category: 'apply',
-        action: 'write_blocked',
-        targetType: 'story_package',
-        targetId: auditLabel,
-        targetLabel: 'Story Package apply',
-        note: message
-      });
-    }
-    return { ok: false, code: 'GUEST_PLAYGROUND', message };
-  }
 
   if (!pkg || !Array.isArray(pkg.proposedShots) || !pkg.proposedShots.length) {
     const message = 'Story Package has no proposed shots — parse first.';

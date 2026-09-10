@@ -7,7 +7,6 @@ import { logLifecycleAudit, getActorEmail, resolveActiveProjectTitle, appendCrea
 import { assertActiveProjectForWrite } from './activeProjectGate';
 import { safeLocalStorageSetItem } from './safeStorage';
 import { titlesMatch } from './projectWorkspace';
-import { isGuestPlayTitle } from './guestPlayground';
 
 function normalizeTitle(title) {
   return String(title || '').trim();
@@ -476,13 +475,7 @@ export function canGenerateForProject(title) {
   return !isProjectLifecycleLocked(title);
 }
 
-export const GUEST_PLAY_LIFECYCLE_MESSAGE =
-  'Guest playground — project lifecycle is disabled. Sign in to lock a real production.';
-
-function assertGuestPlaygroundLifecycleGate(title) {
-  if (isGuestPlayTitle(title)) {
-    return { ok: false, reason: 'guest_playground', message: GUEST_PLAY_LIFECYCLE_MESSAGE };
-  }
+function assertGuestPlaygroundLifecycleGate() {
   return { ok: true };
 }
 

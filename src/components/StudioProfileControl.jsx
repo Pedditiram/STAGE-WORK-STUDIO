@@ -43,7 +43,7 @@ function readAccount() {
     profile?.name
     || (isStudioAdmin(email) ? 'Studio Admin' : '')
     || (email ? email.split('@')[0] : '')
-    || (guest ? 'Guest' : 'Studio')
+    || (guest ? 'Sign in' : 'Studio')
   ).trim();
   const designation = getDesignationForEmail(email) || profile?.designation || (isStudioAdmin(email) ? 'Lead Director' : '');
   const role = profile?.role || (isStudioAdmin(email) ? 'Admin' : '');
@@ -180,7 +180,7 @@ export default function StudioProfileControl({
               </span>
               <div className="min-w-0 leading-snug">
                 <div className="text-[12px] font-semibold truncate" style={{ color: 'var(--sps-text)' }}>
-                  {account.guest ? 'Guest' : account.name}
+                  {account.guest ? 'Sign in' : account.name}
                 </div>
                 {account.email ? (
                   <div className="text-[10px] font-mono truncate mt-0.5" style={{ color: 'var(--sps-muted)' }}>

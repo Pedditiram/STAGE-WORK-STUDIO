@@ -3,10 +3,17 @@
  * Users tab, or production cloud room (MVK stays the owner's film).
  */
 import { isOwner, upsertLicense } from './saasControl';
+import {
+  DEMO_PROJECT_TITLE,
+  DEMO_PROJECT_SCREENPLAY,
+  buildDemoStudioProject
+} from './demoStudioProject';
+import { saveActiveCharacterProfiles, saveActiveWorldAssets } from './projectBibleVault';
 
 export const SELF_SERVE_ORIGIN = 'self_serve';
 export const STUDIO_LIBRARY_KEY = 'sps_project_library';
 export const TENANT_FIRST_TITLE = 'MY FIRST FILM';
+export { DEMO_PROJECT_TITLE };
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -109,11 +116,50 @@ FADE OUT.
 `;
 }
 
+function titleKey(p) {
+  return String(p?.title || '').trim().toUpperCase();
+}
+
+function blankFirstFilm(email, name) {
+  const clean = normalizeEmail(email);
+  return {
+    id: `proj_tenant_${Date.now()}`,
+    title: TENANT_FIRST_TITLE,
+    description: `${name || clean.split('@')[0]} — first film`,
+    targetModel: 'SPS Direct Cinema 2.0',
+    aspectRatio: '2.39:1 Anamorphic',
+    roomId: `sps_${TENANT_FIRST_TITLE.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+    lastModified: new Date().toLocaleDateString(),
+    lastModifiedIso: new Date().toISOString(),
+    shots: starterShots(),
+    screenplayText: starterScreenplay(),
+    characterProfiles: [],
+    worldAssets: [],
+    packOrigin: SELF_SERVE_ORIGIN
+  };
+}
+
+function persistOpenTitle(project) {
+  if (!project?.title) return;
+  try {
+    localStorage.setItem('sps_current_project_title', project.title);
+    localStorage.setItem('sps_active_project_title', project.title);
+    localStorage.setItem('sps_project_title', project.title);
+    localStorage.setItem('sps_current_shots', JSON.stringify(project.shots || []));
+    localStorage.setItem('sps_current_room_id', project.roomId || '');
+    const slug = String(project.title).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const pages = project.screenplayText || '';
+    localStorage.setItem(`sps_open_screenplay_text::${slug}`, pages);
+    localStorage.setItem('sps_open_screenplay_text', pages);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function seedTenantFirstFilm(email, { name = '' } = {}) {
   if (typeof window === 'undefined') return null;
   const clean = normalizeEmail(email);
   if (!clean || isOwner(clean)) return null;
-  const title = TENANT_FIRST_TITLE;
   const key = projectLibraryStorageKey(clean);
   let library = [];
   try {
@@ -122,32 +168,57 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
   } catch {
     library = [];
   }
-  const exists = library.some((p) => String(p?.title || '').trim().toUpperCase() === title);
-  const project = exists
-    ? library.find((p) => String(p?.title || '').trim().toUpperCase() === title)
-    : {
-        id: `proj_tenant_${Date.now()}`,
-        title,
-        description: `${name || clean.split('@')[0]} — first film`,
-        targetModel: 'SPS Direct Cinema 2.0',
-        aspectRatio: '2.39:1 Anamorphic',
-        roomId: `sps_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-        lastModified: new Date().toLocaleDateString(),
-        lastModifiedIso: new Date().toISOString(),
-        shots: starterShots(),
-        screenplayText: starterScreenplay(),
-        packOrigin: SELF_SERVE_ORIGIN
-      };
-  if (!exists) library.unshift(project);
+
+  let demo = library.find((p) => titleKey(p) === DEMO_PROJECT_TITLE);
+  const createdDemo = !demo;
+  if (!demo) {
+    demo = { ...buildDemoStudioProject({ name: name || clean.split('@')[0] }), packOrigin: SELF_SERVE_ORIGIN };
+    library.unshift(demo);
+    try {
+      saveActiveCharacterProfiles(demo.characterProfiles || [], { title: DEMO_PROJECT_TITLE, silent: true });
+      saveActiveWorldAssets(demo.worldAssets || [], { title: DEMO_PROJECT_TITLE, silent: true });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let first = library.find((p) => titleKey(p) === TENANT_FIRST_TITLE);
+  if (!first) {
+    first = blankFirstFilm(clean, name);
+    library.push(first);
+  }
+
+  if (createdDemo) persistOpenTitle(demo);
+  try {
+    localStorage.setItem(`sps_open_screenplay_text::sws_desk_demo`, demo.screenplayText || DEMO_PROJECT_SCREENPLAY);
+  } catch {
+    /* ignore */
+  }
   try {
     localStorage.setItem(key, JSON.stringify(library));
-    localStorage.setItem('sps_current_project_title', title);
-    localStorage.setItem('sps_active_project_title', title);
-    localStorage.setItem('sps_project_title', title);
-    localStorage.setItem('sps_current_shots', JSON.stringify(project.shots || []));
-    localStorage.setItem('sps_current_room_id', project.roomId);
-    localStorage.setItem('sps_open_screenplay_text::my_first_film', project.screenplayText || starterScreenplay());
-    localStorage.setItem('sps_open_screenplay_text', project.screenplayText || starterScreenplay());
+  } catch {
+    /* ignore */
+  }
+  try {
+    const users = readUsers();
+    const idx = users.findIndex((u) => normalizeEmail(u?.email) === clean);
+    if (idx >= 0) {
+      const row = users[idx];
+      const titles = [DEMO_PROJECT_TITLE, TENANT_FIRST_TITLE, ...(row.allottedProjects || []), ...(row.packOwnedTitles || [])];
+      const uniq = [];
+      titles.forEach((t) => {
+        const n = String(t || '').trim();
+        if (!n) return;
+        if (uniq.some((x) => x.toUpperCase() === n.toUpperCase())) return;
+        uniq.push(n);
+      });
+      users[idx] = {
+        ...row,
+        allottedProjects: uniq,
+        packOwnedTitles: uniq
+      };
+      writeUsers(users);
+    }
   } catch {
     /* ignore */
   }
@@ -157,7 +228,7 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
   } catch {
     /* ignore */
   }
-  return project;
+  return demo;
 }
 
 /** Create a public trial profile that cannot enter studio rooms or the studio library. */
@@ -184,8 +255,8 @@ export function activateSelfServeAccount(email, { name = '', role = 'Writer' } =
     ownLibrary: true,
     packOrigin: SELF_SERVE_ORIGIN,
     cloudRooms: [],
-    allottedProjects: [TENANT_FIRST_TITLE],
-    packOwnedTitles: [TENANT_FIRST_TITLE]
+    allottedProjects: [DEMO_PROJECT_TITLE, TENANT_FIRST_TITLE],
+    packOwnedTitles: [DEMO_PROJECT_TITLE, TENANT_FIRST_TITLE]
   };
   if (idx >= 0) users[idx] = row;
   else users.unshift(row);

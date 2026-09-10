@@ -4701,18 +4701,25 @@ button.sps-btn.sps-btn-primary *,
 .theme-paper .sps-shell .bg-gradient-to-r .text-zinc-400,
 .theme-paper .sps-shell .bg-gradient-to-r .text-white,
 .theme-paper .sps-shell .bg-gradient-to-r .hover\:text-white:hover,
-.theme-paper .sps-shell .sps-vault-bar,
 .theme-paper .sps-shell .sps-vault-bar .text-amber-50,
 .theme-paper .sps-shell .sps-vault-bar .text-amber-100,
 .theme-paper .sps-shell .sps-vault-bar .text-amber-200,
 .theme-paper .sps-shell .sps-vault-bar .text-amber-300,
 .theme-paper .sps-shell .sps-vault-bar .text-cyan-200,
-.theme-paper .sps-shell .sps-vault-bar .text-purple-200,
 .theme-paper .sps-shell .sps-vault-bar .text-zinc-400,
 .theme-paper .sps-shell .sps-vault-bar .text-white,
 .theme-paper .sps-shell .sps-vault-bar select {
   color: var(--sps-on-gold) !important;
   -webkit-text-fill-color: var(--sps-on-gold) !important;
+}
+
+/* Auto-AI stays a dark chip on the gold vault strip — cream type, not ink */
+.theme-paper .sps-shell .sps-vault-bar [class*="bg-purple-95"],
+.theme-paper .sps-shell .sps-vault-bar [class*="bg-purple-95"] *,
+.theme-paper .sps-shell .sps-vault-bar .text-purple-200,
+.theme-paper .sps-shell .sps-vault-bar .text-purple-400 {
+  color: #f6efe2 !important;
+  -webkit-text-fill-color: #f6efe2 !important;
 }
 
 .theme-paper .sps-shell .sps-vault-bar .text-zinc-950,
@@ -4748,4 +4755,153 @@ button.sps-btn.sps-btn-primary *,
 .theme-paper .sps-shell .from-zinc-950 .text-zinc-200 {
   color: #f6efe2 !important;
   -webkit-text-fill-color: #f6efe2 !important;
+}
+
+/*
+  OS dark mode still activates Tailwind `dark:` fills (zinc-950 chips, sample
+  scripts, story cards). Paper remaps pale type to ink, which then sits on
+  leftover black — Sample Scripts and Confirm write go unreadable.
+  Flatten those fills to paper. Do not retune theme tokens.
+*/
+.theme-paper:not(.force-dark) [class*="dark:bg-zinc-95"],
+.theme-paper:not(.force-dark) [class*="dark:bg-zinc-9"],
+.theme-paper:not(.force-dark) [class*="dark:bg-zinc-8"],
+.theme-paper:not(.force-dark) [class*="dark:bg-black"],
+.theme-paper:not(.force-dark) [class*="dark:bg-slate-95"],
+.theme-paper:not(.force-dark) [class*="dark:bg-slate-9"],
+.theme-paper:not(.force-dark) [class*="dark:bg-slate-8"],
+.theme-paper .dark\:bg-zinc-950,
+.theme-paper .dark\:bg-zinc-900,
+.theme-paper .dark\:bg-zinc-800,
+.theme-paper .dark\:bg-black,
+.theme-paper .dark\:bg-slate-950,
+.theme-paper .dark\:bg-slate-900,
+.theme-paper .dark\:bg-slate-800 {
+  background-color: var(--sps-surface) !important;
+  border-color: var(--sps-border) !important;
+  color: var(--sps-text) !important;
+}
+
+.theme-paper [class*="dark:text-white"],
+.theme-paper [class*="dark:text-zinc-50"],
+.theme-paper [class*="dark:text-zinc-1"],
+.theme-paper [class*="dark:text-zinc-2"],
+.theme-paper [class*="dark:text-zinc-3"],
+.theme-paper [class*="dark:text-cyan"],
+.theme-paper [class*="dark:text-amber"],
+.theme-paper [class*="dark:text-emerald"],
+.theme-paper [class*="dark:text-sky"],
+.theme-paper [class*="dark:text-fuchsia"],
+.theme-paper [class*="dark:text-purple"],
+.theme-paper [class*="dark:text-rose"],
+.theme-paper [class*="dark:text-orange"],
+.theme-paper .dark\:text-cyan-300,
+.theme-paper .dark\:text-cyan-400,
+.theme-paper .dark\:text-amber-100,
+.theme-paper .dark\:text-amber-200,
+.theme-paper .dark\:text-amber-300,
+.theme-paper .dark\:text-amber-400,
+.theme-paper .dark\:text-zinc-100,
+.theme-paper .dark\:text-zinc-200,
+.theme-paper .dark\:text-zinc-300 {
+  color: var(--sps-text) !important;
+  -webkit-text-fill-color: var(--sps-text) !important;
+}
+
+.theme-paper [class*="dark:text-zinc-4"],
+.theme-paper [class*="dark:text-zinc-5"],
+.theme-paper [class*="dark:text-slate-4"],
+.theme-paper [class*="dark:text-slate-5"],
+.theme-paper .dark\:text-zinc-400,
+.theme-paper .dark\:text-zinc-500,
+.theme-paper .dark\:text-slate-400,
+.theme-paper .dark\:text-slate-500 {
+  color: var(--sps-muted) !important;
+  -webkit-text-fill-color: var(--sps-muted) !important;
+}
+
+/* Modal scrims must stay dim — paper was flattening bg-black/80 to white */
+.theme-paper .sps-modal-scrim,
+.theme-paper .fixed.inset-0[class*="bg-black"] {
+  background-color: rgba(28, 23, 18, 0.52) !important;
+}
+
+/* Confirm write / active-project gate: ink on paper, never white-on-white */
+.theme-paper .sps-paper-gate,
+.theme-paper .sps-paper-gate.bg-zinc-950,
+.theme-paper .sps-paper-gate .bg-zinc-900,
+.theme-paper .sps-paper-gate .bg-zinc-950 {
+  background-color: var(--sps-surface) !important;
+  color: var(--sps-text) !important;
+  border-color: var(--sps-border-strong) !important;
+}
+.theme-paper .sps-paper-gate,
+.theme-paper .sps-paper-gate p,
+.theme-paper .sps-paper-gate h3,
+.theme-paper .sps-paper-gate label,
+.theme-paper .sps-paper-gate span,
+.theme-paper .sps-paper-gate strong,
+.theme-paper .sps-paper-gate li,
+.theme-paper .sps-paper-gate .text-white,
+.theme-paper .sps-paper-gate .text-zinc-300,
+.theme-paper .sps-paper-gate .text-zinc-400,
+.theme-paper .sps-paper-gate .text-zinc-500,
+.theme-paper .sps-paper-gate .text-rose-100,
+.theme-paper .sps-paper-gate .text-emerald-100 {
+  color: var(--sps-text) !important;
+  -webkit-text-fill-color: var(--sps-text) !important;
+}
+.theme-paper .sps-paper-gate .text-amber-300,
+.theme-paper .sps-paper-gate .text-amber-400 {
+  color: var(--sps-accent) !important;
+  -webkit-text-fill-color: var(--sps-accent) !important;
+}
+.theme-paper .sps-paper-gate .text-zinc-400,
+.theme-paper .sps-paper-gate .text-zinc-500 {
+  color: var(--sps-muted) !important;
+  -webkit-text-fill-color: var(--sps-muted) !important;
+}
+.theme-paper .sps-paper-gate input,
+.theme-paper .sps-paper-gate textarea,
+.theme-paper .sps-paper-gate select {
+  background-color: var(--sps-bg-elevated) !important;
+  color: var(--sps-text) !important;
+  -webkit-text-fill-color: var(--sps-text) !important;
+  border-color: var(--sps-border-strong) !important;
+}
+.theme-paper .sps-paper-gate input::placeholder,
+.theme-paper .sps-paper-gate textarea::placeholder {
+  color: var(--sps-muted) !important;
+  opacity: 1;
+}
+.theme-paper .sps-paper-gate .bg-rose-950\/40,
+.theme-paper .sps-paper-gate .bg-emerald-950\/30 {
+  background-color: var(--sps-surface-2) !important;
+  color: var(--sps-text) !important;
+}
+.theme-paper .sps-paper-gate .sps-btn:not(.sps-btn-primary),
+.theme-paper .sps-paper-gate .sps-btn:not(.sps-btn-primary) * {
+  color: var(--sps-text) !important;
+  -webkit-text-fill-color: var(--sps-text) !important;
+}
+.theme-paper .sps-paper-gate .sps-btn-primary,
+.theme-paper .sps-paper-gate .sps-btn-primary * {
+  color: var(--sps-on-gold) !important;
+  -webkit-text-fill-color: var(--sps-on-gold) !important;
+}
+
+/* Keep Director Visual Canvas / force-dark surfaces after the dark: flatten */
+.theme-paper .force-dark,
+.theme-paper .force-dark [class*="dark:bg-zinc"],
+.theme-paper .force-dark [class*="dark:bg-black"],
+.theme-paper .force-dark [class*="dark:bg-slate"] {
+  background-color: #09090b !important;
+  color: #f4f4f5 !important;
+}
+.theme-paper .force-dark [class*="dark:text-"],
+.theme-paper .force-dark .text-white,
+.theme-paper .force-dark .text-zinc-300,
+.theme-paper .force-dark .text-zinc-400 {
+  color: #f4f4f5 !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
 }
