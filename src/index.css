@@ -3132,6 +3132,139 @@ header:has(.sps-console-profile.is-open) {
   align-self: center;
 }
 
+.sps-login-shell {
+  width: min(22.5rem, calc(100vw - 1.5rem));
+  height: auto;
+  max-height: min(92dvh, 36rem);
+  align-self: center;
+  pointer-events: auto;
+}
+
+.sps-login-body {
+  padding: 1.15rem 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sps-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sps-login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sps-muted);
+}
+
+.sps-login-form input[type="email"],
+.sps-login-form input[type="password"],
+.sps-login-form input[type="text"] {
+  width: 100%;
+  border-radius: 7px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sps-text);
+}
+
+.sps-login-form input[type="text"][maxlength="6"] {
+  text-align: center;
+  letter-spacing: 0.28em;
+  font-family: var(--sps-font-mono);
+  font-weight: 600;
+}
+
+.sps-login-agree {
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 0.5rem !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: 500 !important;
+  font-size: 0.72rem !important;
+}
+
+.sps-login-agree input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.sps-login-agree button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--sps-gold);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.sps-login-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--sps-border);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.sps-login-note.is-warn {
+  border-color: var(--sps-warn);
+}
+
+.sps-login-hint,
+.sps-login-legal {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--sps-muted);
+  text-align: center;
+}
+
+.sps-login-legal button,
+.sps-login-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--sps-gold);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.sps-login-link.is-muted,
+.sps-login-admin {
+  color: var(--sps-muted);
+}
+
+.sps-login-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sps-login-admin {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  align-self: center;
+}
+
 .sps-modal-head {
   display: flex;
   align-items: center;
