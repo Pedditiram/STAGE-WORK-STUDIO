@@ -191,7 +191,25 @@ function pptxLayout() {
 </p:sldLayout>`;
 }
 
-function textBox(id, name, x, y, w, h, text, size, bold, color, italic) {
+function hex6(value, fallback = 'C4A574') {
+  const raw = String(value || '').trim();
+  const m = raw.match(/^#?([0-9a-fA-F]{6})$/);
+  return m ? m[1].toUpperCase() : fallback;
+}
+
+function deckTheme(deck) {
+  const s = deck?.style || {};
+  return {
+    paper: hex6(s.present || s.paper, '0C0A08'),
+    ink: hex6(s.ink, 'F4EDE3'),
+    muted: hex6(s.muted, '9A8B7A'),
+    gold: hex6(s.gold, 'C4A574'),
+    display: /Georgia|Times|serif/i.test(s.display || '') ? 'Georgia' : /Courier|mono/i.test(s.display || '') ? 'Courier New' : /Arial Black|Impact/i.test(s.display || '') ? 'Arial' : 'Calibri',
+    body: /Georgia|Times|serif/i.test(s.body || '') ? 'Georgia' : /Courier|mono/i.test(s.body || '') ? 'Courier New' : 'Calibri'
+  };
+}
+
+function textBox(id, name, x, y, w, h, text, size, bold, color, italic, typeface = 'Calibri') {
   const sz = Math.round(size * 100);
   return `<p:sp>
 <p:nvSpPr><p:cNvPr id="${id}" name="${xmlEsc(name)}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
@@ -199,7 +217,7 @@ function textBox(id, name, x, y, w, h, text, size, bold, color, italic) {
 <a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>
 <p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0"/><a:lstStyle/>
 <a:p><a:pPr algn="l"/><a:r><a:rPr lang="en-US" sz="${sz}" b="${bold ? 1 : 0}" i="${italic ? 1 : 0}" dirty="0">
-<a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${bold ? 'Georgia' : 'Calibri'}"/></a:rPr>
+<a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${xmlEsc(typeface)}"/></a:rPr>
 <a:t>${xmlEsc(text).slice(0, 4000)}</a:t></a:r></a:p></p:txBody></p:sp>`;
 }
 
@@ -222,23 +240,23 @@ function emptyFrame(id, x, y, w, h, label) {
 <a:t>${xmlEsc(label || 'Still')}</a:t></a:r></a:p></p:txBody></p:sp>`;
 }
 
-function buildSlideXml(slide, si, images, placements) {
+function buildSlideXml(slide, si, images, theme) {
   const frames = slide.frames || [];
   const n = Math.max(frames.length, 0);
   const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : 3;
   const rows = Math.max(1, Math.ceil(n / cols) || 1);
   let shapes = '';
   let id = 2;
-  shapes += textBox(id++, 'kicker', 457200, 228600, 11277600, 274320, slide.kicker || '', 11, false, 'C4A574', true);
-  shapes += textBox(id++, 'title', 457200, 502920, 11277600, 548640, slide.title || '', 28, true, 'F4EDE3', false);
+  shapes += textBox(id++, 'kicker', 457200, 228600, 11277600, 274320, slide.kicker || '', 11, false, theme.gold, true, theme.body);
+  shapes += textBox(id++, 'title', 457200, 502920, 11277600, 548640, slide.title || '', 28, true, theme.ink, false, theme.display);
   if (slide.subtitle) {
-    shapes += textBox(id++, 'sub', 457200, 1028700, 11277600, 365760, slide.subtitle, 14, false, '9A8B7A', true);
+    shapes += textBox(id++, 'sub', 457200, 1028700, 11277600, 365760, slide.subtitle, 14, false, theme.muted, true, theme.body);
   }
   const bodyY = slide.subtitle ? 1463040 : 1097280;
   const points = (slide.points || []).slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n');
   const hasFrames = n > 0;
   const textW = hasFrames ? 5486400 : 11277600;
-  shapes += textBox(id++, 'body', 457200, bodyY, textW, 4114800, points || slide.statusNote || '', 13, false, 'E8DCC8', false);
+  shapes += textBox(id++, 'body', 457200, bodyY, textW, 4114800, points || slide.statusNote || '', 13, false, theme.ink, false, theme.body);
   if (hasFrames) {
     const gx = 6200000;
     const gy = bodyY;
@@ -258,11 +276,11 @@ function buildSlideXml(slide, si, images, placements) {
     });
   }
   if (slide.disclaimer) {
-    shapes += textBox(id++, 'disc', 457200, 6400800, 11277600, 274320, slide.disclaimer, 9, false, '6B5344', true);
+    shapes += textBox(id++, 'disc', 457200, 6400800, 11277600, 274320, slide.disclaimer, 9, false, theme.muted, true, theme.body);
   }
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="0C0A08"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="${theme.paper}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
 <p:spTree>
 <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
 <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${CX}" cy="${CY}"/></a:xfrm></p:grpSpPr>
@@ -342,9 +360,10 @@ ${slideRels}
   });
   files.push({ name: 'ppt/theme/theme1.xml', data: pptxTheme() });
 
+  const theme = deckTheme(deck);
   slides.forEach((slide, si) => {
     const slideImgs = images.filter((im) => im.slideIndex === si);
-    files.push({ name: `ppt/slides/slide${si + 1}.xml`, data: buildSlideXml(slide, si, images, placements) });
+    files.push({ name: `ppt/slides/slide${si + 1}.xml`, data: buildSlideXml(slide, si, images, theme) });
     const rels = [
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>',
       ...slideImgs.map((im) => `<Relationship Id="${im.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${im.file}"/>`)
@@ -473,19 +492,30 @@ export function pitchDeckToPrintHtml(deck = {}, { projectTitle = '', roomId = ''
   const slides = Array.isArray(deck.slides) ? deck.slides : [];
   const audience = escapeHtml(deck.audienceLabel || deck.audienceId || '');
   const size = escapeHtml(deck.sizeLabel || deck.sizeId || '');
+  const template = escapeHtml(deck.templateId || 'classic');
+  const theme = deckTheme(deck);
+  const paper = `#${theme.paper}`;
+  const ink = `#${theme.ink}`;
+  const muted = `#${theme.muted}`;
+  const gold = `#${theme.gold}`;
+  const display = theme.display;
+  const body = theme.body;
 
   const panels = slides
     .map((slide, i) => {
+      const layout = slide.layout || slide.kind || 'page';
       const points = (slide.points || [])
         .map((p) => `<li>${escapeHtml(p)}</li>`)
         .join('');
-      return `<section class="slide">
-        <p class="num">Slide ${i + 1}</p>
+      const sheetClass = layout === 'sheet' ? ' sheet' : layout === 'cover' || layout === 'quote' ? ' cover' : '';
+      return `<section class="slide${sheetClass}">
+        <p class="num">${escapeHtml(slide.kicker || `Slide ${i + 1}`)}</p>
         <h2>${escapeHtml(slide.title || slide.headline || `Slide ${i + 1}`)}</h2>
-        ${slide.subtitle || slide.kicker ? `<p class="sub">${escapeHtml(slide.subtitle || slide.kicker)}</p>` : ''}
+        ${slide.subtitle ? `<p class="sub">${escapeHtml(slide.subtitle)}</p>` : ''}
         ${points ? `<ul>${points}</ul>` : ''}
         ${slide.body || slide.narrative ? `<p class="body">${escapeHtml(slide.body || slide.narrative)}</p>` : ''}
         ${slide.highlight || slide.callout ? `<blockquote>${escapeHtml(slide.highlight || slide.callout)}</blockquote>` : ''}
+        ${slide.footer ? `<p class="foot">${escapeHtml(slide.footer)}</p>` : ''}
       </section>`;
     })
     .join('');
@@ -496,24 +526,27 @@ export function pitchDeckToPrintHtml(deck = {}, { projectTitle = '', roomId = ''
   <meta charset="utf-8" />
   <title>${title} — Pitch deck</title>
   <style>
-    @page { size: letter landscape; margin: 0.5in; }
-    body { font-family: system-ui, sans-serif; font-size: 10pt; color: #111; margin: 0; padding: 16px; line-height: 1.4; }
-    h1 { font-size: 14pt; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.08em; }
-    .meta { color: #555; margin-bottom: 14px; font-size: 9pt; }
-    .slide { page-break-inside: avoid; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #ddd; }
-    .num { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.12em; color: #8b5a2b; margin: 0 0 4px; font-weight: 700; }
-    h2 { font-size: 13pt; margin: 0 0 6px; }
-    .sub { color: #444; margin: 0 0 8px; }
-    ul { margin: 0; padding-left: 1.2em; }
-    li { margin-bottom: 3px; }
-    .body { margin: 6px 0 0; white-space: pre-wrap; }
-    blockquote { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid #b8860b; background: #faf7f0; font-style: italic; }
-    @media print { body { padding: 0; } }
+    @page { size: letter landscape; margin: 0.45in; }
+    body { font-family: ${body}, system-ui, sans-serif; font-size: 11pt; color: ${ink}; background: ${paper}; margin: 0; padding: 16px; line-height: 1.45; }
+    h1 { font-family: ${display}, Georgia, serif; font-size: 16pt; margin: 0 0 4px; letter-spacing: 0.04em; color: ${gold}; }
+    .meta { color: ${muted}; margin-bottom: 14px; font-size: 9pt; }
+    .slide { page-break-after: always; page-break-inside: avoid; min-height: 6.4in; padding: 28px 32px; border: 1px solid ${gold}44; background: ${paper}; }
+    .slide.cover h2 { font-size: 28pt; margin-top: 1.2in; }
+    .slide.sheet ul { columns: 1; }
+    .num { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.16em; color: ${gold}; margin: 0 0 10px; font-weight: 700; }
+    h2 { font-family: ${display}, Georgia, serif; font-size: 22pt; margin: 0 0 10px; color: ${ink}; }
+    .sub { color: ${muted}; margin: 0 0 14px; font-size: 13pt; }
+    ul { margin: 0; padding-left: 1.1em; }
+    li { margin-bottom: 6px; }
+    .body { margin: 8px 0 0; white-space: pre-wrap; }
+    .foot { margin: 24px 0 0; font-size: 8pt; letter-spacing: 0.1em; text-transform: uppercase; color: ${muted}; }
+    blockquote { margin: 10px 0 0; padding: 8px 12px; border-left: 3px solid ${gold}; color: ${ink}; font-style: italic; }
+    @media print { body { padding: 0; background: ${paper}; } .slide { border: 0; min-height: auto; } }
   </style>
 </head>
 <body>
   <h1>${title} — Pitch deck</h1>
-  <p class="meta">${slides.length} slides${audience ? ` · ${audience}` : ''}${size ? ` · ${size}` : ''}${String(roomId || '').trim() ? ` · Room ${escapeHtml(String(roomId).trim())}` : ''} · ${escapeHtml(new Date().toISOString())}</p>
+  <p class="meta">${slides.length} slides${audience ? ` · ${audience}` : ''}${size ? ` · ${size}` : ''} · ${template}${String(roomId || '').trim() ? ` · Room ${escapeHtml(String(roomId).trim())}` : ''} · ${escapeHtml(new Date().toISOString())}</p>
   ${panels || '<p>No slides.</p>'}
   <script>window.onload = () => { window.print(); };</script>
 </body>

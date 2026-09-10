@@ -9,7 +9,7 @@ import {
   saveProjectDriveShare,
 } from '../utils/projectDriveLinks';
 
-export default function HeaderDriveMenu({ project, lookOnly = false }) {
+export default function HeaderDriveMenu({ project, lookOnly = false, quiet = false }) {
   const title = project?.title || '';
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('');
@@ -60,14 +60,14 @@ export default function HeaderDriveMenu({ project, lookOnly = false }) {
     <div className="relative shrink-0">
       <button
         type="button"
-        className={`sps-icon-btn ${linked || open ? 'is-on' : ''}`}
+        className={quiet ? `sps-quiet-link ${linked || open ? '' : 'is-muted'}` : `sps-icon-btn ${linked || open ? 'is-on' : ''}`}
         title={title ? `Google Drive link — ${title}` : 'Google Drive link'}
         aria-label="Google Drive link for this project"
         aria-expanded={open}
         disabled={lookOnly}
         onClick={() => setOpen((v) => !v)}
       >
-        <IconDrive className="w-3.5 h-3.5" />
+        {quiet ? 'Drive' : <IconDrive className="w-3.5 h-3.5" />}
       </button>
       {open && (
         <>

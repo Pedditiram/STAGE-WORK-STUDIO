@@ -15,7 +15,8 @@ export default function HeaderSaveMenu({
   isSaving = false,
   lastSavedAt = null,
   lastVersionFile = '',
-  isSavedToast = false
+  isSavedToast = false,
+  quiet = false
 }) {
   const [open, setOpen] = useState(false);
 
@@ -41,7 +42,37 @@ export default function HeaderSaveMenu({
   };
 
   return (
-    <div className="relative shrink-0 flex items-center">
+    <div className="relative shrink-0 flex items-center gap-2">
+      {quiet ? (
+        <>
+          <button
+            type="button"
+            className="sps-btn sps-btn-primary sps-header-save"
+            title={
+              isSaving
+                ? 'Saving project…'
+                : `Save project to disk${projectTitle ? ` · ${projectTitle}` : ''}`
+            }
+            aria-label="Save project"
+            disabled={lookOnly || isSaving}
+            onClick={handleSave}
+          >
+            {isSaving ? 'Saving' : isSavedToast ? 'Saved' : 'Save'}
+          </button>
+          <button
+            type="button"
+            className={`sps-quiet-link ${open ? '' : 'is-muted'}`}
+            title={`Auto-save · ${intervalLabel}`}
+            aria-label="Auto-save options"
+            aria-expanded={open}
+            disabled={lookOnly}
+            onClick={() => setOpen((v) => !v)}
+          >
+            Auto
+          </button>
+        </>
+      ) : (
+        <>
       <button
         type="button"
         className={`sps-icon-btn rounded-r-none ${isSavedToast || isSaving ? 'is-on' : ''}`}
@@ -73,6 +104,8 @@ export default function HeaderSaveMenu({
       >
         <ChevronDown className="w-3 h-3" />
       </button>
+        </>
+      )}
       {open && (
         <>
           <div className="fixed inset-0 z-[45]" onClick={() => setOpen(false)} aria-hidden="true" />

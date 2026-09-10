@@ -2,39 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { readCloudSyncHealth, syncBackendLabel } from '../utils/cloudSyncHealth';
 import { managedCreditStatus } from '../utils/saasControl';
 import { APP_VERSION_NAME } from '../utils/runtimeEnv';
-import {
-  IconScript as Scroll,
-  IconMatrix as LayoutGrid,
-  IconForm as FileText,
-  IconStage as Video,
-  IconCast as Users,
-  IconWorld as Globe2,
-  IconLibrary as FolderKanban,
-  IconCompile as Sparkles,
-  IconPromo as PromoMark,
-  IconCampaign as CampaignMark,
-  IconStoryboard as StoryboardMark,
-  IconBudget as BudgetMark,
-  IconClapper as PitchMark,
-  IconReel as ReelMark,
-  IconSpark as GenerateMark,
-  IconUndo as RotateCcw,
-  IconRedo as RotateCw,
-  IconCloud as Cloud,
-  IconGear as Settings,
-  IconHelp as HelpCircle,
-  IconChat as MessageSquare,
-  IconExpand as Maximize2,
-  IconMoon as Moon,
-  IconLock as Lock,
-  IconDownload as Download,
-  IconChevronUp as ChevronUp,
-  IconSync as RefreshCw,
-  IconBrain as Brain,
-  IconNav as NavMark,
-  IconPeople
-} from './StudioIcons';
-import { PinBarButton } from './HoverPinBar';
 import StudioProfileControl from './StudioProfileControl';
 import HeaderDriveMenu from './HeaderDriveMenu';
 import HeaderSaveMenu from './HeaderSaveMenu';
@@ -53,7 +20,7 @@ import {
   setPresentationMode
 } from '../utils/projectPermissions';
 
-function MastTab({ selected = false, onClick, title, label, children }) {
+function MastTab({ selected = false, onClick, title, label }) {
   return (
     <button
       type="button"
@@ -62,9 +29,9 @@ function MastTab({ selected = false, onClick, title, label, children }) {
       aria-label={title}
       title={title}
       onClick={onClick}
+      className={`sps-quiet-link ${selected ? 'is-current' : 'is-muted'}`}
     >
-      {children}
-      <span className="sps-mast-label">{label}</span>
+      {label}
     </button>
   );
 }
@@ -371,11 +338,11 @@ export default function Header({
           <button
             type="button"
             onClick={() => onOpenNavigator?.()}
-            className="sps-icon-btn shrink-0"
+            className="sps-quiet-link is-muted shrink-0"
             title="Navigator (Shift+Space · swipe from left · two-finger tap)"
             aria-label="Open studio navigator"
           >
-            <NavMark className="w-3.5 h-3.5" />
+            Menu
           </button>
           <button
             type="button"
@@ -386,10 +353,10 @@ export default function Header({
               }
               onOpenProjectConsole?.();
             }}
-            className="sps-icon-btn shrink-0"
+            className="sps-quiet-link shrink-0"
             title={isGuest && !lookOnly ? 'Guest: sign in or enable Guest Browse' : 'Projects'}
           >
-            <FolderKanban className="w-3.5 h-3.5" />
+            Projects
           </button>
 
           <div className="min-w-0 flex items-baseline gap-2">
@@ -421,39 +388,19 @@ export default function Header({
               </button>
             )}
             <span className="text-[10px] text-[var(--sps-muted)] tabular-nums shrink-0">{shotCount}</span>
-            {typeof onOpenAppVersionModal === 'function' ? (
-              <button
-                type="button"
-                onClick={() => onOpenAppVersionModal()}
-                className="sps-chip !normal-case !tracking-normal text-[9px] font-mono shrink-0"
-                title={`Build ${APP_VERSION_NAME} · ${appVersionMode === 'cloud' ? 'Cloud' : 'Local'} mode — click to switch`}
-                aria-label={`App build ${APP_VERSION_NAME}, ${appVersionMode} mode`}
-              >
-                {APP_VERSION_NAME}
-                <span className="opacity-60 ml-1">{appVersionMode === 'cloud' ? 'cloud' : 'local'}</span>
-              </button>
-            ) : (
-              <span
-                className="text-[9px] font-mono text-[var(--sps-muted)] shrink-0 tabular-nums"
-                title={`Build ${APP_VERSION_NAME}`}
-              >
-                {APP_VERSION_NAME}
-              </span>
-            )}
           </div>
         </div>
 
         <div className="sps-header-work">
-          <div className="sps-tabs sps-tabs-mast" role="tablist" aria-label="Studio rooms">
+          <div className="sps-header-rooms sps-quiet-links" role="tablist" aria-label="Studio rooms">
             {demoMode ? (
               <button
                 type="button"
-                className="text-[10px] uppercase tracking-[0.14em] px-2 py-1 font-semibold bg-transparent border-0 cursor-pointer"
-                style={{ color: 'var(--sps-gold)' }}
+                className="sps-quiet-link"
                 title="Turn off presentation mode"
                 onClick={() => setPresentationMode(false)}
               >
-                Presentation mode
+                Presentation
               </button>
             ) : null}
             {consoleOn('writer') ? (
@@ -470,9 +417,7 @@ export default function Header({
                   if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
                   else setActiveView('screenplay');
                 }}
-              >
-                <Scroll className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              />
             ) : null}
             {consoleOn('matrix') ? (
               <MastTab
@@ -487,9 +432,7 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('spreadsheet');
                 }}
-              >
-                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              />
             ) : null}
             {consoleOn('form') ? (
               <MastTab
@@ -504,9 +447,7 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('form');
                 }}
-              >
-                <FileText className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              />
             ) : null}
             {consoleOn('stage') ? (
               <MastTab
@@ -521,91 +462,68 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('canvas');
                 }}
-              >
-                <Video className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              />
             ) : null}
-            <span className="sps-tabs-split" aria-hidden="true" />
             {consoleOn('cast') ? (
-              <MastTab selected={activeView === 'cast'} title="Characters" label="Cast" onClick={withGuestGuard('Character Bible', onOpenCharacterBible)}>
-                <Users className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              <MastTab selected={activeView === 'cast'} title="Characters" label="Characters" onClick={withGuestGuard('Character Bible', onOpenCharacterBible)} />
             ) : null}
             {consoleOn('world') ? (
-              <MastTab selected={false} title="World" label="World" onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)}>
-                <Globe2 className="w-3.5 h-3.5 shrink-0" />
-              </MastTab>
+              <MastTab selected={activeView === 'world'} title="World" label="World" onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)} />
             ) : null}
-          </div>
-          <div className="sps-header-tools">
-            <div className="sps-tabs sps-tabs-mast" role="tablist" aria-label="Packs and generate">
               {consoleOn('storyboard') ? (
-                <MastTab selected={activeView === 'storyboard'} title="Storyboard" label="Board" onClick={withGuestGuard('Storyboard', onOpenStoryboard)}>
-                  <StoryboardMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'storyboard'} title="Storyboard" label="Storyboard" onClick={withGuestGuard('Storyboard', onOpenStoryboard)} />
               ) : null}
               {consoleOn('promo') ? (
-                <MastTab selected={activeView === 'promo'} title="Promo Pack" label="Promo" onClick={withGuestGuard('Promo Pack', onOpenPromoPack)}>
-                  <PromoMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'promo'} title="Promo Pack" label="Promo" onClick={withGuestGuard('Promo Pack', onOpenPromoPack)} />
               ) : null}
               {consoleOn('campaign') ? (
-                <MastTab selected={activeView === 'campaign'} title="Campaign Kit" label="Camp" onClick={withGuestGuard('Campaign Kit', onOpenCampaignKit)}>
-                  <CampaignMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'campaign'} title="Campaign Kit" label="Campaign" onClick={withGuestGuard('Campaign Kit', onOpenCampaignKit)} />
               ) : null}
               {consoleOn('pitch') ? (
-                <MastTab selected={activeView === 'pitch'} title="Pitch Deck" label="Pitch" onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)}>
-                  <PitchMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'pitch'} title="Pitch Deck" label="Pitch" onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)} />
               ) : null}
               {consoleOn('budget') ? (
-                <MastTab selected={activeView === 'budget'} title="Budget" label="Budget" onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })}>
-                  <BudgetMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'budget'} title="Budget" label="Budget" onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })} />
               ) : null}
               {consoleOn('reel') ? (
-                <MastTab selected={false} title="Reel" label="Reel" onClick={withGuestGuard('Feature reel', onOpenFeatureReel)}>
-                  <ReelMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'reel'} title="Reel" label="Reel" onClick={withGuestGuard('Feature reel', onOpenFeatureReel)} />
               ) : null}
-              <span className="sps-tabs-split" aria-hidden="true" />
               {consoleOn('compile') ? (
-                <MastTab selected={false} title="Compile" label="Compile" onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })}>
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'compile'} title="Compile" label="Compile" onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })} />
               ) : null}
               {consoleOn('generate') ? (
-                <MastTab selected={false} title="Generate" label="Gen" onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })}>
-                  <GenerateMark className="w-3.5 h-3.5 shrink-0" />
-                </MastTab>
+                <MastTab selected={activeView === 'generate'} title="Generate" label="Generate" onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })} />
               ) : null}
-            </div>
           </div>
         </div>
 
         <div className="sps-header-rail">
-          <div className="sps-header-rail-group" aria-label="Edit history">
-          <button type="button" onClick={onUndo} disabled={!canUndo} className="sps-icon-btn" title="Undo">
-            <RotateCcw className="w-3.5 h-3.5" />
+          <HeaderSaveMenu
+            quiet
+            lookOnly={lookOnly}
+            projectTitle={projectTitle}
+            autoSaveIntervalId={autoSaveIntervalId}
+            onChangeAutoSaveInterval={onChangeAutoSaveInterval}
+            onSaveNow={onDurableProjectSave || onSaveProject}
+            isSaving={isDurableSaving}
+            lastSavedAt={lastDurableSaveAt}
+            lastVersionFile={lastVersionFile}
+            isSavedToast={isProjectSavedToast}
+          />
+          <div className="sps-quiet-links sps-header-rail-links">
+          <button type="button" onClick={onUndo} disabled={!canUndo} className={`sps-quiet-link ${canUndo ? '' : 'is-muted'}`} title="Undo">
+            Undo
           </button>
-          <button type="button" onClick={onRedo} disabled={!canRedo} className="sps-icon-btn" title="Redo">
-            <RotateCw className="w-3.5 h-3.5" />
+          <button type="button" onClick={onRedo} disabled={!canRedo} className={`sps-quiet-link ${canRedo ? '' : 'is-muted'}`} title="Redo">
+            Redo
           </button>
-          </div>
-          <div className="sps-header-rail-group" aria-label="People">
           <button
             type="button"
             onClick={() => onOpenCollabChat?.()}
-            className={`sps-icon-btn relative ${collabChatOpen ? 'is-on' : ''}`}
+            className={`sps-quiet-link ${collabChatOpen ? '' : 'is-muted'}`}
             title="Chat"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
-            {unreadChatCount > 0 && !collabChatOpen && (
-              <span className="absolute -top-1 -right-1 min-w-[0.9rem] h-3.5 px-0.5 bg-[var(--sps-gold)] text-[var(--sps-on-gold)] text-[8px] flex items-center justify-center">
-                {unreadChatCount > 9 ? '9+' : unreadChatCount}
-              </span>
-            )}
+            Chat{unreadChatCount > 0 && !collabChatOpen ? ` ${unreadChatCount > 9 ? '9+' : unreadChatCount}` : ''}
           </button>
           {Boolean(roomId && getCurrentUserEmail()) && (() => {
             const liveCount = activeRemoteUsers.length + 1;
@@ -625,12 +543,12 @@ export default function Header({
                     setIsProfileOpen(false);
                     setIsActiveUsersOpen((v) => !v);
                   }}
-                  className="sps-icon-btn"
+                  className={`sps-quiet-link ${isActiveUsersOpen ? '' : 'is-muted'}`}
                   title={`${liveCount} online`}
                   aria-label={`Users, ${liveCount} online`}
                   aria-expanded={isActiveUsersOpen}
                 >
-                  <IconPeople className="w-3.5 h-3.5" />
+                  Users
                 </button>
 
                 {isActiveUsersOpen && (
@@ -712,27 +630,11 @@ export default function Header({
               </div>
             );
           })()}
-
-          </div>
-
-          <div className="sps-header-rail-group" aria-label="Save and share">
-          <HeaderSaveMenu
-            lookOnly={lookOnly}
-            projectTitle={projectTitle}
-            autoSaveIntervalId={autoSaveIntervalId}
-            onChangeAutoSaveInterval={onChangeAutoSaveInterval}
-            onSaveNow={onDurableProjectSave || onSaveProject}
-            isSaving={isDurableSaving}
-            lastSavedAt={lastDurableSaveAt}
-            lastVersionFile={lastVersionFile}
-            isSavedToast={isProjectSavedToast}
-          />
-
           <button
             type="button"
             onClick={onSaveProject}
             disabled={isCloudSyncing || lookOnly}
-            className={`sps-icon-btn ${isProjectSavedToast || isCloudSyncing ? 'is-on' : ''}`}
+            className={`sps-quiet-link ${isCloudSyncing ? '' : 'is-muted'}`}
             title={
               isCloudSyncing
                 ? 'Cloud syncing…'
@@ -742,14 +644,12 @@ export default function Header({
             }
             aria-label="Cloud sync"
           >
-            {isCloudSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+            {isCloudSyncing ? 'Syncing' : 'Sync'}
           </button>
           {creditStatus?.relevant && creditStatus.level !== 'ok' ? (
             <button
               type="button"
-              className={`sps-chip text-[9px] font-mono ${
-                creditStatus.level === 'empty' ? 'text-red-400 border-red-500/50' : 'text-amber-300 border-amber-500/40'
-              }`}
+              className="sps-quiet-link"
               title={creditStatus.message}
               onClick={() => onOpenAdminModal?.()}
             >
@@ -757,6 +657,7 @@ export default function Header({
             </button>
           ) : null}
           <HeaderDriveMenu
+            quiet
             lookOnly={lookOnly}
             project={{
               title: projectTitle,
@@ -766,7 +667,6 @@ export default function Header({
               roomId,
             }}
           />
-          </div>
           <button
             type="button"
             onClick={() => {
@@ -781,31 +681,50 @@ export default function Header({
               }
               onOpenAdminModal?.();
             }}
-            className={`sps-icon-btn ${isAdminLoggedIn ? 'is-on' : ''}`}
+            className={`sps-quiet-link ${isAdminLoggedIn ? '' : 'is-muted'}`}
             title={isAdminLoggedIn ? 'Settings' : 'Sign in for settings'}
           >
-            {isAdminLoggedIn ? <Settings className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            {isAdminLoggedIn ? 'Settings' : 'Sign in'}
           </button>
           <button
             type="button"
             onClick={() => onOpenNavigatorShortcutHelp?.()}
-            className="sps-icon-btn"
+            className="sps-quiet-link is-muted"
             title="Navigator shortcut (Shift + Space)"
             aria-label="Show navigator keyboard shortcut"
           >
-            <kbd style={{ fontSize: 9, fontWeight: 700, fontFamily: 'var(--sps-font-mono)', lineHeight: 1 }}>⇧␣</kbd>
+            Keys
           </button>
-          <button type="button" onClick={onOpenHelpModal} className="sps-icon-btn" title="Help">
-            <HelpCircle className="w-3.5 h-3.5" />
+          <button type="button" onClick={onOpenHelpModal} className="sps-quiet-link is-muted" title="Help">
+            Help
           </button>
-          {typeof onTogglePinHeader === 'function' && (
-              <PinBarButton
-                pinned={headerPinned}
-                onToggle={onTogglePinHeader}
-                label="studio bar"
-              />
-          )}
-          {typeof onMinimizeHeader === 'function' && (
+          {typeof onOpenAppVersionModal === 'function' ? (
+            <button
+              type="button"
+              onClick={() => onOpenAppVersionModal()}
+              className="sps-quiet-link is-muted"
+              title={`Build ${APP_VERSION_NAME} · ${appVersionMode === 'cloud' ? 'Cloud' : 'Local'} mode`}
+              aria-label={`App build ${APP_VERSION_NAME}, ${appVersionMode} mode`}
+            >
+              {appVersionMode === 'cloud' ? 'Cloud' : 'Local'}
+            </button>
+          ) : null}
+          {typeof onTogglePinHeader === 'function' ? (
+            <button
+              type="button"
+              className={`sps-quiet-link ${headerPinned ? '' : 'is-muted'}`}
+              title={headerPinned ? 'Unpin studio bar' : 'Pin studio bar'}
+              aria-label={headerPinned ? 'Unpin studio bar' : 'Pin studio bar'}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTogglePinHeader();
+              }}
+            >
+              {headerPinned ? 'Unpin' : 'Pin'}
+            </button>
+          ) : null}
+          {typeof onMinimizeHeader === 'function' ? (
             <button
               type="button"
               onClick={(e) => {
@@ -813,18 +732,24 @@ export default function Header({
                 e.stopPropagation();
                 onMinimizeHeader();
               }}
-              className="sps-icon-btn"
+              className="sps-quiet-link is-muted"
               title="Minimize bar"
               aria-label="Minimize bar"
             >
-              <ChevronUp className="w-4 h-4" />
+              Hide
             </button>
-          )}
-          {typeof onToggleFullscreen === 'function' && (
-            <button type="button" onClick={onToggleFullscreen} className={`sps-icon-btn ${isFullscreen ? 'is-on' : ''}`} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-              <Maximize2 className="w-3.5 h-3.5" />
+          ) : null}
+          {typeof onToggleFullscreen === 'function' ? (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className={`sps-quiet-link ${isFullscreen ? '' : 'is-muted'}`}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              {isFullscreen ? 'Exit' : 'Full'}
             </button>
-          )}
+          ) : null}
+          </div>
 
           <StudioProfileControl
             className="sps-header-profile"

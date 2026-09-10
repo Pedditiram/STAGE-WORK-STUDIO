@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronLeft, ChevronRight, RefreshCw, ClipboardCheck,
-  FileSpreadsheet, FileText, Pencil, Wand2, Presentation, Plus, Trash2, Maximize2, Minimize2, Download, Archive
+  Pencil, Wand2, Presentation, Plus, Trash2, Maximize2, Minimize2, Download, X, Users
 } from 'lucide-react';
 import HoverPinBar from './HoverPinBar';
 import { buildPitchDocx, buildPitchPptx, downloadBinary, pitchDeckToPrintHtml } from '../utils/pitchDeckExport';
@@ -11,10 +11,15 @@ import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import {
   PITCH_AUDIENCES,
+  PITCH_FONTS,
+  PITCH_LAYOUTS,
+  PITCH_PALETTES,
   PITCH_SIZES,
+  PITCH_TEMPLATES,
   blankPitchSlide,
   buildInvestorPitchDeck,
   buildPitchDeckZipFiles,
+  characterSheetSlide,
   clonePitchSlides,
   collectPitchFacts,
   generateLoglineOptions,
@@ -22,9 +27,9 @@ import {
   pitchDeckToCsv,
   pitchDeckToMarkdown,
   qualityChecklist,
+  resolvePitchStyle,
   savePitchDeckLocal,
   scorePitchDeck,
-  themeTokens,
   logPitchBeatExclusions,
   collectPitchBeatExclusions
 } from '../utils/pitchDeckMaker';
@@ -45,6 +50,278 @@ const fieldClass =
   'rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[11px] text-[var(--sps-text)] px-2 py-1 focus:outline-none focus:border-[var(--sps-gold)]';
 const formFieldClass = `w-full ${fieldClass} py-1.5`;
 
+function pitchCssVars(style = {}) {
+  return {
+    '--pitch-paper': style.paper || '#1c1914',
+    '--pitch-ink': style.ink || '#f4ede3',
+    '--pitch-muted': style.muted || '#9a8b7a',
+    '--pitch-gold': style.gold || '#c4a574',
+    '--pitch-display': style.display || 'var(--sps-font-display)',
+    '--pitch-body': style.body || 'var(--sps-font)'
+  };
+}
+
+function SlideFrames({ slide, placements, lookOnly, placeImage, compact }) {
+  const frames = slide.frames || [];
+  if (!frames.length) return null;
+  return (
+    <div
+      className={`grid gap-2 ${compact ? 'mt-3' : 'mt-4'} ${
+        frames.length === 1 ? 'grid-cols-1' : frames.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'
+      }`}
+    >
+      {frames.map((fr, fi) => {
+        const key = `${slide.id}:${fi}`;
+        const src = placements[key] || slide.images?.[fi] || '';
+        return (
+          <label
+            key={key}
+            className={`relative block overflow-hidden cursor-pointer border border-dashed ${
+              compact ? 'min-h-[5rem]' : 'min-h-[6.5rem]'
+            }`}
+            style={{ borderColor: 'color-mix(in srgb, var(--pitch-gold) 50%, transparent)', background: 'color-mix(in srgb, var(--pitch-ink) 6%, var(--pitch-paper))' }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              placeImage?.(key, e.dataTransfer.files?.[0]);
+            }}
+          >
+            {src ? (
+              <img src={src} alt={fr.label} className={`w-full object-cover ${compact ? 'h-24' : 'h-28'}`} />
+            ) : (
+              <span className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--pitch-gold)' }}>{fr.label}</span>
+                <span className="text-[10px] mt-1" style={{ color: 'var(--pitch-muted)' }}>
+                  {fr.hint || 'Drop still or click to place'}
+                </span>
+              </span>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={lookOnly || !placeImage}
+              onChange={(e) => {
+                placeImage?.(key, e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function PointList({ slide, isManual, lookOnly, fieldClass, patchPoint, present }) {
+  const points = slide.points || [];
+  if (!points.length && !isManual) return null;
+  return (
+    <ul className={`${present ? 'space-y-3 mt-0' : 'mt-5 space-y-2.5'} flex-1 m-0 p-0 list-none`}>
+      {points.map((pt, pi) => (
+        <li
+          key={pi}
+          className={`leading-relaxed flex gap-2 whitespace-pre-wrap ${present ? 'text-lg md:text-xl' : 'text-[13px]'}`}
+          style={{ color: 'var(--pitch-ink)' }}
+        >
+          <span className="shrink-0" style={{ color: 'var(--pitch-gold)' }}>—</span>
+          {isManual && !present ? (
+            <textarea
+              className={`${fieldClass} min-h-[2.5rem] resize-y flex-1`}
+              value={pt}
+              disabled={lookOnly}
+              onChange={(e) => patchPoint(pi, e.target.value)}
+              rows={2}
+            />
+          ) : (
+            <span>{pt}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PitchSlideCard({
+  slide,
+  style,
+  placements,
+  lookOnly,
+  isManual,
+  present,
+  formFieldClass,
+  fieldClass,
+  patchSlide,
+  patchPoint,
+  addPoint,
+  removeSlide,
+  canRemove,
+  placeImage,
+  fundSplitUi
+}) {
+  const layout = slide.layout || slide.kind || 'page';
+  const isCover = layout === 'cover';
+  const isQuote = layout === 'quote';
+  const isSheet = layout === 'sheet';
+  const isSplit = layout === 'split';
+  const titleSize = present
+    ? isCover || isQuote
+      ? 'text-5xl md:text-6xl'
+      : 'text-4xl md:text-5xl'
+    : isCover || isQuote
+      ? 'text-[2rem] md:text-[2.4rem]'
+      : 'text-[1.7rem] md:text-[2rem]';
+
+  return (
+    <article
+      className={`sps-pitch-slide w-full flex flex-col ${
+        present ? 'max-w-5xl min-h-0' : 'max-w-[46rem] min-h-[30rem] rounded-[4px] border px-8 py-10 md:px-12 md:py-12'
+      }`}
+      style={{
+        ...pitchCssVars(style),
+        background: present ? 'transparent' : 'var(--pitch-paper)',
+        color: 'var(--pitch-ink)',
+        fontFamily: 'var(--pitch-body)',
+        borderColor: present ? 'transparent' : 'color-mix(in srgb, var(--pitch-gold) 28%, transparent)',
+        boxShadow: present ? 'none' : 'var(--sps-shadow-lift)'
+      }}
+    >
+      <p
+        className="text-[10px] font-bold uppercase tracking-[0.18em] m-0"
+        style={{ color: 'var(--pitch-gold)' }}
+      >
+        {isManual && !present ? (
+          <input
+            className={`${formFieldClass} font-bold uppercase tracking-[0.18em]`}
+            value={slide.kicker || ''}
+            onChange={(e) => patchSlide({ kicker: e.target.value })}
+          />
+        ) : (
+          slide.kicker
+        )}
+      </p>
+
+      {isSheet ? (
+        <div className={`grid gap-6 ${present ? 'mt-8 md:grid-cols-[16rem_1fr]' : 'mt-5 md:grid-cols-[12rem_1fr]'}`}>
+          <div>
+            <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} compact />
+            {slide.fields?.status ? (
+              <p className="text-[10px] uppercase tracking-wide mt-2 m-0" style={{ color: 'var(--pitch-muted)' }}>
+                {slide.fields.status}
+              </p>
+            ) : null}
+          </div>
+          <div>
+            {isManual && !present ? (
+              <input
+                className={`${formFieldClass} ${titleSize} font-semibold mb-2`}
+                style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+                value={slide.title || ''}
+                onChange={(e) => patchSlide({ title: e.target.value })}
+              />
+            ) : (
+              <h3 className={`${titleSize} leading-tight mb-2 font-semibold m-0`} style={{ fontFamily: 'var(--pitch-display)' }}>
+                {slide.title}
+              </h3>
+            )}
+            {isManual && !present ? (
+              <input
+                className={`${formFieldClass} mb-4`}
+                value={slide.subtitle || ''}
+                placeholder="Role · age"
+                onChange={(e) => patchSlide({ subtitle: e.target.value })}
+              />
+            ) : slide.subtitle ? (
+              <p className={`${present ? 'text-xl' : 'text-[14px]'} leading-relaxed m-0 mb-4 opacity-90`}>
+                {slide.subtitle}
+              </p>
+            ) : null}
+            <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+          </div>
+        </div>
+      ) : (
+        <>
+          {isManual && !present ? (
+            <input
+              className={`${formFieldClass} ${titleSize} font-semibold mt-4 mb-3`}
+              style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+              value={slide.title || ''}
+              onChange={(e) => patchSlide({ title: e.target.value })}
+            />
+          ) : (
+            <h3
+              className={`${titleSize} leading-tight ${isCover || isQuote ? 'mt-8 mb-6' : 'mt-4 mb-3'} font-semibold`}
+              style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+            >
+              {slide.title}
+            </h3>
+          )}
+          {isManual && !present ? (
+            <textarea
+              className={`${formFieldClass} min-h-[3rem] resize-y ${isQuote ? 'text-[1.05rem]' : ''}`}
+              value={slide.subtitle || ''}
+              placeholder="Subtitle / logline"
+              onChange={(e) => patchSlide({ subtitle: e.target.value })}
+              rows={isQuote ? 3 : 2}
+            />
+          ) : slide.subtitle ? (
+            <p
+              className={`${isQuote || isCover ? (present ? 'text-2xl md:text-3xl' : 'text-[1.15rem]') : present ? 'text-xl' : 'text-[14px]'} leading-relaxed m-0 opacity-90 whitespace-pre-wrap`}
+              style={{ fontFamily: isQuote ? 'var(--pitch-display)' : 'var(--pitch-body)' }}
+            >
+              {slide.subtitle}
+            </p>
+          ) : null}
+          {isSplit ? (
+            <div className="grid md:grid-cols-2 gap-6 mt-2">
+              <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
+              <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+            </div>
+          ) : (
+            <>
+              {!isCover ? (
+                <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
+              ) : (
+                <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
+              )}
+              {!isQuote ? (
+                <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+              ) : isManual && !present ? (
+                <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+              ) : null}
+            </>
+          )}
+        </>
+      )}
+
+      {fundSplitUi}
+      {isManual && !present && !lookOnly ? (
+        <div className="flex flex-wrap gap-2 mt-3">
+          <button type="button" className="sps-btn" onClick={addPoint}>
+            <Plus className="w-3.5 h-3.5" />
+            Add line
+          </button>
+          <button type="button" className="sps-btn" disabled={!canRemove} onClick={removeSlide}>
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete slide
+          </button>
+        </div>
+      ) : null}
+      {slide.disclaimer ? (
+        <p className="text-[11px] italic mt-4 m-0" style={{ color: 'var(--pitch-muted)' }}>{slide.disclaimer}</p>
+      ) : null}
+      {slide.footer && !present ? (
+        <p
+          className="text-[10px] uppercase tracking-wide mt-6 pt-4 m-0"
+          style={{ color: 'var(--pitch-muted)', borderTop: '1px solid color-mix(in srgb, var(--pitch-gold) 22%, transparent)' }}
+        >
+          {slide.footer}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
 export default function PitchDeckMaker({
   shots = [],
   projectTitle = 'Untitled Feature',
@@ -57,9 +334,13 @@ export default function PitchDeckMaker({
 }) {
   const [audienceId, setAudienceId] = useState('investor');
   const [sizeId, setSizeId] = useState('standard');
+  const [templateId, setTemplateId] = useState('classic');
+  const [paletteId, setPaletteId] = useState('studio');
+  const [fontId, setFontId] = useState('studio');
   const [loglineId, setLoglineId] = useState('a');
   const [slideIndex, setSlideIndex] = useState(0);
   const [showCheck, setShowCheck] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [fundSplit, setFundSplit] = useState(null);
   const [budgetAsk, setBudgetAsk] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
@@ -91,15 +372,18 @@ export default function PitchDeckMaker({
         audienceId,
         sizeId,
         loglineText,
-        fundSplit: fundSplit || facts.fundSplit
+        fundSplit: fundSplit || facts.fundSplit,
+        templateId,
+        paletteId,
+        fontId
       }),
-    [facts, audienceId, sizeId, loglineText, fundSplit]
+    [facts, audienceId, sizeId, loglineText, fundSplit, templateId, paletteId, fontId]
   );
 
   const autoSlides = deck.slides || [];
   const slides = deckMode === 'manual' && manualSlides.length ? manualSlides : autoSlides;
   const current = slides[slideIndex] || slides[0];
-  const tokens = themeTokens(deck.theme);
+  const style = deck.style || resolvePitchStyle(paletteId, fontId, deck.theme);
   const scores = useMemo(() => scorePitchDeck({ ...deck, slides }), [deck, slides]);
   const checks = useMemo(() => qualityChecklist({ ...deck, slides }), [deck, slides]);
   const splitNorm = normalizeFundSplit(fundSplit || facts.fundSplit);
@@ -114,7 +398,7 @@ export default function PitchDeckMaker({
 
   useEffect(() => {
     setSlideIndex(0);
-  }, [audienceId, sizeId]);
+  }, [audienceId, sizeId, templateId]);
 
   const mark = () => onDirty?.();
 
@@ -131,7 +415,7 @@ export default function PitchDeckMaker({
 
   const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
   const roomId = resolveCollabRoomId();
-  const lifeNote = `${slides.length} slides · ${audienceId}/${sizeId} · ${isManual ? 'manual' : 'auto'}${roomId ? ` · room:${roomId}` : ''}`;
+  const lifeNote = `${slides.length} slides · ${audienceId}/${templateId}/${sizeId} · ${isManual ? 'manual' : 'auto'}${roomId ? ` · room:${roomId}` : ''}`;
 
   useEffect(() => {
     if (lookOnly) return undefined;
@@ -362,12 +646,31 @@ export default function PitchDeckMaker({
     );
   };
 
-  const addSlide = () => {
+  const addSlide = (layout = 'page') => {
     if (lookOnly) return;
     mark();
     setManualSlides((prev) => {
-      const next = [...prev, blankPitchSlide(prev.length + 1)];
+      const next = [...prev, blankPitchSlide(prev.length + 1, layout)];
       setSlideIndex(next.length - 1);
+      return next;
+    });
+  };
+
+  const insertCharacterSheets = () => {
+    if (lookOnly) return;
+    mark();
+    const sheets = (facts.characters || []).length
+      ? facts.characters.map((c, i) => characterSheetSlide(c, i))
+      : [characterSheetSlide({}, 0)];
+    if (!isManual) {
+      setManualSlides(clonePitchSlides([...(autoSlides.length ? autoSlides : []), ...sheets]));
+      setDeckMode('manual');
+      setSlideIndex((autoSlides.length || 0));
+      return;
+    }
+    setManualSlides((prev) => {
+      const next = [...prev, ...sheets];
+      setSlideIndex(prev.length);
       return next;
     });
   };
@@ -439,6 +742,22 @@ export default function PitchDeckMaker({
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
         <select
+          className={`${fieldClass} w-[8.5rem] shrink-0`}
+          value={templateId}
+          disabled={lookOnly}
+          title="Deck template"
+          onChange={(e) => {
+            mark();
+            setTemplateId(e.target.value);
+          }}
+        >
+          {PITCH_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
           className={`${fieldClass} w-[6.25rem] shrink-0`}
           value={audienceId}
           disabled={lookOnly}
@@ -457,8 +776,8 @@ export default function PitchDeckMaker({
         <select
           className={`${fieldClass} w-[6.5rem] shrink-0`}
           value={sizeId}
-          disabled={lookOnly}
-          title="Deck length"
+          disabled={lookOnly || templateId !== 'classic'}
+          title={templateId === 'classic' ? 'Deck length' : 'Length follows the template'}
           onChange={(e) => {
             mark();
             setSizeId(e.target.value);
@@ -470,33 +789,6 @@ export default function PitchDeckMaker({
             </option>
           ))}
         </select>
-        <select
-          className={`${fieldClass} w-[11rem] shrink-0`}
-          value={loglineId}
-          disabled={lookOnly}
-          title="Approved logline"
-          onChange={(e) => {
-            mark();
-            setLoglineId(e.target.value);
-          }}
-        >
-          {loglines.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.text.slice(0, 72)}{opt.text.length > 72 ? '…' : ''}
-            </option>
-          ))}
-        </select>
-        <input
-          className={`${fieldClass} w-[5.5rem] shrink-0`}
-          placeholder="Ask / ₹"
-          title="Ask / budget (assumption)"
-          value={budgetAsk}
-          disabled={lookOnly}
-          onChange={(e) => {
-            mark();
-            setBudgetAsk(e.target.value);
-          }}
-        />
         <button
           type="button"
           className={`sps-icon-btn shrink-0 ${!isManual ? 'is-on' : ''}`}
@@ -516,6 +808,15 @@ export default function PitchDeckMaker({
         </button>
         <button type="button" className="sps-icon-btn shrink-0" onClick={() => setRebuild((n) => n + 1)} title="Rebuild from project">
           <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          className="sps-icon-btn shrink-0"
+          onClick={insertCharacterSheets}
+          disabled={lookOnly}
+          title="Insert character sheets from Character Bible"
+        >
+          <Users className="w-3.5 h-3.5" />
         </button>
         {excludedBeatCount > 0 ? (
           <button
@@ -548,60 +849,27 @@ export default function PitchDeckMaker({
         <button type="button" className="sps-icon-btn shrink-0" onClick={() => setShowCheck((v) => !v)} title="Quality">
           <ClipboardCheck className="w-3.5 h-3.5" />
         </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportKeynote}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Keynote (.pptx)'}
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportPages}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Pages (.docx)'}
-        >
-          <FileText className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportPrintPdf}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Print pitch PDF'}
-        >
-          <Download className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportMarkdown}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Export pitch markdown'}
-        >
-          <FileText className="w-3.5 h-3.5 opacity-70" />
-        </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportCsv}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Export pitch CSV'}
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5 opacity-70" />
-        </button>
-        <button
-          type="button"
-          className="sps-icon-btn shrink-0 disabled:opacity-40"
-          onClick={exportZip}
-          disabled={lookOnly || exportBlocked}
-          title={exportBlocked ? exportLife.message : 'Download pitch ZIP (README + slides CSV)'}
-        >
-          <Archive className="w-3.5 h-3.5" />
-        </button>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            className={`sps-icon-btn ${showExport ? 'is-on' : ''}`}
+            disabled={lookOnly || exportBlocked}
+            title={exportBlocked ? exportLife.message : 'Export'}
+            onClick={() => setShowExport((v) => !v)}
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          {showExport ? (
+            <div className="absolute right-0 top-full mt-1 z-30 min-w-[11rem] rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] p-1.5 shadow-lg flex flex-col gap-0.5">
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportKeynote(); }}>Keynote (.pptx)</button>
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportPages(); }}>Pages (.docx)</button>
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportPrintPdf(); }}>Print PDF</button>
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportMarkdown(); }}>Markdown</button>
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportCsv(); }}>CSV</button>
+              <button type="button" className="sps-quiet-link text-left px-2 py-1" onClick={() => { setShowExport(false); exportZip(); }}>ZIP pack</button>
+            </div>
+          ) : null}
+        </div>
         {exportBlocked ? (
           <span className="text-[10px] text-[var(--sps-gold)] max-w-[14rem] leading-snug shrink-0 hidden xl:inline">
             {exportLife.message}
@@ -635,175 +903,61 @@ export default function PitchDeckMaker({
             </button>
           ))}
           {isManual && !lookOnly ? (
-            <button type="button" className="sps-btn w-full mt-1" onClick={addSlide}>
-              <Plus className="w-3.5 h-3.5" />
-              Add slide
-            </button>
+            <>
+              <button type="button" className="sps-btn w-full mt-1" onClick={() => addSlide('page')}>
+                <Plus className="w-3.5 h-3.5" />
+                Add slide
+              </button>
+              <button type="button" className="sps-btn w-full mt-1" onClick={insertCharacterSheets}>
+                <Users className="w-3.5 h-3.5" />
+                Character sheets
+              </button>
+            </>
           ) : null}
         </nav>
 
         <div className="min-h-0 overflow-y-auto p-4 md:p-8 flex flex-col items-center gap-3 sps-atelier-pane">
           {current ? (
-            <article
-              className="w-full max-w-[46rem] min-h-[30rem] rounded-[4px] border border-[var(--sps-border)] px-8 py-10 md:px-12 md:py-12 flex flex-col"
-              style={{
-                background:
-                  current.kind === 'cover'
-                    ? tokens.paper
-                    : 'var(--sps-surface)',
-                boxShadow: 'var(--sps-shadow-lift)'
-              }}
-            >
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--sps-gold)] m-0">
-                {isManual ? (
-                  <input
-                    className={`${formFieldClass} font-bold uppercase tracking-[0.18em]`}
-                    value={current.kicker || ''}
-                    onChange={(e) => patchSlide(slideIndex, { kicker: e.target.value })}
-                  />
-                ) : (
-                  current.kicker
-                )}
-              </p>
-              {isManual ? (
-                <input
-                  className={`${formFieldClass} text-[1.4rem] font-semibold mt-4 mb-3`}
-                  style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}
-                  value={current.title || ''}
-                  onChange={(e) => patchSlide(slideIndex, { title: e.target.value })}
-                />
-              ) : (
-                <h3
-                  className="text-[1.7rem] md:text-[2rem] leading-tight mt-4 mb-3 font-semibold"
-                  style={{ fontFamily: 'var(--sps-font-display)', color: 'var(--sps-text)' }}
-                >
-                  {current.title}
-                </h3>
-              )}
-              {isManual ? (
-                <textarea
-                  className={`${formFieldClass} min-h-[3rem] resize-y`}
-                  value={current.subtitle || ''}
-                  placeholder="Subtitle / logline"
-                  onChange={(e) => patchSlide(slideIndex, { subtitle: e.target.value })}
-                  rows={2}
-                />
-              ) : current.subtitle ? (
-                <p className="text-[14px] leading-relaxed text-[var(--sps-text)] m-0 opacity-90 whitespace-pre-wrap">
-                  {current.subtitle}
-                </p>
-              ) : null}
-              {(current.frames || []).length ? (
-                <div
-                  className={`grid gap-2 mt-4 ${
-                    (current.frames || []).length === 1
-                      ? 'grid-cols-1'
-                      : (current.frames || []).length <= 4
-                        ? 'grid-cols-2'
-                        : 'grid-cols-3'
-                  }`}
-                >
-                  {(current.frames || []).map((fr, fi) => {
-                    const key = `${current.id}:${fi}`;
-                    const src = placements[key] || current.images?.[fi] || '';
-                    return (
-                      <label
-                        key={key}
-                        className="relative block min-h-[6.5rem] rounded-sm border border-dashed border-[var(--sps-gold)]/50 bg-[var(--sps-bg)] overflow-hidden cursor-pointer"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          placeImage(key, e.dataTransfer.files?.[0]);
-                        }}
-                      >
-                        {src ? (
-                          <img src={src} alt={fr.label} className="w-full h-28 object-cover" />
-                        ) : (
-                          <span className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
-                            <span className="text-[11px] font-semibold text-[var(--sps-gold)]">{fr.label}</span>
-                            <span className="text-[10px] text-[var(--sps-muted)] mt-1">
-                              {fr.hint || 'Drop still or click to place'}
-                            </span>
-                          </span>
-                        )}
+            <PitchSlideCard
+              slide={current}
+              style={style}
+              placements={placements}
+              lookOnly={lookOnly}
+              isManual={isManual}
+              present={false}
+              formFieldClass={formFieldClass}
+              fieldClass={fieldClass}
+              patchSlide={(patch) => patchSlide(slideIndex, patch)}
+              patchPoint={(pi, value) => patchPoint(slideIndex, pi, value)}
+              addPoint={() => addPoint(slideIndex)}
+              removeSlide={() => removeSlide(slideIndex)}
+              canRemove={slides.length > 1}
+              placeImage={placeImage}
+              fundSplitUi={
+                current.id === 'useOfFunds' ? (
+                  <div className="mt-4 space-y-1.5">
+                    {(splitNorm.list || []).map((row) => (
+                      <div key={row.id} className="flex items-center gap-2 text-[11px]">
+                        <span className="w-40 truncate" style={{ color: 'var(--pitch-muted)' }}>{row.label}</span>
                         <input
-                          type="file"
-                          accept="image/*"
-                          className="sr-only"
+                          className={`${fieldClass} w-16`}
+                          type="number"
+                          min={0}
+                          max={100}
                           disabled={lookOnly}
-                          onChange={(e) => {
-                            placeImage(key, e.target.files?.[0]);
-                            e.target.value = '';
-                          }}
+                          value={row.pct}
+                          onChange={(e) => updatePct(row.id, e.target.value)}
                         />
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : null}
-              <ul className="mt-5 space-y-2.5 flex-1">
-                {(current.points || []).map((pt, pi) => (
-                  <li key={pi} className="text-[13px] leading-relaxed text-[var(--sps-text)] flex gap-2 whitespace-pre-wrap">
-                    <span className="text-[var(--sps-gold)] shrink-0">—</span>
-                    {isManual ? (
-                      <textarea
-                        className={`${fieldClass} min-h-[2.5rem] resize-y flex-1`}
-                        value={pt}
-                        onChange={(e) => patchPoint(slideIndex, pi, e.target.value)}
-                        rows={2}
-                      />
-                    ) : (
-                      <span>{pt}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {isManual && !lookOnly ? (
-                <div className="flex gap-2 mt-3">
-                  <button type="button" className="sps-btn" onClick={() => addPoint(slideIndex)}>
-                    <Plus className="w-3.5 h-3.5" />
-                    Add line
-                  </button>
-                  <button
-                    type="button"
-                    className="sps-btn"
-                    disabled={slides.length <= 1}
-                    onClick={() => removeSlide(slideIndex)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete slide
-                  </button>
-                </div>
-              ) : null}
-              {current.id === 'useOfFunds' && (
-                <div className="mt-4 space-y-1.5">
-                  {(splitNorm.list || []).map((row) => (
-                    <div key={row.id} className="flex items-center gap-2 text-[11px]">
-                      <span className="w-40 truncate text-[var(--sps-muted)]">{row.label}</span>
-                      <input
-                        className={`${fieldClass} w-16`}
-                        type="number"
-                        min={0}
-                        max={100}
-                        disabled={lookOnly}
-                        value={row.pct}
-                        onChange={(e) => updatePct(row.id, e.target.value)}
-                      />
-                      <span className="text-[var(--sps-muted)]">% [{row.status}]</span>
-                    </div>
-                  ))}
-                  <p className={`text-[11px] m-0 ${splitNorm.total === 100 ? 'text-[var(--sps-gold)]' : 'text-[var(--sps-warn)]'}`}>
-                    Total {splitNorm.total}% {splitNorm.total === 100 ? '' : '— must equal 100'}
-                  </p>
-                </div>
-              )}
-              {current.disclaimer ? (
-                <p className="text-[11px] italic text-[var(--sps-muted)] mt-4 m-0">{current.disclaimer}</p>
-              ) : null}
-              <p className="text-[10px] uppercase tracking-wide text-[var(--sps-muted)] mt-6 pt-4 border-t border-[var(--sps-border)] m-0">
-                {current.footer}
-              </p>
-            </article>
+                        <span style={{ color: 'var(--pitch-muted)' }}>% [{row.status}]</span>
+                      </div>
+                    ))}
+                    <p className={`text-[11px] m-0 ${splitNorm.total === 100 ? '' : 'text-[var(--sps-warn)]'}`} style={splitNorm.total === 100 ? { color: 'var(--pitch-gold)' } : undefined}>
+                      Total {splitNorm.total}% {splitNorm.total === 100 ? '' : '— must equal 100'}
+                    </p>
+                  </div>
+                ) : null
+              }
+            />
           ) : null}
           <div className="flex items-center gap-3 pb-3">
             <button type="button" className="sps-btn" disabled={slideIndex <= 0} onClick={() => setSlideIndex((n) => Math.max(0, n - 1))}>
@@ -826,6 +980,87 @@ export default function PitchDeckMaker({
         </div>
 
         <aside className="overflow-y-auto border-l border-[var(--sps-border)] p-3 sps-atelier-pane text-[11px]">
+          <p className="text-[10px] font-bold uppercase text-[var(--sps-muted)] m-0 mb-2">Style</p>
+          <p className="text-[10px] text-[var(--sps-muted)] leading-snug m-0 mb-2">
+            {PITCH_TEMPLATES.find((t) => t.id === templateId)?.hint || 'Industry leave-behind'}
+          </p>
+          <label className="block text-[10px] uppercase tracking-wide text-[var(--sps-muted)] mb-1">Palette</label>
+          <div className="grid grid-cols-3 gap-1.5 mb-3">
+            {PITCH_PALETTES.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={lookOnly}
+                title={p.label}
+                onClick={() => {
+                  mark();
+                  setPaletteId(p.id);
+                }}
+                className={`h-8 rounded-sm border ${paletteId === p.id ? 'border-[var(--sps-gold)]' : 'border-[var(--sps-border)]'}`}
+                style={{ background: `linear-gradient(135deg, ${p.paper} 55%, ${p.gold} 55%)` }}
+              >
+                <span className="sr-only">{p.label}</span>
+              </button>
+            ))}
+          </div>
+          <select
+            className={`${formFieldClass} mb-2`}
+            value={fontId}
+            disabled={lookOnly}
+            title="Type pair"
+            onChange={(e) => {
+              mark();
+              setFontId(e.target.value);
+            }}
+          >
+            {PITCH_FONTS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          {isManual ? (
+            <select
+              className={`${formFieldClass} mb-2`}
+              value={current?.layout || current?.kind || 'page'}
+              disabled={lookOnly || !current}
+              title="Slide layout"
+              onChange={(e) => patchSlide(slideIndex, { layout: e.target.value, kind: e.target.value })}
+            >
+              {PITCH_LAYOUTS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <select
+            className={`${formFieldClass} mb-2`}
+            value={loglineId}
+            disabled={lookOnly}
+            title="Approved logline"
+            onChange={(e) => {
+              mark();
+              setLoglineId(e.target.value);
+            }}
+          >
+            {loglines.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                Logline {opt.id.toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <input
+            className={`${formFieldClass} mb-3`}
+            placeholder="Ask / ₹ (assumption)"
+            title="Ask / budget"
+            value={budgetAsk}
+            disabled={lookOnly}
+            onChange={(e) => {
+              mark();
+              setBudgetAsk(e.target.value);
+            }}
+          />
           <p className="text-[10px] font-bold uppercase text-[var(--sps-muted)] m-0 mb-2">Pitch score</p>
           <p className="text-[10px] text-[var(--sps-muted)] leading-snug m-0 mb-2">{scores.note}</p>
           {[
@@ -867,7 +1102,12 @@ export default function PitchDeckMaker({
         ? createPortal(
             <div
               className="sps-pitch-present fixed inset-0 z-[120] flex flex-col"
-              style={{ background: '#0c0a08', color: '#f4ede3' }}
+              style={{
+                ...pitchCssVars(style),
+                background: style.present || style.paper,
+                color: style.ink,
+                fontFamily: style.body
+              }}
               onClick={() => setSlideIndex((n) => Math.min(slides.length - 1, n + 1))}
             >
               <button
@@ -882,61 +1122,16 @@ export default function PitchDeckMaker({
                 <X className="w-5 h-5" />
               </button>
               <div className="flex-1 min-h-0 flex items-center justify-center px-10 md:px-20 py-12 pointer-events-none">
-                <article className="w-full max-w-5xl">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] m-0" style={{ color: '#c4a574' }}>
-                    {current.kicker}
-                  </p>
-                  <h2
-                    className="text-4xl md:text-5xl leading-tight mt-6 mb-4 font-semibold"
-                    style={{ fontFamily: 'var(--sps-font-display)' }}
-                  >
-                    {current.title}
-                  </h2>
-                  {current.subtitle ? (
-                    <p className="text-xl leading-relaxed opacity-90 whitespace-pre-wrap m-0 mb-6">{current.subtitle}</p>
-                  ) : null}
-                  {(current.frames || []).length ? (
-                    <div
-                      className={`grid gap-3 mb-8 pointer-events-auto ${
-                        (current.frames || []).length === 1
-                          ? 'grid-cols-1'
-                          : (current.frames || []).length <= 4
-                            ? 'grid-cols-2'
-                            : 'grid-cols-3'
-                      }`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {(current.frames || []).map((fr, fi) => {
-                        const key = `${current.id}:${fi}`;
-                        const src = placements[key] || current.images?.[fi] || '';
-                        return src ? (
-                          <img
-                            key={key}
-                            src={src}
-                            alt={fr.label}
-                            className="w-full max-h-56 object-cover rounded-sm"
-                          />
-                        ) : (
-                          <div
-                            key={key}
-                            className="min-h-[8rem] border border-dashed flex items-center justify-center text-sm"
-                            style={{ borderColor: '#6b5344', color: '#9a8b7a' }}
-                          >
-                            {fr.label}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  <ul className="space-y-3 m-0 p-0 list-none">
-                    {(current.points || []).filter(Boolean).map((pt, pi) => (
-                      <li key={pi} className="text-lg md:text-xl leading-relaxed flex gap-3">
-                        <span style={{ color: '#c4a574' }}>—</span>
-                        <span>{pt}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
+                <PitchSlideCard
+                  slide={current}
+                  style={style}
+                  placements={placements}
+                  lookOnly
+                  isManual={false}
+                  present
+                  formFieldClass={formFieldClass}
+                  fieldClass={fieldClass}
+                />
               </div>
               <div
                 className="shrink-0 flex items-center justify-center gap-4 pb-6 pointer-events-auto"
@@ -950,7 +1145,7 @@ export default function PitchDeckMaker({
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-[12px] font-mono" style={{ color: '#9a8b7a' }}>
+                <span className="text-[12px] font-mono" style={{ color: style.muted }}>
                   {slideIndex + 1} / {slides.length}
                 </span>
                 <button

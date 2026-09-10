@@ -963,10 +963,9 @@ ${mainPrompt}`;
               <button
                 type="button"
                 onClick={() => toggleFullscreenMode(true)}
-                className="sps-btn text-xs"
+                className="sps-quiet-link is-muted"
                 title="Fullscreen (⌘ + Enter)"
               >
-                <Maximize2 className="w-4 h-4" />
                 Full screen
               </button>
               <StudioProfileControl />
@@ -1020,25 +1019,23 @@ ${mainPrompt}`;
             <button type="button" role="tab" aria-selected={viewMode === 'cards'} onClick={() => setViewMode('cards')}>Cards</button>
             <button type="button" role="tab" aria-selected={viewMode === 'single'} onClick={() => setViewMode('single')}>Full script</button>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto sps-quiet-links">
             <button
               type="button"
               onClick={handleExportPrintPack}
               disabled={exportBlocked}
-              className="sps-btn text-xs disabled:opacity-40"
+              className="sps-quiet-link is-muted disabled:opacity-40"
               title={exportBlocked ? exportLife.message : 'Print compiled prompts as PDF pack'}
             >
-              <Download className="w-4 h-4" />
               Print PDF
             </button>
             <button
               type="button"
               onClick={handleDownloadZipPackage}
               disabled={exportBlocked}
-              className="sps-btn text-xs disabled:opacity-40"
+              className="sps-quiet-link is-muted disabled:opacity-40"
               title={exportBlocked ? exportLife.message : `Download all ${shotList.length} prompts as ZIP`}
             >
-              <Archive className="w-4 h-4" />
               ZIP
             </button>
             <button
@@ -1048,7 +1045,6 @@ ${mainPrompt}`;
               className="sps-btn sps-btn-primary text-xs disabled:opacity-40"
               title={exportBlocked ? exportLife.message : `Save ${shotList.length} TXT files`}
             >
-              <FolderDown className="w-4 h-4" />
               Save TXT
             </button>
           </div>

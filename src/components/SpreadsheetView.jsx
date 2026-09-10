@@ -1282,7 +1282,7 @@ function SpreadsheetView({
               disabled={
                 lookOnly || typeof onUpdateShots !== 'function' || !visibleLifeCount
               }
-              className="sps-btn text-[10px] h-7 px-2 disabled:opacity-40"
+              className="sps-quiet-link disabled:opacity-40"
               title={matrixAdvanceVisibleTitle}
               aria-label={matrixAdvanceVisibleTitle}
             >
@@ -1302,7 +1302,7 @@ function SpreadsheetView({
             type="button"
             onClick={handleExportMatrixCsv}
             disabled={lookOnly || exportBlocked}
-            className="sps-btn text-[10px] h-7 px-2 disabled:opacity-40"
+            className="sps-quiet-link is-muted disabled:opacity-40"
             title={
               lookOnly
                 ? matrixLookOnlyTitle
@@ -1318,14 +1318,13 @@ function SpreadsheetView({
                   : matrixExportCsvTitle
             }
           >
-            <Download className="w-3.5 h-3.5" />
             CSV
           </button>
           <button
             type="button"
             onClick={handleExportMatrixPdf}
             disabled={lookOnly || exportBlocked}
-            className="sps-btn text-[10px] h-7 px-2 disabled:opacity-40"
+            className="sps-quiet-link is-muted disabled:opacity-40"
             title={
               lookOnly
                 ? matrixLookOnlyTitle
@@ -1341,7 +1340,6 @@ function SpreadsheetView({
                   : matrixExportPdfTitle
             }
           >
-            <Download className="w-3.5 h-3.5" />
             PDF
           </button>
           {exportBlocked ? (

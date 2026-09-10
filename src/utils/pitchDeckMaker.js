@@ -37,6 +37,50 @@ export const PITCH_SIZES = [
   { id: 'detailed', label: 'Detailed investor', range: '20–30 slides', max: 28 }
 ];
 
+/** Industry leave-behind shapes. Classic follows audience + length. */
+export const PITCH_TEMPLATES = [
+  { id: 'classic', label: 'Classic feature', hint: 'Story → world → money → ask' },
+  { id: 'teaser', label: 'Teaser leave-behind', hint: '8-page room packet' },
+  { id: 'festival', label: 'Festival / market', hint: 'Story and look only' },
+  { id: 'series', label: 'Series / OTT bible', hint: 'Platform fit' },
+  { id: 'character', label: 'Character-led', hint: 'One sheet per principal' },
+  { id: 'lookbook', label: 'Lookbook', hint: 'Visual first' }
+];
+
+export const PITCH_PALETTES = [
+  { id: 'studio', label: 'Studio gold', paper: '#1c1914', ink: '#f4ede3', muted: '#9a8b7a', gold: '#c4a574', present: '#0c0a08' },
+  { id: 'ivory', label: 'Ivory leave-behind', paper: '#f4efe6', ink: '#1c1712', muted: '#6b6258', gold: '#8b5a2b', present: '#f4efe6' },
+  { id: 'noir', label: 'Noir', paper: '#141210', ink: '#f3eadf', muted: '#9a8b7a', gold: '#c4a574', present: '#0a0908' },
+  { id: 'midnight', label: 'Midnight', paper: '#101820', ink: '#e8eef6', muted: '#8a97a8', gold: '#7aa2d4', present: '#0b1016' },
+  { id: 'crimson', label: 'Festival crimson', paper: '#1a1010', ink: '#f7efe8', muted: '#b89a90', gold: '#c45c3e', present: '#140c0c' },
+  { id: 'period', label: 'Period sepia', paper: '#ebe0c8', ink: '#2a1f14', muted: '#7a6854', gold: '#8b5a2b', present: '#ebe0c8' }
+];
+
+export const PITCH_FONTS = [
+  { id: 'studio', label: 'Studio', display: 'var(--sps-font-display)', body: 'var(--sps-font)' },
+  { id: 'editorial', label: 'Editorial serif', display: 'Georgia, "Times New Roman", serif', body: 'Georgia, serif' },
+  { id: 'poster', label: 'Poster', display: '"Arial Black", Impact, sans-serif', body: 'Helvetica, Arial, sans-serif' },
+  { id: 'modern', label: 'Clean sans', display: 'system-ui, Helvetica, sans-serif', body: 'system-ui, sans-serif' },
+  { id: 'typewriter', label: 'Typewriter', display: '"Courier New", Courier, monospace', body: '"Courier New", monospace' }
+];
+
+export const PITCH_LAYOUTS = [
+  { id: 'page', label: 'Standard' },
+  { id: 'cover', label: 'Title card' },
+  { id: 'sheet', label: 'Character sheet' },
+  { id: 'split', label: 'Split' },
+  { id: 'quote', label: 'Quote / logline' }
+];
+
+const TEMPLATE_SLIDES = {
+  classic: null,
+  teaser: ['cover', 'hook', 'glance', 'story', 'characters', 'visual', 'ask', 'close'],
+  festival: ['cover', 'hook', 'story', 'world', 'characters', 'visual', 'castTeam', 'close'],
+  series: ['cover', 'hook', 'glance', 'story', 'characters', 'world', 'audience', 'whyNow', 'status', 'ask', 'close'],
+  character: ['cover', 'hook', 'story', 'characters', 'journeys', 'close'],
+  lookbook: ['cover', 'visual', 'world', 'characters', 'scale', 'close']
+};
+
 export const FIELD_STATUS = ['CONFIRMED', 'PROPOSED', 'TARGET', 'UNDER DISCUSSION', 'ESTIMATED', 'ASSUMPTION', 'UNKNOWN', 'DATA REQUIRED'];
 
 export const DEFAULT_FUND_SPLIT = [
@@ -117,6 +161,24 @@ export function themeTokens(theme) {
     comedy: { mood: 'Energetic · bright · playful', paper: 'color-mix(in srgb, var(--sps-surface) 92%, #d4c4a8)' }
   };
   return map[theme] || map.epic;
+}
+
+export function resolvePitchStyle(paletteId = 'studio', fontId = 'studio', genreTheme = 'epic') {
+  const genre = themeTokens(genreTheme);
+  const palette = PITCH_PALETTES.find((p) => p.id === paletteId) || PITCH_PALETTES[0];
+  const font = PITCH_FONTS.find((f) => f.id === fontId) || PITCH_FONTS[0];
+  return {
+    mood: genre.mood,
+    paper: palette.paper,
+    ink: palette.ink,
+    muted: palette.muted,
+    gold: palette.gold,
+    present: palette.present,
+    display: font.display,
+    body: font.body,
+    paletteId: palette.id,
+    fontId: font.id
+  };
 }
 
 function clip(s, max) {
@@ -220,9 +282,9 @@ export function collectPitchFacts({
       age: c.age || '',
       description: clip(c.backstory || c.outline || '', 220),
       motivation: clip(c.motivation || c.backstory || '', 140),
-      conflict: clip(c.conflict || '', 140),
-      arc: clip(c.arc || '', 140),
-      art: c.lookUrl || c.imageUrl || c.portrait || '',
+      conflict: clip(c.conflict || c.internalConflict || '', 140),
+      arc: clip(c.arc || c.shotPurpose || c.psychologicalArchetype || '', 140),
+      art: c.lookUrl || c.imageUrl || c.portrait || c.lockedRefs?.hero || '',
       status: c.castingStatus || 'PROPOSED'
     })),
     worldLines: locations,
@@ -280,30 +342,45 @@ function storySynopsis(facts) {
   return parts.join('\n\n') || 'DATA REQUIRED — paste or generate a 100–180 word cinematic synopsis.';
 }
 
-function selectSlideIds(audienceId, sizeId, facts) {
+function expandCharacterSheets(ids, facts, force) {
+  const chars = facts.characters || [];
+  if (!chars.length || !force) return ids;
+  const out = [];
+  for (const id of ids) {
+    out.push(id);
+    if (id === 'characters') {
+      chars.slice(0, 8).forEach((_, i) => out.push(`sheet_${i}`));
+    }
+  }
+  return out;
+}
+
+function selectSlideIds(audienceId, sizeId, facts, templateId = 'classic') {
   const audience = AUDIENCE_SLIDES[audienceId] || AUDIENCE_SLIDES.investor;
   const core = SIZE_CORE[sizeId];
   const max = PITCH_SIZES.find((s) => s.id === sizeId)?.max || 20;
-  let ids = core && sizeId !== 'detailed'
-    ? core.filter((id) => audience.includes(id) || ['cover', 'hook', 'story', 'ask', 'close'].includes(id))
-    : audience.slice();
+  const templated = TEMPLATE_SLIDES[templateId];
+  let ids = templated
+    ? templated.slice()
+    : core && sizeId !== 'detailed'
+      ? core.filter((id) => audience.includes(id) || ['cover', 'hook', 'story', 'ask', 'close'].includes(id))
+      : audience.slice();
 
-  if (sizeId === 'detailed') ids = audience.slice();
+  if (!templated && sizeId === 'detailed') ids = audience.slice();
 
   if (!(facts.characters || []).length) ids = ids.filter((id) => id !== 'journeys' && id !== 'characters');
   else if ((facts.characters || []).length < 2) ids = ids.filter((id) => id !== 'journeys');
-  if (!(facts.worldArt || []).length && !(facts.worldLines || []).length) {
-    /* keep world slide with DATA REQUIRED */
-  }
   if (audienceId === 'actor') ids = ids.filter((id) => !['budget', 'useOfFunds', 'scenarios', 'structure'].includes(id));
 
-  const must = ['cover', 'hook', 'ask', 'close'];
+  const must = templated ? ['cover', 'close'] : ['cover', 'hook', 'ask', 'close'];
   must.forEach((id) => {
     if (!ids.includes(id)) ids.push(id);
   });
-  if (!ids.includes('story') && audienceId !== 'brand') ids.splice(2, 0, 'story');
+  if (!ids.includes('story') && audienceId !== 'brand' && templateId !== 'lookbook') ids.splice(2, 0, 'story');
 
-  return ids.slice(0, max);
+  const wantSheets = templateId === 'character' || sizeId === 'detailed';
+  ids = expandCharacterSheets(ids, facts, wantSheets);
+  return ids.slice(0, Math.max(max, wantSheets ? max + 8 : max));
 }
 
 /** Empty still frames — producer drops key art, portraits, plates. */
@@ -343,14 +420,43 @@ export const FRAME_PRESETS = {
   close: [{ label: 'Closing still', hint: 'Title lockup. No numbers.' }]
 };
 
-export function blankPitchSlide(n = 1) {
+export function blankPitchSlide(n = 1, layout = 'page') {
   return slideRecord(
     `page_${n}`,
     `Slide ${String(n).padStart(2, '0')}`,
     'Title',
     '',
     [''],
-    { frames: [{ label: 'Still' }, { label: 'Still 2' }] }
+    { frames: [{ label: 'Still' }, { label: 'Still 2' }], kind: layout, layout }
+  );
+}
+
+export function characterSheetSlide(char = {}, index = 0) {
+  const c = char || {};
+  return slideRecord(
+    `sheet_${index}`,
+    'Character sheet',
+    c.name || 'Unnamed',
+    [c.role, c.age].filter(Boolean).join(' · ') || 'Principal',
+    [
+      c.motivation ? `DESIRE — ${c.motivation}` : 'DESIRE — DATA REQUIRED',
+      c.conflict ? `CONFLICT — ${c.conflict}` : 'CONFLICT — DATA REQUIRED',
+      c.arc ? `ARC — ${c.arc}` : 'TRANSFORMATION — DATA REQUIRED',
+      c.description ? clip(c.description, 280) : ''
+    ],
+    {
+      kind: 'sheet',
+      layout: 'sheet',
+      images: c.art ? [c.art] : [],
+      frames: [{ label: 'Portrait', hint: 'Head-and-shoulders. No type on the face.' }],
+      fields: {
+        name: c.name || '',
+        role: c.role || 'Principal',
+        age: c.age || '',
+        status: c.status || 'PROPOSED'
+      },
+      footer: 'One character. One page. Industry leave-behind.'
+    }
   );
 }
 
@@ -376,7 +482,8 @@ function slideRecord(id, kicker, title, subtitle, points, extra = {}) {
     images: extra.images || [],
     frames: extra.frames || preset,
     fields: extra.fields || null,
-    disclaimer: extra.disclaimer || ''
+    disclaimer: extra.disclaimer || '',
+    layout: extra.layout || extra.kind || 'page'
   };
 }
 
@@ -385,10 +492,14 @@ export function buildInvestorPitchDeck({
   audienceId = 'investor',
   sizeId = 'standard',
   loglineText = '',
-  fundSplit = DEFAULT_FUND_SPLIT
+  fundSplit = DEFAULT_FUND_SPLIT,
+  templateId = 'classic',
+  paletteId = 'studio',
+  fontId = 'studio'
 } = {}) {
   const theme = genreThemeFromKey(facts.genreKey);
   const tokens = themeTokens(theme);
+  const style = resolvePitchStyle(paletteId, fontId, theme);
   const logline = loglineText || generateLoglineOptions(facts)[0]?.text || '';
   const chars = facts.characters || [];
   const split = (fundSplit || DEFAULT_FUND_SPLIT).map((x) => ({ ...x }));
@@ -408,6 +519,7 @@ export function buildInvestorPitchDeck({
       ],
       {
         kind: 'cover',
+        layout: 'cover',
         footer: 'Desire first. Numbers later.',
         images: facts.worldArt.slice(0, 1),
         statusNote: 'Cover must stay sparse — no budget on this page.'
@@ -422,7 +534,7 @@ export function buildInvestorPitchDeck({
         'Protagonist · conflict · goal · stakes · unique hook',
         'Approve one option. Do not stack three loglines on the page the room sees.'
       ],
-      { footer: 'Maximum 2–3 sentences' }
+      { footer: 'Maximum 2–3 sentences', layout: 'quote' }
     ),
     glance: slideRecord(
       'glance',
@@ -440,7 +552,8 @@ export function buildInvestorPitchDeck({
         `Target audience — ${facts.audience.value || 'DATA REQUIRED'} [${facts.audience.status}]`,
         `Production status — ${facts.status || 'DATA REQUIRED'} [${facts.liveShotCount ? 'CONFIRMED' : 'UNKNOWN'}]`,
         'Expected release window — DATA REQUIRED'
-      ]
+      ],
+      { layout: 'split' }
     ),
     story: slideRecord(
       'story',
@@ -709,11 +822,15 @@ export function buildInvestorPitchDeck({
         facts.contact.website,
         'No financial figures on this page.'
       ],
-      { kind: 'cover', images: facts.worldArt.slice(0, 1), footer: PRODUCT }
+      { kind: 'cover', layout: 'cover', images: facts.worldArt.slice(0, 1), footer: PRODUCT }
     )
   };
 
-  const ids = selectSlideIds(audienceId, sizeId, facts);
+  chars.slice(0, 8).forEach((c, i) => {
+    catalog[`sheet_${i}`] = characterSheetSlide(c, i);
+  });
+
+  const ids = selectSlideIds(audienceId, sizeId, facts, templateId);
   const slides = ids.map((id, i) => {
     const s = catalog[id];
     if (!s) return null;
@@ -727,8 +844,12 @@ export function buildInvestorPitchDeck({
     kind: 'film-pitch',
     audienceId,
     sizeId,
+    templateId,
+    paletteId: style.paletteId,
+    fontId: style.fontId,
     theme,
     themeMood: tokens.mood,
+    style,
     facts,
     logline,
     fundSplit: split,

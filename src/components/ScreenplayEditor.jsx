@@ -2073,16 +2073,15 @@ Write ONLY the continuation in clean screenplay format:`;
               onChange={handleImportFile}
             />
 
-            <div className={`sps-toolbar-slot ${viewMode === 'focus' ? 'invisible pointer-events-none' : ''}`}>
+            <div className={`sps-toolbar-slot sps-quiet-links ${viewMode === 'focus' ? 'invisible pointer-events-none' : ''}`}>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="sps-btn text-[10px]"
+                  className="sps-quiet-link is-muted"
                   aria-label="Import screenplay file"
                   title="Import Fountain, FDX, TXT, or PDF"
                 >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Import</span>
+                  Import
                 </button>
 
                 <div className="relative" ref={exportMenuRef}>
@@ -2094,14 +2093,20 @@ Write ONLY the continuation in clean screenplay format:`;
                         setExportOpen((o) => !o);
                       }}
                       disabled={exportBlocked}
-                      className="sps-btn sps-btn-primary text-[10px] disabled:opacity-40"
+                      className={viewCfg.showStudioChrome
+                        ? `sps-quiet-link ${exportOpen ? '' : 'is-muted'} disabled:opacity-40`
+                        : 'sps-btn sps-btn-primary text-[10px] disabled:opacity-40'}
                       aria-label="Export screenplay"
                       aria-expanded={exportOpen}
                       title={exportBlocked ? exportLife.message : 'Export PDF, Fountain, TXT, or FDX'}
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Export</span>
-                      <ChevronDown className="w-3 h-3" />
+                      {viewCfg.showStudioChrome ? 'Export' : (
+                        <>
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Export</span>
+                          <ChevronDown className="w-3 h-3" />
+                        </>
+                      )}
                     </button>
                   </div>
                   {exportBlocked ? (
@@ -2133,29 +2138,27 @@ Write ONLY the continuation in clean screenplay format:`;
                 <button
                   type="button"
                   onClick={() => toggleDrawer('find')}
-                  className={`sps-btn text-[10px] ${rightDrawer === 'find' ? 'sps-btn-primary' : ''}`}
+                  className={`sps-quiet-link ${rightDrawer === 'find' ? 'is-current' : 'is-muted'}`}
                   aria-label="Find and replace"
                   title="Find / Replace"
                 >
-                  <Search className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Find</span>
+                  Find
                 </button>
             </div>
 
             {/* Studio-native tools — full row in Studio; More menu in Page/Scenes */}
             {viewCfg.showStudioChrome ? (
-              <>
+              <div className="sps-quiet-links">
                 <button
                   type="button"
                   onClick={() => {
                     setVersionsSubTab('drafts');
                     toggleDrawer('versions');
                   }}
-                  className={`sps-btn text-[10px] ${rightDrawer === 'versions' && versionsSubTab === 'drafts' ? 'sps-btn-primary' : ''}`}
+                  className={`sps-quiet-link ${rightDrawer === 'versions' && versionsSubTab === 'drafts' ? 'is-current' : 'is-muted'}`}
                   title="Quick draft versions"
                 >
-                  <History className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Versions</span>
+                  Versions
                 </button>
                 <button
                   type="button"
@@ -2164,11 +2167,10 @@ Write ONLY the continuation in clean screenplay format:`;
                     setVersionsSubTab('archive');
                     setRightDrawer('versions');
                   }}
-                  className={`sps-btn text-[10px] ${rightDrawer === 'versions' && versionsSubTab === 'archive' ? 'sps-btn-primary' : ''}`}
+                  className={`sps-quiet-link ${rightDrawer === 'versions' && versionsSubTab === 'archive' ? 'is-current' : 'is-muted'}`}
                   title="Script Archive milestones"
                 >
-                  <Archive className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Archive</span>
+                  Archive
                 </button>
                 <button
                   type="button"
@@ -2176,31 +2178,27 @@ Write ONLY the continuation in clean screenplay format:`;
                     setIntelSubTab('radar');
                     toggleDrawer('intel');
                   }}
-                  className={`sps-btn text-[10px] ${rightDrawer === 'intel' ? 'sps-btn-primary' : ''}`}
+                  className={`sps-quiet-link ${rightDrawer === 'intel' ? 'is-current' : 'is-muted'}`}
                   title="Writer Intel"
                 >
-                  <Radar className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Intel</span>
-                  <span className="text-[9px] font-black opacity-90">{intel.readiness?.score ?? 0}</span>
+                  Intel {intel.readiness?.score ?? 0}
                 </button>
                 <button
                   type="button"
                   onClick={() => setCollabEnabled((v) => !v)}
-                  className={`sps-btn text-[10px] ${collabEnabled ? 'sps-btn-primary' : ''}`}
+                  className={`sps-quiet-link ${collabEnabled ? 'is-current' : 'is-muted'}`}
                   title="Co-Write"
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">Co-Write</span>
+                  Co-Write
                 </button>
                 <button
                   type="button"
                   onClick={handleAICowriteNextScene}
                   disabled={isAICowriting}
-                  className="sps-btn sps-btn-primary text-[10px]"
+                  className="sps-quiet-link is-muted"
                   title="AI Co-Writer"
                 >
-                  <Sparkles className={`w-3.5 h-3.5 ${isAICowriting ? 'animate-spin' : ''}`} />
-                  {isAICowriting ? '…' : 'AI'}
+                  {isAICowriting ? 'AI…' : 'AI'}
                 </button>
                 <button
                   type="button"
@@ -2209,10 +2207,9 @@ Write ONLY the continuation in clean screenplay format:`;
                   className="sps-btn sps-btn-primary text-[10px]"
                   title={projectLocked ? 'Project locked — unlock in Production dashboard' : 'Sync to Matrix (⌘⇧Enter)'}
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isAutoParsing ? 'animate-spin' : ''}`} />
-                  Sync
+                  {isAutoParsing ? 'Syncing' : 'Sync'}
                 </button>
-              </>
+              </div>
             ) : viewMode !== 'focus' ? (
               <div className="relative" ref={studioMoreRef}>
                 <button
@@ -2301,32 +2298,31 @@ Write ONLY the continuation in clean screenplay format:`;
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="sps-btn text-[10px]"
+              className="sps-quiet-link is-muted"
               title="Writer Help (⌘/)"
             >
-              <CircleHelp className="w-3.5 h-3.5" />
               Help
             </button>
 
             {viewMode !== 'focus' && (
-              <>
+              <div className="sps-quiet-links">
                 <button
                   type="button"
                   onClick={handleCopyScript}
-                  className="sps-icon-btn"
+                  className="sps-quiet-link is-muted"
                   title="Copy screenplay text"
                 >
-                  {copiedToast ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedToast ? 'Copied' : 'Copy'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setRightDrawer((d) => (d ? null : 'find'))}
-                  className={`sps-icon-btn ${rightDrawer ? 'is-on' : ''}`}
+                  className={`sps-quiet-link ${rightDrawer ? 'is-current' : 'is-muted'}`}
                   title={rightDrawer ? 'Close panel' : 'Open panel'}
                 >
-                  {rightDrawer ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+                  {rightDrawer ? 'Close' : 'Panel'}
                 </button>
-              </>
+              </div>
             )}
           </div>
         )}

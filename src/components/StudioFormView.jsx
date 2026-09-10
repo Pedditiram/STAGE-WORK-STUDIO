@@ -975,18 +975,18 @@ export default function StudioFormView({
                     <Sparkles className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
                     <span className="truncate">Live prompt</span>
                   </span>
-                  <div className="sps-compact-toolbar">
+                  <div className="sps-quiet-links">
                     <button
                       type="button"
                       onClick={() => handleToggleFavoritesOnly()}
-                      className={`sps-icon-btn ${showFavoritesOnly ? 'is-on' : ''}`}
+                      className={`sps-quiet-link ${showFavoritesOnly ? 'is-current' : 'is-muted'}`}
                       title={showFavoritesOnly ? `Show all ${SEEDANCE_SLOTS.length} crafts` : 'Show favorites'}
                     >
-                      <Star className={`w-3.5 h-3.5 ${showFavoritesOnly ? 'fill-current' : ''}`} />
+                      {showFavoritesOnly ? 'All crafts' : 'Favorites'}
                     </button>
                     {onAddShot ? (
-                      <button type="button" onClick={onAddShot} className="sps-icon-btn is-on" title="Add shot">
-                        <Plus className="w-3.5 h-3.5" />
+                      <button type="button" onClick={onAddShot} className="sps-quiet-link is-muted" title="Add shot">
+                        Add shot
                       </button>
                     ) : null}
                   </div>
@@ -1024,25 +1024,25 @@ export default function StudioFormView({
                   <button
                     type="button"
                     onClick={handleCopyPrompt}
-                    className="sps-icon-btn is-on"
+                    className="sps-btn sps-btn-primary sps-btn-compact"
                     title={copyToast ? 'Copied' : 'Copy prompt'}
                   >
-                    {copyToast ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copyToast ? 'Copied' : 'Copy'}
                   </button>
                   <button
                     type="button"
                     onClick={handleExportFormCsv}
                     disabled={exportBlocked}
-                    className="sps-icon-btn disabled:opacity-40"
+                    className="sps-quiet-link is-muted disabled:opacity-40"
                     title={exportBlocked ? exportLife.message : 'Export Form craft CSV (all shots)'}
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    CSV
                   </button>
                   <button
                     type="button"
                     onClick={handleExportFormPdf}
                     disabled={exportBlocked}
-                    className="sps-btn text-[9px] h-7 px-2 disabled:opacity-40"
+                    className="sps-quiet-link is-muted disabled:opacity-40"
                     title={exportBlocked ? exportLife.message : 'Print Form craft PDF'}
                   >
                     PDF

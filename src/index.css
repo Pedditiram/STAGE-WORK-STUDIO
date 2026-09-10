@@ -810,11 +810,16 @@ a:focus:not(:focus-visible) {
     justify-self: end;
   }
 
-  .sps-header-bar button:not(.sps-pin-btn),
+  .sps-header-bar button:not(.sps-pin-btn):not(.sps-quiet-link):not(.sps-header-save),
   .sps-header-bar label.sps-touch,
   .sps-header-bar .sps-touch {
     min-height: 2.25rem;
     min-width: 2.25rem;
+  }
+
+  .sps-header-bar .sps-quiet-link {
+    min-height: 0;
+    min-width: 0;
   }
 
   .sps-header-bar .sps-pin-btn,
@@ -3477,6 +3482,36 @@ svg.lucide {
   min-width: 0;
 }
 
+.sps-header-rooms {
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+  row-gap: 0.25rem;
+}
+
+.sps-header-rooms .sps-quiet-link {
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+.sps-header-rooms .sps-quiet-link.is-current,
+.sps-quiet-link.is-current {
+  color: var(--sps-text);
+  font-weight: 700;
+}
+
+.sps-header-save {
+  min-height: 1.55rem !important;
+  min-width: auto !important;
+  padding: 0.15rem 0.55rem !important;
+  font-size: 0.68rem !important;
+  letter-spacing: 0.04em;
+}
+
+.sps-header-rail-links {
+  justify-content: flex-end;
+  gap: 0.55rem 0.75rem;
+}
+
 .sps-header-rail {
   grid-area: rail;
   display: flex;
@@ -4548,4 +4583,18 @@ button.sps-btn.sps-btn-primary *,
 .sps-guide-blue .sps-tabs > button[aria-selected="true"] * {
   color: #f4f8fc !important;
   -webkit-text-fill-color: #f4f8fc !important;
+}
+
+.sps-pitch-slide {
+  --pitch-paper: #1c1914;
+  --pitch-ink: #f4ede3;
+  --pitch-muted: #9a8b7a;
+  --pitch-gold: #c4a574;
+  --pitch-display: var(--sps-font-display);
+  --pitch-body: var(--sps-font);
+}
+
+.sps-pitch-present .sps-icon-btn,
+.sps-pitch-present .sps-btn {
+  color: inherit;
 }
