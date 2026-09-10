@@ -1,16 +1,20 @@
 /**
  * Filled teaching film for a new registered account.
- * Card title stays SWS DESK DEMO. The picture is The Last Letter (coastal Andhra, 1986).
+ * Card title is THE LAST LETTER (coastal Andhra, 1986).
  */
 
-export const DEMO_PROJECT_TITLE = 'SWS DESK DEMO';
-export const DEMO_PROJECT_ID = 'proj_sws_desk_demo';
-export const DEMO_PROJECT_ROOM = 'sps_sws_desk_demo';
-export const DEMO_PROJECT_REVISION = 'last_letter_1986';
+export const DEMO_PROJECT_TITLE = 'THE LAST LETTER';
+export const LEGACY_DEMO_TITLES = ['SWS DESK DEMO'];
+export const DEMO_PROJECT_ID = 'proj_the_last_letter';
+export const DEMO_PROJECT_ROOM = 'sps_the_last_letter';
+export const DEMO_PROJECT_REVISION = 'the_last_letter';
 export const DEMO_PROJECT_GENRE = 'konaseema_anthology';
 
 export function isDemoProjectTitle(title) {
-  return String(title || '').trim().toUpperCase() === DEMO_PROJECT_TITLE;
+  const t = String(title || '').trim().toUpperCase();
+  if (!t) return false;
+  if (t === DEMO_PROJECT_TITLE) return true;
+  return LEGACY_DEMO_TITLES.some((legacy) => t === String(legacy).trim().toUpperCase());
 }
 
 const PALETTE =
@@ -746,7 +750,8 @@ export const DEMO_PROJECT_WORLD = [
 
 export function resolveCurrentDemoProject(project) {
   if (!isDemoProjectTitle(project?.title)) return project;
-  if (project?.demoRevision === DEMO_PROJECT_REVISION) return project;
+  const titleOk = String(project?.title || '').trim().toUpperCase() === DEMO_PROJECT_TITLE;
+  if (titleOk && project?.demoRevision === DEMO_PROJECT_REVISION) return project;
   return {
     ...buildDemoStudioProject(),
     id: project?.id || DEMO_PROJECT_ID,

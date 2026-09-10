@@ -8,7 +8,8 @@ import {
   DEMO_PROJECT_ID,
   DEMO_PROJECT_REVISION,
   DEMO_PROJECT_SCREENPLAY,
-  buildDemoStudioProject
+  buildDemoStudioProject,
+  isDemoProjectTitle
 } from './demoStudioProject';
 import { saveActiveCharacterProfiles, saveActiveWorldAssets } from './projectBibleVault';
 
@@ -171,20 +172,20 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
     library = [];
   }
 
-  let demo = library.find((p) => titleKey(p) === DEMO_PROJECT_TITLE);
+  let demo = library.find((p) => isDemoProjectTitle(p.title));
   const createdDemo = !demo;
-  const staleDemo = Boolean(demo && demo.demoRevision !== DEMO_PROJECT_REVISION);
+  const staleDemo = Boolean(
+    demo &&
+      (demo.demoRevision !== DEMO_PROJECT_REVISION || titleKey(demo) !== DEMO_PROJECT_TITLE)
+  );
   if (!demo || staleDemo) {
     const next = {
       ...buildDemoStudioProject({ name: name || clean.split('@')[0] }),
       id: demo?.id || DEMO_PROJECT_ID,
       packOrigin: demo?.packOrigin || SELF_SERVE_ORIGIN
     };
-    if (demo) {
-      library = library.map((p) => (titleKey(p) === DEMO_PROJECT_TITLE ? next : p));
-    } else {
-      library.unshift(next);
-    }
+    library = library.filter((p) => !isDemoProjectTitle(p.title));
+    library.unshift(next);
     demo = next;
     try {
       saveActiveCharacterProfiles(demo.characterProfiles || [], { title: DEMO_PROJECT_TITLE, silent: true });
@@ -202,7 +203,9 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
 
   if (createdDemo || staleDemo) persistOpenTitle(demo);
   try {
-    localStorage.setItem(`sps_open_screenplay_text::sws_desk_demo`, demo.screenplayText || DEMO_PROJECT_SCREENPLAY);
+    const slug = String(DEMO_PROJECT_TITLE).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    localStorage.setItem(`sps_open_screenplay_text::${slug}`, demo.screenplayText || DEMO_PROJECT_SCREENPLAY);
+    localStorage.setItem('sps_open_screenplay_text::sws_desk_demo', demo.screenplayText || DEMO_PROJECT_SCREENPLAY);
   } catch {
     /* ignore */
   }
@@ -216,7 +219,9 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
     const idx = users.findIndex((u) => normalizeEmail(u?.email) === clean);
     if (idx >= 0) {
       const row = users[idx];
-      const titles = [DEMO_PROJECT_TITLE, TENANT_FIRST_TITLE, ...(row.allottedProjects || []), ...(row.packOwnedTitles || [])];
+      const titles = [DEMO_PROJECT_TITLE, TENANT_FIRST_TITLE, ...(row.allottedProjects || []), ...(row.packOwnedTitles || [])].map(
+        (t) => (isDemoProjectTitle(t) ? DEMO_PROJECT_TITLE : t)
+      );
       const uniq = [];
       titles.forEach((t) => {
         const n = String(t || '').trim();

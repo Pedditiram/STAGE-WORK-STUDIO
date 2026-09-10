@@ -42,6 +42,7 @@ import {
   readLocalProjectLibrary,
   writeLocalProjectLibrary,
   roomIdForProject,
+  slugProjectTitle,
   titlesMatch,
   writeWorkspaceOntoLibrary,
   resolveActiveTitleForBoot,
@@ -65,7 +66,7 @@ import {
   patchLibraryProjectBibleFields
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
-import { buildDemoStudioProject, isDemoProjectTitle } from './utils/demoStudioProject';
+import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE } from './utils/demoStudioProject';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -387,22 +388,35 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!isDemoProjectTitle(projectTitle)) return;
-    if (Array.isArray(shots) && shots.some((s) => /@Ravi\b/.test(String(s?.characterIdAssetRef || '')))) {
-      return;
-    }
     const demo = buildDemoStudioProject();
-    setShots(demo.shots);
-    setPresetProfile(demo.genreKey);
-    try {
-      safeLocalStorageSetItem('sps_current_shots', JSON.stringify(demo.shots));
-      localStorage.setItem('sps_open_screenplay_text', demo.screenplayText);
-      localStorage.setItem('sps_open_screenplay_text::sws_desk_demo', demo.screenplayText);
-      localStorage.setItem('sps_preset_profile', demo.genreKey);
-      localStorage.setItem('sps_active_genre', demo.genreKey);
-    } catch {
-      /* ignore */
+    const needsRename = String(projectTitle || '').trim().toUpperCase() !== DEMO_PROJECT_TITLE;
+    const hasCast = Array.isArray(shots) && shots.some((s) => /@Ravi\b/.test(String(s?.characterIdAssetRef || '')));
+    if (needsRename) {
+      setProjectTitle(DEMO_PROJECT_TITLE);
+      try {
+        localStorage.setItem('sps_current_project_title', DEMO_PROJECT_TITLE);
+        localStorage.setItem('sps_active_project_title', DEMO_PROJECT_TITLE);
+        localStorage.setItem('sps_project_title', DEMO_PROJECT_TITLE);
+      } catch {
+        /* ignore */
+      }
     }
-    applyOpenWorkspace(demo);
+    if (hasCast && !needsRename) return;
+    if (!hasCast) {
+      setShots(demo.shots);
+      setPresetProfile(demo.genreKey);
+      try {
+        safeLocalStorageSetItem('sps_current_shots', JSON.stringify(demo.shots));
+        localStorage.setItem('sps_open_screenplay_text', demo.screenplayText);
+        localStorage.setItem(`sps_open_screenplay_text::${slugProjectTitle(demo.title)}`, demo.screenplayText);
+        localStorage.setItem('sps_open_screenplay_text::sws_desk_demo', demo.screenplayText);
+        localStorage.setItem('sps_preset_profile', demo.genreKey);
+        localStorage.setItem('sps_active_genre', demo.genreKey);
+      } catch {
+        /* ignore */
+      }
+      applyOpenWorkspace(demo);
+    }
   }, [projectTitle, shots]);
 
   // Safety guard: sanitize oversized shots array (e.g. 7000+ PDF binary stream items) to max 150
@@ -1667,7 +1681,11 @@ export default function App() {
           if (!Array.isArray(library)) library = [];
           library = filterOutDeletedProjects(library);
 
-          const existingIdx = library.findIndex(p => p.title === projectTitle);
+          const existingIdx = library.findIndex(
+            (p) =>
+              p.title === projectTitle ||
+              (isDemoProjectTitle(projectTitle) && isDemoProjectTitle(p.title))
+          );
           if (existingIdx === -1 && !canCreateOrDeleteProjects()) return;
 
           const extras = collectOpenWorkspace();

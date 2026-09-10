@@ -237,10 +237,10 @@ export function mergeProjectLibraries(local = [], incoming = []) {
   const byTitle = new Map();
   [...(Array.isArray(local) ? local : []), ...(Array.isArray(incoming) ? incoming : [])].forEach((p) => {
     if (!p || !String(p.title || '').trim()) return;
-    const key = String(p.title).trim().toLowerCase();
+    const key = isDemoProjectTitle(p.title) ? '__sws_demo__' : String(p.title).trim().toLowerCase();
     byTitle.set(key, mergeOne(byTitle.get(key), p));
   });
-  return Array.from(byTitle.values()).map((p) => ensureProjectRoomId(p));
+  return Array.from(byTitle.values()).map((p) => ensureProjectRoomId(resolveCurrentDemoProject(p)));
 }
 
 /**
