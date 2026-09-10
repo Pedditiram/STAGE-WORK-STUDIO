@@ -86,6 +86,7 @@ import {
     stripTitleFromPackOwned
 } from '../utils/userSettingsPack';
 import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
+import { resolveCurrentDemoProject } from '../utils/demoStudioProject';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
 import { APP_VERSION_NAME, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
@@ -1695,6 +1696,7 @@ export default function ProjectConsoleModal({
     } catch {
       /* use in-memory proj */
     }
+    openProj = resolveCurrentDemoProject(openProj);
     if (currentProjectTitle && !isProjectTitleDeleted(currentProjectTitle)) {
       try {
         const saved = JSON.parse(JSON.stringify(readLocalProjectLibrary()));

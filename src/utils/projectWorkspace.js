@@ -45,6 +45,7 @@ import {
 import { readOpenScreenplayText, writeOpenScreenplayText } from './screenplayInterop';
 import { safeLocalStorageSetItem } from './safeStorage';
 import { projectLibraryStorageKey, isSelfServeSession } from './tenantScope';
+import { DEMO_PROJECT_REVISION, isDemoProjectTitle, resolveCurrentDemoProject } from './demoStudioProject';
 
 export const LEGACY_SHARED_ROOM = 'SPS-CLOUD-8821';
 const UNTITLED_ROOM_IDS = new Set(['', 'sps_untitled', 'untitled', 'sps_untitled_project']);
@@ -193,6 +194,11 @@ function mergeShotsById(primaryShots, secondaryShots) {
 function mergeOne(a, b) {
   if (!a) return b;
   if (!b) return a;
+  if (isDemoProjectTitle(a.title) && isDemoProjectTitle(b.title)) {
+    const aFresh = a.demoRevision === DEMO_PROJECT_REVISION;
+    const bFresh = b.demoRevision === DEMO_PROJECT_REVISION;
+    if (aFresh !== bFresh) return aFresh ? a : b;
+  }
   const scoreA = projectContentScore(a);
   const scoreB = projectContentScore(b);
   const useB =
@@ -398,7 +404,7 @@ export function collectOpenWorkspace() {
 
 export function applyOpenWorkspace(project) {
   if (typeof window === 'undefined' || !project) return;
-  const p = ensureProjectRoomId(project);
+  const p = ensureProjectRoomId(resolveCurrentDemoProject(project));
   try {
     localStorage.setItem('sps_current_room_id', p.roomId || roomIdForProject(p.title));
   } catch {

@@ -5,6 +5,8 @@
 import { isOwner, upsertLicense } from './saasControl';
 import {
   DEMO_PROJECT_TITLE,
+  DEMO_PROJECT_ID,
+  DEMO_PROJECT_REVISION,
   DEMO_PROJECT_SCREENPLAY,
   buildDemoStudioProject
 } from './demoStudioProject';
@@ -171,9 +173,19 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
 
   let demo = library.find((p) => titleKey(p) === DEMO_PROJECT_TITLE);
   const createdDemo = !demo;
-  if (!demo) {
-    demo = { ...buildDemoStudioProject({ name: name || clean.split('@')[0] }), packOrigin: SELF_SERVE_ORIGIN };
-    library.unshift(demo);
+  const staleDemo = Boolean(demo && demo.demoRevision !== DEMO_PROJECT_REVISION);
+  if (!demo || staleDemo) {
+    const next = {
+      ...buildDemoStudioProject({ name: name || clean.split('@')[0] }),
+      id: demo?.id || DEMO_PROJECT_ID,
+      packOrigin: demo?.packOrigin || SELF_SERVE_ORIGIN
+    };
+    if (demo) {
+      library = library.map((p) => (titleKey(p) === DEMO_PROJECT_TITLE ? next : p));
+    } else {
+      library.unshift(next);
+    }
+    demo = next;
     try {
       saveActiveCharacterProfiles(demo.characterProfiles || [], { title: DEMO_PROJECT_TITLE, silent: true });
       saveActiveWorldAssets(demo.worldAssets || [], { title: DEMO_PROJECT_TITLE, silent: true });
@@ -188,7 +200,7 @@ export function seedTenantFirstFilm(email, { name = '' } = {}) {
     library.push(first);
   }
 
-  if (createdDemo) persistOpenTitle(demo);
+  if (createdDemo || staleDemo) persistOpenTitle(demo);
   try {
     localStorage.setItem(`sps_open_screenplay_text::sws_desk_demo`, demo.screenplayText || DEMO_PROJECT_SCREENPLAY);
   } catch {
