@@ -116,7 +116,8 @@ import {
   isProjectTitleDeleted,
   healActiveProjectFromArchive,
   clearDeletedProjectTitles,
-  reviveProjectTitleForOpen
+  reviveProjectTitleForOpen,
+  pinLiveLibraryTitle
 } from './services/dbService';
 import {
   learnFromProject,
@@ -1688,17 +1689,19 @@ export default function App() {
 
       if (projectTitle && Array.isArray(persistableShots) && persistableShots.length > 0) {
         try {
+          if (!canAccessProject(projectTitle)) return;
+          reviveProjectTitleForOpen(projectTitle);
           if (isProjectTitleDeleted(projectTitle)) {
             return;
           }
-          if (!canAccessProject(projectTitle)) return;
+          pinLiveLibraryTitle(projectTitle);
           let library = readLocalProjectLibrary();
           if (!Array.isArray(library)) library = [];
           library = filterOutDeletedProjects(library);
 
           const existingIdx = library.findIndex(
             (p) =>
-              p.title === projectTitle ||
+              titlesMatch(p.title, projectTitle) ||
               (isDemoProjectTitle(projectTitle) && isDemoProjectTitle(p.title))
           );
           if (existingIdx === -1 && !canCreateOrDeleteProjects()) return;
@@ -1766,41 +1769,30 @@ export default function App() {
         ];
       }
 
-      // Self-heal active project into library for UI — clear stale tombstone if needed
+      // Self-heal the open film into Library — never abandon it for a tombstone
       const activeTitle =
         projectTitle && typeof projectTitle === 'string' && projectTitle.toUpperCase() !== 'STAGE PRODUCTION STUDIO'
           ? projectTitle
           : '';
       if (activeTitle && shots && shots.length > 0) {
-        if (isProjectTitleDeleted(activeTitle)) {
-          const nextLive = updatedProjs.find((p) => p && p.title && !isProjectTitleDeleted(p.title));
-          if (nextLive) {
-            setProjectTitle(nextLive.title);
-            if (Array.isArray(nextLive.shots)) setShots(nextLive.shots);
-            if (nextLive.targetModel) setTargetModel(nextLive.targetModel);
-            if (nextLive.aspectRatio) setAspectRatio(nextLive.aspectRatio);
-            safeLocalStorageSetItem('sps_current_project_title', nextLive.title);
-            safeLocalStorageSetItem('sps_active_project_title', nextLive.title);
-            safeLocalStorageSetItem('sps_project_title', nextLive.title);
-            safeLocalStorageSetItem('sps_current_shots', JSON.stringify(nextLive.shots || []));
-          }
-        } else {
-          const exists = updatedProjs.some((p) => p.title === activeTitle);
-          if (!exists) {
-            updatedProjs = [
-              {
-                id: `proj_${Date.now()}`,
-                title: activeTitle,
-                description: `Cinema Production Studio Project with ${shots.length} shots`,
-                targetModel: targetModel || 'SPS Direct Cinema 2.0',
-                aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-                roomId: roomIdForProject(activeTitle, effectiveRoomId),
-                lastModified: new Date().toLocaleDateString(),
-                shots: shots,
-              },
-              ...updatedProjs,
-            ];
-          }
+        reviveProjectTitleForOpen(activeTitle);
+        const exists = updatedProjs.some(
+          (p) => titlesMatch(p.title, activeTitle) || String(p?.title || '').trim() === activeTitle
+        );
+        if (!exists) {
+          updatedProjs = [
+            {
+              id: `proj_${Date.now()}`,
+              title: activeTitle,
+              description: `Cinema Production Studio Project with ${shots.length} shots`,
+              targetModel: targetModel || 'SPS Direct Cinema 2.0',
+              aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+              roomId: roomIdForProject(activeTitle, effectiveRoomId),
+              lastModified: new Date().toLocaleDateString(),
+              shots: shots,
+            },
+            ...updatedProjs,
+          ];
         }
       }
 
@@ -2453,6 +2445,9 @@ export default function App() {
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString();
       
       const existingIdx = library.findIndex(p => titlesMatch(p.title, projectTitle));
+      if (projectTitle && String(projectTitle).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
+        reviveProjectTitleForOpen(projectTitle);
+      }
       if (!isProjectTitleDeleted(projectTitle)) {
       const updatedProjectData = {
         id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
@@ -2478,6 +2473,16 @@ export default function App() {
 
       library = filterOutDeletedProjects(library);
       writeLocalProjectLibrary(library);
+      saveProjectToVault({
+        ...(existingIdx !== -1 ? library.find((p) => titlesMatch(p.title, projectTitle)) : {}),
+        title: projectTitle,
+        shots,
+        projectGeneratedImages: mergedImages,
+        targetModel,
+        aspectRatio,
+        roomId,
+        lastModified: nowStr
+      }).catch(() => {});
       safeLocalStorageSetItem('sps_current_project_title', projectTitle);
       safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
       safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
@@ -2491,22 +2496,11 @@ export default function App() {
         try {
           const authUsers = JSON.parse(savedUsersStr);
           await syncCollaboratorsToCloud(authUsers);
-        } catch (err) {}
-      }
-
-      // 2. PULL LATEST DATA FROM CLOUD DATABASE
-      try {
-        const latestCloudLib = await fetchProjectLibraryFromCloud();
-        await fetchCollaboratorsFromCloud();
-        if (Array.isArray(latestCloudLib) && latestCloudLib.length > 0) {
-          const activeProj = latestCloudLib.find(p => titlesMatch(p.title, projectTitle));
-          if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
-            isReceivingCloudUpdate.current = true;
-            setShots(activeProj.shots);
-            localStorage.setItem('sps_current_shots', JSON.stringify(activeProj.shots));
-          }
+        } catch {
+          /* ignore */
         }
-      } catch (err) {}
+      }
+      await fetchCollaboratorsFromCloud().catch(() => {});
       
       setIsProjectSavedToast(true);
       setTimeout(() => setIsProjectSavedToast(false), 3500);
@@ -3568,10 +3562,14 @@ export default function App() {
         let library = readLocalProjectLibrary();
         if (!Array.isArray(library)) library = [];
 
-        const existingIdx = library.findIndex(p => p.title === nextTitle);
+        const existingIdx = library.findIndex((p) => titlesMatch(p.title, nextTitle));
+        if (nextTitle && String(nextTitle).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO') {
+          reviveProjectTitleForOpen(nextTitle);
+        }
         if (isProjectTitleDeleted(nextTitle)) {
           // Archived title — do not re-mint into live library from AI apply
         } else {
+        pinLiveLibraryTitle(nextTitle);
         const existingProj = existingIdx !== -1 ? library[existingIdx] : {};
 
         const newProj = {
@@ -3603,6 +3601,7 @@ export default function App() {
 
         library = filterOutDeletedProjects(library);
         writeLocalProjectLibrary(library);
+        saveProjectToVault(newProj).catch(() => {});
         window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'App' } }));
         syncProjectLibraryToCloud(library);
         }

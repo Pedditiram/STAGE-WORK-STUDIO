@@ -234,6 +234,11 @@ export const saveProjectToVault = async (project) => {
         vaultSavedAt: new Date().toLocaleString()
       };
       store.put(vaultRecord);
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error || new Error('idb put failed'));
+        tx.onabort = () => reject(tx.error || new Error('idb put aborted'));
+      });
     }
   } catch (e) {
     console.warn('Error saving to IndexedDB Vault:', e);
@@ -241,7 +246,7 @@ export const saveProjectToVault = async (project) => {
 
   try {
     const { projectLibraryStorageKey } = await import('../utils/tenantScope');
-    const { isProjectTitleDeleted, filterOutDeletedProjects } = await import('./dbService');
+    const { isProjectTitleDeleted, filterOutDeletedProjects, pinLiveLibraryTitle } = await import('./dbService');
     if (isProjectTitleDeleted(title)) return false;
     const savedLib = localStorage.getItem(projectLibraryStorageKey());
     let lib = savedLib ? JSON.parse(savedLib) : [];
@@ -254,6 +259,7 @@ export const saveProjectToVault = async (project) => {
     } else {
       lib.push(slim);
     }
+    pinLiveLibraryTitle(ensured.title);
     safeLocalStorageSetItem(projectLibraryStorageKey(), JSON.stringify(filterOutDeletedProjects(lib).map(slimProjectForLocalMirror)));
   } catch (e) {}
 

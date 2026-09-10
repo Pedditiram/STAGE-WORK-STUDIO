@@ -26,7 +26,6 @@ import {
   syncProjectLibraryToCloud,
   fetchProjectLibraryFromCloud,
   syncCollaboratorsToCloud,
-  clearDeletedProjectTitles,
   reviveProjectTitleForOpen,
   filterOutDeletedProjects,
   isProjectTitleDeleted,
@@ -34,7 +33,7 @@ import {
   getArchivedProjects,
   restoreProjectFromArchive,
   purgeArchivedProject,
-  healActiveProjectFromArchive
+  healActiveProjectFromArchive,
 } from '../services/dbService';
 import { 
   saveProjectToVault, loadProjectsFromVault, exportProjectPackageToFile, importProjectPackageFromFile,
@@ -1828,8 +1827,12 @@ export default function ProjectConsoleModal({
       ]
     };
 
-    clearDeletedProjectTitles([cleanTitle]);
-    setProjectLibrary(prev => [...prev, newProjObj]);
+    reviveProjectTitleForOpen(cleanTitle);
+    const nextLibrary = [...(Array.isArray(projectLibrary) ? projectLibrary : []), newProjObj];
+    setProjectLibrary(nextLibrary);
+    writeLocalProjectLibrary(filterOutDeletedProjects(nextLibrary));
+    saveProjectToVault(newProjObj).catch(() => {});
+    syncProjectLibraryToCloud(filterOutDeletedProjects(nextLibrary));
     claimNewLibraryTitleIfPackUser(cleanTitle);
     handleSwitchProject(newProjObj);
   };
@@ -1854,8 +1857,11 @@ export default function ProjectConsoleModal({
       roomId: roomIdForProject(dupTitle),
       lastModified: new Date().toLocaleDateString()
     };
+    reviveProjectTitleForOpen(dupTitle);
     setProjectLibrary(prev => [...prev, dupObj]);
     claimNewLibraryTitleIfPackUser(dupTitle);
+    writeLocalProjectLibrary(filterOutDeletedProjects([...(Array.isArray(projectLibrary) ? projectLibrary : []), dupObj]));
+    saveProjectToVault(dupObj).catch(() => {});
   };
 
   // 5. ARCHIVE PROJECT (PRIMARY ADMIN) — remove from library, keep in Archive for restore

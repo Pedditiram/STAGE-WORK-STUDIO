@@ -663,6 +663,11 @@ export function isTitlePinnedLive(title) {
   return Boolean(key && readPinnedLiveTitleKeys().has(key));
 }
 
+/** Keep a newly created / opened title in Library across cloud hydrate. */
+export function pinLiveLibraryTitle(title) {
+  pinLiveTitle(title);
+}
+
 function blockedLibraryTitleKeys() {
   const pinned = readPinnedLiveTitleKeys();
   return new Set(
@@ -850,9 +855,17 @@ export function reviveProjectTitleForOpen(title) {
 
 export function filterOutDeletedProjects(projects) {
   const blocked = blockedLibraryTitleKeys();
+  let openKey = '';
+  try {
+    openKey = String(localStorage.getItem('sps_current_project_title') || '').trim().toUpperCase();
+  } catch {
+    openKey = '';
+  }
   return (Array.isArray(projects) ? projects : []).filter((p) => {
     const key = projectKey(p);
-    return key && key !== 'STAGE PRODUCTION STUDIO' && !blocked.has(key);
+    if (!key || key === 'STAGE PRODUCTION STUDIO') return false;
+    if (openKey && key === openKey) return true;
+    return !blocked.has(key);
   });
 }
 
@@ -868,13 +881,12 @@ function projectRecency(p) {
 }
 
 /**
- * Cloud is source of truth for membership. Shared titles merge fields (cloud preferred).
- * Local-only drafts are NOT kept after a successful cloud fetch — otherwise deleted
- * titles (e.g. 002) linger on Owner devices and reappear in allotment UI.
+ * Cloud enriches shared titles. Live local-only films (new creates, not yet on KV)
+ * stay in the library. Tombstoned / archived titles are already excluded via
+ * blockedLibraryTitleKeys — that is how deletes stay gone, not by dropping drafts.
  */
 function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true } = {}) {
   const deleted = blockedLibraryTitleKeys();
-  const pinned = readPinnedLiveTitleKeys();
   const map = new Map();
   const localByKey = new Map();
 
@@ -901,10 +913,9 @@ function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true 
     }
   });
 
-  // Cloud membership is SoT except titles this device just Open-file'd / restored.
   localByKey.forEach((p, key) => {
     if (map.has(key)) return;
-    if (!cloudAuthoritative || pinned.has(key)) map.set(key, p);
+    map.set(key, p);
   });
 
   return Array.from(map.values());
@@ -942,6 +953,7 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
     await enrichLibraryWithDiskVault(filterOutDeletedProjects(merged))
   );
 
+  const localStr = JSON.stringify(Array.isArray(localProjs) ? localProjs : []);
   const newStr = JSON.stringify(finalList);
   const wrote = writeLocalProjectLibrary(finalList);
   if (wrote || newStr !== localStr) {
