@@ -46,6 +46,7 @@ import {
   titlesMatch,
   writeWorkspaceOntoLibrary,
   resolveActiveTitleForBoot,
+  scrubDemoBleedFromProject,
   LEGACY_SHARED_ROOM
 } from './utils/projectWorkspace';
 import { assertProjectWriteGate } from './utils/productionLifecycle';
@@ -66,7 +67,7 @@ import {
   patchLibraryProjectBibleFields
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
-import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject } from './utils/demoStudioProject';
+import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './utils/demoStudioProject';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -150,7 +151,7 @@ import {
   hasAdminGrantedWorkspace,
   downloadedAppPresentationOnly
 } from './utils/projectPermissions';
-import { isSelfServeSession } from './utils/tenantScope';
+import { isSelfServeSession, starterShots } from './utils/tenantScope';
 import { activatePackForSession, persistLivePackIfActive, claimNewLibraryTitleIfPackUser, packLibraryRestrictedMessage } from './utils/userSettingsPack';
 import { heartbeat, getDeviceId, canUseSaasFeature, assertCanGenerate, upsertLicense } from './utils/saasControl';
 import { collaboratorHasPassword, findAuthorizedUser } from './utils/collaboratorPassword';
@@ -1543,15 +1544,16 @@ export default function App() {
             openProj = resolveCurrentDemoProject(openProj);
           }
           if (openProj?.shots?.length && (localEmpty || !localIsSameFilm || diskForcesSwitch || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(localShots)))) {
-            setShots(openProj.shots);
-            setProjectTitle(openProj.title);
-            if (openProj.targetModel) setTargetModel(openProj.targetModel);
-            if (openProj.aspectRatio) setAspectRatio(openProj.aspectRatio);
-            if (openProj.roomId) setRoomId(roomIdForProject(openProj.title, openProj.roomId));
-            applyOpenWorkspace(openProj);
-            safeLocalStorageSetItem('sps_current_shots', JSON.stringify(openProj.shots));
-            safeLocalStorageSetItem('sps_current_project_title', openProj.title);
-            safeLocalStorageSetItem('sps_current_room_id', roomIdForProject(openProj.title, openProj.roomId));
+            const isolated = scrubDemoBleedFromProject(openProj);
+            setShots(isolated.shots);
+            setProjectTitle(isolated.title);
+            if (isolated.targetModel) setTargetModel(isolated.targetModel);
+            if (isolated.aspectRatio) setAspectRatio(isolated.aspectRatio);
+            if (isolated.roomId) setRoomId(roomIdForProject(isolated.title, isolated.roomId));
+            applyOpenWorkspace(isolated);
+            safeLocalStorageSetItem('sps_current_shots', JSON.stringify(isolated.shots));
+            safeLocalStorageSetItem('sps_current_project_title', isolated.title);
+            safeLocalStorageSetItem('sps_current_room_id', roomIdForProject(isolated.title, isolated.roomId));
           }
           if (openProj?.title) {
             saveActiveWorkspaceToDisk({
@@ -1611,6 +1613,7 @@ export default function App() {
           openProj = resolveCurrentDemoProject(openProj);
         }
         if (!openProj?.shots?.length) return;
+        openProj = scrubDemoBleedFromProject(openProj);
         setShots(openProj.shots);
         setProjectTitle(openProj.title);
         if (openProj.targetModel) setTargetModel(openProj.targetModel);
@@ -1876,16 +1879,23 @@ export default function App() {
     prevAutoSavedShotsRef.current = currentShotsHash;
 
     const safeTitle = (projectTitle == null ? '' : String(projectTitle));
+    // Never stamp THE LAST LETTER teaching Matrix onto a different film title.
+    const persistShots =
+      !isDemoProjectTitle(safeTitle) && shotsLookLikeDemoSeed(shots) ? starterShots() : shots;
+    if (persistShots !== shots) {
+      setShots(persistShots);
+      return;
+    }
     const roots = normalizeAssetRoots(readAssetRootsFromLibrary(projectTitle));
     const activeProj = attachWorkspaceToProject({
       id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
       title: projectTitle,
-      description: `Cinema Production Studio Project with ${shots.length} shots`,
+      description: `Cinema Production Studio Project with ${persistShots.length} shots`,
       targetModel: targetModel || 'SPS Direct Cinema 2.0',
       aspectRatio: aspectRatio || '2.39:1 Anamorphic',
       roomId: roomIdForProject(projectTitle, effectiveRoomId),
       lastModified: new Date().toLocaleString(),
-      shots: shots,
+      shots: persistShots,
       assetRoots: roots,
       projectVersion: roots.projectVersion
     });
@@ -1916,6 +1926,13 @@ export default function App() {
       if (cloudData && cloudData.shots && Array.isArray(cloudData.shots)) {
         const openTitle = projectTitleRef.current;
         if (cloudData.projectTitle && openTitle && !titlesMatch(cloudData.projectTitle, openTitle)) {
+          return;
+        }
+        if (
+          openTitle &&
+          !isDemoProjectTitle(openTitle) &&
+          shotsLookLikeDemoSeed(cloudData.shots)
+        ) {
           return;
         }
         const nextTitle = cloudData.projectTitle || openTitle;

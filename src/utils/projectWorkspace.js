@@ -44,8 +44,8 @@ import {
 } from './productionLifecycle';
 import { readOpenScreenplayText, writeOpenScreenplayText } from './screenplayInterop';
 import { safeLocalStorageSetItem } from './safeStorage';
-import { projectLibraryStorageKey, isSelfServeSession } from './tenantScope';
-import { DEMO_PROJECT_REVISION, isDemoProjectTitle, resolveCurrentDemoProject } from './demoStudioProject';
+import { projectLibraryStorageKey, isSelfServeSession, starterShots, starterScreenplay } from './tenantScope';
+import { DEMO_PROJECT_REVISION, isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './demoStudioProject';
 
 export const LEGACY_SHARED_ROOM = 'SPS-CLOUD-8821';
 const UNTITLED_ROOM_IDS = new Set(['', 'sps_untitled', 'untitled', 'sps_untitled_project']);
@@ -61,6 +61,22 @@ export function slugProjectTitle(title) {
 
 export function titlesMatch(a, b) {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+/** Drop THE LAST LETTER seed from a non-demo title (new films must not inherit the teaching Matrix). */
+export function scrubDemoBleedFromProject(project) {
+  if (!project || isDemoProjectTitle(project.title)) return project;
+  if (!shotsLookLikeDemoSeed(project.shots)) return project;
+  return {
+    ...project,
+    shots: starterShots(),
+    screenplayText: starterScreenplay(),
+    extractedMasterStory: '',
+    writerCustomSynopsis: '',
+    characterProfiles: [],
+    worldAssets: [],
+    storyPackage: undefined
+  };
 }
 
 /**
@@ -404,7 +420,7 @@ export function collectOpenWorkspace() {
 
 export function applyOpenWorkspace(project) {
   if (typeof window === 'undefined' || !project) return;
-  const p = ensureProjectRoomId(resolveCurrentDemoProject(project));
+  const p = ensureProjectRoomId(scrubDemoBleedFromProject(resolveCurrentDemoProject(project)));
   try {
     localStorage.setItem('sps_current_room_id', p.roomId || roomIdForProject(p.title));
   } catch {
@@ -448,39 +464,43 @@ export function applyOpenWorkspace(project) {
 
 export function attachWorkspaceToProject(project) {
   if (!project) return project;
-  const open = collectOpenWorkspace();
-  const withBible = mergeOpenBibleOntoProject(project, open);
+  const sameFilm = titlesMatch(currentWorkspaceTitle(), project.title);
+  const open = sameFilm ? collectOpenWorkspace() : {};
+  const withBible = sameFilm ? mergeOpenBibleOntoProject(project, open) : project;
   const storyPackage =
-    open.storyPackage && open.storyPackage.projectTitle
+    sameFilm && open.storyPackage && titlesMatch(open.storyPackage.projectTitle, project.title)
       ? open.storyPackage
-      : project.storyPackage || open.storyPackage || undefined;
+      : project.storyPackage || undefined;
   const assetRegistry =
-    open.assetRegistry && open.assetRegistry.projectTitle
+    sameFilm && open.assetRegistry && titlesMatch(open.assetRegistry.projectTitle, project.title)
       ? open.assetRegistry
-      : project.assetRegistry || open.assetRegistry || undefined;
+      : project.assetRegistry || undefined;
   const productionSpine =
-    open.productionSpine && open.productionSpine.projectTitle
+    sameFilm && open.productionSpine && titlesMatch(open.productionSpine.projectTitle, project.title)
       ? open.productionSpine
-      : project.productionSpine || open.productionSpine || undefined;
+      : project.productionSpine || undefined;
   const projectLifecycle =
-    open.projectLifecycle && open.projectLifecycle.projectTitle
+    sameFilm && open.projectLifecycle && titlesMatch(open.projectLifecycle.projectTitle, project.title)
       ? open.projectLifecycle
-      : project.projectLifecycle || open.projectLifecycle || undefined;
-  return {
+      : project.projectLifecycle || undefined;
+  const attached = {
     ...withBible,
-    screenplayText: open.screenplayText || withBible.screenplayText || '',
-    extractedMasterStory: open.extractedMasterStory || withBible.extractedMasterStory || '',
-    writerCustomSynopsis: open.writerCustomSynopsis || withBible.writerCustomSynopsis || '',
+    screenplayText: sameFilm ? (open.screenplayText || withBible.screenplayText || '') : (withBible.screenplayText || ''),
+    extractedMasterStory: sameFilm ? (open.extractedMasterStory || withBible.extractedMasterStory || '') : (withBible.extractedMasterStory || ''),
+    writerCustomSynopsis: sameFilm ? (open.writerCustomSynopsis || withBible.writerCustomSynopsis || '') : (withBible.writerCustomSynopsis || ''),
     storyPackage,
     assetRegistry,
     productionSpine,
     projectLifecycle,
-    directorPsychology: resolveProjectDirectorPsychology({ ...withBible, directorPsychology: open.directorPsychology || withBible.directorPsychology }),
-    dopVision: open.dopVision || withBible.dopVision,
-    soundVision: open.soundVision || withBible.soundVision,
+    directorPsychology: sameFilm
+      ? resolveProjectDirectorPsychology({ ...withBible, directorPsychology: open.directorPsychology || withBible.directorPsychology })
+      : resolveProjectDirectorPsychology(withBible),
+    dopVision: sameFilm ? (open.dopVision || withBible.dopVision) : withBible.dopVision,
+    soundVision: sameFilm ? (open.soundVision || withBible.soundVision) : withBible.soundVision,
     roomId: roomIdForProject(project.title, project.roomId),
     lastModifiedIso: new Date().toISOString()
   };
+  return scrubDemoBleedFromProject(attached);
 }
 
 export function writeWorkspaceOntoLibrary(library, title) {

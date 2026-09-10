@@ -75,7 +75,7 @@ export function studioCollaboratorsForCloud(users) {
   return (Array.isArray(users) ? users : []).filter((u) => !isSelfServeProfile(u));
 }
 
-function starterShots() {
+export function starterShots() {
   return [
     {
       sceneShotId: 'SC01_SH01',

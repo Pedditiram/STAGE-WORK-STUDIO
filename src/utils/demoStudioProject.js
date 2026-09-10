@@ -25,6 +25,40 @@ export function demoShotsLookFilled(shots) {
   );
 }
 
+/** True when Matrix rows are the teaching seed (demo_ravi / demo_bus_stop), not a new film. */
+export function shotsLookLikeDemoSeed(shots) {
+  if (!Array.isArray(shots) || !shots.length) return false;
+  let demoHits = 0;
+  for (const s of shots) {
+    const chars = Array.isArray(s?.charAssetIds) ? s.charAssetIds : [];
+    const worlds = Array.isArray(s?.worldAssetIds) ? s.worldAssetIds : [];
+    if (
+      chars.some((id) => String(id).startsWith('demo_')) ||
+      worlds.some((id) => String(id).startsWith('demo_'))
+    ) {
+      return true;
+    }
+    const blob = [
+      s?.characterIdAssetRef,
+      s?.sceneSynopsis,
+      s?.actionEnvContext,
+      s?.worldAssetRef,
+      s?.lookBlockLabel
+    ]
+      .map((v) => String(v || ''))
+      .join(' ');
+    if (
+      /\bdemo_[a-z0-9_]+\b/i.test(blob) ||
+      /VILLAGE BUS STOP/i.test(blob) ||
+      (/@Ravi\b/.test(blob) && /\bLakshmi\b|\bSubbaiah\b|\bMeena\b/i.test(blob))
+    ) {
+      demoHits += 1;
+      if (demoHits >= 2) return true;
+    }
+  }
+  return false;
+}
+
 export function demoSynopsisLooksFilled(text) {
   const t = String(text || '');
   return /\bRavi\b/i.test(t) && /\bLakshmi\b/i.test(t);

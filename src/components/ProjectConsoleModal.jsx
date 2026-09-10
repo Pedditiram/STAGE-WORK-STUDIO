@@ -84,8 +84,9 @@ import {
     renameTitleAcrossPackOwned,
     stripTitleFromPackOwned
 } from '../utils/userSettingsPack';
-import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
-import { resolveCurrentDemoProject } from '../utils/demoStudioProject';
+import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
+import { isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from '../utils/demoStudioProject';
+import { starterShots, starterScreenplay } from '../utils/tenantScope';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
 import { APP_VERSION_NAME, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
@@ -1029,7 +1030,6 @@ export default function ProjectConsoleModal({
   const [newDescription, setNewDescription] = useState('');
   const [newModel, setNewModel] = useState('SPS Direct Cinema 2.0');
   const [newRatio, setNewRatio] = useState('2.39:1 Anamorphic');
-  const [newTemplate, setNewTemplate] = useState('epic_war');
   const [newGenreKey, setNewGenreKey] = useState(presetProfile || 'mythological');
 
   // Rename Project State
@@ -1672,7 +1672,7 @@ export default function ProjectConsoleModal({
   };
 
   // 1. SWITCH PROJECT (ALLOTTED PERMISSION GUARD)
-  const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
+  const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false, skipDisk = false } = {}) => {
     if (!proj?.title) return false;
     if (isGuestSession()) {
       alert(`🔒 SIGN IN\n\nCreate an account or sign in to open '${proj.title}'.`);
@@ -1687,15 +1687,21 @@ export default function ProjectConsoleModal({
     }
     // Always prefer full disk copy so Electron + browser open the same Matrix
     let openProj = proj;
-    try {
-      const diskFull = await loadProjectFromDiskByTitle(proj.title);
-      if (diskFull && Array.isArray(diskFull.shots) && diskFull.shots.length) {
-        openProj = { ...proj, ...diskFull, shots: diskFull.shots };
+    if (!skipDisk) {
+      try {
+        const diskFull = await loadProjectFromDiskByTitle(proj.title);
+        if (diskFull && Array.isArray(diskFull.shots) && diskFull.shots.length) {
+          const diskIsDemoSeed = shotsLookLikeDemoSeed(diskFull.shots);
+          const openingDemo = isDemoProjectTitle(proj.title);
+          if (openingDemo || !diskIsDemoSeed) {
+            openProj = { ...proj, ...diskFull, shots: diskFull.shots };
+          }
+        }
+      } catch {
+        /* use in-memory proj */
       }
-    } catch {
-      /* use in-memory proj */
     }
-    openProj = resolveCurrentDemoProject(openProj);
+    openProj = scrubDemoBleedFromProject(resolveCurrentDemoProject(openProj));
     if (currentProjectTitle && !isProjectTitleDeleted(currentProjectTitle)) {
       try {
         const saved = JSON.parse(JSON.stringify(readLocalProjectLibrary()));
@@ -1781,28 +1787,7 @@ export default function ProjectConsoleModal({
       return;
     }
 
-    let initialShots = [...shots];
-    if (newTemplate === 'epic_war') {
-      initialShots = [
-        {
-          sceneShotId: 'SC01_SH01',
-          shotComposition: 'Extreme Wide Shot (EWS)',
-          cameraMotionTag: '[Camera: High-Angle Crane Sweep]',
-          subjectLightingTag: '[Lighting: Fiery Sunset & Smoke Flares]',
-          subjectColorTag: '[Subject Color: Saffron & Golden Armor]',
-          backgroundLightingTag: '[BG Lighting: Atmospheric Dust & Fire Glow]',
-          backgroundColorTag: '[BG Color: Deep Crimson & Smoke Black]',
-          characterIdAssetRef: '[CharID: @Commander_Hero - Lead Warrior]',
-          coArtistInteraction: '[Co-Artist: Thousands of soldiers assembled in phalanx formation]',
-          actionEnvContext: 'Ancient battlefield plain under stormy skies, war banners fluttering in wind.',
-          characterExpression: 'Fierce determination, shouting battle command',
-          characterPlacement: 'Foreground ridge overlooking vast plain',
-          characterDialogue: '"Forward into glory!"',
-          characterMovement: 'Drawing sword towards sky',
-          characterEyeLooks: '[Eye Look: Direct Laser Focus on Enemy Battalions]'
-        }
-      ];
-    }
+    const initialShots = starterShots();
 
     const genreProfile = getMergedGenreProfiles()[newGenreKey] || GENRE_PRESET_PROFILES[newGenreKey];
     const newProjObj = {
@@ -1817,6 +1802,10 @@ export default function ProjectConsoleModal({
       roomId: roomIdForProject(cleanTitle),
       lastModified: new Date().toLocaleDateString(),
       shots: initialShots,
+      screenplayText: starterScreenplay(),
+      extractedMasterStory: '',
+      characterProfiles: [],
+      worldAssets: [],
       versions: [
         {
           versionId: `v_${Date.now()}`,
@@ -1831,10 +1820,13 @@ export default function ProjectConsoleModal({
     const nextLibrary = [...(Array.isArray(projectLibrary) ? projectLibrary : []), newProjObj];
     setProjectLibrary(nextLibrary);
     writeLocalProjectLibrary(filterOutDeletedProjects(nextLibrary));
-    saveProjectToVault(newProjObj).catch(() => {});
+    saveProjectToVault(newProjObj)
+      .catch(() => {})
+      .finally(() => {
+        applyProjectToStudio(newProjObj, { closeConsole: true, skipDisk: true });
+      });
     syncProjectLibraryToCloud(filterOutDeletedProjects(nextLibrary));
     claimNewLibraryTitleIfPackUser(cleanTitle);
-    handleSwitchProject(newProjObj);
   };
 
   // 4. DUPLICATE PROJECT (admin only — creates a new project)
