@@ -5,6 +5,7 @@ import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 import StudioProfileControl from './StudioProfileControl';
 import HeaderDriveMenu from './HeaderDriveMenu';
 import HeaderSaveMenu from './HeaderSaveMenu';
+import ActiveFilmTitle from './ActiveFilmTitle';
 import {
   getAllottedProjectTitles,
   isStudioAdmin,
@@ -107,8 +108,6 @@ export default function Header({
   onOpenNavigator,
   shots = [],
 }) {
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [tempTitleInput, setTempTitleInput] = useState(projectTitle);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isActiveUsersOpen, setIsActiveUsersOpen] = useState(false);
   const [syncHealth, setSyncHealth] = useState(() => readCloudSyncHealth());
@@ -171,19 +170,6 @@ export default function Header({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const handleTitleSubmit = () => {
-    if (tempTitleInput.trim()) {
-      if (!isAdminLoggedIn) {
-        showNotice('Only the studio admin can rename this project.');
-        setTempTitleInput(projectTitle);
-        setIsEditingTitle(false);
-        return;
-      }
-      setProjectTitle(tempTitleInput.trim());
-    }
-    setIsEditingTitle(false);
-  };
 
   const getLoggedInUser = () => {
     if (typeof window !== 'undefined') {
@@ -341,6 +327,12 @@ export default function Header({
         style={{ paddingLeft: '12px', paddingRight: '12px' }}
       >
         <div className="sps-header-identity">
+          <ActiveFilmTitle
+            title={projectTitle}
+            shotCount={shotCount}
+            canRename={isAdminLoggedIn}
+            onRename={(next) => setProjectTitle?.(next)}
+          />
           <button
             type="button"
             onClick={() => onOpenNavigator?.()}
@@ -364,37 +356,6 @@ export default function Header({
           >
             Projects
           </button>
-
-          <div className="min-w-0 flex items-baseline gap-2">
-            {isEditingTitle ? (
-              <input
-                type="text"
-                value={tempTitleInput}
-                onChange={(e) => setTempTitleInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
-                onBlur={handleTitleSubmit}
-                autoFocus
-                className="bg-transparent border-b border-[var(--sps-gold)] px-0 py-0.5 text-xs text-[var(--sps-text)] focus:outline-none max-w-[160px]"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isAdminLoggedIn) {
-                    showNotice('Only the studio admin can rename this project.');
-                    return;
-                  }
-                  setTempTitleInput(projectTitle);
-                  setIsEditingTitle(true);
-                }}
-                className="font-display italic text-[14px] text-[var(--sps-gold)] truncate text-left min-w-0 max-w-[9rem] lg:max-w-[14rem]"
-                title={isAdminLoggedIn ? 'Click to edit project title' : 'Project title (admin rename only)'}
-              >
-                {projectTitle}
-              </button>
-            )}
-            <span className="text-[10px] text-[var(--sps-muted)] tabular-nums shrink-0">{shotCount}</span>
-          </div>
         </div>
 
         <div className="sps-header-work">

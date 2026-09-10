@@ -551,18 +551,27 @@ export default function AiScriptBreakdownPanel({
     const shotsToApply = payload?.shots?.length ? payload.shots : parsedPreview;
     const elementsToApply = payload?.fullElements || lastFullElements;
     if (typeof onApplyShots === 'function') {
-      onApplyShots(shotsToApply, projectTitle, {
+      const extras = {
         ...(elementsToApply || {}),
         markStoryPackage: true,
         learnFromParse: true
-      });
-      setParseStatusBanner(
-        `✓ ${shotsToApply.length} shots queued — approve in Production → LLM command review`
-      );
+      };
+      const applyNow = () => {
+        onApplyShots(shotsToApply, projectTitle, extras);
+        setParseStatusBanner(
+          `✓ ${shotsToApply.length} shots queued — approve in Production → LLM command review`
+        );
+        onApplied?.();
+      };
+      if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        window.setTimeout(applyNow, 0);
+      } else {
+        applyNow();
+      }
     } else {
       setParseStatusBanner('⚠️ Apply needs a review step — Matrix was not overwritten.');
+      onApplied?.();
     }
-    onApplied?.();
   };
 
   const handleStoryPackageLogline = (logline) => {

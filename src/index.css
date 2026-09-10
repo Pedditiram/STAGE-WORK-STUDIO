@@ -3449,7 +3449,7 @@ svg.lucide {
   column-gap: 0.55rem;
   row-gap: 0.35rem;
   overflow: visible !important;
-  min-height: 2.7rem;
+  min-height: 3.05rem;
   padding-top: 0.32rem;
   padding-bottom: 0.32rem;
   background: transparent;
@@ -3459,9 +3459,70 @@ svg.lucide {
   grid-area: identity;
   display: flex;
   align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  max-width: none;
+}
+
+.sps-header-identity .sps-film-title-wrap {
+  max-width: min(38vw, 20rem);
+}
+
+.sps-film-title-wrap {
+  display: flex;
+  align-items: baseline;
   gap: 0.45rem;
   min-width: 0;
-  max-width: 16rem;
+  flex: 0 1 auto;
+  max-width: min(42vw, 22rem);
+  padding-right: 0.85rem;
+  margin-right: 0.15rem;
+  border-right: 1px solid var(--sps-border);
+}
+
+.sps-film-title,
+.sps-film-title-input {
+  font-family: var(--sps-font-display);
+  font-style: normal;
+  font-weight: 600;
+  font-size: 1.28rem;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: var(--sps-text);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+}
+
+.sps-film-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.sps-film-title.is-editable {
+  cursor: text;
+}
+
+.sps-film-title:hover {
+  color: var(--sps-text);
+}
+
+.sps-film-title-input {
+  width: 100%;
+  border-bottom: 1px solid var(--sps-gold);
+  outline: none;
+  cursor: text;
+}
+
+.sps-matrix-toolbar .sps-film-title-wrap {
+  flex-shrink: 0;
 }
 
 .sps-header-work {
@@ -3650,7 +3711,7 @@ header .sps-icon-btn.is-on {
 
 @media (min-width: 1200px) {
   .sps-header-identity {
-    max-width: 18rem;
+    max-width: none;
   }
   .sps-header-rail {
     max-width: none;

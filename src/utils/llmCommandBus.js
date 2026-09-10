@@ -8,6 +8,7 @@ import { isShotSpecCraftKey, SHOT_SPEC_CRAFT_KEYS, ensureShotSpecMeta } from './
 import { assertCanMutateContent, assertProjectCanMutate, isLifecycleLocked } from './productionLifecycle';
 import { appendCreativeAudit, getActorEmail } from './creativeAuditLog';
 import { safeLocalStorageSetItem } from './safeStorage';
+import { getApplyPayloadFromStoryPackage, readStoryPackageForTitle } from './storyPackage';
 
 export const CMD_STATUS = Object.freeze({
   PROPOSED: 'proposed',
@@ -29,6 +30,10 @@ export const CMD_TYPES = Object.freeze({
 });
 
 const MAX_PENDING = 40;
+
+/** Session SoT — localStorage is a best-effort mirror and must not drop in-flight commands. */
+const memoryBySlug = new Map();
+const payloadById = new Map();
 
 function slugProjectTitle(title) {
   const s = String(title || 'untitled')
@@ -57,12 +62,76 @@ function clip(s, max) {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
-export function readLlmCommands(title) {
-  if (typeof window === 'undefined') return [];
-  const t = normalizeProjectTitle(title);
-  if (!t) return [];
+function rememberPayload(cmd) {
+  if (cmd?.id && cmd.payload) payloadById.set(cmd.id, cmd.payload);
+}
+
+function withCachedPayload(cmd) {
+  if (!cmd?.id) return cmd;
+  const cached = payloadById.get(cmd.id);
+  return cached ? { ...cmd, payload: cached } : cmd;
+}
+
+function slimExtrasForStorage(extras) {
+  if (!extras || typeof extras !== 'object') return extras || undefined;
+  const {
+    shots: _shots,
+    screenplayText,
+    fullElements,
+    ...rest
+  } = extras;
+  return {
+    ...rest,
+    screenplayText: clip(screenplayText, 400) || undefined,
+    storyPackageId: extras.storyPackageId,
+    markStoryPackage: extras.markStoryPackage,
+    learnFromParse: extras.learnFromParse,
+    detectedGenre: extras.detectedGenre
+  };
+}
+
+function slimCommandForStorage(cmd) {
+  if (!cmd || typeof cmd !== 'object') return cmd;
+  if (cmd.type !== CMD_TYPES.APPLY_SHOTS) return cmd;
+  const payload = cmd.payload || {};
+  const shots = Array.isArray(payload.shots) ? payload.shots : [];
+  return {
+    ...cmd,
+    payload: {
+      mode: payload.mode === 'merge' ? 'merge' : 'overwrite',
+      shotCount: shots.length,
+      extras: slimExtrasForStorage(payload.extras),
+      storyPackageId: payload.extras?.storyPackageId || payload.storyPackageId
+    }
+  };
+}
+
+function hydrateApplyShotsPayload(cmd, title) {
+  if (!cmd || cmd.type !== CMD_TYPES.APPLY_SHOTS) return cmd;
+  const merged = withCachedPayload(cmd);
+  const payload = { ...(merged.payload || {}) };
+  if (Array.isArray(payload.shots) && payload.shots.length) {
+    return { ...merged, payload };
+  }
   try {
-    const raw = localStorage.getItem(cmdKeyForTitle(t));
+    const pkg = readStoryPackageForTitle(title || cmd.projectTitle);
+    const fromPkg = getApplyPayloadFromStoryPackage(pkg);
+    if (fromPkg?.shots?.length) {
+      payload.shots = fromPkg.shots;
+      const pkgExtras = fromPkg.fullElements || {};
+      const { shots: _dup, ...pkgRest } = pkgExtras;
+      payload.extras = { ...pkgRest, ...(payload.extras || {}) };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ...merged, payload };
+}
+
+function loadCommandsFromDisk(title) {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(cmdKeyForTitle(title));
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -70,18 +139,50 @@ export function readLlmCommands(title) {
   }
 }
 
-function persistCommands(title, list) {
-  const t = normalizeProjectTitle(title);
-  if (!isUsableProjectTitle(t)) return list;
-  const trimmed = (Array.isArray(list) ? list : []).slice(0, MAX_PENDING);
+function emitCommandsUpdated(title, count) {
+  if (typeof window === 'undefined') return;
   try {
-    safeLocalStorageSetItem(cmdKeyForTitle(t), JSON.stringify(trimmed));
     window.dispatchEvent(
-      new CustomEvent('sps_llm_commands_updated', { detail: { title: t, count: trimmed.length } })
+      new CustomEvent('sps_llm_commands_updated', { detail: { title, count } })
     );
   } catch {
     /* ignore */
   }
+}
+
+export function readLlmCommands(title) {
+  const t = normalizeProjectTitle(title);
+  if (!t) return [];
+  const slug = slugProjectTitle(t);
+  if (memoryBySlug.has(slug)) {
+    return memoryBySlug.get(slug).map((cmd) => hydrateApplyShotsPayload(cmd, t));
+  }
+  const fromDisk = loadCommandsFromDisk(t).map((cmd) => {
+    rememberPayload(cmd);
+    return hydrateApplyShotsPayload(cmd, t);
+  });
+  memoryBySlug.set(slug, fromDisk);
+  return fromDisk;
+}
+
+function persistCommands(title, list) {
+  const t = normalizeProjectTitle(title);
+  const trimmed = (Array.isArray(list) ? list : []).slice(0, MAX_PENDING);
+  trimmed.forEach(rememberPayload);
+  const slug = slugProjectTitle(t || 'untitled');
+  memoryBySlug.set(slug, trimmed);
+  if (!isUsableProjectTitle(t)) {
+    emitCommandsUpdated(t, trimmed.length);
+    return trimmed;
+  }
+  try {
+    if (typeof window !== 'undefined') {
+      safeLocalStorageSetItem(cmdKeyForTitle(t), JSON.stringify(trimmed.map(slimCommandForStorage)));
+    }
+  } catch {
+    /* quota / circular — session memory still holds the command */
+  }
+  emitCommandsUpdated(t, trimmed.length);
   return trimmed;
 }
 
@@ -103,6 +204,7 @@ export function validateLlmCommand(cmd, ctx = {}) {
     errors.push(`Unknown command type: ${cmd.type}`);
   }
   const title = normalizeProjectTitle(cmd.projectTitle || ctx.projectTitle);
+  const hydrated = hydrateApplyShotsPayload(cmd, title);
   if (!isUsableProjectTitle(title)) {
     errors.push('Usable project title required');
   }
@@ -110,7 +212,8 @@ export function validateLlmCommand(cmd, ctx = {}) {
   if (!projectGate.ok) errors.push(projectGate.message);
 
   const shots = Array.isArray(ctx.shots) ? ctx.shots : [];
-  const payload = cmd.payload || {};
+  const payload = hydrated.payload || {};
+  cmd = hydrated;
 
   if (cmd.type === CMD_TYPES.PATCH_SHOT_CRAFT) {
     const idx = Number(payload.shotIndex);
@@ -206,7 +309,7 @@ export function validateAndMarkCommand(cmdId, projectTitle, ctx = {}) {
   const list = readLlmCommands(title);
   const idx = list.findIndex((c) => c.id === cmdId);
   if (idx < 0) return { ok: false, error: 'Command not found' };
-  const cmd = list[idx];
+  const cmd = hydrateApplyShotsPayload(list[idx], title);
   const result = validateLlmCommand(cmd, { ...ctx, projectTitle: title });
   const next = {
     ...cmd,
@@ -384,7 +487,9 @@ export function patchLlmCommandPayload(cmdId, projectTitle, payloadPatch = {}) {
 export function describeApplyShotsCommand(cmd, ctx = {}) {
   const p = cmd?.payload || {};
   const mode = p.mode === 'merge' ? 'merge' : 'overwrite';
-  const incoming = Array.isArray(p.shots) ? p.shots.length : 0;
+  const incoming = Array.isArray(p.shots) && p.shots.length
+    ? p.shots.length
+    : Number(p.shotCount) || 0;
   const existing = (Array.isArray(ctx.shots) ? ctx.shots : []).filter((s) => !s?.isArchived).length;
   return {
     mode,
@@ -412,7 +517,7 @@ export function applyLlmCommand(cmdId, projectTitle, ctx = {}, mutators = {}) {
   const list = readLlmCommands(title);
   const idx = list.findIndex((c) => c.id === cmdId);
   if (idx < 0) return { ok: false, error: 'Command not found' };
-  let cmd = list[idx];
+  let cmd = hydrateApplyShotsPayload(list[idx], title);
 
   if (cmd.status === CMD_STATUS.PROPOSED) {
     const v = validateLlmCommand(cmd, { ...ctx, projectTitle: title });
@@ -521,6 +626,12 @@ export function applyLlmCommand(cmdId, projectTitle, ctx = {}, mutators = {}) {
 export function proposeAndValidate(input, ctx = {}) {
   const proposed = proposeLlmCommand(input);
   if (!proposed.ok) return proposed;
+  const marked = validateAndMarkCommand(proposed.command.id, proposed.command.projectTitle, ctx);
+  if (marked.ok || marked.error !== 'Command not found') return marked;
+  persistCommands(proposed.command.projectTitle, [
+    proposed.command,
+    ...readLlmCommands(proposed.command.projectTitle).filter((c) => c.id !== proposed.command.id)
+  ]);
   return validateAndMarkCommand(proposed.command.id, proposed.command.projectTitle, ctx);
 }
 
@@ -541,11 +652,16 @@ export function proposeApplyShotsCommand(
 ) {
   const list = Array.isArray(shots) ? shots : [];
   const m = mode === 'merge' ? 'merge' : 'overwrite';
+  let extrasOut = extras || undefined;
+  if (extrasOut && typeof extrasOut === 'object') {
+    const { shots: _dupShots, ...rest } = extrasOut;
+    extrasOut = rest;
+  }
   return proposeAndValidate(
     {
       type: CMD_TYPES.APPLY_SHOTS,
       projectTitle,
-      payload: { shots: list, mode: m, extras: extras || undefined },
+      payload: { shots: list, mode: m, extras: extrasOut },
       source,
       reason: reason || `Apply ${list.length} shots (${m})`,
       preview: preview || `${list.length} shots · ${m}`
