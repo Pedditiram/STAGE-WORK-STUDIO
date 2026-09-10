@@ -9,7 +9,7 @@
   --sps-border: rgba(244, 236, 222, 0.11);
   --sps-border-strong: rgba(244, 236, 222, 0.24);
   --sps-text: #f4ecde;
-  --sps-muted: #938b80;
+  --sps-muted: #b4aca0;
   --sps-accent: #c9a36a;
   --sps-accent-2: #e4d0ae;
   --sps-warn: #c4a574;
@@ -994,10 +994,10 @@ html, body, #root {
   --sps-border: #d5cbb8;
   --sps-border-strong: #c0b49d;
   --sps-text: #1c1712;
-  --sps-muted: #2f2a24;
-  --sps-accent: #8b5a2b;
-  --sps-accent-2: #6e4520;
-  --sps-gold: #c4a05a;
+  --sps-muted: #3d342c;
+  --sps-accent: #6b3f16;
+  --sps-accent-2: #5a3512;
+  --sps-gold: #a07a38;
   --sps-on-gold: #1c1712;
   --sps-row-active: rgba(139, 90, 43, 0.1);
   --sps-shadow: 0 16px 40px rgba(28, 23, 18, 0.08);
@@ -1380,6 +1380,9 @@ html.sps-fs-active #root {
   color: #64748B !important;
 }
 
+.theme-paper .text-amber-50,
+.theme-paper .text-amber-100,
+.theme-paper .text-amber-100\/90,
 .theme-paper .text-amber-200,
 .theme-paper .text-amber-300,
 .theme-paper .text-amber-400 {
@@ -1403,6 +1406,8 @@ html.sps-fs-active #root {
   color: var(--sps-accent-2) !important;
 }
 
+.theme-paper .text-purple-100,
+.theme-paper .text-purple-200,
 .theme-paper .text-purple-300,
 .theme-paper .text-purple-400,
 .theme-paper .text-indigo-300 {
@@ -3242,7 +3247,7 @@ header:has(.sps-console-profile.is-open) {
   background: none;
   border: 0;
   padding: 0;
-  color: var(--sps-gold);
+  color: var(--sps-accent);
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 600;
@@ -4648,4 +4653,99 @@ button.sps-btn.sps-btn-primary *,
 .sps-pitch-present .sps-icon-btn,
 .sps-pitch-present .sps-btn {
   color: inherit;
+}
+
+/*
+  Paper theme stays as-is. These rules only retune type:
+  - pale classes that were never remapped (light-on-paper)
+  - remapped amber/cyan sitting on gold-painted shell gradients (brown-on-gold)
+  - remapped ink sitting on leftover dark 950 strips (brown-on-black)
+*/
+.theme-paper .text-yellow-100,
+.theme-paper .text-orange-100,
+.theme-paper .text-orange-200,
+.theme-paper .text-red-100,
+.theme-paper .text-red-200,
+.theme-paper .text-rose-100,
+.theme-paper .text-rose-200,
+.theme-paper .text-green-100,
+.theme-paper .text-green-200,
+.theme-paper .text-emerald-100,
+.theme-paper .text-blue-100,
+.theme-paper .text-blue-200,
+.theme-paper .text-sky-100,
+.theme-paper .text-sky-200,
+.theme-paper .text-fuchsia-100,
+.theme-paper .text-fuchsia-200,
+.theme-paper .text-pink-100,
+.theme-paper .text-pink-200 {
+  color: var(--sps-text) !important;
+}
+
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-50,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-100,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-100\/90,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-200,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-200\/90,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-300,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-300\/90,
+.theme-paper .sps-shell .bg-gradient-to-r .text-amber-400,
+.theme-paper .sps-shell .bg-gradient-to-r .text-cyan-100,
+.theme-paper .sps-shell .bg-gradient-to-r .text-cyan-200,
+.theme-paper .sps-shell .bg-gradient-to-r .text-cyan-300,
+.theme-paper .sps-shell .bg-gradient-to-r .text-cyan-300\/80,
+.theme-paper .sps-shell .bg-gradient-to-r .text-purple-100,
+.theme-paper .sps-shell .bg-gradient-to-r .text-purple-200,
+.theme-paper .sps-shell .bg-gradient-to-r .text-purple-300,
+.theme-paper .sps-shell .bg-gradient-to-r .text-zinc-300,
+.theme-paper .sps-shell .bg-gradient-to-r .text-zinc-400,
+.theme-paper .sps-shell .bg-gradient-to-r .text-white,
+.theme-paper .sps-shell .bg-gradient-to-r .hover\:text-white:hover,
+.theme-paper .sps-shell .sps-vault-bar,
+.theme-paper .sps-shell .sps-vault-bar .text-amber-50,
+.theme-paper .sps-shell .sps-vault-bar .text-amber-100,
+.theme-paper .sps-shell .sps-vault-bar .text-amber-200,
+.theme-paper .sps-shell .sps-vault-bar .text-amber-300,
+.theme-paper .sps-shell .sps-vault-bar .text-cyan-200,
+.theme-paper .sps-shell .sps-vault-bar .text-purple-200,
+.theme-paper .sps-shell .sps-vault-bar .text-zinc-400,
+.theme-paper .sps-shell .sps-vault-bar .text-white,
+.theme-paper .sps-shell .sps-vault-bar select {
+  color: var(--sps-on-gold) !important;
+  -webkit-text-fill-color: var(--sps-on-gold) !important;
+}
+
+.theme-paper .sps-shell .sps-vault-bar .text-zinc-950,
+.theme-paper .sps-shell .bg-gradient-to-r .text-zinc-950,
+.theme-paper .sps-shell .bg-gradient-to-r .text-black {
+  color: #1c1712 !important;
+  -webkit-text-fill-color: #1c1712 !important;
+}
+
+.theme-paper .sps-on-dark-type,
+.theme-paper .sps-on-dark-type .text-amber-50,
+.theme-paper .sps-on-dark-type .text-amber-100,
+.theme-paper .sps-on-dark-type .text-amber-200,
+.theme-paper .sps-on-dark-type .text-amber-200\/90,
+.theme-paper .sps-on-dark-type .text-amber-300,
+.theme-paper .sps-on-dark-type .text-cyan-200,
+.theme-paper .sps-on-dark-type .text-cyan-300,
+.theme-paper .sps-on-dark-type .text-white,
+.theme-paper .sps-on-dark-type .text-zinc-300,
+.theme-paper .sps-on-dark-type .text-zinc-400,
+.theme-paper .sps-on-dark-type .text-slate-300,
+.theme-paper .sps-on-dark-type .text-slate-400 {
+  color: #f6efe2 !important;
+  -webkit-text-fill-color: #f6efe2 !important;
+}
+
+.theme-paper .sps-shell .bg-gradient-to-br .text-zinc-50,
+.theme-paper .sps-shell .bg-gradient-to-br .text-zinc-100,
+.theme-paper .sps-shell .bg-gradient-to-br .text-zinc-200,
+.theme-paper .sps-shell .bg-gradient-to-br .text-white,
+.theme-paper .sps-shell .from-zinc-950 .text-zinc-50,
+.theme-paper .sps-shell .from-zinc-950 .text-zinc-100,
+.theme-paper .sps-shell .from-zinc-950 .text-zinc-200 {
+  color: #f6efe2 !important;
+  -webkit-text-fill-color: #f6efe2 !important;
 }

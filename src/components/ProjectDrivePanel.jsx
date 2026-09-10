@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Cloud, Copy, ExternalLink, HardDrive, Link2, Loader2, Upload } from 'lucide-react';
-import { getCurrentUserEmail } from '../utils/projectPermissions';
+import { Cloud, Copy, ExternalLink, Link2, Loader2, Upload } from 'lucide-react';
+import { getCurrentUserEmail, isGuestSession } from '../utils/projectPermissions';
 import {
   clearProjectDriveShare,
   getProjectDriveShare,
@@ -8,10 +8,12 @@ import {
   saveProjectDriveShare,
 } from '../utils/projectDriveLinks';
 import {
+  DEFAULT_ROOT_NAME,
   connectGoogleDrive,
   explainDriveClientIdError,
   getDriveClientId,
   getProjectDrivePath,
+  getStudioDriveAccessEmail,
   isDriveConnected,
   pushProjectToDrive,
 } from '../services/googleDriveVault';
@@ -32,7 +34,7 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
   const load = useCallback(() => {
     const rec = getProjectDriveShare(title);
     setUrl(rec.url || '');
-    setEmail(rec.email || getCurrentUserEmail() || '');
+    setEmail(getStudioDriveAccessEmail() || rec.email || getCurrentUserEmail() || '');
     setLinked(Boolean(rec.url));
     setConnected(isDriveConnected());
   }, [title]);
@@ -58,9 +60,11 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
   const drivePath = getProjectDrivePath(title);
 
   const handleSaveLink = () => {
-    const rec = saveProjectDriveShare(title, { url, email });
+    const accessEmail = getStudioDriveAccessEmail() || email;
+    const rec = saveProjectDriveShare(title, { url, email: accessEmail });
+    setEmail(accessEmail);
     setLinked(Boolean(rec.url));
-    setNotice(rec.url ? `Drive link saved for ${title}.` : 'Paste a Drive folder link first.');
+    setNotice(rec.url ? `Drive link saved for ${title}.` : 'Connect Drive to create SWS Projects, or paste a folder link.');
     window.setTimeout(() => setNotice(''), 3200);
   };
 
@@ -84,9 +88,13 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
     setBusy('connect');
     setNotice('');
     try {
-      await connectGoogleDrive(project);
+      const accessEmail = await connectGoogleDrive(project);
+      const rec = getProjectDriveShare(title);
+      setUrl(rec.url || '');
+      setEmail(accessEmail || getStudioDriveAccessEmail());
+      setLinked(Boolean(rec.url));
       setConnected(true);
-      setNotice(`Folder ready: ${drivePath}`);
+      setNotice(`Folder ready: ${DEFAULT_ROOT_NAME} / ${accessEmail || 'you'} / ${title}`);
     } catch (err) {
       setNotice(err.message || 'Google Drive sign-in failed.');
     } finally {
@@ -122,7 +130,7 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
       </div>
 
       <p className="text-[9px] text-slate-500 dark:text-zinc-400 m-0 leading-snug hidden sm:block">
-        One Drive folder per project · paste link or connect in Settings → Cloud
+        Connect creates <strong>{DEFAULT_ROOT_NAME}</strong> in Google Drive. Access is your signed-in studio email.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -132,24 +140,32 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://drive.google.com/drive/folders/…"
+            placeholder="Created automatically in SWS Projects"
             className="mt-0.5 w-full sps-input-premium bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-[11px] font-mono px-2 py-1.5"
           />
         </label>
-        <label className="block min-w-0">
-          <span className="text-[9px] uppercase tracking-wide text-slate-500 dark:text-zinc-500">Access Gmail</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@gmail.com"
-            className="mt-0.5 w-full sps-input-premium bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-[11px] font-mono px-2 py-1.5"
-          />
-        </label>
+        <div className="block min-w-0">
+          <span className="text-[9px] uppercase tracking-wide text-slate-500 dark:text-zinc-500">Access</span>
+          <p className="mt-0.5 w-full sps-input-premium bg-white/70 dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-700 text-[11px] font-mono px-2 py-1.5 m-0 truncate" title={email || 'Sign in first'}>
+            {email || (isGuestSession() ? 'Sign in to use Drive' : '—')}
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        <button type="button" className="sps-btn sps-btn-primary text-[10px]" onClick={handleSaveLink}>
+        {clientId && !connected ? (
+          <button type="button" className="sps-btn sps-btn-primary text-[10px]" onClick={handleConnect} disabled={!!busy}>
+            {busy === 'connect' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cloud className="w-3 h-3" />}
+            Create SWS Projects
+          </button>
+        ) : null}
+        {clientId && connected ? (
+          <button type="button" className="sps-btn sps-btn-primary text-[10px]" onClick={handlePush} disabled={!!busy}>
+            {busy === 'push' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+            Push project
+          </button>
+        ) : null}
+        <button type="button" className="sps-btn text-[10px]" onClick={handleSaveLink}>
           <Link2 className="w-3 h-3" />
           Save link
         </button>
@@ -175,18 +191,6 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
             }}
           >
             Clear
-          </button>
-        ) : null}
-        {clientId && !connected ? (
-          <button type="button" className="sps-btn text-[10px]" onClick={handleConnect} disabled={!!busy}>
-            {busy === 'connect' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cloud className="w-3 h-3" />}
-            Connect Drive
-          </button>
-        ) : null}
-        {clientId && connected ? (
-          <button type="button" className="sps-btn text-[10px]" onClick={handlePush} disabled={!!busy}>
-            {busy === 'push' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-            Push project
           </button>
         ) : null}
       </div>

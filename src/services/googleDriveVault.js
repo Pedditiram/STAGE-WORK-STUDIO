@@ -4,6 +4,8 @@
  */
 
 import { buildProjectPackage } from './projectDiskVault';
+import { getCurrentUserEmail, isGuestSession } from '../utils/projectPermissions';
+import { saveProjectDriveShare } from '../utils/projectDriveLinks';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const CLIENT_ID_KEY = 'sps_google_drive_client_id';
@@ -14,7 +16,8 @@ const USER_FOLDER_NAME_KEY = 'sps_google_drive_user_folder_name';
 const PROJECT_FOLDERS_KEY = 'sps_google_drive_project_folders';
 const TOKEN_KEY = 'sps_google_drive_token';
 const EMAIL_KEY = 'sps_google_drive_email';
-const DEFAULT_ROOT_NAME = 'Stage Work Studio';
+export const DEFAULT_ROOT_NAME = 'SWS Projects';
+const LEGACY_ROOT_NAMES = ['Stage Work Studio', 'StageWork Studio'];
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -62,6 +65,27 @@ export function getDriveAccountEmail() {
   }
 }
 
+/** Drive access identity is always the signed-in studio user — never a second typed Gmail. */
+export function getStudioDriveAccessEmail() {
+  const studio = String(getCurrentUserEmail() || '').trim().toLowerCase();
+  if (studio && !isGuestSession(studio)) return studio;
+  return String(getDriveAccountEmail() || '').trim().toLowerCase();
+}
+
+function migrateLegacyRootName() {
+  try {
+    const stored = String(localStorage.getItem(ROOT_NAME_KEY) || '').trim();
+    if (!stored || LEGACY_ROOT_NAMES.includes(stored)) {
+      localStorage.setItem(ROOT_NAME_KEY, DEFAULT_ROOT_NAME);
+      localStorage.removeItem(ROOT_ID_KEY);
+      localStorage.removeItem(USER_FOLDER_ID_KEY);
+      localStorage.removeItem(USER_FOLDER_NAME_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function isDriveConnected() {
   return Boolean(readCachedToken() && getDriveClientId());
 }
@@ -84,8 +108,11 @@ export function setDriveRootFolderId(id) {
 }
 
 export function getDriveRootFolderName() {
+  migrateLegacyRootName();
   try {
-    return String(localStorage.getItem(ROOT_NAME_KEY) || DEFAULT_ROOT_NAME).trim() || DEFAULT_ROOT_NAME;
+    const stored = String(localStorage.getItem(ROOT_NAME_KEY) || '').trim();
+    if (!stored || LEGACY_ROOT_NAMES.includes(stored)) return DEFAULT_ROOT_NAME;
+    return stored;
   } catch {
     return DEFAULT_ROOT_NAME;
   }
@@ -120,21 +147,8 @@ function escapeDriveQuery(value) {
 }
 
 function resolveUserFolderName(driveEmail = '') {
-  let studioEmail = '';
-  let displayName = '';
-  try {
-    studioEmail = String(localStorage.getItem('sps_authorized_user_email') || '').trim();
-    const users = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
-    const hit = Array.isArray(users)
-      ? users.find((u) => String(u?.email || '').trim().toLowerCase() === studioEmail.toLowerCase())
-      : null;
-    displayName = String(hit?.name || '').trim();
-  } catch {
-    /* ignore */
-  }
-  const email = studioEmail || driveEmail || 'studio';
-  const base = displayName || email.split('@')[0] || 'user';
-  return base.replace(/[\\/:*?"<>|]/g, '-').slice(0, 80);
+  const email = getStudioDriveAccessEmail() || String(driveEmail || '').trim().toLowerCase() || 'studio';
+  return email.replace(/[\\/:*?"<>|]/g, '-').slice(0, 80);
 }
 
 function readCachedToken() {
@@ -395,11 +409,17 @@ export async function ensureProjectFolder(project) {
 
 export async function connectGoogleDrive(project = null) {
   await getToken(true);
-  const email = await readAboutEmail();
-  await ensureUserFolder(email);
-  if (project?.title) await ensureProjectFolder(project);
+  const driveEmail = await readAboutEmail();
+  const accessEmail = getStudioDriveAccessEmail() || driveEmail;
+  await ensureUserFolder(accessEmail);
+  if (project?.title) {
+    const rec = await ensureProjectFolder(project);
+    if (rec?.webViewLink) {
+      saveProjectDriveShare(project.title, { url: rec.webViewLink, email: accessEmail });
+    }
+  }
   window.dispatchEvent(new Event('sps_google_drive_changed'));
-  return email;
+  return accessEmail;
 }
 
 export function disconnectGoogleDrive() {

@@ -124,7 +124,7 @@ import {
 import { getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES, getMergedGenreProfiles } from './constants/seedancePresets';
 import { safeLocalStorageSetItem } from './utils/safeStorage';
 import { writeOpenScreenplayText, migrateOpenScreenplayToSoT } from './utils/screenplayInterop';
-import { parseSceneAndShotID } from './utils/sceneShotUtils';
+import { parseSceneAndShotID, moveSceneBlock, reorderSceneBlocks } from './utils/sceneShotUtils';
 import { bindLastFrameToNext, persistBridges } from './utils/continuitySpine';
 import {
   getCurrentUserEmail,
@@ -232,7 +232,14 @@ const INITIAL_SHOTS = [
 ];
 
 function shouldBootWithSplash() {
-  return false;
+  try {
+    // Vite HMR remounts App without a full navigation — don't replay the intro.
+    if (import.meta.hot?.data?.splashPlayed) return false;
+    if (import.meta.hot) import.meta.hot.data.splashPlayed = true;
+  } catch {
+    /* ignore */
+  }
+  return true;
 }
 
 export default function App() {
@@ -2925,7 +2932,6 @@ export default function App() {
         { id: 'writer-screenplay', label: 'Screenplay', hint: 'Pages', run: () => goWriter('screenplay') },
         { id: 'writer-synopsis', label: 'Synopsis', hint: 'Master story', run: () => goWriter('synopsis') },
         { id: 'writer-breakdown', label: 'AI Breakdown', hint: 'Parse → Matrix', run: () => goWriter('breakdown') },
-        { id: 'writer-cast', label: 'Character console', hint: 'Bible', run: () => openCast('roster') },
       ],
     },
     {
@@ -3219,15 +3225,17 @@ export default function App() {
       hint: 'Guided tour',
       keywords: ['tour', 'walkthrough', 'tutorial', 'demo', 'onboarding'],
       icon: NAV_ICONS.generate,
-      run: () => setIsStudioTourOpen(true),
+      enabled: !isGuestSession(),
+      run: () => {
+        if (isGuestSession()) return guestBlock('App demo');
+        setIsStudioTourOpen(true);
+      },
       children: [
-        { id: 'app-demo-tour', label: 'Start studio tour', run: () => setIsStudioTourOpen(true) },
         {
-          id: 'app-demo-presentation',
-          label: 'Presentation + tour',
-          hint: 'Reel then walkthrough',
+          id: 'app-demo-tour',
+          label: 'Start studio tour',
           run: () => {
-            setPresentationMode(true);
+            if (isGuestSession()) return guestBlock('App demo');
             setIsStudioTourOpen(true);
           }
         },
@@ -3475,6 +3483,29 @@ export default function App() {
     if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(toIndex);
     syncToCloud({ shots: newShots });
+  };
+
+  const rememberActiveAfterSceneMove = (nextShots) => {
+    const activeId = shots[activeShotIndex]?.sceneShotId;
+    if (!activeId) return 0;
+    const found = nextShots.findIndex((s) => s?.sceneShotId === activeId);
+    return found >= 0 ? found : 0;
+  };
+
+  const handleMoveScene = (sceneTag, direction) => {
+    const next = moveSceneBlock(shots, sceneTag, direction);
+    if (next === shots) return;
+    if (!updateShotsWithHistory(next)) return;
+    setActiveShotIndex(rememberActiveAfterSceneMove(next));
+    syncToCloud({ shots: next });
+  };
+
+  const handleReorderScenes = (fromTag, toTag) => {
+    const next = reorderSceneBlocks(shots, fromTag, toTag);
+    if (next === shots) return;
+    if (!updateShotsWithHistory(next)) return;
+    setActiveShotIndex(rememberActiveAfterSceneMove(next));
+    syncToCloud({ shots: next });
   };
 
   const [mergePromptState, setMergePromptState] = useState({
@@ -4146,7 +4177,6 @@ export default function App() {
                 setPresetProfile={handleSetPresetProfile}
                 projectTitle={projectTitle}
                 initialConsoleTab={writerConsoleTab}
-                onOpenCharacters={handleOpenCharactersModal}
                 roomId={effectiveRoomId}
               />
             </div>
@@ -4171,6 +4201,8 @@ export default function App() {
                 onToggleMuteShot={handleToggleMuteShot}
                 onCloneShot={handleCloneShot}
                 onMoveShot={handleMoveShot}
+                onMoveScene={handleMoveScene}
+                onReorderScenes={handleReorderScenes}
                 onReorderShots={handleReorderShots}
                 onCompilePrompt={openCompiler}
                 onOpenReel={() => goStudioRoom('reel')}
@@ -4683,7 +4715,7 @@ export default function App() {
         </div>
       ) : null}
 
-      {/* Always-visible build stamp (splash is off on web; header often hidden behind Projects) */}
+      {/* Always-visible build stamp (header often hidden behind Projects) */}
       {!showSplash && (
         <button
           type="button"

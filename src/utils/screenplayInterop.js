@@ -1,7 +1,14 @@
 /**
- * Screenplay interchange: Fountain + Final Draft FDX (+ TXT).
+ * Screenplay interchange: Fountain + Final Draft FDX + TXT + PDF + Word.
  */
 import { normalizeToFountain, classifyScreenplayLines } from './screenplayFormat.js';
+import {
+  decodePlainScriptBytes,
+  extractOfficeScriptText,
+  isOleBytes,
+  looksLikeRtf
+} from './officeScriptExtract.js';
+import { isZipBytes } from './zipRead.js';
 
 const VERSIONS_KEY = 'sps_screenplay_versions';
 const ARCHIVE_KEY = 'sps_screenplay_archive';
@@ -237,25 +244,74 @@ export function importFountainOrTxt(text) {
   return normalizeToFountain(text);
 }
 
+/** Shared by Writer Import and AI Breakdown Upload. */
+export const SCRIPT_UPLOAD_ACCEPT = [
+  '.pdf',
+  '.txt',
+  '.text',
+  '.docx',
+  '.doc',
+  '.docm',
+  '.rtf',
+  '.fountain',
+  '.fdx',
+  '.xml',
+  '.spmd',
+  'application/pdf',
+  'text/plain',
+  'text/rtf',
+  'application/rtf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-word.document.macroEnabled.12'
+].join(',');
+
+export const SCRIPT_UPLOAD_HINT = 'PDF, Word (.docx/.doc), TXT, RTF, Fountain, or FDX';
+
+export function isPdfScriptFile(file, bytes) {
+  const name = String(file?.name || '').toLowerCase();
+  const type = String(file?.type || '').toLowerCase();
+  if (type === 'application/pdf' || name.endsWith('.pdf')) return true;
+  if (bytes && bytes.length >= 5) {
+    const head = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]);
+    if (head.startsWith('%PDF')) return true;
+  }
+  return false;
+}
+
 /**
  * Detect + import by filename / mime / content.
  */
 export async function importScreenplayFile(file, { extractPdf, signal } = {}) {
   if (!file) throw new Error('No file');
   const name = String(file.name || '').toLowerCase();
-  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
-  const isFdx = name.endsWith('.fdx') || name.endsWith('.xml');
-  const isFountain = name.endsWith('.fountain') || name.endsWith('.spmd');
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
 
-  if (isPdf) {
+  if (isPdfScriptFile(file, bytes)) {
     if (typeof extractPdf !== 'function') {
       throw new Error('PDF extract unavailable');
     }
-    const text = await extractPdf(file, { signal });
+    const pdfFile =
+      bytes.byteLength && typeof File !== 'undefined'
+        ? new File([arrayBuffer], file.name || 'script.pdf', { type: 'application/pdf' })
+        : file;
+    const text = await extractPdf(pdfFile, { signal });
     return { text: importFountainOrTxt(text), format: 'pdf' };
   }
 
-  const raw = await file.text();
+  const office = await extractOfficeScriptText(file, arrayBuffer);
+  if (office?.text) {
+    return { text: importFountainOrTxt(office.text), format: office.format };
+  }
+
+  if (isZipBytes(bytes) || isOleBytes(bytes) || looksLikeRtf(bytes)) {
+    throw new Error('Could not read that Word file. Save as .docx, PDF, or TXT and upload again.');
+  }
+
+  const raw = decodePlainScriptBytes(bytes);
+  const isFdx = name.endsWith('.fdx') || name.endsWith('.xml') || raw.includes('<FinalDraft');
+  const isFountain = name.endsWith('.fountain') || name.endsWith('.spmd');
   if (isFdx || raw.includes('<FinalDraft')) {
     return { text: importFdx(raw), format: 'fdx' };
   }

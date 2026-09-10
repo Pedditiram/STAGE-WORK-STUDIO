@@ -507,9 +507,10 @@ async function extractTextFromPDFViaServer(file, originalArrayBuffer, { signal }
     if (res.ok && data?.success && data?.text && looksLikeUsableScriptText(data.text)) {
       return safeTrim(repairTeluguPdfText(data.text));
     }
-    // Propagate definitive server codes so UI can show the right message
-    if (data?.code === 'NO_TEXT_LAYER' || data?.code === 'PDF_GARBAGE' || data?.code === 'TOO_LARGE') {
-      throw new PdfExtractError(data.code, PDF_EXTRACT_MESSAGES[data.code] || data.error || PDF_EXTRACT_MESSAGES.PARSE_FAILED);
+    // Server "no text layer" is often a false negative on Word / Final Draft text PDFs.
+    // Never abort browser fallback for those — only honor a true local size limit.
+    if (data?.code === 'TOO_LARGE' && originalArrayBuffer.byteLength > PDF_MAX_BYTES) {
+      throw new PdfExtractError('TOO_LARGE', PDF_EXTRACT_MESSAGES.TOO_LARGE);
     }
     console.warn('[PDF] Server extract unavailable:', res.status, data?.error || data?.code);
     return null;
@@ -572,11 +573,25 @@ export async function extractTextFromPDF(file, options = {}) {
     // Vercel (worker/cMap fetch quirks). Later attempts are fallbacks only.
     const attempts = [
       {
+        label: 'disableWorker+systemFonts',
+        options: {
+          data: clonePdfBytes(),
+          verbosity: 0,
+          isEvalSupported: false,
+          ignoreErrors: true,
+          disableWorker: true,
+          disableFontFace: false,
+          useSystemFonts: true,
+          ...fontOpts
+        }
+      },
+      {
         label: 'disableWorker+local-cmaps',
         options: {
           data: clonePdfBytes(),
           verbosity: 0,
           isEvalSupported: false,
+          ignoreErrors: true,
           disableWorker: true,
           disableFontFace: true,
           ...fontOpts
@@ -588,6 +603,7 @@ export async function extractTextFromPDF(file, options = {}) {
           data: clonePdfBytes(),
           verbosity: 0,
           isEvalSupported: false,
+          ignoreErrors: true,
           ...fontOpts
         }
       },
@@ -597,6 +613,7 @@ export async function extractTextFromPDF(file, options = {}) {
           data: clonePdfBytes(),
           verbosity: 0,
           isEvalSupported: false,
+          ignoreErrors: true,
           disableFontFace: false,
           useSystemFonts: true,
           ...fontOpts
@@ -744,6 +761,30 @@ export function lightSanitizePdfExtractedText(text) {
   );
 }
 
+async function getRichestPageTextItems(page) {
+  const attempts = [
+    { includeMarkedContent: false, disableCombineTextItems: false },
+    { includeMarkedContent: true, disableCombineTextItems: false },
+    { includeMarkedContent: false, disableCombineTextItems: true }
+  ];
+  let best = [];
+  let bestChars = -1;
+  for (const opts of attempts) {
+    try {
+      const textContent = await page.getTextContent(opts);
+      const items = textContent.items || [];
+      const chars = items.reduce((n, item) => n + (typeof item?.str === 'string' ? item.str.length : 0), 0);
+      if (chars > bestChars) {
+        best = items;
+        bestChars = chars;
+      }
+    } catch {
+      /* try the next getTextContent shape */
+    }
+  }
+  return best;
+}
+
 export async function extractPagesTextFromPdfObj(pdf, { signal } = {}) {
   const extractedPagesText = [];
   let pagesWithText = 0;
@@ -755,12 +796,7 @@ export async function extractPagesTextFromPdfObj(pdf, { signal } = {}) {
     assertParseNotAborted(signal);
     try {
       const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent({
-        includeMarkedContent: true,
-        disableCombineTextItems: false
-      });
-
-      const items = textContent.items || [];
+      const items = await getRichestPageTextItems(page);
       let pageRawChars = 0;
       let pageTextItems = 0;
       for (const item of items) {
@@ -852,6 +888,35 @@ function parsePdfBinaryAdvanced(arrayBuffer) {
   }
 
   const textBlocks = [];
+  const decodePdfHexString = (hex) => {
+    const clean = String(hex || '').replace(/\s+/g, '');
+    if (clean.length < 4) return '';
+    const bytes = new Uint8Array(Math.floor(clean.length / 2));
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16) || 0;
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+      let s = '';
+      for (let i = 2; i + 1 < bytes.length; i += 2) {
+        s += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+      }
+      return s;
+    }
+    try {
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    } catch {
+      return '';
+    }
+  };
+  const actualTextRe = /\/ActualText\s*(?:\(([^)]{3,})\)|<([0-9A-Fa-f\s]+)>)/g;
+  let actualMatch;
+  while ((actualMatch = actualTextRe.exec(decodedStr)) !== null) {
+    const raw = actualMatch[1] || decodePdfHexString(actualMatch[2]);
+    const cleanStr = safeTrim(String(raw || '').replace(/\\([0-7]{3}|[()\\n\r\t])/g, '$1'));
+    if (cleanStr.length > 2 && /[\u0C00-\u0C7Fa-zA-Z]/.test(cleanStr)) {
+      textBlocks.push(cleanStr);
+    }
+  }
   const tjPattern = /\(([^()]{3,})\)\s*Tj|\[\(([^()]{3,})\)\]\s*TJ/gi;
   let match;
 

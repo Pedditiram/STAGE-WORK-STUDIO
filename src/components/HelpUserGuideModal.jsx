@@ -62,6 +62,34 @@ function Callout({ title, children }) {
   );
 }
 
+function KeyChart({ rows = [] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[11px]">
+        <tbody>
+          {(rows || []).map((row, idx) => {
+            const keys = Array.isArray(row) ? row[0] : row?.keys;
+            const action = Array.isArray(row) ? row[1] : row?.action;
+            return (
+              <tr key={`${keys}-${idx}`}>
+                <td
+                  className="py-1 pr-3 align-top whitespace-nowrap font-mono font-semibold"
+                  style={{ color: 'var(--sps-gold)' }}
+                >
+                  {keys}
+                </td>
+                <td className="py-1 align-top" style={{ color: 'var(--sps-text)' }}>
+                  {action}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function buildGuideSections(isAdmin) {
   const sections = [
     {
@@ -225,7 +253,8 @@ function buildGuideSections(isAdmin) {
             </p>
             <p>
               Cloud sync (cloud with up/down arrows, next to Save) shares with teammates. Google Drive (triangle
-              mark) is a folder link, not the same as sync. Use both: Save for safety on disk, Sync for the room.
+              mark) auto-creates <strong>SWS Projects</strong> for your signed-in email — not the same as sync.
+              Use both: Save for safety on disk, Sync for the room.
             </p>
           </Callout>
 

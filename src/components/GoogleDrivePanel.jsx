@@ -4,11 +4,13 @@ import {
   connectGoogleDrive,
   disconnectGoogleDrive,
   getDriveAccountEmail,
+  DEFAULT_ROOT_NAME,
   getDriveClientId,
   getDrivePathLabel,
   getDriveRootFolderId,
   getDriveRootFolderName,
   getProjectDrivePath,
+  getStudioDriveAccessEmail,
   isDriveConnected,
   listDriveProjects,
   pullProjectFromDrive,
@@ -29,7 +31,7 @@ export default function GoogleDrivePanel({
   const [rootName, setRootName] = useState(getDriveRootFolderName);
   const [rootId, setRootId] = useState(getDriveRootFolderId);
   const [pathLabel, setPathLabel] = useState(getDrivePathLabel);
-  const [email, setEmail] = useState(getDriveAccountEmail);
+  const [email, setEmail] = useState(() => getStudioDriveAccessEmail() || getDriveAccountEmail());
   const [connected, setConnected] = useState(isDriveConnected);
   const [busy, setBusy] = useState('');
   const [files, setFiles] = useState([]);
@@ -40,7 +42,7 @@ export default function GoogleDrivePanel({
     setRootName(getDriveRootFolderName());
     setRootId(getDriveRootFolderId());
     setPathLabel(currentProject?.title ? getProjectDrivePath(currentProject.title) : getDrivePathLabel());
-    setEmail(getDriveAccountEmail());
+    setEmail(getStudioDriveAccessEmail() || getDriveAccountEmail());
     setConnected(isDriveConnected());
   }, [currentProject?.title]);
 
@@ -58,7 +60,7 @@ export default function GoogleDrivePanel({
       const list = await listDriveProjects(currentProject || null);
       setFiles(list);
       setConnected(true);
-      setEmail(getDriveAccountEmail());
+      setEmail(getStudioDriveAccessEmail() || getDriveAccountEmail());
       setPathLabel(currentProject?.title ? getProjectDrivePath(currentProject.title) : getDrivePathLabel());
     } catch (err) {
       setNotice(err.message || 'Could not list Drive files.');
@@ -150,7 +152,7 @@ export default function GoogleDrivePanel({
             Google Drive
           </p>
           <p className="text-[11px] text-zinc-400 m-0 mt-1 leading-relaxed">
-            OAuth Client ID setup is on hold (task: google credentials). For now, paste a Drive share link on the toolbar cloud icon — one link per project, with the user’s Gmail.
+            Connect auto-creates <strong>{DEFAULT_ROOT_NAME}</strong> in My Drive, then a folder for this project. Access is the signed-in studio email — not a second Gmail.
           </p>
         </div>
         {connected ? (
@@ -195,7 +197,7 @@ export default function GoogleDrivePanel({
               value={rootName}
               onChange={(e) => setRootName(e.target.value)}
               onBlur={() => setDriveRootFolderName(rootName)}
-              placeholder="Stage Work Studio"
+              placeholder={DEFAULT_ROOT_NAME}
               className="mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-200"
             />
           </label>
@@ -210,7 +212,7 @@ export default function GoogleDrivePanel({
               className="mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-200"
             />
             <span className="text-[10px] text-zinc-500 mt-1 block leading-relaxed">
-              Connect creates the location, a user folder, then a dedicated folder for the open project. Packs save only in that project folder.
+              Connect creates {DEFAULT_ROOT_NAME}, then a folder named with your studio email, then the open project. Packs save only in that project folder.
             </span>
           </label>
         </div>

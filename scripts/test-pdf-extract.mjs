@@ -178,6 +178,61 @@ try {
   assert(looksLikeUsableScriptText(titleResult.text), 'title extract usable without sluglines');
   console.log('OK title:', titleResult.text);
 
+  console.log('--- server extract-pdf handler ---');
+  const { createRequire } = await import('module');
+  const require = createRequire(import.meta.url);
+  const extractPdfHandler = require(path.join(root, 'api/extract-pdf.js'));
+  const callHandler = (buf, fileName = 'script.pdf') =>
+    new Promise((resolve, reject) => {
+      const req = {
+        method: 'POST',
+        headers: { origin: 'http://localhost:5173' },
+        body: { pdfBase64: buf.toString('base64'), fileName }
+      };
+      const res = {
+        statusCode: 200,
+        setHeader() {
+          return this;
+        },
+        status(code) {
+          this.statusCode = code;
+          return this;
+        },
+        json(payload) {
+          resolve({ status: this.statusCode, payload });
+        },
+        end() {
+          resolve({ status: this.statusCode, payload: null });
+        }
+      };
+      Promise.resolve(extractPdfHandler(req, res)).catch(reject);
+    });
+  const handlerMini = await callHandler(pdfBuf, 'mini-screenplay.pdf');
+  assert(handlerMini.status === 200, `handler status ${handlerMini.status} ${JSON.stringify(handlerMini.payload)}`);
+  assert(handlerMini.payload?.success, 'handler success');
+  assert(
+    /EXT\. FOREST/i.test(handlerMini.payload?.text || ''),
+    `handler text: ${String(handlerMini.payload?.text || '').slice(0, 120)}`
+  );
+  console.log('OK handler mini:', String(handlerMini.payload.text).slice(0, 80));
+
+  const blueprintPath = path.join(root, 'docs/STAGEWORKS_APP_BLUEPRINT.pdf');
+  if (fs.existsSync(blueprintPath)) {
+    const blueprintBuf = fs.readFileSync(blueprintPath);
+    const handlerBp = await callHandler(blueprintBuf, 'STAGEWORKS_APP_BLUEPRINT.pdf');
+    assert(
+      handlerBp.status === 200 && handlerBp.payload?.success,
+      `blueprint extract failed: ${handlerBp.status} ${handlerBp.payload?.code || handlerBp.payload?.error}`
+    );
+    assert(
+      looksLikeUsableScriptText(handlerBp.payload.text),
+      `blueprint text unusable: ${String(handlerBp.payload.text).slice(0, 160)}`
+    );
+    console.log(
+      `OK handler blueprint: ${handlerBp.payload.pageCount} pages, ${handlerBp.payload.charCount} chars`
+    );
+  }
+
   const karaPath =
     process.env.KARA_PDF ||
     '/Users/pedditiram/Downloads/RAMAYAN/Kara_Dhushan_War_Script_and_Prompts.pdf';
@@ -215,3 +270,4 @@ try {
     fs.unlinkSync(bundle);
   } catch (_) {}
 }
+process.exit(0);

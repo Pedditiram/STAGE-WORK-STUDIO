@@ -9,7 +9,10 @@ import {
   PDF_EXTRACT_MESSAGES, isParseAbortError
 } from '../services/aiScriptParser';
 import { detectScriptGenre, SEEDANCE_SLOTS } from '../constants/seedancePresets';
-import { writeOpenScreenplayText, importScreenplayFile } from '../utils/screenplayInterop';
+import {
+  writeOpenScreenplayText, importScreenplayFile, SCRIPT_UPLOAD_ACCEPT, SCRIPT_UPLOAD_HINT, isPdfScriptFile
+} from '../utils/screenplayInterop';
+import { OfficeExtractError } from '../utils/officeScriptExtract';
 import { assertProjectWriteGate } from '../utils/productionLifecycle';
 import { assertCanWriteScreenplay } from '../utils/projectPermissions';
 import ActiveProjectConfirmModal from './ActiveProjectConfirmModal';
@@ -190,7 +193,7 @@ export default function AiScriptBreakdownPanel({
 
   const formatPdfFailureBanner = (code, message) => {
     const label = code || 'extract failed';
-    return `⚠️ PDF: ${label} — ${message || PDF_EXTRACT_MESSAGES.PARSE_FAILED}`;
+    return `⚠️ File: ${label} — ${message || PDF_EXTRACT_MESSAGES.PARSE_FAILED}`;
   };
 
   const commitStoryPackageFromParse = (parsedShots, sourceText, meta, fullElements = null) => {
@@ -241,7 +244,7 @@ export default function AiScriptBreakdownPanel({
       let extractedText = '';
       const imported = await importScreenplayFile(file, { extractPdf: extractTextFromPDF, signal });
       extractedText = imported?.text || '';
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const isPdf = isPdfScriptFile(file);
 
       if (!extractedText || !String(extractedText).trim()) {
         setUploadedFileName('');
@@ -261,7 +264,7 @@ export default function AiScriptBreakdownPanel({
         return;
       }
 
-      if (isPdf && (isPdfBinaryGarbage(extractedText) || !looksLikeUsableScriptText(extractedText))) {
+      if (isPdfBinaryGarbage(extractedText) || !looksLikeUsableScriptText(extractedText)) {
         setUploadedFileName('');
         setPdfFailure({
           code: 'PDF_GARBAGE',
@@ -360,12 +363,16 @@ export default function AiScriptBreakdownPanel({
         setParseStatusBanner('⏹ Parse stopped — project left unchanged.');
         return;
       }
-      const isPdfErr = err instanceof PdfExtractError || err?.name === 'PdfExtractError';
-      const code = err?.code || (isPdfErr ? 'PARSE_FAILED' : 'PARSE_ERROR');
+      const isExtractErr =
+        err instanceof PdfExtractError ||
+        err?.name === 'PdfExtractError' ||
+        err instanceof OfficeExtractError ||
+        err?.name === 'OfficeExtractError';
+      const code = err?.code || (isExtractErr ? 'PARSE_FAILED' : 'PARSE_ERROR');
       const message = err?.message || PDF_EXTRACT_MESSAGES.PARSE_FAILED;
       // Do not wipe existing paste text / preview / project shots on failure
       setUploadedFileName('');
-      if (isPdfErr) {
+      if (isExtractErr) {
         setPdfFailure({ code, message, fileName: file.name });
         setParseStatusBanner(formatPdfFailureBanner(code, message));
       } else {
@@ -385,7 +392,7 @@ export default function AiScriptBreakdownPanel({
   const handleParseScript = async () => {
     if (parseInFlightRef.current || isLoadingFile) return;
     if (!rawScriptText.trim()) {
-      alert('Paste screenplay text, upload a text-based PDF/TXT, or pick a sample script before parsing.');
+      alert(`Paste screenplay text, upload ${SCRIPT_UPLOAD_HINT}, or pick a sample script before parsing.`);
       setParseStatusBanner('⚠️ Parse disabled — no usable screenplay text yet.');
       return;
     }
@@ -579,10 +586,12 @@ export default function AiScriptBreakdownPanel({
                         AI Screenplay Breakdown & Cinema Parser
                       </h4>
                       <p className="text-[10px] text-[color:var(--sps-muted)] font-semibold mt-0.5 truncate">
-                        Target: {projectTitle || 'Active project'}
+                        Target: {projectTitle || 'Active project'} · {SCRIPT_UPLOAD_HINT}
                       </p>
                     </div>
-                    <label className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 shadow-md transition-all ${
+                    <label
+                      title={SCRIPT_UPLOAD_HINT}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 shadow-md transition-all ${
                       isLoadingFile
                         ? 'bg-zinc-700 text-white cursor-not-allowed opacity-90 pointer-events-none'
                         : 'bg-cyan-700 hover:bg-cyan-600 text-white cursor-pointer'
@@ -592,10 +601,11 @@ export default function AiScriptBreakdownPanel({
                       <input
                         ref={scriptFileInputRef}
                         type="file"
-                        accept=".pdf,.txt,.fountain,.fdx"
+                        accept={SCRIPT_UPLOAD_ACCEPT}
                         onChange={handleFileUpload}
                         disabled={isLoadingFile}
                         className="hidden"
+                        title={SCRIPT_UPLOAD_HINT}
                       />
                     </label>
                   </div>
@@ -629,15 +639,15 @@ export default function AiScriptBreakdownPanel({
                         <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                         <div className="space-y-1 min-w-0">
                           <p className="font-black">
-                            PDF extract failed{pdfFailure.code ? `: ${pdfFailure.code}` : ''}
+                            File extract failed{pdfFailure.code ? `: ${pdfFailure.code}` : ''}
                             {pdfFailure.fileName ? ` (${pdfFailure.fileName})` : ''}
                           </p>
                           <p className="leading-relaxed opacity-90">{pdfFailure.message}</p>
                           <ul className="list-disc pl-4 space-y-0.5 text-amber-900/90 dark:text-amber-100/90">
-                            <li>Use a <strong>text-based PDF</strong> or <strong>.TXT</strong> export (not a scan).</li>
+                            <li>Upload <strong>PDF, Word (.docx/.doc), TXT, RTF, Fountain, or FDX</strong>.</li>
+                            <li>PDFs need a <strong>text layer</strong> (not a scan). Word files should be unlocked.</li>
                             <li>Or <strong>paste</strong> screenplay text into the box below.</li>
                             <li>Or load a <strong>Sample Script</strong> above to verify the parser.</li>
-                            <li>Scanned PDFs need <strong>external OCR</strong> first — not built into SPS.</li>
                           </ul>
                           <p className="font-semibold text-amber-800 dark:text-amber-200">
                             Parse stays disabled until usable script text is present. Existing project shots were not changed.

@@ -12,6 +12,9 @@ const BOOT_STEPS = [
   { id: 'ready', label: 'Studio ready', detail: 'Opening project library' },
 ];
 
+const SPLASH_HOLD_MS = 4000;
+const SPLASH_FADE_MS = 500;
+
 export default function SplashScreen({ onFinish }) {
   const local = isLocalStudioHost();
   const [progress, setProgress] = useState(0);
@@ -28,7 +31,7 @@ export default function SplashScreen({ onFinish }) {
     if (finishedRef.current) return;
     finishedRef.current = true;
     try {
-      if (!isLocalStudioHost()) sessionStorage.setItem('sps_splash_done', '1');
+      sessionStorage.setItem('sps_splash_done', '1');
     } catch {
       /* ignore */
     }
@@ -40,37 +43,24 @@ export default function SplashScreen({ onFinish }) {
     return () => cancelAnimationFrame(t);
   }, []);
 
+  // Hold the brand lockup for 4s on local and web, then fade. Do not exit early when the bar fills.
   useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) return 100;
-        const remaining = 100 - prev;
-        const inc = Math.max(3, Math.min(11, Math.round(remaining * 0.14)));
-        return Math.min(100, prev + inc);
-      });
-    }, 90);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const minMs = local ? 3200 : 2400;
-    const hard = setTimeout(() => {
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const p = Math.min(100, Math.round(((Date.now() - start) / SPLASH_HOLD_MS) * 100));
+      setProgress(p);
+      if (p >= 100) clearInterval(tick);
+    }, 50);
+    const hold = setTimeout(() => {
       setProgress(100);
       setIsFadingOut(true);
-      setTimeout(() => finishOnce(), 420);
-    }, minMs + 1400);
-    return () => clearTimeout(hard);
-  }, [finishOnce, local]);
-
-  useEffect(() => {
-    if (progress < 100) return undefined;
-    const fadeTimer = setTimeout(() => setIsFadingOut(true), 400);
-    const exitTimer = setTimeout(() => finishOnce(), 780);
+      setTimeout(() => finishOnce(), SPLASH_FADE_MS);
+    }, SPLASH_HOLD_MS);
     return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(exitTimer);
+      clearInterval(tick);
+      clearTimeout(hold);
     };
-  }, [progress, finishOnce]);
+  }, [finishOnce]);
 
   useEffect(() => {
     const onKey = (e) => {

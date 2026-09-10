@@ -15,12 +15,11 @@ import {
 import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
 import DesktopTrialModal from './DesktopTrialModal';
-import StudioTourOverlay from './StudioTourOverlay';
 import LegalDocModal from './LegalDocModal';
 import { LINE, PRODUCT } from '../constants/brand';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { pickPresentationOpening } from '../utils/presentationOpening';
-import { setPresentationMode } from '../utils/projectPermissions';
+import { getCurrentUserEmail, isGuestSession, setPresentationMode } from '../utils/projectPermissions';
 
 const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
@@ -145,9 +144,37 @@ const REST_SLIDES = [
   },
 ];
 
+const PUBLIC_DOOR = {
+  id: 'door',
+  scene: 'STUDIO DOOR',
+  kind: 'thesis',
+  kicker: 'Private studio',
+  title: 'Sign in to enter.',
+  punch: `${PRODUCT} is for registered collaborators.`,
+  welcome: 'Login or request access. The desk stays behind this door.',
+  points: [
+    { n: 'In', label: 'Registered crew' },
+    { n: 'Out', label: 'Guests stay here' },
+    { n: 'Ask', label: 'Request access' },
+  ],
+  beats: [
+    'This slate is the door, not a tour.',
+    'The studio opens after you are signed in.',
+    'Download the app if you already have a seat.',
+  ],
+  Icon: Film,
+  wash: 'from-amber-800/18 via-transparent to-stone-600/12',
+};
+
+function presentationAudienceSignedIn() {
+  return !isGuestSession() && !!getCurrentUserEmail();
+}
+
 export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   const [opening] = useState(() => pickPresentationOpening());
+  const [signedIn] = useState(() => presentationAudienceSignedIn());
   const slides = useMemo(() => {
+    if (!signedIn) return [PUBLIC_DOOR];
     const open = {
       id: 'open',
       scene: 'OPENING TITLE',
@@ -157,14 +184,13 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
       ...opening,
     };
     return [open, ...REST_SLIDES];
-  }, [opening]);
+  }, [opening, signedIn]);
 
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [tick, setTick] = useState(0);
   const [accessOpen, setAccessOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
-  const [tourOpen, setTourOpen] = useState(false);
   const [legalKind, setLegalKind] = useState(null);
   const slide = slides[i];
   const Icon = slide.Icon;
@@ -184,13 +210,13 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   }, []);
 
   useEffect(() => {
-    if (!playing || tourOpen || legalKind) return undefined;
+    if (!playing || legalKind) return undefined;
     const t = setInterval(next, dwell);
     return () => clearInterval(t);
-  }, [playing, next, tick, tourOpen, legalKind, dwell]);
+  }, [playing, next, tick, legalKind, dwell]);
 
   useEffect(() => {
-    if (tourOpen || legalKind) return undefined;
+    if (legalKind) return undefined;
     const onKey = (e) => {
       if (e.key === 'ArrowRight') next();
       if (e.key === 'ArrowLeft') prev();
@@ -201,7 +227,7 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [next, prev, tourOpen, legalKind]);
+  }, [next, prev, legalKind]);
 
   return (
     <div className="sps-pres-root flex-1 min-h-0 w-full relative overflow-hidden">
@@ -237,9 +263,6 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
                 </button>
                 <button type="button" className="sps-quiet-link is-muted" onClick={() => setTrialOpen(true)}>
                   Download app
-                </button>
-                <button type="button" className="sps-quiet-link is-muted" onClick={() => setTourOpen(true)}>
-                  Demo
                 </button>
               </div>
               <p className="sps-pres-meta text-[11px] font-mono tracking-widest m-0">
@@ -376,7 +399,6 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
       </div>
       <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
       <DesktopTrialModal isOpen={trialOpen} onClose={() => setTrialOpen(false)} />
-      <StudioTourOverlay isOpen={tourOpen} onClose={() => setTourOpen(false)} />
       <LegalDocModal kind={legalKind} onClose={() => setLegalKind(null)} />
     </div>
   );

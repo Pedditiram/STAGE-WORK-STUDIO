@@ -21,6 +21,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:pdf-extract": "node scripts/test-pdf-extract.mjs",
+    "test:script-import": "node scripts/test-script-import.mjs",
     "test:sws-comfy": "node scripts/test-sws-comfy.mjs",
     "electron:dev": "concurrently \"cross-env NODE_ENV=development vite\" \"wait-on tcp:5173 && env -u ELECTRON_RUN_AS_NODE NODE_ENV=development VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "electron:build": "node scripts/sync-pdfjs-assets.mjs && node scripts/electron-build.js",

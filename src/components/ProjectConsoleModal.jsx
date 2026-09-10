@@ -2822,7 +2822,7 @@ export default function ProjectConsoleModal({
           {activeTab === 'director_psychology' && (
             <div className="space-y-2 animate-in fade-in duration-200 font-mono h-full flex flex-col justify-between">
               {/* Single Ultra-Compact 1-Line Control Bar (32px Total Height) */}
-              <div className="p-2 px-3 rounded-xl bg-gradient-to-r from-amber-950/90 via-zinc-900 to-black border border-amber-500/40 shadow-md flex items-center justify-between gap-2 shrink-0 overflow-x-auto">
+              <div className="sps-vault-bar p-2 px-3 rounded-xl bg-gradient-to-r from-amber-950/90 via-zinc-900 to-black border border-amber-500/40 shadow-md flex items-center justify-between gap-2 shrink-0 overflow-x-auto">
                 {/* Left: Vault Category Switcher + Project Selector + Actions */}
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Tri-Vault Category Switcher */}

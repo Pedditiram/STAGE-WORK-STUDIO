@@ -16,7 +16,7 @@ export default function ConflictAlertModal({
       <div className="w-full max-w-lg bg-slate-950 text-white border-2 border-amber-500/80 rounded-2xl shadow-[0_25px_80px_rgba(245,158,11,0.4)] overflow-hidden font-mono text-xs text-left">
         
         {/* Header Banner */}
-        <div className="p-4 bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-b border-amber-500/50 flex items-center justify-between">
+        <div className="sps-on-dark-type p-4 bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-b border-amber-500/50 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500 text-slate-950 shadow-md flex items-center justify-center">
               <AlertTriangle className="w-5 h-5 animate-pulse" />

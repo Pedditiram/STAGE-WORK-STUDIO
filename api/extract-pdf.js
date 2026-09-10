@@ -11,6 +11,8 @@
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+const MAX_BYTES = 12 * 1024 * 1024;
+
 const extractHits = new Map();
 function extractRateOk(req) {
   const ip = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
@@ -429,7 +431,31 @@ function joinPdfTextItems(items, { yBreak = 3.5 } = {}) {
   return lines.join('\n');
 }
 
-async function extractWithPdfJs(uint8) {
+async function getRichestPageTextItems(page) {
+  const attempts = [
+    { includeMarkedContent: false, disableCombineTextItems: false },
+    { includeMarkedContent: true, disableCombineTextItems: false },
+    { includeMarkedContent: false, disableCombineTextItems: true }
+  ];
+  let best = [];
+  let bestChars = -1;
+  for (const opts of attempts) {
+    try {
+      const textContent = await page.getTextContent(opts);
+      const items = textContent.items || [];
+      const chars = items.reduce((n, item) => n + (typeof item?.str === 'string' ? item.str.length : 0), 0);
+      if (chars > bestChars) {
+        best = items;
+        bestChars = chars;
+      }
+    } catch {
+      /* try the next getTextContent shape */
+    }
+  }
+  return best;
+}
+
+async function extractWithPdfJs(uint8, extraOpts = {}) {
   const lib = await loadPdfJsLegacy();
   const cMapDir = resolvePdfJsAssetDir('cmaps');
   const fontDir = resolvePdfJsAssetDir('standard_fonts');
@@ -438,33 +464,58 @@ async function extractWithPdfJs(uint8) {
     data: uint8,
     verbosity: 0,
     isEvalSupported: false,
+    ignoreErrors: true,
     disableWorker: true,
-    disableFontFace: true,
+    disableFontFace: extraOpts.disableFontFace !== false,
+    useSystemFonts: extraOpts.useSystemFonts === true,
     cMapUrl: pathToFileURL(cMapDir + path.sep).href,
     cMapPacked: true,
     standardFontDataUrl: pathToFileURL(fontDir + path.sep).href
   });
 
   const pdf = await loadingTask.promise;
-  const pages = [];
-  let totalItems = 0;
+  try {
+    const pages = [];
+    let totalItems = 0;
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent({ includeMarkedContent: true });
-    const items = textContent.items || [];
-    totalItems += items.filter((i) => i && typeof i.str === 'string' && i.str.length).length;
-    const pageText = joinPdfTextItems(items);
-    if (pageText) pages.push(pageText);
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const items = await getRichestPageTextItems(page);
+      totalItems += items.filter((i) => i && typeof i.str === 'string' && i.str.length).length;
+      const pageText = joinPdfTextItems(items);
+      if (pageText) pages.push(pageText);
+    }
+
+    const text = repairTeluguPdfText(pages.join('\n\n')).trim();
+    return {
+      text,
+      pageCount: pdf.numPages,
+      textItems: totalItems,
+      charCount: text.length
+    };
+  } finally {
+    try {
+      await pdf.destroy();
+    } catch {
+      /* ignore */
+    }
   }
+}
 
-  const text = repairTeluguPdfText(pages.join('\n\n')).trim();
-  return {
-    text,
-    pageCount: pdf.numPages,
-    textItems: totalItems,
-    charCount: text.length
-  };
+async function extractWithPdfJsBest(uint8) {
+  const clone = () => new Uint8Array(uint8);
+  const first = await extractWithPdfJs(clone(), { disableFontFace: true });
+  if (first.text && looksUsable(first.text) && first.textItems > 0) return first;
+  try {
+    const second = await extractWithPdfJs(clone(), { disableFontFace: false, useSystemFonts: true });
+    if ((second.charCount || 0) > (first.charCount || 0)) return second;
+    if (second.text && looksUsable(second.text) && !(first.text && looksUsable(first.text))) {
+      return second;
+    }
+  } catch {
+    /* keep first */
+  }
+  return first;
 }
 
 function looksUsable(text) {
@@ -508,7 +559,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const result = await extractWithPdfJs(new Uint8Array(buf));
+    const result = await extractWithPdfJsBest(new Uint8Array(buf));
     if (!result.text || !looksUsable(result.text)) {
       const code = result.textItems === 0 ? 'NO_TEXT_LAYER' : 'PDF_GARBAGE';
       return res.status(422).json({

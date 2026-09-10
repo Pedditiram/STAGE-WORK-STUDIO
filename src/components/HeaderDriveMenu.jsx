@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Copy, ExternalLink, Link2 } from 'lucide-react';
 import { IconDrive } from './StudioIcons';
-import { getCurrentUserEmail } from '../utils/projectPermissions';
+import { getCurrentUserEmail, isGuestSession } from '../utils/projectPermissions';
 import {
   clearProjectDriveShare,
   getProjectDriveShare,
   hasProjectDriveShare,
   saveProjectDriveShare,
 } from '../utils/projectDriveLinks';
+import { DEFAULT_ROOT_NAME, getStudioDriveAccessEmail } from '../services/googleDriveVault';
 
 export default function HeaderDriveMenu({ project, lookOnly = false, quiet = false }) {
   const title = project?.title || '';
@@ -20,7 +21,7 @@ export default function HeaderDriveMenu({ project, lookOnly = false, quiet = fal
   const load = () => {
     const rec = getProjectDriveShare(title);
     setUrl(rec.url || '');
-    setEmail(rec.email || getCurrentUserEmail() || '');
+    setEmail(getStudioDriveAccessEmail() || rec.email || getCurrentUserEmail() || '');
     setLinked(Boolean(rec.url));
   };
 
@@ -41,9 +42,11 @@ export default function HeaderDriveMenu({ project, lookOnly = false, quiet = fal
   }, [open]);
 
   const handleSave = () => {
-    const rec = saveProjectDriveShare(title, { url, email });
+    const accessEmail = getStudioDriveAccessEmail() || email;
+    const rec = saveProjectDriveShare(title, { url, email: accessEmail });
+    setEmail(accessEmail);
     setLinked(Boolean(rec.url));
-    setNotice(rec.url ? `Saved Drive link for ${rec.email || 'this project'}.` : 'Paste a Drive folder or file link first.');
+    setNotice(rec.url ? `Saved Drive link for ${accessEmail || 'this project'}.` : 'Connect Drive to create SWS Projects, or paste a folder link.');
   };
 
   const handleCopy = async () => {
@@ -80,7 +83,7 @@ export default function HeaderDriveMenu({ project, lookOnly = false, quiet = fal
               Drive link · {title || 'This project'}
             </p>
             <p className="m-0 text-[11px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
-              Share the folder in Google Drive with the person’s Gmail, then paste that link here. OAuth Client ID setup is on hold.
+              Connect creates <strong>{DEFAULT_ROOT_NAME}</strong> in Google Drive. Access is your signed-in studio email.
             </p>
             <label className="block">
               <span className="text-[10px]" style={{ color: 'var(--sps-muted)' }}>Google Drive link</span>
@@ -88,22 +91,21 @@ export default function HeaderDriveMenu({ project, lookOnly = false, quiet = fal
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/…"
+                placeholder="Created automatically in SWS Projects"
                 className="mt-1 w-full rounded-lg border px-2.5 py-1.5 text-[11px] font-mono"
                 style={{ borderColor: 'var(--sps-border)', background: 'var(--sps-surface)', color: 'var(--sps-text)' }}
               />
             </label>
-            <label className="block">
-              <span className="text-[10px]" style={{ color: 'var(--sps-muted)' }}>Access email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@gmail.com"
-                className="mt-1 w-full rounded-lg border px-2.5 py-1.5 text-[11px] font-mono"
+            <div className="block">
+              <span className="text-[10px]" style={{ color: 'var(--sps-muted)' }}>Access</span>
+              <p
+                className="mt-1 w-full rounded-lg border px-2.5 py-1.5 text-[11px] font-mono m-0 truncate"
                 style={{ borderColor: 'var(--sps-border)', background: 'var(--sps-surface)', color: 'var(--sps-text)' }}
-              />
-            </label>
+                title={email || 'Sign in first'}
+              >
+                {email || (isGuestSession() ? 'Sign in to use Drive' : '—')}
+              </p>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <button type="button" className="sps-btn sps-btn-primary text-[11px]" onClick={handleSave}>
                 <Link2 className="w-3.5 h-3.5" />

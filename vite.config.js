@@ -5,8 +5,10 @@ import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
 import { createRequire } from 'module'
+import { pathToFileURL, fileURLToPath } from 'url'
 
 const require = createRequire(import.meta.url)
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function loadAssetRootsFs() {
   const modPath = require.resolve('./src/utils/projectAssetRootsFs.cjs')
@@ -225,7 +227,8 @@ function localDiskVaultPlugin() {
                 return this;
               }
             };
-            const extractPdfMod = await import('./api/extract-pdf.js');
+            const extractPdfPath = path.resolve(__dirname, 'api/extract-pdf.js');
+            const extractPdfMod = await import(`${pathToFileURL(extractPdfPath).href}?t=${Date.now()}`);
             const extractPdfHandler = extractPdfMod.default || extractPdfMod;
             await extractPdfHandler(fakeReq, fakeRes);
           } catch (err) {

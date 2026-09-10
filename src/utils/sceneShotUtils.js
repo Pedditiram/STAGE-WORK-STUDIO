@@ -105,6 +105,58 @@ export function formatShotIdForPrompt(shotOrId, idx = 0) {
   return parseSceneAndShotID(shotOrId, idx).formattedId;
 }
 
+/** Scene blocks in first-appearance order (all shots sharing a scene tag). */
+export function collectSceneBlocks(shots = []) {
+  const blocks = [];
+  const index = new Map();
+  (shots || []).forEach((shot, originalIdx) => {
+    const parsed = parseSceneAndShotID(shot, originalIdx);
+    const key = parsed.sceneTag;
+    let block = index.get(key);
+    if (!block) {
+      block = { sceneTag: key, sceneNum: parsed.sceneNum, items: [] };
+      index.set(key, block);
+      blocks.push(block);
+    }
+    block.items.push({ shot, originalIdx, parsed });
+  });
+  return blocks;
+}
+
+function flattenSceneBlocks(blocks) {
+  const out = [];
+  (blocks || []).forEach((block) => {
+    (block.items || []).forEach(({ shot }) => out.push(shot));
+  });
+  return out;
+}
+
+/** Swap a scene with the previous or next scene. Returns the same array if nothing moves. */
+export function moveSceneBlock(shots = [], sceneTag, direction) {
+  const blocks = collectSceneBlocks(shots);
+  const i = blocks.findIndex((b) => b.sceneTag === sceneTag);
+  if (i < 0) return shots;
+  const j = direction === 'up' ? i - 1 : i + 1;
+  if (j < 0 || j >= blocks.length) return shots;
+  const next = blocks.slice();
+  const tmp = next[i];
+  next[i] = next[j];
+  next[j] = tmp;
+  return flattenSceneBlocks(next);
+}
+
+/** Drop a scene onto another scene's slot (insert at that scene's position). */
+export function reorderSceneBlocks(shots = [], fromTag, toTag) {
+  const blocks = collectSceneBlocks(shots);
+  const from = blocks.findIndex((b) => b.sceneTag === fromTag);
+  const to = blocks.findIndex((b) => b.sceneTag === toTag);
+  if (from < 0 || to < 0 || from === to) return shots;
+  const next = blocks.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return flattenSceneBlocks(next);
+}
+
 /**
  * Returns clean short filename for exports: "SC09_SH28.txt"
  */

@@ -51,7 +51,9 @@ import { readOpenScreenplayText, writeOpenScreenplayText,
   promoteVersionToArchive,
   purgeScreenplayArchiveEntry,
   renameScreenplayArchiveEntry,
-  SCREENPLAY_MILESTONE_PRESETS
+  SCREENPLAY_MILESTONE_PRESETS,
+  SCRIPT_UPLOAD_ACCEPT,
+  SCRIPT_UPLOAD_HINT
 } from '../utils/screenplayInterop';
 import { analyzeScreenplay, intensityColor } from '../utils/screenplayIntelligence';
 import ScreenplayDiffModal from './ScreenplayDiffModal';
@@ -282,7 +284,6 @@ export default function ScreenplayEditor({
   shots = [],
   onUpdateShotsFromScript,
   onNavigateToView,
-  onOpenCharacters,
   onOpenLlmCommands,
   onApplyShots,
   setPresetProfile,
@@ -1983,20 +1984,10 @@ export default function ScreenplayEditor({
               role="tab"
               aria-selected={activeConsoleTab === 'breakdown'}
               onClick={() => setActiveConsoleTab('breakdown')}
-              title="AI Script Breakdown (same flow as Project Console)"
+              title="AI Script Breakdown"
             >
               <Wand2 className="w-3.5 h-3.5 shrink-0" />
               Breakdown
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={false}
-              onClick={() => onOpenCharacters?.()}
-              title="Character bible"
-            >
-              <Users className="w-3.5 h-3.5 shrink-0" />
-              Characters
             </button>
           </div>
         </div>
@@ -2037,7 +2028,7 @@ export default function ScreenplayEditor({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".fountain,.fdx,.txt,.pdf,.xml"
+              accept={SCRIPT_UPLOAD_ACCEPT}
               className="hidden"
               onChange={handleImportFile}
             />
@@ -2048,7 +2039,7 @@ export default function ScreenplayEditor({
                   onClick={() => fileInputRef.current?.click()}
                   className="sps-quiet-link is-muted"
                   aria-label="Import screenplay file"
-                  title="Import Fountain, FDX, TXT, or PDF"
+                  title={`Import ${SCRIPT_UPLOAD_HINT}`}
                 >
                   Import
                 </button>
