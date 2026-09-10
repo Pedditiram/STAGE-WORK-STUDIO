@@ -3996,8 +3996,6 @@ export default function App() {
         </Suspense>
       )}
 
-      )}
-
       {/* Main Studio Body View — keep off-screen during splash / project console */}
       <main
         className="flex-1 w-full flex flex-col overflow-hidden min-h-0 sps-workspace is-flush"
