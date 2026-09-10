@@ -66,7 +66,7 @@ import {
   patchLibraryProjectBibleFields
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
-import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE } from './utils/demoStudioProject';
+import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, resolveCurrentDemoProject } from './utils/demoStudioProject';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -390,7 +390,7 @@ export default function App() {
     if (!isDemoProjectTitle(projectTitle)) return;
     const demo = buildDemoStudioProject();
     const needsRename = String(projectTitle || '').trim().toUpperCase() !== DEMO_PROJECT_TITLE;
-    const hasCast = Array.isArray(shots) && shots.some((s) => /@Ravi\b/.test(String(s?.characterIdAssetRef || '')));
+    const hasCast = demoShotsLookFilled(shots);
     if (needsRename) {
       setProjectTitle(DEMO_PROJECT_TITLE);
       try {
@@ -1525,11 +1525,14 @@ export default function App() {
           const diskForcesSwitch =
             diskActive?.title && titlesMatch(diskActive.title, preferred.title) && !localIsSameFilm;
           let openProj = preferred;
-          if (!openProj.shots?.length) {
+          if (!openProj.shots?.length || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))) {
             const fullDisk = await loadProjectFromDiskByTitle(preferred.title);
             if (fullDisk?.shots?.length) openProj = fullDisk;
           }
-          if (openProj?.shots?.length && (localEmpty || !localIsSameFilm || diskForcesSwitch)) {
+          if (isDemoProjectTitle(openProj?.title || preferred.title)) {
+            openProj = resolveCurrentDemoProject(openProj);
+          }
+          if (openProj?.shots?.length && (localEmpty || !localIsSameFilm || diskForcesSwitch || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(localShots)))) {
             setShots(openProj.shots);
             setProjectTitle(openProj.title);
             if (openProj.targetModel) setTargetModel(openProj.targetModel);
@@ -1590,9 +1593,12 @@ export default function App() {
         const preferred = cleanedMerged.find((p) => titlesMatch(p?.title, wantTitle));
         if (!preferred) return;
         let openProj = preferred;
-        if (!openProj.shots?.length) {
+        if (!openProj.shots?.length || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))) {
           const fullDisk = await loadProjectFromDiskByTitle(wantTitle);
           if (fullDisk?.shots?.length) openProj = fullDisk;
+        }
+        if (isDemoProjectTitle(openProj?.title || wantTitle)) {
+          openProj = resolveCurrentDemoProject(openProj);
         }
         if (!openProj?.shots?.length) return;
         setShots(openProj.shots);

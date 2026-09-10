@@ -223,6 +223,17 @@ function SpreadsheetView({
     return () => window.removeEventListener(MATRIX_LIFECYCLE_FILTER_EVENT, onFilter);
   }, []);
 
+  useEffect(() => {
+    const list = Array.isArray(shots) ? shots : [];
+    if (!list.length || !lifecycleFilter?.statuses?.length) return;
+    const visible = list.filter((s) => shotMatchesLifecycleFilter(s, lifecycleFilter)).length;
+    if (visible > 0) return;
+    const cleared = setMatrixLifecycleFilter({ id: 'all', statuses: null, source: 'matrix_empty_filter' });
+    setLifecycleFilter(cleared);
+    setPitchLifePulse('all');
+    window.setTimeout(() => setPitchLifePulse(''), 2400);
+  }, [shots, lifecycleFilter]);
+
   const colWidthOf = (key) => {
     if (key === 'index' || key === 'actions' || key === 'look') {
       return Number(colWidths[key]) || COL_DEFAULTS[key];

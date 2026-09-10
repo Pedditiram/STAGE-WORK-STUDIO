@@ -9,12 +9,26 @@ export const DEMO_PROJECT_ID = 'proj_the_last_letter';
 export const DEMO_PROJECT_ROOM = 'sps_the_last_letter';
 export const DEMO_PROJECT_REVISION = 'the_last_letter';
 export const DEMO_PROJECT_GENRE = 'konaseema_anthology';
+export const DEMO_PROJECT_POSTER_URL = `${import.meta.env.BASE_URL || '/'}brand/the-last-letter-poster.jpg`;
 
 export function isDemoProjectTitle(title) {
   const t = String(title || '').trim().toUpperCase();
   if (!t) return false;
   if (t === DEMO_PROJECT_TITLE) return true;
   return LEGACY_DEMO_TITLES.some((legacy) => t === String(legacy).trim().toUpperCase());
+}
+
+export function demoShotsLookFilled(shots) {
+  return (
+    Array.isArray(shots) &&
+    shots.some((s) => /@Ravi\b/.test(String(s?.characterIdAssetRef || '')))
+  );
+}
+
+function demoPosterUrl(existing) {
+  const cur = String(existing || '').trim();
+  if (cur && !cur.startsWith('/api/project-poster') && !cur.startsWith('idb:')) return cur;
+  return DEMO_PROJECT_POSTER_URL;
 }
 
 const PALETTE =
@@ -750,13 +764,22 @@ export const DEMO_PROJECT_WORLD = [
 
 export function resolveCurrentDemoProject(project) {
   if (!isDemoProjectTitle(project?.title)) return project;
+  const built = buildDemoStudioProject();
   const titleOk = String(project?.title || '').trim().toUpperCase() === DEMO_PROJECT_TITLE;
-  if (titleOk && project?.demoRevision === DEMO_PROJECT_REVISION) return project;
+  const shotsOk = demoShotsLookFilled(project?.shots);
+  if (titleOk && project?.demoRevision === DEMO_PROJECT_REVISION && shotsOk) {
+    return {
+      ...project,
+      title: DEMO_PROJECT_TITLE,
+      posterUrl: demoPosterUrl(project?.posterUrl)
+    };
+  }
   return {
-    ...buildDemoStudioProject(),
+    ...built,
     id: project?.id || DEMO_PROJECT_ID,
     packOrigin: project?.packOrigin,
-    posterUrl: project?.posterUrl
+    posterUrl: demoPosterUrl(project?.posterUrl),
+    shots: shotsOk ? project.shots.map((s) => ({ ...s })) : built.shots
   };
 }
 
@@ -780,6 +803,7 @@ export function buildDemoStudioProject({ name = '' } = {}) {
     screenplayText: DEMO_PROJECT_SCREENPLAY,
     characterProfiles: DEMO_PROJECT_CHARACTERS.map((c) => ({ ...c })),
     worldAssets: DEMO_PROJECT_WORLD.map((a) => ({ ...a })),
+    posterUrl: DEMO_PROJECT_POSTER_URL,
     isDemoProject: true,
     demoRevision: DEMO_PROJECT_REVISION
   };

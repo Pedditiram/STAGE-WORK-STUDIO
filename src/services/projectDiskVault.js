@@ -4,6 +4,7 @@
 
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { roomIdForProject, slimProjectForLocalMirror, slugProjectTitle } from '../utils/projectWorkspace';
+import { isDemoProjectTitle, resolveCurrentDemoProject } from '../utils/demoStudioProject';
 import { saveDirectorPsychology } from '../utils/directorPsychologyStorage';
 
 const DB_NAME = 'sps_local_disk_vault_db';
@@ -516,8 +517,11 @@ export async function loadProjectFromDiskByTitle(title) {
   const all = await fetchDiskProjects();
   for (const dp of all) {
     const proj = dp?.project || dp;
-    if (proj && String(proj.title || '').trim().toLowerCase() === want) return proj;
+    if (proj && String(proj.title || '').trim().toLowerCase() === want) {
+      return isDemoProjectTitle(proj.title) ? resolveCurrentDemoProject(proj) : proj;
+    }
   }
+  if (isDemoProjectTitle(title)) return resolveCurrentDemoProject({ title });
   return null;
 }
 
