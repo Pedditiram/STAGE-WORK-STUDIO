@@ -8,6 +8,7 @@ import { PRODUCT } from '../constants/brand';
 import { GENRE_PRESET_PROFILES, getMergedGenreProfiles } from '../constants/seedancePresets';
 import { getActiveCharacterProfiles, getActiveWorldAssets } from './projectBibleVault';
 import { appendCreativeAudit } from './creativeAuditLog';
+import { readProductionBible } from './productionBible';
 
 function readJsonArray(key) {
   if (typeof window === 'undefined') return [];
@@ -32,10 +33,68 @@ export const PITCH_AUDIENCES = [
 ];
 
 export const PITCH_SIZES = [
-  { id: 'compact', label: 'Compact', range: '12–15 slides', max: 15 },
-  { id: 'standard', label: 'Standard', range: '16–20 slides', max: 20 },
-  { id: 'detailed', label: 'Detailed investor', range: '20–30 slides', max: 28 }
+  { id: 'compact', label: 'Compact', range: '12–18 slides', max: 18 },
+  { id: 'standard', label: 'Standard', range: '18–24 slides', max: 24 },
+  { id: 'detailed', label: 'Detailed investor', range: '24–32 slides', max: 32 }
 ];
+
+/** Slide frame — ratio / paper / pixels. Separate from PITCH_SIZES (deck length). */
+const EMU_INCH = 914400;
+function pitchEmuFromInches(w, h) {
+  return { cx: Math.round(w * EMU_INCH), cy: Math.round(h * EMU_INCH) };
+}
+function pitchEmuFromMm(w, h) {
+  return pitchEmuFromInches(w / 25.4, h / 25.4);
+}
+
+export const PITCH_FORMATS = [
+  { id: 'wide16x9', label: '16:9 HD', hint: 'Keynote / PowerPoint', ratio: '16:9', px: [1920, 1080], ...pitchEmuFromInches(13.333, 7.5), pptxType: 'screen16x9', pageCss: '13.333in 7.5in' },
+  { id: 'wide16x10', label: '16:10', hint: 'Mac / Keynote', ratio: '16:10', px: [1920, 1200], ...pitchEmuFromInches(12.8, 8), pptxType: 'screen16x10', pageCss: '12.8in 8in' },
+  { id: 'classic4x3', label: '4:3', hint: 'Classic projector', ratio: '4:3', px: [1024, 768], ...pitchEmuFromInches(10, 7.5), pptxType: 'screen4x3', pageCss: '10in 7.5in' },
+  { id: 'cinema', label: '2.39:1', hint: 'Scope leave-behind', ratio: '2.39:1', px: [2048, 858], ...pitchEmuFromInches(13.333, 5.579), pptxType: '', pageCss: '13.333in 5.579in' },
+  { id: 'a4land', label: 'A4 landscape', hint: 'Print packet', ratio: '297:210', mm: [297, 210], ...pitchEmuFromMm(297, 210), pptxType: '', pageCss: 'A4 landscape' },
+  { id: 'a4port', label: 'A4 portrait', hint: 'Leave-behind', ratio: '210:297', mm: [210, 297], ...pitchEmuFromMm(210, 297), pptxType: '', pageCss: 'A4 portrait' },
+  { id: 'letterland', label: 'Letter landscape', hint: 'US print', ratio: '11:8.5', inches: [11, 8.5], ...pitchEmuFromInches(11, 8.5), pptxType: '', pageCss: 'letter landscape' },
+  { id: 'letterport', label: 'Letter portrait', hint: 'US leave-behind', ratio: '8.5:11', inches: [8.5, 11], ...pitchEmuFromInches(8.5, 11), pptxType: '', pageCss: 'letter' },
+  { id: 'square', label: '1:1', hint: 'Digital square', ratio: '1:1', px: [1080, 1080], ...pitchEmuFromInches(10, 10), pptxType: '', pageCss: '10in 10in' },
+  { id: 'story', label: '9:16', hint: 'Phone / story', ratio: '9:16', px: [1080, 1920], ...pitchEmuFromInches(7.5, 13.333), pptxType: '', pageCss: '7.5in 13.333in' }
+];
+
+export const DEFAULT_PITCH_FORMAT = 'wide16x9';
+
+export function resolvePitchFormat(id) {
+  return PITCH_FORMATS.find((f) => f.id === id) || PITCH_FORMATS[0];
+}
+
+export function pitchFormatDimension(idOrFormat) {
+  const f = typeof idOrFormat === 'object' && idOrFormat ? idOrFormat : resolvePitchFormat(idOrFormat);
+  if (Array.isArray(f.mm) && f.mm.length === 2) return `${f.mm[0]} × ${f.mm[1]} mm · ${f.ratio}`;
+  if (Array.isArray(f.px) && f.px.length === 2) return `${f.px[0]} × ${f.px[1]} px · ${f.ratio}`;
+  if (Array.isArray(f.inches) && f.inches.length === 2) return `${f.inches[0]} × ${f.inches[1]} in · ${f.ratio}`;
+  return `${f.ratio || '16:9'}`;
+}
+
+export function pitchStageBox(idOrFormat, present = false) {
+  const f = typeof idOrFormat === 'object' && idOrFormat ? idOrFormat : resolvePitchFormat(idOrFormat);
+  const ratio = `${f.cx} / ${f.cy}`;
+  const ar = f.cx / f.cy;
+  if (present) {
+    return {
+      aspectRatio: ratio,
+      width: `min(94vw, calc(78vh * ${ar.toFixed(4)}))`,
+      height: 'auto',
+      maxWidth: '94vw',
+      maxHeight: '78vh'
+    };
+  }
+  return {
+    aspectRatio: ratio,
+    width: '100%',
+    height: '100%',
+    maxWidth: '100%',
+    maxHeight: '100%'
+  };
+}
 
 /** Industry leave-behind shapes. Classic follows audience + length. */
 export const PITCH_TEMPLATES = [
@@ -67,18 +126,21 @@ export const PITCH_FONTS = [
 export const PITCH_LAYOUTS = [
   { id: 'page', label: 'Standard' },
   { id: 'cover', label: 'Title card' },
+  { id: 'hero', label: 'Hero still' },
   { id: 'sheet', label: 'Character sheet' },
   { id: 'split', label: 'Split' },
-  { id: 'quote', label: 'Quote / logline' }
+  { id: 'quote', label: 'Quote / logline' },
+  { id: 'grid', label: 'Cast / merch grid' },
+  { id: 'crew', label: 'Department list' }
 ];
 
 const TEMPLATE_SLIDES = {
   classic: null,
-  teaser: ['cover', 'hook', 'glance', 'story', 'characters', 'visual', 'ask', 'close'],
-  festival: ['cover', 'hook', 'story', 'world', 'characters', 'visual', 'castTeam', 'close'],
-  series: ['cover', 'hook', 'glance', 'story', 'characters', 'world', 'audience', 'whyNow', 'status', 'ask', 'close'],
-  character: ['cover', 'hook', 'story', 'characters', 'journeys', 'close'],
-  lookbook: ['cover', 'visual', 'world', 'characters', 'scale', 'close']
+  teaser: ['cover', 'hook', 'glance', 'story', 'cast', 'visual', 'ask', 'close'],
+  festival: ['cover', 'hook', 'story', 'world', 'cast', 'visual', 'technicians', 'close'],
+  series: ['cover', 'hook', 'glance', 'story', 'cast', 'world', 'audience', 'worldwide', 'whyNow', 'status', 'ask', 'close'],
+  character: ['cover', 'hook', 'story', 'cast', 'journeys', 'close'],
+  lookbook: ['cover', 'visual', 'world', 'cast', 'merchandise', 'close']
 };
 
 export const FIELD_STATUS = ['CONFIRMED', 'PROPOSED', 'TARGET', 'UNDER DISCUSSION', 'ESTIMATED', 'ASSUMPTION', 'UNKNOWN', 'DATA REQUIRED'];
@@ -95,49 +157,49 @@ export const DEFAULT_FUND_SPLIT = [
 
 const AUDIENCE_SLIDES = {
   investor: [
-    'cover', 'hook', 'glance', 'story', 'world', 'characters', 'journeys', 'visual', 'comps', 'audience',
-    'whyNow', 'scale', 'approach', 'status', 'budget', 'useOfFunds', 'revenue', 'distribution',
-    'scenarios', 'structure', 'risks', 'milestones', 'teamWhy', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'cast', 'journeys', 'technicians', 'visual', 'comps', 'audience',
+    'merchandise', 'worldwide', 'whyNow', 'scale', 'approach', 'status', 'budget', 'useOfFunds', 'revenue',
+    'distribution', 'scenarios', 'structure', 'risks', 'milestones', 'teamWhy', 'ask', 'close'
   ],
   producer: [
-    'cover', 'hook', 'glance', 'story', 'world', 'characters', 'visual', 'scale', 'approach',
-    'castTeam', 'status', 'milestones', 'budget', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'cast', 'technicians', 'visual', 'scale', 'approach',
+    'status', 'milestones', 'budget', 'ask', 'close'
   ],
   studio: [
-    'cover', 'hook', 'glance', 'story', 'world', 'characters', 'visual', 'comps', 'audience',
-    'scale', 'castTeam', 'distribution', 'revenue', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'cast', 'technicians', 'visual', 'comps', 'audience',
+    'merchandise', 'worldwide', 'scale', 'distribution', 'revenue', 'ask', 'close'
   ],
   ott: [
-    'cover', 'hook', 'glance', 'story', 'characters', 'audience', 'visual', 'whyNow',
+    'cover', 'hook', 'glance', 'story', 'cast', 'audience', 'visual', 'worldwide', 'whyNow',
     'status', 'distribution', 'ask', 'close'
   ],
   distributor: [
-    'cover', 'hook', 'glance', 'story', 'comps', 'audience', 'castTeam', 'distribution',
+    'cover', 'hook', 'glance', 'story', 'comps', 'audience', 'cast', 'technicians', 'worldwide',
     'revenue', 'whyNow', 'ask', 'close'
   ],
   coproducer: [
-    'cover', 'hook', 'story', 'scale', 'approach', 'status', 'budget', 'useOfFunds',
+    'cover', 'hook', 'story', 'technicians', 'scale', 'approach', 'status', 'budget', 'useOfFunds',
     'structure', 'risks', 'milestones', 'ask', 'close'
   ],
   actor: [
-    'cover', 'hook', 'story', 'characters', 'journeys', 'visual', 'castTeam', 'close'
+    'cover', 'hook', 'story', 'cast', 'journeys', 'visual', 'technicians', 'close'
   ],
   brand: [
-    'cover', 'hook', 'world', 'audience', 'visual', 'whyNow', 'revenue', 'ask', 'close'
+    'cover', 'hook', 'world', 'cast', 'audience', 'visual', 'merchandise', 'worldwide', 'whyNow', 'revenue', 'ask', 'close'
   ],
   international: [
-    'cover', 'hook', 'glance', 'story', 'world', 'audience', 'distribution', 'revenue', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'audience', 'worldwide', 'merchandise', 'revenue', 'ask', 'close'
   ]
 };
 
 const SIZE_CORE = {
   compact: [
-    'cover', 'hook', 'glance', 'story', 'world', 'characters', 'visual', 'audience',
-    'whyNow', 'status', 'budget', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'cast', 'technicians', 'visual', 'audience',
+    'merchandise', 'worldwide', 'whyNow', 'status', 'ask', 'close'
   ],
   standard: [
-    'cover', 'hook', 'glance', 'story', 'world', 'characters', 'visual', 'comps', 'audience',
-    'whyNow', 'scale', 'approach', 'status', 'budget', 'useOfFunds', 'revenue', 'ask', 'close'
+    'cover', 'hook', 'glance', 'story', 'world', 'cast', 'technicians', 'visual', 'comps', 'audience',
+    'merchandise', 'worldwide', 'whyNow', 'scale', 'approach', 'status', 'budget', 'ask', 'close'
   ],
   detailed: null
 };
@@ -217,6 +279,56 @@ function field(value, statusIfPresent = 'CONFIRMED') {
   return { value: v, status: statusIfPresent };
 }
 
+function firstFilled(...vals) {
+  for (const v of vals) {
+    const t = String(v || '').replace(/\s+/g, ' ').trim();
+    if (t && t !== '[object Object]') return t;
+  }
+  return '';
+}
+
+function visionSlice(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  if (obj.hybrid && typeof obj.hybrid === 'object') return { ...obj, ...obj.hybrid };
+  if (obj.human && typeof obj.human === 'object') return { ...obj, ...obj.human };
+  if (obj.ai && typeof obj.ai === 'object') return { ...obj, ...obj.ai };
+  return obj;
+}
+
+function collectCrew(projectTitle) {
+  let bible = { director: null, dop: null, sound: null };
+  try {
+    bible = readProductionBible(projectTitle) || bible;
+  } catch {
+    /* vault optional */
+  }
+  const dir = visionSlice(bible.director);
+  const dop = visionSlice(bible.dop);
+  const sound = visionSlice(bible.sound);
+  return [
+    { dept: 'Director', name: firstFilled(dir.directorName, dir.name, dir.filmmaker), source: 'Director vault' },
+    { dept: 'Writer', name: firstFilled(dir.writer, dir.screenwriter), source: 'Director vault' },
+    { dept: 'Director of Photography', name: firstFilled(dop.dopName, dop.cinematographer, dop.name), source: 'DoP vault' },
+    { dept: 'Production Designer', name: firstFilled(dop.productionDesigner, dir.productionDesigner), source: 'DoP vault' },
+    { dept: 'Editor', name: firstFilled(dop.editor, dir.editor), source: '' },
+    { dept: 'Costume', name: firstFilled(dop.costumeDesigner, dir.costumeDesigner), source: '' },
+    { dept: 'Sound / Score', name: firstFilled(sound.soundDesigner, sound.composer, sound.name), source: 'Sound vault' },
+    { dept: 'VFX Supervisor', name: firstFilled(dop.vfxSupervisor, dir.vfxSupervisor), source: '' }
+  ].map((r) => ({
+    ...r,
+    status: r.name ? 'CONFIRMED' : 'DATA REQUIRED'
+  }));
+}
+
+function collectMerchandise(worlds = []) {
+  const lines = [];
+  (Array.isArray(worlds) ? worlds : []).forEach((w) => {
+    const merch = firstFilled(w.merchandise, w.merch, w.licensing, w.productLine, w.brandWorld);
+    if (merch) lines.push(`${firstFilled(w.name, w.title, 'World')}: ${clip(merch, 180)}`);
+  });
+  return lines;
+}
+
 const APPROVED_PITCH_LIFE = new Set(['approved', 'locked']);
 
 export function collectPitchFacts({
@@ -242,6 +354,8 @@ export function collectPitchFacts({
     unique(live.map((s) => s.sceneSynopsis || s.scriptSynopsis), 8).join(' ');
   const chars = getActiveCharacterProfiles().filter((c) => c && (c.name || c.tag));
   const worlds = getActiveWorldAssets().filter((a) => a && a.includeInPrompt !== false);
+  const crew = collectCrew(title);
+  const merchandise = collectMerchandise(worlds);
   const looks = unique(live.map((s) => s.shotComposition || s.cameraMotionTag), 6);
   const lighting = unique(live.map((s) => s.timeAndLightingEnv || s.subjectLightingTag || s.colorPaletteSlot), 5);
   const locations = unique(
@@ -291,6 +405,9 @@ export function collectPitchFacts({
     worldArt: worlds.map((w) => w.imageUrl || w.lookUrl || w.plate).filter(Boolean).slice(0, 6),
     visualLines: [...looks, ...lighting].slice(0, 8),
     dialogueBits,
+    crew,
+    merchandise,
+    territories: [],
     comps: [],
     budgetTotal: field('', 'DATA REQUIRED'),
     budgetScenarios: { lean: '', target: '', premium: '' },
@@ -348,7 +465,7 @@ function expandCharacterSheets(ids, facts, force) {
   const out = [];
   for (const id of ids) {
     out.push(id);
-    if (id === 'characters') {
+    if (id === 'cast' || id === 'characters') {
       chars.slice(0, 8).forEach((_, i) => out.push(`sheet_${i}`));
     }
   }
@@ -368,7 +485,7 @@ function selectSlideIds(audienceId, sizeId, facts, templateId = 'classic') {
 
   if (!templated && sizeId === 'detailed') ids = audience.slice();
 
-  if (!(facts.characters || []).length) ids = ids.filter((id) => id !== 'journeys' && id !== 'characters');
+  if (!(facts.characters || []).length) ids = ids.filter((id) => id !== 'journeys' && id !== 'characters' && !String(id).startsWith('sheet_'));
   else if ((facts.characters || []).length < 2) ids = ids.filter((id) => id !== 'journeys');
   if (audienceId === 'actor') ids = ids.filter((id) => !['budget', 'useOfFunds', 'scenarios', 'structure'].includes(id));
 
@@ -380,12 +497,14 @@ function selectSlideIds(audienceId, sizeId, facts, templateId = 'classic') {
 
   const wantSheets = templateId === 'character' || sizeId === 'detailed';
   ids = expandCharacterSheets(ids, facts, wantSheets);
-  return ids.slice(0, Math.max(max, wantSheets ? max + 8 : max));
+  ids = ids.slice(0, Math.max(max, wantSheets ? max + 8 : max));
+  const mid = ids.filter((id) => id !== 'cover' && id !== 'back');
+  return ['cover', ...mid, 'back'];
 }
 
 /** Empty still frames — producer drops key art, portraits, plates. */
 export const FRAME_PRESETS = {
-  cover: [{ label: 'Key art', hint: 'One cinematic still. No type on the image.' }],
+  cover: [{ label: 'Key art', hint: 'Full-bleed cinematic still. No type on the image. ≥ 1 MB.' }],
   world: [
     { label: 'World 1' },
     { label: 'World 2' },
@@ -395,6 +514,14 @@ export const FRAME_PRESETS = {
     { label: 'World 6' }
   ],
   characters: [
+    { label: 'Portrait 1' },
+    { label: 'Portrait 2' },
+    { label: 'Portrait 3' },
+    { label: 'Portrait 4' },
+    { label: 'Portrait 5' },
+    { label: 'Portrait 6' }
+  ],
+  cast: [
     { label: 'Portrait 1' },
     { label: 'Portrait 2' },
     { label: 'Portrait 3' },
@@ -416,8 +543,11 @@ export const FRAME_PRESETS = {
     { label: 'Reference 4' }
   ],
   scale: [{ label: 'Set / crowd' }, { label: 'Action / VFX' }, { label: 'Period / spectacle' }],
-  castTeam: [{ label: 'Director' }, { label: 'Lead' }, { label: 'Key cast' }, { label: 'Department' }],
-  close: [{ label: 'Closing still', hint: 'Title lockup. No numbers.' }]
+  technicians: [{ label: 'Director' }, { label: 'DoP' }, { label: 'Production design' }, { label: 'Sound' }],
+  merchandise: [{ label: 'Hero product' }, { label: 'Look / costume' }, { label: 'World object' }, { label: 'Poster lockup' }],
+  worldwide: [{ label: 'Territory key art' }],
+  close: [{ label: 'Closing still', hint: 'Title lockup. No numbers. ≥ 1 MB.' }],
+  back: [{ label: 'Back cover still', hint: 'Full-bleed lockup. No numbers. ≥ 1 MB.' }]
 };
 
 export function blankPitchSlide(n = 1, layout = 'page') {
@@ -483,7 +613,8 @@ function slideRecord(id, kicker, title, subtitle, points, extra = {}) {
     frames: extra.frames || preset,
     fields: extra.fields || null,
     disclaimer: extra.disclaimer || '',
-    layout: extra.layout || extra.kind || 'page'
+    layout: extra.layout || extra.kind || 'page',
+    navTitle: extra.navTitle || ''
   };
 }
 
@@ -495,7 +626,8 @@ export function buildInvestorPitchDeck({
   fundSplit = DEFAULT_FUND_SPLIT,
   templateId = 'classic',
   paletteId = 'studio',
-  fontId = 'studio'
+  fontId = 'studio',
+  formatId = DEFAULT_PITCH_FORMAT
 } = {}) {
   const theme = genreThemeFromKey(facts.genreKey);
   const tokens = themeTokens(theme);
@@ -508,9 +640,9 @@ export function buildInvestorPitchDeck({
   const catalog = {
     cover: slideRecord(
       'cover',
-      'Confidential · Feature film',
+      'Cover',
       facts.title,
-      logline ? clip(logline, 180) : 'One-line hook — DATA REQUIRED',
+      logline || 'One-line hook — DATA REQUIRED',
       [
         facts.genreLabel,
         facts.language,
@@ -520,7 +652,8 @@ export function buildInvestorPitchDeck({
       {
         kind: 'cover',
         layout: 'cover',
-        footer: 'Desire first. Numbers later.',
+        navTitle: 'Cover',
+        footer: 'Confidential · Desire first. Numbers later.',
         images: facts.worldArt.slice(0, 1),
         statusNote: 'Cover must stay sparse — no budget on this page.'
       }
@@ -534,7 +667,7 @@ export function buildInvestorPitchDeck({
         'Protagonist · conflict · goal · stakes · unique hook',
         'Approve one option. Do not stack three loglines on the page the room sees.'
       ],
-      { footer: 'Maximum 2–3 sentences', layout: 'quote' }
+      { footer: 'Maximum 2–3 sentences', layout: 'quote', kind: 'quote' }
     ),
     glance: slideRecord(
       'glance',
@@ -581,7 +714,71 @@ export function buildInvestorPitchDeck({
       chars.length
         ? chars.slice(0, 6).map((c) => `${c.name} — ${c.role}${c.age ? `, ${c.age}` : ''} [${c.status}]. ${clip(c.description || c.motivation, 160)}`)
         : ['Add principals in Cast. Unconfirmed names stay PROPOSED.'],
-      { images: chars.map((c) => c.art).filter(Boolean).slice(0, 6) }
+      { images: chars.map((c) => c.art).filter(Boolean).slice(0, 6), kind: 'grid', layout: 'grid' }
+    ),
+    cast: slideRecord(
+      'cast',
+      'Cast',
+      'Cast details',
+      chars.length ? `${chars.length} principals · unconfirmed names stay PROPOSED` : 'DATA REQUIRED — Character Bible',
+      chars.length
+        ? chars.slice(0, 8).map((c) =>
+            `${c.name} — ${[c.role, c.age].filter(Boolean).join(' · ') || 'Principal'} [${c.status}]\n${clip(c.description || c.motivation || c.arc, 200) || 'Arc — DATA REQUIRED'}`
+          )
+        : ['Add principals in Cast. Do not present unattached talent as locked.'],
+      {
+        kind: 'grid',
+        layout: 'grid',
+        images: chars.map((c) => c.art).filter(Boolean).slice(0, 8),
+        fields: { people: chars.slice(0, 8) },
+        footer: 'Portraits from the bible when locked. Generate stills stay on this disk.'
+      }
+    ),
+    technicians: slideRecord(
+      'technicians',
+      'Creative team',
+      'Technicians',
+      'Department heads from Director / DoP / Sound vaults. Empty cells stay DATA REQUIRED.',
+      (facts.crew || []).map((r) => `${r.dept} — ${r.name || 'DATA REQUIRED'} [${r.status}]`),
+      {
+        kind: 'crew',
+        layout: 'crew',
+        fields: { crew: facts.crew || [] },
+        footer: 'Never present unconfirmed talent as attached.'
+      }
+    ),
+    merchandise: slideRecord(
+      'merchandise',
+      'Ancillary',
+      'Merchandise scope',
+      'Only what the world bible already names. Not a sales forecast.',
+      facts.merchandise?.length
+        ? facts.merchandise
+        : [
+            'Hero product / look — DATA REQUIRED (World console)',
+            'Costume / character IP — DATA REQUIRED',
+            'Location / set pieces — DATA REQUIRED',
+            'Music / publishing — DATA REQUIRED',
+            'Do not invent SKUs, partners, or revenue.'
+          ],
+      { kind: 'grid', layout: 'grid', footer: 'Scope, not a merch catalogue.' }
+    ),
+    worldwide: slideRecord(
+      'worldwide',
+      'Release',
+      'Worldwide release',
+      'Territories and languages only when the producer has named them.',
+      [
+        `Language of origin — ${facts.language || 'DATA REQUIRED'} [${facts.language ? 'PROPOSED' : 'DATA REQUIRED'}]`,
+        'Primary territory — DATA REQUIRED',
+        'India / South Asia windows — DATA REQUIRED',
+        'Diaspora / international — DATA REQUIRED',
+        'Dubbing / subtitling languages — DATA REQUIRED',
+        'Theatrical vs OTT-first vs hybrid — DATA REQUIRED',
+        'Festival path — TARGET only if dated',
+        'Do not invent distributors, MG, or release dates.'
+      ],
+      { layout: 'split', footer: 'Unconfirmed partners: TARGET / DISCUSSION / PROSPECTIVE.' }
     ),
     journeys: slideRecord(
       'journeys',
@@ -816,13 +1013,34 @@ export function buildInvestorPitchDeck({
       'close',
       'Close',
       facts.title,
-      logline ? clip(logline, 140) : 'The next conversation.',
+      logline || 'The next conversation.',
       [
         facts.contact.email,
         facts.contact.website,
         'No financial figures on this page.'
       ],
-      { kind: 'cover', layout: 'cover', images: facts.worldArt.slice(0, 1), footer: PRODUCT }
+      { kind: 'cover', layout: 'cover', navTitle: 'Close', images: facts.worldArt.slice(0, 1), footer: PRODUCT }
+    ),
+    back: slideRecord(
+      'back',
+      'Back',
+      'Thank you',
+      facts.title,
+      [
+        facts.productionCompany || facts.contact.company || 'DATA REQUIRED',
+        facts.contact.email || 'DATA REQUIRED',
+        facts.contact.website || '',
+        'Confidential — not for circulation',
+        'No financial figures on this page.'
+      ],
+      {
+        kind: 'cover',
+        layout: 'cover',
+        navTitle: 'Back',
+        images: facts.worldArt.slice(0, 1),
+        footer: PRODUCT,
+        statusNote: 'Back cover. Contact only. No ask, no budget.'
+      }
     )
   };
 
@@ -845,6 +1063,8 @@ export function buildInvestorPitchDeck({
     audienceId,
     sizeId,
     templateId,
+    formatId: resolvePitchFormat(formatId).id,
+    format: resolvePitchFormat(formatId),
     paletteId: style.paletteId,
     fontId: style.fontId,
     theme,
@@ -942,7 +1162,7 @@ export function pitchDeckToMarkdown(deck) {
   const lines = [
     `# ${deck.facts?.title || 'Feature'} — Movie investor pitch`,
     '',
-    `Audience: ${deck.audienceId} · Length: ${deck.sizeId} · Theme: ${deck.themeMood || deck.theme}`,
+    `Audience: ${deck.audienceId} · Length: ${deck.sizeId} · Frame: ${pitchFormatDimension(deck.formatId || deck.format)} · Theme: ${deck.themeMood || deck.theme}`,
     '',
     '_Film production proposal. Not a startup deck. Not a trailer. Not a prompt pack._',
     '',
@@ -970,7 +1190,7 @@ export function pitchDeckToMarkdown(deck) {
 /** Craft CSV for pitch deck slides (Campaign/Investor CSV parity). */
 export function pitchDeckToCsv(deck = {}) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const headers = ['#', 'Id', 'Kicker', 'Title', 'Subtitle', 'Points', 'Disclaimer', 'Audience', 'Size', 'Project'];
+  const headers = ['#', 'Id', 'Kicker', 'Title', 'Subtitle', 'Points', 'Disclaimer', 'Audience', 'Length', 'Frame', 'Project'];
   const slides = Array.isArray(deck.slides) ? deck.slides : [];
   const rows = slides.map((s, i) =>
     [
@@ -983,6 +1203,7 @@ export function pitchDeckToCsv(deck = {}) {
       s?.disclaimer || '',
       deck.audienceId || '',
       deck.sizeId || '',
+      deck.formatId || '',
       deck.facts?.title || deck.projectTitle || ''
     ]
       .map(esc)
@@ -1004,6 +1225,7 @@ export function buildPitchDeckZipFiles(deck = {}, { roomId = '' } = {}) {
         `Project: ${title}`,
         `Audience: ${d.audienceId || ''}`,
         `Size: ${d.sizeId || ''}`,
+        `Frame: ${d.formatId || ''} · ${pitchFormatDimension(d.formatId || d.format)}`,
         `Slides: ${(d.slides || []).length}`,
         `Theme: ${d.themeMood || d.theme || ''}`,
         `Room: ${String(roomId || '').trim() || '—'}`,

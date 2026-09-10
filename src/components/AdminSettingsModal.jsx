@@ -786,13 +786,13 @@ export default function AdminSettingsModal({
     return localStorage.getItem('sps_image_gen_engine') || 'gemini_36_flash';
   });
   const [googleImageModel, setGoogleImageModel] = useState(() => {
-    const stored = localStorage.getItem('sps_google_image_model') || 'gemini-3.1-flash-image';
+    const stored = localStorage.getItem('sps_google_image_model') || 'gemini-3.6-flash-image';
     // Migrate legacy text-only model IDs that cannot generate images
     const legacyTextModels = new Set([
       'gemini-3.6-flash', 'gemini_36_flash', 'google_gemini_nano',
       'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'
     ]);
-    return legacyTextModels.has(stored) ? 'gemini-3.1-flash-image' : stored;
+    return legacyTextModels.has(stored) ? 'gemini-3.6-flash-image' : stored;
   });
   const [useSameModelForImageGen, setUseSameModelForImageGen] = useState(() => {
     const stored = localStorage.getItem('sps_use_same_model_image_gen');
@@ -810,11 +810,11 @@ export default function AdminSettingsModal({
     if (checked) {
       // Reuse the Google API key path, but pin a real Gemini Image model (not the text LLM id)
       setImageGenEngine('gemini_36_flash');
-      setGoogleImageModel('gemini-3.1-flash-image');
+      setGoogleImageModel('gemini-3.6-flash-image');
       localStorage.setItem('sps_image_gen_engine', 'gemini_36_flash');
-      localStorage.setItem('sps_google_image_model', 'gemini-3.1-flash-image');
+      localStorage.setItem('sps_google_image_model', 'gemini-3.6-flash-image');
       saveAppSettingToVault('sps_image_gen_engine', 'gemini_36_flash');
-      saveAppSettingToVault('sps_google_image_model', 'gemini-3.1-flash-image');
+      saveAppSettingToVault('sps_google_image_model', 'gemini-3.6-flash-image');
     }
   };
 
@@ -2711,13 +2711,13 @@ export default function AdminSettingsModal({
                           <div className="mb-2 p-2.5 px-3 rounded-lg border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] font-mono text-xs font-bold flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <CheckCircle2 className="w-4 h-4 shrink-0 text-[var(--sps-gold)]" />
-                              <span>Using your Google API key with <strong>Gemini 3.1 Flash Image</strong> (Nano Banana) for storyboard frames</span>
+                              <span>Using your Google API key with <strong>Gemini 3.6 Flash Image</strong> for pitch and storyboard stills</span>
                             </div>
                           </div>
                         )}
 
                         <select
-                          value={useSameModelForImageGen ? 'gemini-3.1-flash-image' : googleImageModel}
+                          value={useSameModelForImageGen ? 'gemini-3.6-flash-image' : googleImageModel}
                           disabled={useSameModelForImageGen}
                           onChange={(e) => setGoogleImageModel(e.target.value)}
                           className={`w-full rounded-lg px-3 py-2 text-xs font-bold focus:outline-none border ${
@@ -2729,7 +2729,8 @@ export default function AdminSettingsModal({
                             borderColor: 'var(--sps-border)',
                           }}
                         >
-                          <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash Image — Recommended (2K Storyboards)</option>
+                          <option value="gemini-3.6-flash-image">✨ Gemini 3.6 Flash Image — Recommended (Pitch + stills)</option>
+                          <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash Image — 2K Storyboards</option>
                           <option value="gemini-3.1-flash-lite-image">⚡ Gemini 3.1 Flash Lite Image — Fast Drafts</option>
                           <option value="gemini-3-pro-image">💎 Gemini 3 Pro Image — Highest Fidelity</option>
                           <option value="gemini-2.5-flash-image">🚀 Gemini 2.5 Flash Image — Legacy Nano Banana</option>
@@ -2748,7 +2749,7 @@ export default function AdminSettingsModal({
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         {useSameModelForImageGen
-                          ? '✓ Auto-Active: Gemini 3.1 Flash Image for Storyboard Generation'
+                          ? '✓ Auto-Active: Gemini 3.6 Flash Image for still generation'
                           : isGoogleSaved || imageGenEngine === 'gemini_36_flash'
                           ? '✓ Google Gemini Image Gen is active and default'
                           : '💾 Save & Set Gemini Image Model as Active Default'}
@@ -3182,9 +3183,9 @@ export default function AdminSettingsModal({
                           if (next === 'built_in') return;
                           if (useSameModelForImageGen) {
                             setImageGenEngine('gemini_36_flash');
-                            setGoogleImageModel('gemini-3.1-flash-image');
+                            setGoogleImageModel('gemini-3.6-flash-image');
                             localStorage.setItem('sps_image_gen_engine', 'gemini_36_flash');
-                            localStorage.setItem('sps_google_image_model', 'gemini-3.1-flash-image');
+                            localStorage.setItem('sps_google_image_model', 'gemini-3.6-flash-image');
                           }
                         }}
                         className="w-full bg-zinc-950 text-amber-300 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-amber-500 font-bold"

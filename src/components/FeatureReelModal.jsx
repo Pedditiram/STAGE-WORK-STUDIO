@@ -23,6 +23,7 @@ import {
 export default function FeatureReelModal({
   isOpen,
   onClose,
+  asRoom = false,
   shots = [],
   projectTitle = '',
   activeShotIndex = 0,
@@ -47,7 +48,7 @@ export default function FeatureReelModal({
   const slug = String(projectTitle || 'feature').replace(/[^\w\-]+/g, '_').slice(0, 40);
   const lifeNote = `${stats.count} shots · ~${stats.minutes} min${roomId ? ` · room ${roomId}` : ''}`;
 
-  if (!isOpen) return null;
+  if (!asRoom && !isOpen) return null;
 
   const exportPack = async () => {
     if (exportBlocked) {
@@ -178,9 +179,8 @@ export default function FeatureReelModal({
     });
   };
 
-  return (
-    <div className="sps-overlay" onClick={onClose}>
-      <div className="sps-shell sps-shell-md" style={{ maxWidth: '52rem', height: 'auto', maxHeight: 'min(92dvh, 40rem)', alignSelf: 'center' }} onClick={(e) => e.stopPropagation()}>
+  const shell = (
+      <div className={`sps-shell sps-atelier-room ${asRoom ? 'h-full max-h-none rounded-none border-0 shadow-none' : 'sps-shell-md'}`} style={asRoom ? undefined : { maxWidth: '52rem', height: 'auto', maxHeight: 'min(92dvh, 40rem)', alignSelf: 'center' }} onClick={(e) => e.stopPropagation()}>
         <div className="sps-modal-head">
           <div>
             <h2>Feature reel</h2>
@@ -225,12 +225,14 @@ export default function FeatureReelModal({
               <Download className="w-3.5 h-3.5" />
               Pack
             </button>
+            {!asRoom ? (
             <button type="button" className="sps-icon-btn" onClick={onClose} title="Close">
               <X className="w-4 h-4" />
             </button>
+            ) : null}
           </div>
         </div>
-        <div className="sps-modal-body p-3 space-y-1.5">
+        <div className={`sps-modal-body p-3 space-y-1.5 ${asRoom ? 'flex-1 min-h-0 overflow-y-auto' : ''}`}>
           {live.length === 0 ? (
             <p className="text-sm text-[var(--sps-muted)] p-6 text-center">No live shots yet.</p>
           ) : (
@@ -286,6 +288,19 @@ export default function FeatureReelModal({
           )}
         </div>
       </div>
+  );
+
+  if (asRoom) {
+    return (
+      <div className="h-full min-h-0 w-full overflow-hidden">
+        {shell}
+      </div>
+    );
+  }
+
+  return (
+    <div className="sps-overlay" onClick={onClose}>
+      {shell}
     </div>
   );
 }

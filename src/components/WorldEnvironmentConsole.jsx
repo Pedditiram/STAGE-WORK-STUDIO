@@ -104,6 +104,7 @@ function cloneAssets(list) {
 export default function WorldEnvironmentConsole({
   isOpen,
   onClose,
+  asRoom = false,
   shots = [],
   projectTitle = ''
 }) {
@@ -123,7 +124,7 @@ export default function WorldEnvironmentConsole({
   const snapshotRef = useRef([]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!asRoom && !isOpen) return;
     const reload = () => {
       const stored = getStoredWorldEnvironmentAssets();
       const cloned = cloneAssets(stored);
@@ -137,7 +138,7 @@ export default function WorldEnvironmentConsole({
     reload();
     window.addEventListener('sps_world_vault_updated', reload);
     return () => window.removeEventListener('sps_world_vault_updated', reload);
-  }, [isOpen, projectTitle]);
+  }, [isOpen, asRoom, projectTitle]);
 
   useEffect(() => {
     const found = assets.find((a) => a.id === selectedId) || assets[0] || null;
@@ -284,9 +285,17 @@ export default function WorldEnvironmentConsole({
   };
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!asRoom && !isOpen) return undefined;
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
+      if (asRoom) {
+        if (showConfirmClose) {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowConfirmClose(false);
+        }
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       if (showConfirmClose) {
@@ -303,7 +312,7 @@ export default function WorldEnvironmentConsole({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   });
 
-  if (!isOpen) return null;
+  if (!asRoom && !isOpen) return null;
 
   const updateField = (key, value) => {
     if (!editing) return;
@@ -362,7 +371,7 @@ export default function WorldEnvironmentConsole({
         flash('No world assets found — add manually');
       }
     } catch (e) {
-      flash('Extract failed — try again or add manually');
+      flash(e?.message || 'Extract failed — try again or add manually');
     } finally {
       setIsExtracting(false);
     }
@@ -380,9 +389,9 @@ export default function WorldEnvironmentConsole({
   const TypeIcon = typeMeta(editing?.type).icon;
 
   return (
-    <div className="sps-overlay">
+    <div className={asRoom ? 'h-full min-h-0 w-full overflow-hidden' : 'sps-overlay'}>
       <div
-        className="sps-shell sps-atelier-room"
+        className={`sps-shell sps-atelier-room ${asRoom ? 'h-full max-h-none rounded-none border-0 shadow-none' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 p-3 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] shrink-0 flex-wrap">
@@ -525,7 +534,8 @@ export default function WorldEnvironmentConsole({
               ZIP
             </button>
 
-            <StudioProfileControl />
+            {!asRoom ? <StudioProfileControl /> : null}
+            {!asRoom ? (
             <button
               type="button"
               onClick={handleRequestClose}
@@ -534,6 +544,7 @@ export default function WorldEnvironmentConsole({
             >
               <X className="w-4 h-4" />
             </button>
+            ) : null}
           </div>
         </div>
 
@@ -862,7 +873,7 @@ export default function WorldEnvironmentConsole({
 
         <div className="shrink-0 border-t border-[var(--sps-border)] px-4 py-1.5 bg-[var(--sps-bg-elevated)] flex items-center justify-between gap-3 flex-wrap">
           <span className="text-[11px] text-[var(--sps-muted)]">
-            {assets.length} world assets · Esc closes
+            {assets.length} world assets{asRoom ? '' : ' · Esc closes'}
           </span>
           <div className="flex items-center gap-2">
             <button

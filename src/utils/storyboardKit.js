@@ -34,6 +34,17 @@ export function storyboardStillUrl(shot, index, generatedMap = {}) {
   return '';
 }
 
+export const STORYBOARD_STILL_PROMPT_AUTO = 'auto';
+export const STORYBOARD_STILL_PROMPT_MANUAL = 'manual';
+
+export function storyboardStillPromptSource(shot) {
+  const src = String(shot?.storyboardStillPromptSource || '').trim().toLowerCase();
+  if (src === STORYBOARD_STILL_PROMPT_MANUAL || src === 'custom' || src === 'writer') {
+    return STORYBOARD_STILL_PROMPT_MANUAL;
+  }
+  return STORYBOARD_STILL_PROMPT_AUTO;
+}
+
 export function buildStoryboardStillPrompt(shot, { projectTitle = 'Project', aspectRatio = '2.39:1' } = {}) {
   const id = shot?.sceneShotId || 'SHOT';
   const subject = clip(shot?.characterIdAssetRef, 120) || 'Lead from the bible';
@@ -59,6 +70,14 @@ export function buildStoryboardStillPrompt(shot, { projectTitle = 'Project', asp
     .join('\n');
 }
 
+/** Manual override when the writer set it; otherwise the auto still prompt. */
+export function effectiveStoryboardStillPrompt(shot, opts = {}) {
+  const auto = buildStoryboardStillPrompt(shot, opts);
+  if (storyboardStillPromptSource(shot) !== STORYBOARD_STILL_PROMPT_MANUAL) return auto;
+  const custom = String(shot?.storyboardStillPrompt || '').trim();
+  return custom || auto;
+}
+
 export function buildStoryboardFrames({
   shots = [],
   projectTitle = 'Project',
@@ -67,11 +86,16 @@ export function buildStoryboardFrames({
 } = {}) {
   return liveShots(shots).map(({ shot, index }) => {
     const cinema = compileMasterCinemaCompilerPrompt(shot, index, { projectTitle, shots });
+    const promptOpts = { projectTitle, aspectRatio };
+    const stillPromptAuto = buildStoryboardStillPrompt(shot, promptOpts);
+    const stillPromptSource = storyboardStillPromptSource(shot);
     return {
       index,
       sceneShotId: shot.sceneShotId || `SH_${index + 1}`,
       stillUrl: storyboardStillUrl(shot, index, generatedMap),
-      stillPrompt: buildStoryboardStillPrompt(shot, { projectTitle, aspectRatio }),
+      stillPrompt: effectiveStoryboardStillPrompt(shot, promptOpts),
+      stillPromptAuto,
+      stillPromptSource,
       videoPrompt: cinema.masterCinemaPrompt || cinema.mainPrompt || '',
       composition: clip(shot.shotComposition, 80),
       dialogue: clip(shot.characterDialogue, 120),

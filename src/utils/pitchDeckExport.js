@@ -3,6 +3,8 @@
  * Store-only ZIP (no extra deps). Keynote opens PPTX; Pages opens DOCX.
  */
 
+import { pitchFormatDimension, resolvePitchFormat } from './pitchDeckMaker';
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -141,8 +143,21 @@ function collectImages(deck, placements) {
   return out;
 }
 
-const CX = 12192000;
-const CY = 6858000;
+const REF_CX = 12192000;
+const REF_CY = 6858000;
+
+function deckFrame(deck) {
+  return resolvePitchFormat(deck?.formatId || deck?.format?.id);
+}
+
+function mapBox(x, y, w, h, cx, cy) {
+  return {
+    x: Math.round((x * cx) / REF_CX),
+    y: Math.round((y * cy) / REF_CY),
+    w: Math.round((w * cx) / REF_CX),
+    h: Math.round((h * cy) / REF_CY)
+  };
+}
 
 function pptxTheme() {
   const solid = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
@@ -168,24 +183,24 @@ function pptxTheme() {
 </a:themeElements></a:theme>`;
 }
 
-function pptxMaster() {
+function pptxMaster(cx, cy) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="0C0A08"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
 <p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${CX}" cy="${CY}"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>
 <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
 <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
 <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
 </p:sldMaster>`;
 }
 
-function pptxLayout() {
+function pptxLayout(cx, cy) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">
 <p:cSld name="Blank"><p:spTree>
 <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${CX}" cy="${CY}"/></a:xfrm></p:grpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></p:grpSpPr>
 </p:spTree></p:cSld>
 <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
 </p:sldLayout>`;
@@ -240,23 +255,28 @@ function emptyFrame(id, x, y, w, h, label) {
 <a:t>${xmlEsc(label || 'Still')}</a:t></a:r></a:p></p:txBody></p:sp>`;
 }
 
-function buildSlideXml(slide, si, images, theme) {
+function buildSlideXml(slide, si, images, theme, cx, cy) {
   const frames = slide.frames || [];
   const n = Math.max(frames.length, 0);
   const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : 3;
   const rows = Math.max(1, Math.ceil(n / cols) || 1);
+  const box = (x, y, w, h) => mapBox(x, y, w, h, cx, cy);
   let shapes = '';
   let id = 2;
-  shapes += textBox(id++, 'kicker', 457200, 228600, 11277600, 274320, slide.kicker || '', 11, false, theme.gold, true, theme.body);
-  shapes += textBox(id++, 'title', 457200, 502920, 11277600, 548640, slide.title || '', 28, true, theme.ink, false, theme.display);
+  const k = box(457200, 228600, 11277600, 274320);
+  shapes += textBox(id++, 'kicker', k.x, k.y, k.w, k.h, slide.kicker || '', 11, false, theme.gold, true, theme.body);
+  const t = box(457200, 502920, 11277600, 548640);
+  shapes += textBox(id++, 'title', t.x, t.y, t.w, t.h, slide.title || '', 28, true, theme.ink, false, theme.display);
   if (slide.subtitle) {
-    shapes += textBox(id++, 'sub', 457200, 1028700, 11277600, 365760, slide.subtitle, 14, false, theme.muted, true, theme.body);
+    const s = box(457200, 1028700, 11277600, 365760);
+    shapes += textBox(id++, 'sub', s.x, s.y, s.w, s.h, slide.subtitle, 14, false, theme.muted, true, theme.body);
   }
   const bodyY = slide.subtitle ? 1463040 : 1097280;
   const points = (slide.points || []).slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join('\n');
   const hasFrames = n > 0;
   const textW = hasFrames ? 5486400 : 11277600;
-  shapes += textBox(id++, 'body', 457200, bodyY, textW, 4114800, points || slide.statusNote || '', 13, false, theme.ink, false, theme.body);
+  const b = box(457200, bodyY, textW, 4114800);
+  shapes += textBox(id++, 'body', b.x, b.y, b.w, b.h, points || slide.statusNote || '', 13, false, theme.ink, false, theme.body);
   if (hasFrames) {
     const gx = 6200000;
     const gy = bodyY;
@@ -268,22 +288,22 @@ function buildSlideXml(slide, si, images, theme) {
     frames.forEach((fr, fi) => {
       const c = fi % cols;
       const r = Math.floor(fi / cols);
-      const x = gx + c * (cw + gap);
-      const y = gy + r * (ch + gap);
+      const cell = box(gx + c * (cw + gap), gy + r * (ch + gap), cw, ch);
       const img = images.find((im) => im.slideIndex === si && im.frameIndex === fi);
-      if (img) shapes += picBox(id++, fr.label, img.rid, x, y, cw, ch);
-      else shapes += emptyFrame(id++, x, y, cw, ch, fr.label);
+      if (img) shapes += picBox(id++, fr.label, img.rid, cell.x, cell.y, cell.w, cell.h);
+      else shapes += emptyFrame(id++, cell.x, cell.y, cell.w, cell.h, fr.label);
     });
   }
   if (slide.disclaimer) {
-    shapes += textBox(id++, 'disc', 457200, 6400800, 11277600, 274320, slide.disclaimer, 9, false, theme.muted, true, theme.body);
+    const d = box(457200, 6400800, 11277600, 274320);
+    shapes += textBox(id++, 'disc', d.x, d.y, d.w, d.h, slide.disclaimer, 9, false, theme.muted, true, theme.body);
   }
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="${theme.paper}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
 <p:spTree>
 <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${CX}" cy="${CY}"/></a:xfrm></p:grpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></p:grpSpPr>
 ${shapes}
 </p:spTree></p:cSld>
 <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
@@ -297,6 +317,10 @@ export function buildPitchPptx(deck, placements = {}) {
     im.file = `image${i + 1}.${im.ext}`;
   });
   const slides = deck.slides || [];
+  const frame = deckFrame(deck);
+  const cx = frame.cx;
+  const cy = frame.cy;
+  const typeAttr = frame.pptxType ? ` type="${frame.pptxType}"` : '';
   const files = [];
   const slideRels = slides.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join('');
   const sldIdLst = slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 1}"/>`).join('');
@@ -329,7 +353,7 @@ ${slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" Conte
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId${slides.length + 1}"/></p:sldMasterIdLst>
 <p:sldIdLst>${sldIdLst}</p:sldIdLst>
-<p:sldSz cx="${CX}" cy="${CY}" type="screen16x9"/>
+<p:sldSz cx="${cx}" cy="${cy}"${typeAttr}/>
 <p:notesSz cx="6858000" cy="9144000"/>
 </p:presentation>`
   });
@@ -341,7 +365,7 @@ ${slideRels}
 <Relationship Id="rId${slides.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
 </Relationships>`
   });
-  files.push({ name: 'ppt/slideMasters/slideMaster1.xml', data: pptxMaster() });
+  files.push({ name: 'ppt/slideMasters/slideMaster1.xml', data: pptxMaster(cx, cy) });
   files.push({
     name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
     data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -350,7 +374,7 @@ ${slideRels}
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
 </Relationships>`
   });
-  files.push({ name: 'ppt/slideLayouts/slideLayout1.xml', data: pptxLayout() });
+  files.push({ name: 'ppt/slideLayouts/slideLayout1.xml', data: pptxLayout(cx, cy) });
   files.push({
     name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
     data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -363,7 +387,7 @@ ${slideRels}
   const theme = deckTheme(deck);
   slides.forEach((slide, si) => {
     const slideImgs = images.filter((im) => im.slideIndex === si);
-    files.push({ name: `ppt/slides/slide${si + 1}.xml`, data: buildSlideXml(slide, si, images, theme) });
+    files.push({ name: `ppt/slides/slide${si + 1}.xml`, data: buildSlideXml(slide, si, images, theme, cx, cy) });
     const rels = [
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>',
       ...slideImgs.map((im) => `<Relationship Id="${im.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${im.file}"/>`)
@@ -493,6 +517,8 @@ export function pitchDeckToPrintHtml(deck = {}, { projectTitle = '', roomId = ''
   const audience = escapeHtml(deck.audienceLabel || deck.audienceId || '');
   const size = escapeHtml(deck.sizeLabel || deck.sizeId || '');
   const template = escapeHtml(deck.templateId || 'classic');
+  const frame = deckFrame(deck);
+  const frameNote = escapeHtml(pitchFormatDimension(frame));
   const theme = deckTheme(deck);
   const paper = `#${theme.paper}`;
   const ink = `#${theme.ink}`;
@@ -526,7 +552,7 @@ export function pitchDeckToPrintHtml(deck = {}, { projectTitle = '', roomId = ''
   <meta charset="utf-8" />
   <title>${title} — Pitch deck</title>
   <style>
-    @page { size: letter landscape; margin: 0.45in; }
+    @page { size: ${frame.pageCss || 'letter landscape'}; margin: 0.45in; }
     body { font-family: ${body}, system-ui, sans-serif; font-size: 11pt; color: ${ink}; background: ${paper}; margin: 0; padding: 16px; line-height: 1.45; }
     h1 { font-family: ${display}, Georgia, serif; font-size: 16pt; margin: 0 0 4px; letter-spacing: 0.04em; color: ${gold}; }
     .meta { color: ${muted}; margin-bottom: 14px; font-size: 9pt; }
@@ -546,7 +572,7 @@ export function pitchDeckToPrintHtml(deck = {}, { projectTitle = '', roomId = ''
 </head>
 <body>
   <h1>${title} — Pitch deck</h1>
-  <p class="meta">${slides.length} slides${audience ? ` · ${audience}` : ''}${size ? ` · ${size}` : ''} · ${template}${String(roomId || '').trim() ? ` · Room ${escapeHtml(String(roomId).trim())}` : ''} · ${escapeHtml(new Date().toISOString())}</p>
+  <p class="meta">${slides.length} slides${audience ? ` · ${audience}` : ''}${size ? ` · ${size}` : ''} · ${template}${frameNote ? ` · ${frameNote}` : ''}${String(roomId || '').trim() ? ` · Room ${escapeHtml(String(roomId).trim())}` : ''} · ${escapeHtml(new Date().toISOString())}</p>
   ${panels || '<p>No slides.</p>'}
   <script>window.onload = () => { window.print(); };</script>
 </body>

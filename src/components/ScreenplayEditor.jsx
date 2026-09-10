@@ -6,7 +6,6 @@ import {
   Users, Lock, Unlock, Archive, Palette, CircleHelp, Focus, ListTree, LayoutTemplate, MoreHorizontal, Maximize2, Minimize2, Mic, MicOff, Wand2
 } from 'lucide-react';
 import { PinBarButton } from './HoverPinBar';
-import { resolveLlmApiKey } from '../utils/saasControl';
 import { assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
@@ -17,7 +16,9 @@ import {
   extractMasterScriptSynopsisWithLLM,
   getLastParseMeta,
   extractTextFromPDF,
-  isParseAbortError
+  isParseAbortError,
+  generateScreenplayContinuation,
+  notifyLlmFailure
 } from '../services/aiScriptParser';
 import {
   applyElementToCurrentLine,
@@ -1752,44 +1753,12 @@ export default function ScreenplayEditor({
   const handleAICowriteNextScene = async () => {
     setIsAICowriting(true);
     try {
-      const apiKey = resolveLlmApiKey(provider) || (typeof window !== 'undefined' ? localStorage.getItem('sps_api_key') || '' : '');
-      const provider =
-        typeof window !== 'undefined' ? localStorage.getItem('sps_llm_provider') || 'google_gemini' : 'google_gemini';
-
-      const promptText = `You are a Hollywood Master Screenwriter (Stage Work Studio Cinema Intelligence Engine).
-Continue the following screenplay by writing the next dramatic 1-2 shots/scenes in standard Fountain screenplay format. Include [SHOT SXX-X] camera tags, dialogue, and vivid stage directions.
-
-Current Screenplay:
-${scriptText.slice(-2000)}
-
-Write ONLY the continuation in clean screenplay format:`;
-
-      let generatedContinuation = '';
-
-      if (apiKey.trim() && provider === 'google_gemini') {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          generatedContinuation = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        }
-      }
-
-      if (!generatedContinuation) {
-        generatedContinuation = `\n\n[SHOT S04-A]: Low Angle Hero Track\nCamera: Slow Dolly Push In\nLighting: Golden Temple Solar Sunbeams\n\nRAMA raises his bow high. The arrows ignite with sacred blue plasma flare.\n\nRAMA\n(voice echoing over the valley)\nFor righteousness, the forest shall stand!`;
-      }
-
-      const updatedText = `${(scriptText || '').trim()}\n\n${(generatedContinuation || '').trim()}`;
+      const generatedContinuation = await generateScreenplayContinuation(scriptText);
+      const updatedText = `${(scriptText || '').trim()}\n\n${generatedContinuation}`;
       applyScriptText(updatedText);
       handleParseScriptToMatrix(updatedText);
     } catch (e) {
-      console.warn('AI Cowriter error:', e);
+      notifyLlmFailure(e, 'Writer continue');
     } finally {
       setIsAICowriting(false);
     }

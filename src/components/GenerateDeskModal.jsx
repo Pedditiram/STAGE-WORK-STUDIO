@@ -195,6 +195,7 @@ function TakeStrip({ shot, index, onUpdateShot, lifeLocked }) {
 export default function GenerateDeskModal({
   isOpen,
   onClose,
+  asRoom = false,
   shots = [],
   activeShotIndex = 0,
   setActiveShotIndex,
@@ -554,11 +555,12 @@ export default function GenerateDeskModal({
         }
         return;
       }
+      if (asRoom) return;
       onClose?.();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [isOpen, onClose, jobFilter]);
+  }, [isOpen, asRoom, onClose, jobFilter]);
   const bridged = useMemo(
     () => (isOpen ? applyShotBridge(shot, shots, index) : shot),
     [isOpen, shot, shots, index]
@@ -609,7 +611,7 @@ export default function GenerateDeskModal({
 
   const httpFrame = (url) => (String(url || '').startsWith('http') ? url : '');
 
-  if (!isOpen) return null;
+  if (!asRoom && !isOpen) return null;
 
   const refuseIfDirty = () => {
     if (!dirty) return false;
@@ -1436,22 +1438,24 @@ export default function GenerateDeskModal({
 
   return (
     <>
-    <div className="sps-overlay" onClick={onClose}>
-      <div className="sps-shell sps-shell-md" style={{ height: 'auto', maxHeight: 'min(92dvh, 44rem)', alignSelf: 'center' }} onClick={(e) => e.stopPropagation()}>
+    <div className={asRoom ? 'h-full min-h-0 w-full overflow-hidden' : 'sps-overlay'} onClick={asRoom ? undefined : onClose}>
+      <div className={`sps-shell ${asRoom ? 'sps-atelier-room h-full max-h-none rounded-none border-0 shadow-none' : 'sps-shell-md'}`} style={asRoom ? undefined : { height: 'auto', maxHeight: 'min(92dvh, 44rem)', alignSelf: 'center' }} onClick={(e) => e.stopPropagation()}>
         <div className="sps-modal-head">
           <div>
             <h2>Generate</h2>
             <p>AI Cinema Production OS · {id} · {dur}s · {takeSummary.stillCount} still · {takeSummary.videoCount} video take{takeSummary.videoCount === 1 ? '' : 's'}</p>
           </div>
           <div className="flex items-center gap-1.5">
-            <StudioProfileControl />
+            {!asRoom ? <StudioProfileControl /> : null}
+            {!asRoom ? (
             <button type="button" className="sps-icon-btn" onClick={onClose} title="Close">
               <X className="w-4 h-4" />
             </button>
+            ) : null}
           </div>
         </div>
 
-        <div className="sps-modal-body p-4 space-y-4">
+        <div className={`sps-modal-body p-4 space-y-4 ${asRoom ? 'flex-1 min-h-0 overflow-y-auto' : ''}`}>
           {creditStatus?.relevant && creditStatus.level !== 'ok' ? (
             <p
               className={`m-0 text-[11px] font-mono px-2 py-1.5 rounded border ${

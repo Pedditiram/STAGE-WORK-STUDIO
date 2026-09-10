@@ -521,7 +521,6 @@ export default function App() {
     }
     return 0;
   });
-  const [isCompilerOpen, setIsCompilerOpen] = useState(false);
   const [budgetAccessTick, setBudgetAccessTick] = useState(0);
 
   useEffect(() => {
@@ -556,11 +555,16 @@ export default function App() {
       spreadsheet: 'matrix',
       form: 'form',
       canvas: 'stage',
+      cast: 'cast',
+      world: 'world',
       promo: 'promo',
       campaign: 'campaign',
       storyboard: 'storyboard',
       pitch: 'pitch',
       budget: 'budget',
+      reel: 'reel',
+      compile: 'compile',
+      generate: 'generate',
     }[activeView];
     if (viewModule && !isStudioModuleEnabled(viewModule)) {
       const fallback = ['spreadsheet', 'form', 'screenplay'].find((v) => {
@@ -576,8 +580,6 @@ export default function App() {
 
   const presentationDesk = activeView === 'demo';
 
-  const [isFeatureReelOpen, setIsFeatureReelOpen] = useState(false);
-  const [isGenerateDeskOpen, setIsGenerateDeskOpen] = useState(false);
   const [isStudioTourOpen, setIsStudioTourOpen] = useState(false);
   const [isProjectConsoleOpen, setIsProjectConsoleOpen] = useState(false);
   const [projectConsoleInitialTab, setProjectConsoleInitialTab] = useState('library');
@@ -912,7 +914,6 @@ export default function App() {
   };
 
   const [characterBibleTab, setCharacterBibleTab] = useState('roster'); // 'roster' | 'character_sheet'
-  const [isWorldEnvironmentOpen, setIsWorldEnvironmentOpen] = useState(false);
   const [writerConsoleTab, setWriterConsoleTab] = useState('screenplay'); // 'screenplay' | 'synopsis' | 'breakdown'
 
   const handleOpenCharactersModal = (tab = 'roster') => {
@@ -923,7 +924,8 @@ export default function App() {
   };
 
   const handleOpenWorldEnvironment = () => {
-    setIsWorldEnvironmentOpen(true);
+    setHeaderMinimized(false);
+    setActiveView('world');
   };
 
   const openWriterConsole = (tab = 'screenplay') => {
@@ -1025,17 +1027,7 @@ export default function App() {
         setIsNavigatorOpen(false);
         return;
       }
-      if (isCompilerOpen || isAdminModalOpen || isHelpModalOpen || isLoginModalOpen) return;
-      if (isGenerateDeskOpen) {
-        e.preventDefault();
-        setIsGenerateDeskOpen(false);
-        return;
-      }
-      if (isFeatureReelOpen) {
-        e.preventDefault();
-        setIsFeatureReelOpen(false);
-        return;
-      }
+      if (isAdminModalOpen || isHelpModalOpen || isLoginModalOpen) return;
       if (isStudioBrainOpen) {
         e.preventDefault();
         setIsStudioBrainOpen(false);
@@ -1055,12 +1047,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onEsc, true);
   }, [
     isNavigatorOpen,
-    isCompilerOpen,
     isAdminModalOpen,
     isHelpModalOpen,
     isLoginModalOpen,
-    isGenerateDeskOpen,
-    isFeatureReelOpen,
     isStudioBrainOpen,
     isProductionDashboardOpen,
     isLlmCommandReviewOpen
@@ -2758,7 +2747,8 @@ export default function App() {
       return;
     }
     setShots((current) => persistBridges(current));
-    setIsGenerateDeskOpen(true);
+    setHeaderMinimized(false);
+    setActiveView('generate');
   };
 
   const openCompiler = () => {
@@ -2767,7 +2757,8 @@ export default function App() {
       return;
     }
     setShots((current) => persistBridges(current));
-    setIsCompilerOpen(true);
+    setHeaderMinimized(false);
+    setActiveView('compile');
   };
 
   const guestBlock = (label) => {
@@ -3105,9 +3096,9 @@ export default function App() {
       keywords: ['playback', 'takes'],
       icon: NAV_ICONS.reel,
       enabled: isStudioModuleEnabled('reel'),
-      run: () => { if (!guestMayLook('Reel')) return; setIsFeatureReelOpen(true); },
+      run: () => { if (!guestMayLook('Reel')) return; goStudioRoom('reel'); },
       children: [
-        { id: 'reel-open', label: 'Open reel', run: () => { if (!guestMayLook('Reel')) return; setIsFeatureReelOpen(true); } },
+        { id: 'reel-open', label: 'Open reel', run: () => { if (!guestMayLook('Reel')) return; goStudioRoom('reel'); } },
       ],
     },
     {
@@ -3372,6 +3363,47 @@ export default function App() {
     newShots.splice(insertAfter + 1, 0, ensureLifecycle(newShot));
     if (!updateShotsWithHistory(newShots)) return;
     setActiveShotIndex(insertAfter + 1);
+    syncToCloud({ shots: newShots });
+  };
+
+  const handleAddScene = () => {
+    let maxScene = 0;
+    let lastIdxOfMax = -1;
+    shots.forEach((s, i) => {
+      const p = parseSceneAndShotID(s, i);
+      if (p.sceneNum > maxScene) {
+        maxScene = p.sceneNum;
+        lastIdxOfMax = i;
+      } else if (p.sceneNum === maxScene) {
+        lastIdxOfMax = i;
+      }
+    });
+    const nextScene = Math.max(1, maxScene + 1);
+    const sceneStr = `SC${String(nextScene).padStart(2, '0')}`;
+    const newShot = {
+      sceneShotId: `${sceneStr}_SH01`,
+      sceneSynopsis: '',
+      sceneHeading: `SCENE ${String(nextScene).padStart(2, '0')}`,
+      shotComposition: 'Medium Shot (MS)',
+      cameraMotionTag: '[Camera: Static Anchor]',
+      subjectLightingTag: '[Lighting: Rembrandt 3-Point Classic]',
+      subjectColorTag: '[Subject Color: Teal & Orange Cinema Palette]',
+      backgroundLightingTag: '[BG Lighting: Mood Soft Ambient Falloff]',
+      backgroundColorTag: '[BG Color: Deep Midnight Blue & Indigo]',
+      characterIdAssetRef: '',
+      coArtistInteraction: '',
+      actionEnvContext: '',
+      characterExpression: '',
+      characterPlacement: '',
+      characterDialogue: '',
+      characterMovement: '',
+      characterEyeLooks: '',
+      lifecycleStatus: 'draft'
+    };
+    const newShots = [...shots];
+    newShots.splice(lastIdxOfMax + 1, 0, ensureLifecycle(newShot));
+    if (!updateShotsWithHistory(newShots)) return;
+    setActiveShotIndex(lastIdxOfMax + 1);
     syncToCloud({ shots: newShots });
   };
 
@@ -3948,7 +3980,7 @@ export default function App() {
           onOpenFeatureReel={() => {
             if (!isStudioModuleEnabled('reel')) return;
             if (!guestMayLook('Reel')) return;
-            setIsFeatureReelOpen(true);
+            goStudioRoom('reel');
           }}
           onOpenCloudModal={() => { setAdminModalTab('cloud_collab'); setIsAdminModalOpen(true); }}
           onOpenAdminModal={() => { setAdminModalTab('all'); setIsAdminModalOpen(true); }}
@@ -4134,13 +4166,14 @@ export default function App() {
                   syncToCloud({ shots: next, projectTitle });
                 }}
                 onAddShot={handleAddShot}
+                onAddScene={handleAddScene}
                 onDeleteShot={handleDeleteShot}
                 onToggleMuteShot={handleToggleMuteShot}
                 onCloneShot={handleCloneShot}
                 onMoveShot={handleMoveShot}
                 onReorderShots={handleReorderShots}
                 onCompilePrompt={openCompiler}
-                onOpenReel={() => setIsFeatureReelOpen(true)}
+                onOpenReel={() => goStudioRoom('reel')}
                 onOpenGenerate={openGenerateDesk}
                 colorTheme={colorTheme}
                 genreKey={presetProfile}
@@ -4226,6 +4259,7 @@ export default function App() {
                 aspectRatio={aspectRatio}
                 generatedMap={projectGeneratedImages}
                 lookOnly={isGuestSession() && !canGuestBrowseApp()}
+                onUpdateShot={handleUpdateShot}
                 onOpenShot={(idx) => {
                   setActiveShotIndex(idx);
                   goStudioRoom('form');
@@ -4265,6 +4299,84 @@ export default function App() {
             </div>
           )}
 
+          {activeView === 'world' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <Suspense fallback={null}>
+              <WorldEnvironmentConsole
+                asRoom
+                isOpen
+                onClose={() => setActiveView('spreadsheet')}
+                shots={shots}
+                projectTitle={projectTitle}
+              />
+              </Suspense>
+            </div>
+          )}
+
+          {activeView === 'reel' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <Suspense fallback={null}>
+              <FeatureReelModal
+                asRoom
+                isOpen
+                onClose={() => setActiveView('spreadsheet')}
+                shots={shots}
+                projectTitle={projectTitle}
+                activeShotIndex={activeShotIndex}
+                setActiveShotIndex={setActiveShotIndex}
+                onOpenShot={(idx) => {
+                  setActiveShotIndex(idx);
+                  goStudioRoom('spreadsheet');
+                }}
+              />
+              </Suspense>
+            </div>
+          )}
+
+          {activeView === 'compile' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <Suspense fallback={null}>
+              <PromptCompilerModal
+                asRoom
+                isOpen
+                onClose={() => setActiveView('spreadsheet')}
+                shots={shots}
+                onUpdateShot={handleUpdateShot}
+                activeTargetModel={targetModel}
+                projectTitle={projectTitle}
+                colorTheme={colorTheme}
+                onOpenWriterSynopsis={() => openWriterConsole('synopsis')}
+                onEditShotInForm={(shotIdx) => {
+                  setActiveShotIndex(shotIdx);
+                  goStudioRoom('form');
+                }}
+              />
+              </Suspense>
+            </div>
+          )}
+
+          {activeView === 'generate' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <Suspense fallback={null}>
+              <GenerateDeskModal
+                asRoom
+                isOpen
+                onClose={() => setActiveView('spreadsheet')}
+                shots={shots}
+                activeShotIndex={activeShotIndex}
+                setActiveShotIndex={setActiveShotIndex}
+                projectTitle={projectTitle}
+                onSaveTake={handleEmbedImageToProject}
+                onSaveVideo={handleEmbedVideoToProject}
+                onOpenCompiler={openCompiler}
+                onOpenReel={() => goStudioRoom('reel')}
+                onOpenStage={isStudioModuleEnabled('stage') ? () => goStudioRoom('canvas') : undefined}
+                onUpdateShot={handleUpdateShot}
+              />
+              </Suspense>
+            </div>
+          )}
+
           {/* TEMPLATES TAB */}
           {activeView === 'templates' && (
             <div className="flex-1 w-full h-full overflow-y-auto pr-1">
@@ -4276,60 +4388,6 @@ export default function App() {
       </main>
 
       <Suspense fallback={null}>
-      {isCompilerOpen && (
-      <PromptCompilerModal
-        isOpen={isCompilerOpen}
-        onClose={() => setIsCompilerOpen(false)}
-        shots={shots}
-        onUpdateShot={handleUpdateShot}
-        activeTargetModel={targetModel}
-        projectTitle={projectTitle}
-        colorTheme={colorTheme}
-        onOpenWriterSynopsis={() => {
-          setIsCompilerOpen(false);
-          openWriterConsole('synopsis');
-        }}
-        onEditShotInForm={(shotIdx) => {
-          setIsCompilerOpen(false);
-          setActiveShotIndex(shotIdx);
-          setActiveView('form');
-        }}
-      />
-      )}
-
-      {isGenerateDeskOpen && (
-      <GenerateDeskModal
-        isOpen={isGenerateDeskOpen}
-        onClose={() => setIsGenerateDeskOpen(false)}
-        shots={shots}
-        activeShotIndex={activeShotIndex}
-        setActiveShotIndex={setActiveShotIndex}
-        projectTitle={projectTitle}
-        onSaveTake={handleEmbedImageToProject}
-        onSaveVideo={handleEmbedVideoToProject}
-        onOpenCompiler={openCompiler}
-        onOpenReel={() => setIsFeatureReelOpen(true)}
-        onOpenStage={isStudioModuleEnabled('stage') ? () => setActiveView('canvas') : undefined}
-        onUpdateShot={handleUpdateShot}
-      />
-      )}
-
-      {isFeatureReelOpen && (
-      <FeatureReelModal
-        isOpen={isFeatureReelOpen}
-        onClose={() => setIsFeatureReelOpen(false)}
-        shots={shots}
-        projectTitle={projectTitle}
-        activeShotIndex={activeShotIndex}
-        setActiveShotIndex={setActiveShotIndex}
-        onOpenShot={(idx) => {
-          setActiveShotIndex(idx);
-          setIsFeatureReelOpen(false);
-          setActiveView('spreadsheet');
-        }}
-      />
-      )}
-
       {isAdminModalOpen && (
       <AdminSettingsModal
         isOpen={isAdminModalOpen}
@@ -4604,14 +4662,6 @@ export default function App() {
         onSelectMode={handleSelectAppVersionMode}
       />
 
-      {isWorldEnvironmentOpen && (
-      <WorldEnvironmentConsole
-        isOpen={isWorldEnvironmentOpen}
-        onClose={() => setIsWorldEnvironmentOpen(false)}
-        shots={shots}
-        projectTitle={projectTitle}
-      />
-      )}
       </Suspense>
 
       {/* Project save confirmation toast */}

@@ -3,10 +3,10 @@ import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import SlotEditor from './SlotEditor';
 import HoverPinBar from './HoverPinBar';
 import {
-  Plus, Copy, VolumeX, Volume2, Sparkles, 
-  Check, Filter, Download
+  Plus, Copy, VolumeX, Volume2, Sparkles,
+  Check
 } from 'lucide-react';
-import { enhanceEntireShotWithLLM } from '../services/aiScriptParser';
+import { enhanceEntireShotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import { parseSceneAndShotID, deriveSceneGroupHeading } from '../utils/sceneShotUtils';
 import {
   blockingFlags,
@@ -84,7 +84,8 @@ function SpreadsheetView({
   shots, 
   onUpdateShot,
   onUpdateShots,
-  onAddShot, 
+  onAddShot,
+  onAddScene, 
   onDeleteShot, 
   onToggleMuteShot,
   onCloneShot, 
@@ -506,7 +507,7 @@ function SpreadsheetView({
         });
       }
     } catch (err) {
-      console.error('Failed to enhance shot:', err);
+      notifyLlmFailure(err, 'Matrix enhance');
     } finally {
       setEnhancingShotIdx(null);
     }
@@ -809,8 +810,8 @@ function SpreadsheetView({
     matrixFilterSuffix
   ]);
 
-  const matrixAddShotTitle = useMemo(
-    () => `Add shot into the selected scene (after active row)${matrixFilterSuffix}`,
+  const matrixAddSceneTitle = useMemo(
+    () => `Add a new scene after the last scene${matrixFilterSuffix}`,
     [matrixFilterSuffix]
   );
 
@@ -1089,12 +1090,11 @@ function SpreadsheetView({
         barClassName="sps-matrix-toolbar px-3 py-1 border-b flex items-center justify-between gap-2"
         showProfile={false}
       >
-        <div className="flex items-center gap-1 overflow-x-auto sps-header-scroll max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex-1 min-w-0">
+        <div className="sps-quiet-links sps-matrix-filters overflow-x-auto sps-header-scroll max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex-1 min-w-0">
           <span
-            className="text-[9px] font-semibold uppercase tracking-[0.14em] flex items-center gap-1 mr-1 shrink-0 text-[var(--sps-muted)]"
+            className="sps-quiet-link is-muted pointer-events-none"
             title={matrixFocusLabelTitle}
           >
-            <Filter className="w-3 h-3 text-[var(--sps-gold)]" />
             Focus
           </span>
           {CATEGORIES.map((cat) => {
@@ -1142,22 +1142,22 @@ function SpreadsheetView({
                     /* ignore */
                   }
                 }}
-                className={`sps-cat-chip px-2 py-0.5 text-[10px] cursor-pointer shrink-0 ${
-                  isCatActive ? 'is-on' : ''
-                } ${fromPulse ? 'ring-1 ring-[var(--sps-gold)] animate-pulse' : ''}`}
+                className={`sps-quiet-link shrink-0 ${
+                  isCatActive ? 'is-current' : 'is-muted'
+                } ${fromPulse ? 'is-pulse' : ''}`}
                 title={getMatrixFocusChipTitle(cat, slotCount)}
                 aria-label={getMatrixFocusChipTitle(cat, slotCount)}
+                aria-pressed={isCatActive}
               >
                 {cat.label}
               </button>
             );
           })}
           <span
-            className="text-[9px] font-semibold uppercase tracking-[0.14em] flex items-center gap-1 mx-1 shrink-0 text-[var(--sps-muted)]"
+            className="sps-quiet-link is-muted pointer-events-none"
             title={matrixLifeLabelTitle}
           >
             Life
-            <span className="font-mono normal-case tracking-normal opacity-70">L / ⇧L · Esc</span>
           </span>
           {MATRIX_LIFECYCLE_FILTER_OPTIONS.map((opt) => {
             const isOn = (lifecycleFilter?.id || 'all') === opt.id;
@@ -1208,11 +1208,12 @@ function SpreadsheetView({
                     /* ignore */
                   }
                 }}
-                className={`sps-cat-chip px-2 py-0.5 text-[10px] cursor-pointer shrink-0 ${
-                  isOn ? 'is-on' : ''
-                } ${fromPitch ? 'ring-1 ring-[var(--sps-gold)] animate-pulse' : ''}`}
+                className={`sps-quiet-link shrink-0 ${
+                  isOn ? 'is-current' : 'is-muted'
+                } ${fromPitch ? 'is-pulse' : ''}`}
                 title={getMatrixLifeChipTitle(opt, lifeShotCount, fromPitch)}
                 aria-label={getMatrixLifeChipTitle(opt, lifeShotCount, fromPitch)}
+                aria-pressed={isOn}
               >
                 {opt.label}
               </button>
@@ -1221,7 +1222,7 @@ function SpreadsheetView({
           {lifecycleFilter?.statuses?.length ? (
             <button
               type="button"
-              className="sps-cat-chip px-2 py-0.5 text-[10px] cursor-pointer shrink-0 text-[var(--sps-gold)]"
+              className="sps-quiet-link shrink-0"
               title={matrixClearLifeTitle}
               aria-label={matrixClearLifeTitle}
               onClick={() => {
@@ -1258,14 +1259,14 @@ function SpreadsheetView({
                 }
               }}
             >
-              Clear Life
+              Clear
             </button>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="sps-quiet-links sps-header-rail-links shrink-0">
           <span
-            className="sps-count-pill whitespace-nowrap text-[10px]"
+            className="sps-quiet-link is-muted pointer-events-none whitespace-nowrap"
             title={matrixCountPillTitle}
             aria-label={matrixCountPillTitle}
           >
@@ -1353,7 +1354,7 @@ function SpreadsheetView({
           ) : null}
           {lookOnly ? (
             <span
-              className="sps-chip text-[10px]"
+              className="sps-quiet-link is-muted pointer-events-none"
               title={matrixLookOnlyTitle}
               aria-label={matrixLookOnlyTitle}
             >
@@ -1362,13 +1363,13 @@ function SpreadsheetView({
           ) : (
           <button
             type="button"
-            onClick={onAddShot}
-            className="sps-btn sps-btn-primary text-[10px] h-7 px-2"
-            title={matrixAddShotTitle}
-            aria-label={matrixAddShotTitle}
+            onClick={onAddScene}
+            disabled={!onAddScene}
+            className="sps-btn sps-btn-primary sps-header-save"
+            title={matrixAddSceneTitle}
+            aria-label={matrixAddSceneTitle}
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add shot
+            Scene
           </button>
           )}
         </div>

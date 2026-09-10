@@ -16,10 +16,12 @@ import {
   Archive,
   Wand2,
   HardDrive,
-  Upload
+  Upload,
+  Keyboard
 } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { isStudioAdmin, getCurrentUserEmail } from '../utils/projectPermissions';
+import { MOD, WRITER_HOTKEY_GROUPS } from '../utils/writerHotkeys';
 
 const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
@@ -100,13 +102,68 @@ function buildGuideSections(isAdmin) {
             Project</strong> (another film). That loads Writer, Matrix, Cast, and everything for that title.
           </Step>
           <Step n={4} title="Save your work">
-            Click the <strong>Save</strong> (disk) icon in the top bar. Use the small arrow next to it for auto-save
-            every few minutes. Prefer this over only relying on Cloud sync.
+            Click <strong>Save</strong> in the studio bar. The small arrow on that same button opens auto-save intervals.
+            Prefer this over only relying on Cloud sync.
           </Step>
           <Step n={5} title="Need a map?">
             Press <strong>Shift+Space</strong> (or swipe from the left on phone) to open the <strong>Navigator</strong> —
-            jump to Writer, Matrix, Cast, Generate, and more by name.
+            jump to Writer, Matrix, Cast, Generate, and more by name. All shortcuts live in <strong>Help → Keyboard &amp; shot keys</strong>.
           </Step>
+        </div>
+      )
+    },
+    {
+      id: 'keys',
+      icon: Keyboard,
+      title: 'Keyboard & shot keys',
+      badge: 'KEYS',
+      keywords: 'shortcut hotkey keys keyboard shot matrix writer navigator cmd ctrl shift space undo redo',
+      content: (
+        <div className="space-y-4 text-[11px]">
+          <Callout title="Studio">
+            <KeyChart
+              rows={[
+                ['Shift + Space', 'Navigator — jump to any room or tool'],
+                [`${MOD} + O`, 'Open Projects console'],
+                [`${MOD} + K`, 'Settings (admin)'],
+                [`${MOD} + Z`, 'Undo shot history'],
+                [`${MOD} + Shift + Z / ${MOD} + Y`, 'Redo shot history'],
+                [`${MOD} + Enter`, 'Fullscreen studio / room'],
+                ['Esc', 'Exit fullscreen · close overlays'],
+                ['Unpin', 'Hides the studio bar; hover the top edge to show it again']
+              ]}
+            />
+          </Callout>
+          <Callout title="Shot keys — Matrix / Form">
+            <KeyChart
+              rows={[
+                [`${MOD} + ↑ / ←`, 'Previous shot'],
+                [`${MOD} + ↓ / →`, 'Next shot'],
+                [`${MOD} + Shift + ↑`, 'Previous scene (Form craft desk)'],
+                [`${MOD} + Shift + ↓`, 'Next scene (Form craft desk)'],
+                [`${MOD} + ← / →`, 'Previous / next craft (Form desk)'],
+                [`${MOD} + Space`, 'Expand Form craft editor'],
+                ['L', 'Cycle Matrix Life filter'],
+                ['Shift + L', 'Cycle Life filter backward'],
+                ['Esc', 'Clear Life filter (Matrix, no cell open)'],
+                ['Scene', 'Matrix top-right — new scene (SC## / SH01)'],
+                ['Row +', 'Add a shot inside the current scene']
+              ]}
+            />
+          </Callout>
+          {WRITER_HOTKEY_GROUPS.map((group) => (
+            <Callout key={group.id} title={`Writer — ${group.title}`}>
+              <KeyChart rows={group.items.map((it) => [it.keys, it.action])} />
+            </Callout>
+          ))}
+          <Callout title="Stage">
+            <KeyChart
+              rows={[
+                [`${MOD} + Z`, 'Stage undo (only inside the 3D Stage)'],
+                [`${MOD} + Shift + Z`, 'Stage redo']
+              ]}
+            />
+          </Callout>
         </div>
       )
     },
@@ -259,7 +316,7 @@ function buildGuideSections(isAdmin) {
               <strong>Compile</strong> turns the row + Cast + World into a ready prompt for image/video engines.
             </li>
             <li>
-              <strong>+ Add Shot</strong> at the bottom of Matrix adds a blank row.
+              <strong>Scene</strong> at the top right of Matrix starts a new scene. Use the row <strong>+</strong> to add a shot inside a scene.
             </li>
           </ul>
         </div>

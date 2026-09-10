@@ -9,7 +9,7 @@ import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import SlotEditor from './SlotEditor';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import IntensityScaleSelector from './IntensityScaleSelector';
-import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
+import { enhanceCraftSlotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import {
   assertCanMutateContent,
   isLifecycleLocked,
@@ -635,7 +635,7 @@ export default function StudioFormView({
         });
       }
     } catch (err) {
-      console.error('AI Enhancement error:', err);
+      notifyLlmFailure(err, 'Form enhance');
     } finally {
       setTimeout(() => setIsEnhancingField(null), 400);
     }

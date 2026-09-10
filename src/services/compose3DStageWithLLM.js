@@ -4,7 +4,7 @@
  */
 
 import { compileMasterCinemaCompilerPrompt } from '../utils/compileMasterCinemaPrompt';
-import { fetchGeminiContent } from './aiScriptParser';
+import { fetchGeminiContent, extractGeminiResponseText, safeParseJsonObject } from './aiScriptParser';
 import { resolveLlmApiKey } from '../utils/saasControl';
 import {
   bakeCameraKeyframes,
@@ -33,29 +33,8 @@ function getApiKey() {
   }
 }
 
-function extractGeminiText(data) {
-  try {
-    const parts = data?.candidates?.[0]?.content?.parts;
-    if (!Array.isArray(parts)) return '';
-    return parts.map((p) => p?.text || '').join('').trim();
-  } catch {
-    return '';
-  }
-}
-
 function parseJsonObject(raw) {
-  if (!raw) return null;
-  let text = String(raw).trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) text = fence[1].trim();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return null;
-  }
+  return safeParseJsonObject(raw);
 }
 
 function clamp(n, lo, hi) {
@@ -470,7 +449,7 @@ ${schemaHint}`;
     const response = await fetchGeminiContent(apiKey, llmPrompt, {
       temperature: 0.35,
       responseMimeType: 'application/json'
-    }, { timeoutMs: 90000 });
+    }, { timeoutMs: 90000, context: 'Stage compose' });
 
     if (!response?.ok) {
       const plan = heuristicStagePlanFromShot(shot, shotIdx);
@@ -484,7 +463,7 @@ ${schemaHint}`;
     }
 
     const data = await response.json();
-    const text = extractGeminiText(data);
+    const text = extractGeminiResponseText(data);
     const parsed = parseJsonObject(text);
     if (!parsed) {
       const plan = heuristicStagePlanFromShot(shot, shotIdx);

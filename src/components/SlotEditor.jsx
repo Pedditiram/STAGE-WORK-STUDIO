@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, Maximize2, Minimize2, X, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown, Volume2, VolumeX } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
-import { enhanceCraftSlotWithLLM } from '../services/aiScriptParser';
+import { enhanceCraftSlotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import { assertCanMutateContent } from '../utils/productionLifecycle';
 import { CMD_TYPES, proposeAndValidate, approveLlmCommand, applyLlmCommand } from '../utils/llmCommandBus';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
@@ -498,7 +498,7 @@ function SlotEditor({
         setTimeout(() => setSavedToast(false), 2500);
       }
     } catch (e) {
-      console.warn('Craft AI enhance error:', e);
+      notifyLlmFailure(e, 'Craft enhance');
     } finally {
       setIsEnhancingCraft(false);
     }

@@ -12,10 +12,12 @@ import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import {
   PITCH_AUDIENCES,
   PITCH_FONTS,
+  PITCH_FORMATS,
   PITCH_LAYOUTS,
   PITCH_PALETTES,
   PITCH_SIZES,
   PITCH_TEMPLATES,
+  DEFAULT_PITCH_FORMAT,
   blankPitchSlide,
   buildInvestorPitchDeck,
   buildPitchDeckZipFiles,
@@ -26,7 +28,10 @@ import {
   normalizeFundSplit,
   pitchDeckToCsv,
   pitchDeckToMarkdown,
+  pitchFormatDimension,
+  pitchStageBox,
   qualityChecklist,
+  resolvePitchFormat,
   resolvePitchStyle,
   savePitchDeckLocal,
   scorePitchDeck,
@@ -36,15 +41,9 @@ import {
 import { openMatrixLifecycleFilter } from '../utils/productionLifecycle';
 import { createZipArchive } from '../utils/zipUtils';
 import { saveExportBlob } from '../utils/saveExportFile';
-
-function readImageFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+import { persistPitchStill, readLocalImageFile, pitchStillSrc } from '../utils/localPitchMedia';
+import { generateGeminiPitchStill, geminiImageAspect } from '../services/geminiImageClient';
+import { polishPitchSlideWithGemini } from '../utils/pitchSlideLlm';
 
 const fieldClass =
   'rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[11px] text-[var(--sps-text)] px-2 py-1 focus:outline-none focus:border-[var(--sps-gold)]';
@@ -61,25 +60,39 @@ function pitchCssVars(style = {}) {
   };
 }
 
-function SlideFrames({ slide, placements, lookOnly, placeImage, compact }) {
+function SlideFrames({
+  slide,
+  placements,
+  lookOnly,
+  placeImage,
+  compact,
+  fill = false,
+  onGenerate,
+  generatingKey = ''
+}) {
   const frames = slide.frames || [];
   if (!frames.length) return null;
+  const cols =
+    frames.length === 1 ? 'grid-cols-1' : frames.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
   return (
     <div
-      className={`grid gap-2 ${compact ? 'mt-3' : 'mt-4'} ${
-        frames.length === 1 ? 'grid-cols-1' : frames.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'
-      }`}
+      className={`${fill ? 'absolute inset-0 grid' : `grid gap-2 ${compact ? 'mt-3' : 'mt-4'}`} ${cols}`}
+      style={fill ? { gap: 0 } : undefined}
     >
       {frames.map((fr, fi) => {
         const key = `${slide.id}:${fi}`;
-        const src = placements[key] || slide.images?.[fi] || '';
+        const src = pitchStillSrc(placements[key] || slide.images?.[fi] || '');
+        const busy = generatingKey === key;
         return (
           <label
             key={key}
-            className={`relative block overflow-hidden cursor-pointer border border-dashed ${
-              compact ? 'min-h-[5rem]' : 'min-h-[6.5rem]'
+            className={`relative block overflow-hidden ${fill ? 'min-h-0 h-full' : compact ? 'min-h-[7rem]' : 'min-h-[11rem]'} ${
+              lookOnly || !placeImage ? '' : 'cursor-pointer'
             }`}
-            style={{ borderColor: 'color-mix(in srgb, var(--pitch-gold) 50%, transparent)', background: 'color-mix(in srgb, var(--pitch-ink) 6%, var(--pitch-paper))' }}
+            style={{
+              border: fill ? 'none' : '1px dashed color-mix(in srgb, var(--pitch-gold) 50%, transparent)',
+              background: 'color-mix(in srgb, var(--pitch-ink) 6%, var(--pitch-paper))'
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -87,12 +100,12 @@ function SlideFrames({ slide, placements, lookOnly, placeImage, compact }) {
             }}
           >
             {src ? (
-              <img src={src} alt={fr.label} className={`w-full object-cover ${compact ? 'h-24' : 'h-28'}`} />
+              <img src={src} alt={fr.label} className="absolute inset-0 w-full h-full object-cover" />
             ) : (
               <span className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
                 <span className="text-[11px] font-semibold" style={{ color: 'var(--pitch-gold)' }}>{fr.label}</span>
                 <span className="text-[10px] mt-1" style={{ color: 'var(--pitch-muted)' }}>
-                  {fr.hint || 'Drop still or click to place'}
+                  {fr.hint || 'Drop still · Generate · ≥ 1 MB on this disk'}
                 </span>
               </span>
             )}
@@ -106,6 +119,21 @@ function SlideFrames({ slide, placements, lookOnly, placeImage, compact }) {
                 e.target.value = '';
               }}
             />
+            {!lookOnly && onGenerate ? (
+              <button
+                type="button"
+                className="absolute bottom-1.5 right-1.5 sps-quiet-link"
+                style={{ background: 'color-mix(in srgb, var(--pitch-paper) 82%, transparent)' }}
+                disabled={busy}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onGenerate(key, fi);
+                }}
+              >
+                {busy ? 'Generating' : 'Generate'}
+              </button>
+            ) : null}
           </label>
         );
       })}
@@ -157,28 +185,45 @@ function PitchSlideCard({
   removeSlide,
   canRemove,
   placeImage,
-  fundSplitUi
+  fundSplitUi,
+  frameStyle,
+  onGenerate,
+  generatingKey = ''
 }) {
   const layout = slide.layout || slide.kind || 'page';
   const isCover = layout === 'cover';
+  const isHero = layout === 'hero';
   const isQuote = layout === 'quote';
   const isSheet = layout === 'sheet';
   const isSplit = layout === 'split';
+  const isGrid = layout === 'grid';
+  const isCrew = layout === 'crew';
   const titleSize = present
-    ? isCover || isQuote
+    ? isCover || isQuote || isHero
       ? 'text-5xl md:text-6xl'
       : 'text-4xl md:text-5xl'
-    : isCover || isQuote
-      ? 'text-[2rem] md:text-[2.4rem]'
-      : 'text-[1.7rem] md:text-[2rem]';
+    : isCover || isQuote || isHero
+      ? 'text-[clamp(1.6rem,4.2cqw,2.6rem)]'
+      : 'text-[clamp(1.35rem,3.4cqw,2rem)]';
+  const frameProps = {
+    slide,
+    placements,
+    lookOnly: lookOnly || present,
+    placeImage: present ? undefined : placeImage,
+    onGenerate: present ? undefined : onGenerate,
+    generatingKey
+  };
+  const people = slide.fields?.people || [];
+  const crew = slide.fields?.crew || [];
 
   return (
     <article
-      className={`sps-pitch-slide w-full flex flex-col ${
-        present ? 'max-w-5xl min-h-0' : 'max-w-[46rem] min-h-[30rem] rounded-[4px] border px-8 py-10 md:px-12 md:py-12'
-      }`}
+      className={`sps-pitch-slide w-full h-full flex flex-col overflow-hidden shrink-0 ${
+        present ? 'min-h-0' : 'rounded-[4px] border'
+      } ${isHero || isCover ? 'relative' : ''} ${present ? '' : 'px-[6%] py-[7%]'}`}
       style={{
         ...pitchCssVars(style),
+        ...(present ? {} : frameStyle || {}),
         background: present ? 'transparent' : 'var(--pitch-paper)',
         color: 'var(--pitch-ink)',
         fontFamily: 'var(--pitch-body)',
@@ -201,17 +246,146 @@ function PitchSlideCard({
         )}
       </p>
 
-      {isSheet ? (
-        <div className={`grid gap-6 ${present ? 'mt-8 md:grid-cols-[16rem_1fr]' : 'mt-5 md:grid-cols-[12rem_1fr]'}`}>
+      {isHero ? (
+        <div className="flex-1 min-h-0 grid grid-rows-[1fr_auto] gap-3 mt-3">
+          <div className="relative min-h-0">
+            <SlideFrames {...frameProps} fill />
+          </div>
           <div>
-            <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} compact />
+            {isManual && !present ? (
+              <input
+                className={`${formFieldClass} ${titleSize} font-semibold`}
+                style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+                value={slide.title || ''}
+                onChange={(e) => patchSlide({ title: e.target.value })}
+              />
+            ) : (
+              <h3 className={`${titleSize} leading-tight font-semibold m-0`} style={{ fontFamily: 'var(--pitch-display)' }}>
+                {slide.title}
+              </h3>
+            )}
+            {slide.subtitle ? (
+              <p className={`${present ? 'text-xl' : 'text-[14px]'} leading-relaxed m-0 mt-2 opacity-90 whitespace-pre-wrap`}>
+                {slide.subtitle}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : isCover ? (
+        <div className="flex-1 min-h-0 grid md:grid-cols-[1.05fr_0.95fr] gap-6 mt-4">
+          <div className="flex flex-col min-h-0">
+            {isManual && !present ? (
+              <input
+                className={`${formFieldClass} ${titleSize} font-semibold mb-3`}
+                style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+                value={slide.title || ''}
+                onChange={(e) => patchSlide({ title: e.target.value })}
+              />
+            ) : (
+              <h3 className={`${titleSize} leading-[1.05] font-semibold m-0 mb-4`} style={{ fontFamily: 'var(--pitch-display)' }}>
+                {slide.title}
+              </h3>
+            )}
+            {isManual && !present ? (
+              <textarea
+                className={`${formFieldClass} min-h-[4.5rem] resize-y flex-1`}
+                value={slide.subtitle || ''}
+                placeholder="Logline"
+                onChange={(e) => patchSlide({ subtitle: e.target.value })}
+                rows={4}
+              />
+            ) : slide.subtitle ? (
+              <p className={`${present ? 'text-2xl md:text-3xl' : 'text-[clamp(1rem,2.2cqw,1.25rem)]'} leading-relaxed m-0 opacity-90 whitespace-pre-wrap`}>
+                {slide.subtitle}
+              </p>
+            ) : null}
+            <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+          </div>
+          <div className="relative min-h-[12rem]">
+            <SlideFrames {...frameProps} fill />
+          </div>
+        </div>
+      ) : isGrid ? (
+        <div className="flex-1 min-h-0 flex flex-col mt-3">
+          {isManual && !present ? (
+            <input
+              className={`${formFieldClass} ${titleSize} font-semibold mb-2`}
+              style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+              value={slide.title || ''}
+              onChange={(e) => patchSlide({ title: e.target.value })}
+            />
+          ) : (
+            <h3 className={`${titleSize} leading-tight font-semibold m-0 mb-1`} style={{ fontFamily: 'var(--pitch-display)' }}>
+              {slide.title}
+            </h3>
+          )}
+          {slide.subtitle ? (
+            <p className={`${present ? 'text-lg' : 'text-[13px]'} m-0 mb-3 opacity-90`}>{slide.subtitle}</p>
+          ) : null}
+          <div className="flex-1 min-h-0 relative">
+            <SlideFrames {...frameProps} fill />
+          </div>
+          {people.length ? (
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 m-0 p-0 list-none">
+              {people.slice(0, 8).map((p, i) => (
+                <li key={`${p.id || p.name || 'cast'}-${i}`} className="text-[11px] leading-snug" style={{ color: 'var(--pitch-ink)' }}>
+                  <span className="font-semibold">{p.name}</span>
+                  <span style={{ color: 'var(--pitch-muted)' }}> · {p.role || 'Principal'} [{p.status || 'PROPOSED'}]</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+          )}
+        </div>
+      ) : isCrew ? (
+        <div className="flex-1 min-h-0 flex flex-col mt-3">
+          {isManual && !present ? (
+            <input
+              className={`${formFieldClass} ${titleSize} font-semibold mb-2`}
+              style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
+              value={slide.title || ''}
+              onChange={(e) => patchSlide({ title: e.target.value })}
+            />
+          ) : (
+            <h3 className={`${titleSize} leading-tight font-semibold m-0 mb-1`} style={{ fontFamily: 'var(--pitch-display)' }}>
+              {slide.title}
+            </h3>
+          )}
+          {slide.subtitle ? (
+            <p className={`${present ? 'text-lg' : 'text-[13px]'} m-0 mb-3 opacity-90`}>{slide.subtitle}</p>
+          ) : null}
+          {crew.length ? (
+            <table className="w-full border-collapse text-left flex-1">
+              <tbody>
+                {crew.map((row) => (
+                  <tr key={row.dept || row.name} className="border-t" style={{ borderColor: 'color-mix(in srgb, var(--pitch-gold) 22%, transparent)' }}>
+                    <th className="py-2 pr-3 font-semibold w-[38%]" style={{ color: 'var(--pitch-gold)', fontFamily: 'var(--pitch-display)' }}>
+                      {row.dept}
+                    </th>
+                    <td className="py-2">{row.name || 'DATA REQUIRED'}</td>
+                    <td className="py-2 text-right text-[10px] uppercase tracking-wide" style={{ color: 'var(--pitch-muted)' }}>
+                      {row.status || 'DATA REQUIRED'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
+          )}
+        </div>
+      ) : isSheet ? (
+        <div className={`grid gap-6 flex-1 min-h-0 ${present ? 'mt-8 md:grid-cols-[16rem_1fr]' : 'mt-5 md:grid-cols-[minmax(10rem,14rem)_1fr]'}`}>
+          <div className="relative min-h-[10rem]">
+            <SlideFrames {...frameProps} fill compact />
             {slide.fields?.status ? (
               <p className="text-[10px] uppercase tracking-wide mt-2 m-0" style={{ color: 'var(--pitch-muted)' }}>
                 {slide.fields.status}
               </p>
             ) : null}
           </div>
-          <div>
+          <div className="min-h-0 overflow-hidden">
             {isManual && !present ? (
               <input
                 className={`${formFieldClass} ${titleSize} font-semibold mb-2`}
@@ -250,7 +424,7 @@ function PitchSlideCard({
             />
           ) : (
             <h3
-              className={`${titleSize} leading-tight ${isCover || isQuote ? 'mt-8 mb-6' : 'mt-4 mb-3'} font-semibold`}
+              className={`${titleSize} leading-tight ${isQuote ? 'mt-8 mb-6' : 'mt-4 mb-3'} font-semibold`}
               style={{ fontFamily: 'var(--pitch-display)', color: 'var(--pitch-ink)' }}
             >
               {slide.title}
@@ -266,27 +440,25 @@ function PitchSlideCard({
             />
           ) : slide.subtitle ? (
             <p
-              className={`${isQuote || isCover ? (present ? 'text-2xl md:text-3xl' : 'text-[1.15rem]') : present ? 'text-xl' : 'text-[14px]'} leading-relaxed m-0 opacity-90 whitespace-pre-wrap`}
+              className={`${isQuote ? (present ? 'text-2xl md:text-3xl' : 'text-[1.15rem]') : present ? 'text-xl' : 'text-[14px]'} leading-relaxed m-0 opacity-90 whitespace-pre-wrap`}
               style={{ fontFamily: isQuote ? 'var(--pitch-display)' : 'var(--pitch-body)' }}
             >
               {slide.subtitle}
             </p>
           ) : null}
           {isSplit ? (
-            <div className="grid md:grid-cols-2 gap-6 mt-2">
-              <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
+            <div className="grid md:grid-cols-2 gap-6 mt-2 flex-1 min-h-0">
+              <div className="relative min-h-[10rem]">
+                <SlideFrames {...frameProps} fill />
+              </div>
               <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
             </div>
           ) : (
             <>
-              {!isCover ? (
-                <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
-              ) : (
-                <SlideFrames slide={slide} placements={placements} lookOnly={lookOnly || present} placeImage={present ? undefined : placeImage} />
-              )}
-              {!isQuote ? (
-                <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
-              ) : isManual && !present ? (
+              <div className="relative flex-1 min-h-[10rem] mt-3">
+                <SlideFrames {...frameProps} fill={Boolean((slide.frames || []).length)} />
+              </div>
+              {!isQuote || (isManual && !present) ? (
                 <PointList slide={slide} isManual={isManual} lookOnly={lookOnly} fieldClass={fieldClass} patchPoint={patchPoint} present={present} />
               ) : null}
             </>
@@ -334,6 +506,13 @@ export default function PitchDeckMaker({
 }) {
   const [audienceId, setAudienceId] = useState('investor');
   const [sizeId, setSizeId] = useState('standard');
+  const [formatId, setFormatId] = useState(() => {
+    try {
+      return localStorage.getItem('sps_pitch_slide_format') || DEFAULT_PITCH_FORMAT;
+    } catch {
+      return DEFAULT_PITCH_FORMAT;
+    }
+  });
   const [templateId, setTemplateId] = useState('classic');
   const [paletteId, setPaletteId] = useState('studio');
   const [fontId, setFontId] = useState('studio');
@@ -349,6 +528,9 @@ export default function PitchDeckMaker({
   const [deckMode, setDeckMode] = useState('project');
   const [manualSlides, setManualSlides] = useState([]);
   const [presenting, setPresenting] = useState(false);
+  const [stillBusy, setStillBusy] = useState('');
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [pitchNote, setPitchNote] = useState('');
 
   const facts = useMemo(() => {
     void rebuild;
@@ -375,9 +557,10 @@ export default function PitchDeckMaker({
         fundSplit: fundSplit || facts.fundSplit,
         templateId,
         paletteId,
-        fontId
+        fontId,
+        formatId
       }),
-    [facts, audienceId, sizeId, loglineText, fundSplit, templateId, paletteId, fontId]
+    [facts, audienceId, sizeId, loglineText, fundSplit, templateId, paletteId, fontId, formatId]
   );
 
   const autoSlides = deck.slides || [];
@@ -389,6 +572,8 @@ export default function PitchDeckMaker({
   const splitNorm = normalizeFundSplit(fundSplit || facts.fundSplit);
   const exportDeck = { ...deck, slides };
   const isManual = deckMode === 'manual';
+  const pitchFrame = resolvePitchFormat(formatId);
+  const presentBox = pitchStageBox(pitchFrame, true);
   const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
   const {
     strict: pitchLifecycleStrict,
@@ -415,7 +600,15 @@ export default function PitchDeckMaker({
 
   const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
   const roomId = resolveCollabRoomId();
-  const lifeNote = `${slides.length} slides · ${audienceId}/${templateId}/${sizeId} · ${isManual ? 'manual' : 'auto'}${roomId ? ` · room:${roomId}` : ''}`;
+  const lifeNote = `${slides.length} slides · ${audienceId}/${templateId}/${sizeId}/${formatId} · ${isManual ? 'manual' : 'auto'}${roomId ? ` · room:${roomId}` : ''}`;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sps_pitch_slide_format', formatId);
+    } catch {
+      /* ignore */
+    }
+  }, [formatId]);
 
   useEffect(() => {
     if (lookOnly) return undefined;
@@ -428,8 +621,69 @@ export default function PitchDeckMaker({
   const placeImage = async (key, file) => {
     if (lookOnly || !file || !file.type.startsWith('image/')) return;
     mark();
-    const src = await readImageFile(file);
-    setPlacements((prev) => ({ ...prev, [key]: src }));
+    const src = await readLocalImageFile(file);
+    const frameIndex = Number(String(key).split(':').pop() || 0);
+    const saved = await persistPitchStill({
+      projectTitle,
+      slideId: current?.id || 'slide',
+      index: frameIndex,
+      dataUrl: src
+    });
+    setPlacements((prev) => ({ ...prev, [key]: saved.dataUrl }));
+    setPitchNote('Still on this disk · ≥ 1 MB · synced to collaborators’ local stores');
+  };
+
+  const generateStill = async (key, frameIndex = 0) => {
+    if (lookOnly || !current) return;
+    setStillBusy(key);
+    setPitchNote('');
+    try {
+      const prompt = [
+        'Cinematic film pitch still. No title text, no logos, no watermarks, no lettering.',
+        `Project: ${projectTitle}.`,
+        current.title ? `Subject: ${current.title}.` : '',
+        current.subtitle || '',
+        (current.points || []).slice(0, 2).join(' '),
+        facts.genreLabel ? `Genre: ${facts.genreLabel}.` : ''
+      ].filter(Boolean).join(' ');
+      const { dataUrl, modelId } = await generateGeminiPitchStill({
+        prompt,
+        aspectRatio: geminiImageAspect(pitchFrame)
+      });
+      const saved = await persistPitchStill({
+        projectTitle,
+        slideId: current.id,
+        index: frameIndex,
+        dataUrl
+      });
+      mark();
+      setPlacements((prev) => ({ ...prev, [key]: saved.dataUrl }));
+      setPitchNote(`Still on this disk · ≥ 1 MB · ${modelId}`);
+    } catch (err) {
+      setPitchNote(err?.message || 'Still failed');
+    } finally {
+      setStillBusy('');
+    }
+  };
+
+  const polishCurrent = async () => {
+    if (lookOnly || !current) return;
+    setCopyBusy(true);
+    setPitchNote('');
+    try {
+      const polished = await polishPitchSlideWithGemini({ slide: current, facts, logline: loglineText });
+      mark();
+      setDeckMode('manual');
+      setManualSlides((prev) => {
+        const base = prev.length ? prev : clonePitchSlides(autoSlides);
+        return base.map((s, i) => (i === slideIndex ? { ...s, ...polished } : s));
+      });
+      setPitchNote('Copy polished on this machine · Gemini 3.6 · no invented numbers');
+    } catch (err) {
+      setPitchNote(err?.message || 'Polish failed');
+    } finally {
+      setCopyBusy(false);
+    }
   };
 
   const exportKeynote = () => {
@@ -650,7 +904,24 @@ export default function PitchDeckMaker({
     if (lookOnly) return;
     mark();
     setManualSlides((prev) => {
-      const next = [...prev, blankPitchSlide(prev.length + 1, layout)];
+      const slide = blankPitchSlide(prev.length + 1, layout === 'back' ? 'cover' : layout);
+      if (layout === 'cover') {
+        slide.navTitle = 'Cover';
+        slide.kicker = 'Cover';
+        slide.title = facts.title || slide.title;
+        slide.layout = 'cover';
+        slide.kind = 'cover';
+      }
+      if (layout === 'back') {
+        slide.id = `back_${prev.length + 1}`;
+        slide.navTitle = 'Back';
+        slide.kicker = 'Back';
+        slide.title = 'Thank you';
+        slide.subtitle = facts.title || '';
+        slide.layout = 'cover';
+        slide.kind = 'cover';
+      }
+      const next = [...prev, slide];
       setSlideIndex(next.length - 1);
       return next;
     });
@@ -789,6 +1060,22 @@ export default function PitchDeckMaker({
             </option>
           ))}
         </select>
+        <select
+          className={`${fieldClass} w-[9.5rem] shrink-0`}
+          value={formatId}
+          disabled={lookOnly}
+          title={`Slide frame · ${pitchFormatDimension(pitchFrame)}`}
+          onChange={(e) => {
+            mark();
+            setFormatId(e.target.value);
+          }}
+        >
+          {PITCH_FORMATS.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.label}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           className={`sps-icon-btn shrink-0 ${!isManual ? 'is-on' : ''}`}
@@ -899,7 +1186,7 @@ export default function PitchDeckMaker({
               <span className="block text-[9px] uppercase tracking-wide text-[var(--sps-gold)]">
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <span className="block text-[12px] font-semibold text-[var(--sps-text)] leading-snug">{slide.title}</span>
+              <span className="block text-[12px] font-semibold text-[var(--sps-text)] leading-snug">{slide.navTitle || slide.title}</span>
             </button>
           ))}
           {isManual && !lookOnly ? (
@@ -907,6 +1194,12 @@ export default function PitchDeckMaker({
               <button type="button" className="sps-btn w-full mt-1" onClick={() => addSlide('page')}>
                 <Plus className="w-3.5 h-3.5" />
                 Add slide
+              </button>
+              <button type="button" className="sps-btn w-full mt-1" onClick={() => addSlide('cover')}>
+                Cover
+              </button>
+              <button type="button" className="sps-btn w-full mt-1" onClick={() => addSlide('back')}>
+                Back
               </button>
               <button type="button" className="sps-btn w-full mt-1" onClick={insertCharacterSheets}>
                 <Users className="w-3.5 h-3.5" />
@@ -916,8 +1209,16 @@ export default function PitchDeckMaker({
           ) : null}
         </nav>
 
-        <div className="min-h-0 overflow-y-auto p-4 md:p-8 flex flex-col items-center gap-3 sps-atelier-pane">
+        <div className="min-h-0 overflow-hidden p-3 md:p-5 flex flex-col items-center gap-3 sps-atelier-pane">
           {current ? (
+            <div
+              className="sps-pitch-stage flex-1 min-h-0 w-full"
+              style={{
+                '--pitch-ar': `${pitchFrame.cx} / ${pitchFrame.cy}`,
+                '--pitch-ar-num': pitchFrame.cx / pitchFrame.cy
+              }}
+            >
+            <div className="sps-pitch-canvas">
             <PitchSlideCard
               slide={current}
               style={style}
@@ -933,6 +1234,9 @@ export default function PitchDeckMaker({
               removeSlide={() => removeSlide(slideIndex)}
               canRemove={slides.length > 1}
               placeImage={placeImage}
+              onGenerate={generateStill}
+              generatingKey={stillBusy}
+              frameStyle={{ width: '100%', height: '100%', minHeight: 0 }}
               fundSplitUi={
                 current.id === 'useOfFunds' ? (
                   <div className="mt-4 space-y-1.5">
@@ -958,6 +1262,8 @@ export default function PitchDeckMaker({
                 ) : null
               }
             />
+            </div>
+            </div>
           ) : null}
           <div className="flex items-center gap-3 pb-3">
             <button type="button" className="sps-btn" disabled={slideIndex <= 0} onClick={() => setSlideIndex((n) => Math.max(0, n - 1))}>
@@ -984,6 +1290,51 @@ export default function PitchDeckMaker({
           <p className="text-[10px] text-[var(--sps-muted)] leading-snug m-0 mb-2">
             {PITCH_TEMPLATES.find((t) => t.id === templateId)?.hint || 'Industry leave-behind'}
           </p>
+          <label className="block text-[10px] uppercase tracking-wide text-[var(--sps-muted)] mb-1">Frame</label>
+          <select
+            className={`${formFieldClass} mb-1`}
+            value={formatId}
+            disabled={lookOnly}
+            title="Ratio · size · dimension"
+            onChange={(e) => {
+              mark();
+              setFormatId(e.target.value);
+            }}
+          >
+            {PITCH_FORMATS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label} · {f.hint}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-[var(--sps-muted)] leading-snug m-0 mb-3">
+            {pitchFormatDimension(pitchFrame)}
+          </p>
+          <button
+            type="button"
+            className="sps-btn w-full mb-1"
+            disabled={lookOnly || !current || Boolean(stillBusy)}
+            title="Gemini 3.6 still · saved on this disk · ≥ 1 MB"
+            onClick={() => generateStill(`${current.id}:0`, 0)}
+          >
+            {stillBusy ? 'Generating still' : 'Generate still'}
+          </button>
+          <button
+            type="button"
+            className="sps-btn w-full mb-2"
+            disabled={lookOnly || !current || copyBusy}
+            title="Rewrite this slide from project facts. Never invents box office or deals."
+            onClick={polishCurrent}
+          >
+            {copyBusy ? 'Polishing' : 'Polish copy'}
+          </button>
+          {pitchNote ? (
+            <p className="text-[10px] text-[var(--sps-gold)] leading-snug m-0 mb-3">{pitchNote}</p>
+          ) : (
+            <p className="text-[10px] text-[var(--sps-muted)] leading-snug m-0 mb-3">
+              Stills stay on this disk and copy to other users’ local stores. None under 1 MB.
+            </p>
+          )}
           <label className="block text-[10px] uppercase tracking-wide text-[var(--sps-muted)] mb-1">Palette</label>
           <div className="grid grid-cols-3 gap-1.5 mb-3">
             {PITCH_PALETTES.map((p) => (
@@ -1121,17 +1472,20 @@ export default function PitchDeckMaker({
               >
                 <X className="w-5 h-5" />
               </button>
-              <div className="flex-1 min-h-0 flex items-center justify-center px-10 md:px-20 py-12 pointer-events-none">
-                <PitchSlideCard
-                  slide={current}
-                  style={style}
-                  placements={placements}
-                  lookOnly
-                  isManual={false}
-                  present
-                  formFieldClass={formFieldClass}
-                  fieldClass={fieldClass}
-                />
+              <div className="flex-1 min-h-0 flex items-center justify-center px-6 md:px-16 py-10 pointer-events-none">
+                <div className="overflow-hidden" style={presentBox}>
+                  <PitchSlideCard
+                    slide={current}
+                    style={style}
+                    placements={placements}
+                    lookOnly
+                    isManual={false}
+                    present
+                    formFieldClass={formFieldClass}
+                    fieldClass={fieldClass}
+                    frameStyle={presentBox}
+                  />
+                </div>
               </div>
               <div
                 className="shrink-0 flex items-center justify-center gap-4 pb-6 pointer-events-auto"

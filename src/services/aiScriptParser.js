@@ -324,12 +324,66 @@ export function missingApiKeyMessage() {
 
 export function classifyLlmFailureCode(errOrMessage) {
   const code = errOrMessage && typeof errOrMessage === 'object' ? errOrMessage.code : '';
-  if (code === 'LLM_TIMEOUT' || code === 'PARSE_ABORTED') return code;
+  if (
+    code === 'LLM_TIMEOUT' ||
+    code === 'PARSE_ABORTED' ||
+    code === 'MISSING_API_KEY' ||
+    code === 'GEMINI_FATAL' ||
+    code === 'GEMINI_UNAVAILABLE' ||
+    code === 'LLM_EMPTY' ||
+    code === 'BUILT_IN'
+  ) {
+    return code;
+  }
   const msg = String(errOrMessage?.message || errOrMessage || '');
   if (/timed out/i.test(msg)) return 'LLM_TIMEOUT';
   if (/aborted|stopped by user/i.test(msg)) return 'PARSE_ABORTED';
+  if (/missing api key|no api key/i.test(msg)) return 'MISSING_API_KEY';
+  if (/quota|rate limit|RESOURCE_EXHAUSTED/i.test(msg)) return 'GEMINI_FATAL';
+  if (/invalid or unauthorized api key/i.test(msg)) return 'GEMINI_FATAL';
   if (!msg.trim()) return 'LLM_EMPTY';
   return 'LLM_FAILED';
+}
+
+export function userFacingLlmError(errOrMessage, context = 'LLM') {
+  const code = classifyLlmFailureCode(errOrMessage);
+  const raw = String(errOrMessage?.message || errOrMessage || '').trim();
+  if (code === 'PARSE_ABORTED') return 'Stopped.';
+  if (code === 'LLM_TIMEOUT') return `${context} timed out. Try again.`;
+  if (code === 'MISSING_API_KEY' || code === 'BUILT_IN') return missingApiKeyMessage();
+  if (code === 'LLM_EMPTY') return `${context} returned no usable text.`;
+  return raw || `${context} failed.`;
+}
+
+export function emitLlmActivity(detail = {}) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('sps_llm_activity', {
+        detail: {
+          at: Date.now(),
+          phase: detail.phase || 'tick',
+          context: detail.context || 'LLM',
+          ok: detail.ok,
+          message: detail.message || ''
+        }
+      })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export function notifyLlmFailure(errOrMessage, context = 'LLM') {
+  const message = userFacingLlmError(errOrMessage, context);
+  emitLlmActivity({ phase: 'error', context, ok: false, message });
+  if (typeof window === 'undefined') return message;
+  try {
+    window.dispatchEvent(new CustomEvent('sps_toast', { detail: { message } }));
+  } catch {
+    /* ignore */
+  }
+  return message;
 }
 
 /** Typed PDF extract failures — UI should surface message; do not feed garbage into the LLM/heuristic. */
@@ -1020,6 +1074,7 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
 
   let lastError = null;
   let lastFatal = false;
+  emitLlmActivity({ phase: 'start', context: options.context || 'Gemini' });
 
   for (const modelId of modelChain) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${cleanKey}`;
@@ -1052,6 +1107,7 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
           // Empty/safety on a live model — try next fallback when available.
           continue;
         }
+        emitLlmActivity({ phase: 'ok', context: options.context || 'Gemini', ok: true, message: modelId });
         return res;
       }
 
@@ -1073,7 +1129,10 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
         continue;
       }
     } catch (e) {
-      if (isParseAbortError(e) || options.signal?.aborted) throw e;
+      if (isParseAbortError(e) || options.signal?.aborted) {
+        emitLlmActivity({ phase: 'error', context: options.context || 'Gemini', ok: false, message: 'Stopped.' });
+        throw e;
+      }
       lastError = e?.message || String(e);
       if (e?.code === 'LLM_TIMEOUT') lastFatal = false;
       console.warn('Gemini API endpoint attempt failed:', lastError);
@@ -1088,6 +1147,7 @@ export async function fetchGeminiContent(apiKey, prompt, generationConfig = {}, 
   err.code = lastFatal ? 'GEMINI_FATAL' : 'GEMINI_UNAVAILABLE';
   err.provider = provider;
   err.modelId = cfg.modelId;
+  emitLlmActivity({ phase: 'error', context: options.context || 'Gemini', ok: false, message: err.message });
   throw err;
 }
 
@@ -1354,6 +1414,41 @@ async function completeLlmText(prompt, { temperature = 0.22, maxOutputTokens = 6
   }
 
   return '';
+}
+
+export async function generateScreenplayContinuation(scriptText = '', options = {}) {
+  const tail = String(scriptText || '').trim();
+  if (!tail) {
+    const err = new Error('Writer page is empty — add a scene first.');
+    err.code = 'EMPTY_SCRIPT';
+    throw err;
+  }
+  const apiKey = getApiKey();
+  if (!apiKey || isBuiltInLlm()) {
+    const err = new Error(missingApiKeyMessage());
+    err.code = 'MISSING_API_KEY';
+    throw err;
+  }
+  const prompt = `You are a Hollywood Master Screenwriter (Stage Work Studio Cinema Intelligence Engine).
+Continue the following screenplay by writing the next dramatic 1-2 shots/scenes in standard Fountain screenplay format. Include [SHOT SXX-X] camera tags, dialogue, and vivid stage directions.
+
+Current Screenplay:
+${tail.slice(-4000)}
+
+Write ONLY the continuation in clean screenplay format. No markdown fences.`;
+  const text = await completeLlmText(prompt, {
+    temperature: 0.35,
+    maxOutputTokens: 4096,
+    timeoutMs: 90000,
+    signal: options.signal
+  });
+  const clean = safeTrim(text).replace(/^```(?:fountain|screenplay)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  if (!clean) {
+    const err = new Error('LLM returned no screenplay continuation.');
+    err.code = 'LLM_EMPTY';
+    throw err;
+  }
+  return clean;
 }
 
 async function fetchSelectedLlmShotJson(prompt, { provider, apiKey, signal } = {}) {
@@ -2433,13 +2528,10 @@ export async function enhanceCraftSlotWithLLM(craftKey, currentValue, shotContex
   }
 
   if (!apiKey) {
-    const fallback = currentValue ? `[Enhanced] ${currentValue}` : `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
-    return autoEnhanceCraftValue(craftKey, fallback) || fallback;
+    return autoEnhanceCraftValue(craftKey, currentValue) || currentValue || `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
   }
 
-  if (apiKey) {
-    try {
-      const prompt = `You are a legendary Master Director & Cinematographer (Stage Work Studio Cinema Intelligence Engine).
+  const prompt = `You are a legendary Master Director & Cinematographer (Stage Work Studio Cinema Intelligence Engine).
 Enhance the following film craft parameter for a cinema production script:
 Craft Field: "${craftKey}"
 Current Value: "${currentValue || ''}"
@@ -2449,19 +2541,15 @@ Project: "${projectTitle || 'Untitled'}"
 ${referenceBlock ? `${referenceBlock}\n` : ''}
 Return ONLY a concise, ultra-cinematic, production-ready descriptor string (max 25 words). Do NOT wrap in quotes or code blocks. Do not name movies unless essential to a technical grammar.`;
 
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
-      if (response && response.ok) {
-        const data = await response.json();
-        const text = safeTrim(extractGeminiResponseText(data));
-        if (text) return text.replace(/^"|"$/g, '');
-      }
-    } catch (err) {
-      if (isParseAbortError(err)) throw err;
-      console.warn("LLM craft enhancer fallback:", err);
-    }
+  const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal, context: 'Craft enhance' });
+  const data = await response.json();
+  const text = safeTrim(extractGeminiResponseText(data)).replace(/^["'`]+|["'`]+$/g, '');
+  if (!text) {
+    const err = new Error('LLM returned empty craft text.');
+    err.code = 'LLM_EMPTY';
+    throw err;
   }
-
-  return currentValue ? `[Enhanced] ${currentValue}` : `[Stage Work Studio Cinematic Preset for ${craftKey}]`;
+  return text;
 }
 
 export async function enhanceEntireShotWithLLM(shot, options = {}) {
@@ -2469,9 +2557,12 @@ export async function enhanceEntireShotWithLLM(shot, options = {}) {
   const signal = options.signal;
   assertParseNotAborted(signal);
 
-  if (apiKey && shot) {
-    try {
-      const prompt = `You are a Master Film Director (Stage Work Studio Cinema Intelligence Engine).
+  if (!shot) return shot;
+  if (!apiKey) {
+    return normalizeShotTo26Crafts(shot, 0, shot.actionEnvContext || '');
+  }
+
+  const prompt = `You are a Master Film Director (Stage Work Studio Cinema Intelligence Engine).
 Elevate the following shot into an ultra-cinematic masterpiece by enhancing all craft fields:
 Current Shot JSON: ${JSON.stringify(shot)}
 
@@ -2480,23 +2571,16 @@ Return ONLY a valid JSON object representing the enhanced shot with the same 26 
 
 Do NOT use markdown codeblocks. Return JSON object ONLY.`;
 
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
-      if (response && response.ok) {
-        const data = await response.json();
-        const responseText = extractGeminiResponseText(data);
-        const parsed = safeParseJsonObject(responseText);
-        if (parsed) {
-          const merged = { ...shot, ...parsed, sceneShotId: shot.sceneShotId || parsed.sceneShotId };
-          return normalizeShotTo26Crafts(merged, 0, shot.actionEnvContext || '');
-        }
-      }
-    } catch (err) {
-      if (isParseAbortError(err)) throw err;
-      console.warn("LLM shot enhancer fallback:", err);
-    }
+  const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal, context: 'Shot enhance' });
+  const data = await response.json();
+  const parsed = safeParseJsonObject(extractGeminiResponseText(data));
+  if (!parsed) {
+    const err = new Error('LLM did not return a valid enhanced shot.');
+    err.code = 'LLM_EMPTY';
+    throw err;
   }
-
-  return shot ? normalizeShotTo26Crafts(shot, 0, shot.actionEnvContext || '') : shot;
+  const merged = { ...shot, ...parsed, sceneShotId: shot.sceneShotId || parsed.sceneShotId };
+  return normalizeShotTo26Crafts(merged, 0, shot.actionEnvContext || '');
 }
 
 export async function composeCharacterPersonaWithLLM(characterName, tag, role, rawNotes = '', shots = [], projectTitle = '', options = {}) {
@@ -2531,23 +2615,15 @@ Return ONLY a valid JSON object with the following exact keys:
 Do NOT output markdown blocks or extra text. Return valid JSON ONLY.`;
 
   if (apiKey) {
-    try {
-      const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal });
-      if (response && response.ok) {
-        const data = await response.json();
-        const responseText = extractGeminiResponseText(data);
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed && typeof parsed === 'object') {
-            return parsed;
-          }
-        }
-      }
-    } catch (err) {
-      if (isParseAbortError(err)) throw err;
-      console.warn("LLM character composition fallback:", err);
+    const response = await fetchGeminiContent(apiKey, prompt, { temperature: 0.1 }, { signal, context: 'Cast enhance' });
+    const data = await response.json();
+    const parsed = safeParseJsonObject(extractGeminiResponseText(data));
+    if (!parsed) {
+      const err = new Error('LLM did not return character JSON.');
+      err.code = 'LLM_EMPTY';
+      throw err;
     }
+    return parsed;
   }
 
   return {

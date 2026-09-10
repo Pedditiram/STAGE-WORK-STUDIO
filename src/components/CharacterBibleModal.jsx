@@ -721,24 +721,30 @@ Costume locked: ${outfit}. ${lock.genre}. Photoreal cinema, ${lock.world || 'sce
       return;
     }
     setIsComposingLLM(true);
-    const res = await composeCharacterPersonaWithLLM(src.name, src.tag, src.role, src.backstory, shots, projectTitle);
-    const enhanced = {
-      ...src,
-      ...res,
-      id: characters.find((c) => charSource(c) === 'ai_enhance' && (c.tag === src.tag || c.name === src.name))?.id || `char_enh_${Date.now()}`,
-      source: 'ai_enhance',
-    };
-    setCharacters((prev) => {
-      const exists = prev.some((c) => c.id === enhanced.id);
-      return exists ? prev.map((c) => (c.id === enhanced.id ? enhanced : c)) : [enhanced, ...prev];
-    });
-    setCharacterSourceMode('ai_enhance');
-    localStorage.setItem('sps_selected_character_source', 'ai_enhance');
-    setSelectedCharId(enhanced.id);
-    setHasUnsavedChanges(true);
-    setIsComposingLLM(false);
-    setToastMsg('✨ AI enhance locked on this character.');
-    setTimeout(() => setToastMsg(null), 3000);
+    try {
+      const res = await composeCharacterPersonaWithLLM(src.name, src.tag, src.role, src.backstory, shots, projectTitle);
+      const enhanced = {
+        ...src,
+        ...res,
+        id: characters.find((c) => charSource(c) === 'ai_enhance' && (c.tag === src.tag || c.name === src.name))?.id || `char_enh_${Date.now()}`,
+        source: 'ai_enhance',
+      };
+      setCharacters((prev) => {
+        const exists = prev.some((c) => c.id === enhanced.id);
+        return exists ? prev.map((c) => (c.id === enhanced.id ? enhanced : c)) : [enhanced, ...prev];
+      });
+      setCharacterSourceMode('ai_enhance');
+      localStorage.setItem('sps_selected_character_source', 'ai_enhance');
+      setSelectedCharId(enhanced.id);
+      setHasUnsavedChanges(true);
+      setToastMsg('AI enhance locked on this character.');
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch (err) {
+      setToastMsg(err?.message || 'Cast enhance failed.');
+      setTimeout(() => setToastMsg(null), 4000);
+    } finally {
+      setIsComposingLLM(false);
+    }
   };
 
   return (
@@ -1236,26 +1242,32 @@ Costume locked: ${outfit}. ${lock.genre}. Photoreal cinema, ${lock.world || 'sce
                         return;
                       }
                       setIsComposingLLM(true);
-                      const res = await composeCharacterPersonaWithLLM(editingChar.name, editingChar.tag, editingChar.role, editingChar.backstory, shots, projectTitle);
-                      setEditingChar(prev => ({
-                        ...prev,
-                        backstory: res.backstory || prev.backstory,
-                        characterConnections: res.characterConnections || prev.characterConnections,
-                        shotPurpose: res.shotPurpose || prev.shotPurpose,
-                        mannerism: res.mannerism || prev.mannerism,
-                        walkingStyle: res.walkingStyle || prev.walkingStyle,
-                        dialogueDelivery: res.dialogueDelivery || prev.dialogueDelivery,
-                        uniqueVoice: res.uniqueVoice || prev.uniqueVoice,
-                        outfit: res.outfit || prev.outfit,
-                        wardrobeElements: res.wardrobeElements || prev.wardrobeElements,
-                        accessories: res.accessories || prev.accessories,
-                        costumeDetails: res.costumeDetails || prev.costumeDetails,
-                        colorPalette: res.colorPalette || prev.colorPalette
-                      }));
-                      setHasUnsavedChanges(true);
-                      setIsComposingLLM(false);
-                      setToastMsg("✨ AI Composed Deep Character Story & Connections!");
-                      setTimeout(() => setToastMsg(null), 3000);
+                      try {
+                        const res = await composeCharacterPersonaWithLLM(editingChar.name, editingChar.tag, editingChar.role, editingChar.backstory, shots, projectTitle);
+                        setEditingChar((prev) => ({
+                          ...prev,
+                          backstory: res.backstory || prev.backstory,
+                          characterConnections: res.characterConnections || prev.characterConnections,
+                          shotPurpose: res.shotPurpose || prev.shotPurpose,
+                          mannerism: res.mannerism || prev.mannerism,
+                          walkingStyle: res.walkingStyle || prev.walkingStyle,
+                          dialogueDelivery: res.dialogueDelivery || prev.dialogueDelivery,
+                          uniqueVoice: res.uniqueVoice || prev.uniqueVoice,
+                          outfit: res.outfit || prev.outfit,
+                          wardrobeElements: res.wardrobeElements || prev.wardrobeElements,
+                          accessories: res.accessories || prev.accessories,
+                          costumeDetails: res.costumeDetails || prev.costumeDetails,
+                          colorPalette: res.colorPalette || prev.colorPalette
+                        }));
+                        setHasUnsavedChanges(true);
+                        setToastMsg('AI composed character story.');
+                        setTimeout(() => setToastMsg(null), 3000);
+                      } catch (err) {
+                        setToastMsg(err?.message || 'Cast compose failed.');
+                        setTimeout(() => setToastMsg(null), 4000);
+                      } finally {
+                        setIsComposingLLM(false);
+                      }
                     }}
                     disabled={isComposingLLM}
                     className="px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-[10px] font-bold flex items-center gap-1.5 shadow-md border border-purple-400/40 transition-all cursor-pointer"

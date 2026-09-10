@@ -19,6 +19,7 @@ import StudioProfileControl from './StudioProfileControl';
 export default function PromptCompilerModal({
   isOpen,
   onClose,
+  asRoom = false,
   shots,
   onUpdateShot: _onUpdateShot, // retained for API compat; crafts are read-only — edit via Form
   activeTargetModel = "Stage Work Studio",
@@ -120,9 +121,17 @@ export default function PromptCompilerModal({
 
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        if (asRoom) return;
         e.preventDefault();
         toggleFullscreenMode();
       } else if (e.key === 'Escape') {
+        if (asRoom) {
+          if (isFullscreen) {
+            e.preventDefault();
+            toggleFullscreenMode(false);
+          }
+          return;
+        }
         e.preventDefault();
         if (isFullscreen) {
           toggleFullscreenMode(false);
@@ -154,7 +163,7 @@ export default function PromptCompilerModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isFullscreen, shots, onClose]);
+  }, [isOpen, asRoom, isFullscreen, shots, onClose]);
 
   // Sync native fullscreen exit
   useEffect(() => {
@@ -320,7 +329,7 @@ const SmartFormattedPromptViewer = ({ content }) => {
   );
 };
 
-  if (!isOpen) return null;
+  if (!asRoom && !isOpen) return null;
 
   const shotList = Array.isArray(shots) ? shots.filter((s) => s && !s.isArchived) : [];
 
@@ -921,8 +930,8 @@ ${mainPrompt}`;
   };
 
   return (
-    <div className={`sps-overlay ${isFullscreen ? 'is-full' : ''}`}>
-      <div className="sps-shell">
+    <div className={asRoom ? 'h-full min-h-0 w-full overflow-hidden' : `sps-overlay ${isFullscreen ? 'is-full' : ''}`}>
+      <div className={`sps-shell ${asRoom ? 'h-full max-h-none rounded-none border-0 shadow-none' : ''}`}>
         {/* Modal Header */}
         {isFullscreen ? (
           <div className="sps-modal-head">
@@ -960,6 +969,7 @@ ${mainPrompt}`;
               <p>AI Cinema Production OS — one video prompt per shot.</p>
             </div>
             <div className="flex items-center gap-1.5">
+              {!asRoom ? (
               <button
                 type="button"
                 onClick={() => toggleFullscreenMode(true)}
@@ -968,10 +978,13 @@ ${mainPrompt}`;
               >
                 Full screen
               </button>
-              <StudioProfileControl />
+              ) : null}
+              {!asRoom ? <StudioProfileControl /> : null}
+              {!asRoom ? (
               <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>
+              ) : null}
             </div>
           </div>
         )}

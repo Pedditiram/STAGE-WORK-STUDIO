@@ -44,7 +44,7 @@ export default function HeaderSaveMenu({
   return (
     <div className="relative shrink-0 flex items-center gap-2">
       {quiet ? (
-        <>
+        <div className="sps-header-save-split">
           <button
             type="button"
             className="sps-btn sps-btn-primary sps-header-save"
@@ -61,16 +61,16 @@ export default function HeaderSaveMenu({
           </button>
           <button
             type="button"
-            className={`sps-quiet-link ${open ? '' : 'is-muted'}`}
+            className="sps-btn sps-btn-primary sps-header-save sps-header-save-arrow"
             title={`Auto-save · ${intervalLabel}`}
             aria-label="Auto-save options"
             aria-expanded={open}
             disabled={lookOnly}
             onClick={() => setOpen((v) => !v)}
           >
-            Auto
+            <ChevronDown className="w-3 h-3" />
           </button>
-        </>
+        </div>
       ) : (
         <>
       <button

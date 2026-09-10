@@ -114,6 +114,7 @@ export default function Header({
   const [isActiveUsersOpen, setIsActiveUsersOpen] = useState(false);
   const [syncHealth, setSyncHealth] = useState(() => readCloudSyncHealth());
   const [creditStatus, setCreditStatus] = useState(() => managedCreditStatus());
+  const [llmBusy, setLlmBusy] = useState('');
 
   useEffect(() => {
     const refresh = () => setSyncHealth(readCloudSyncHealth());
@@ -127,6 +128,17 @@ export default function Header({
     refreshCredits();
     window.addEventListener('sps_saas_changed', refreshCredits);
     return () => window.removeEventListener('sps_saas_changed', refreshCredits);
+  }, []);
+
+  useEffect(() => {
+    const onLlm = (e) => {
+      const phase = e?.detail?.phase;
+      const ctx = e?.detail?.context || 'LLM';
+      if (phase === 'start') setLlmBusy(ctx);
+      else setLlmBusy('');
+    };
+    window.addEventListener('sps_llm_activity', onLlm);
+    return () => window.removeEventListener('sps_llm_activity', onLlm);
   }, []);
 
   useEffect(() => {
@@ -646,6 +658,11 @@ export default function Header({
           >
             {isCloudSyncing ? 'Syncing' : 'Sync'}
           </button>
+          {llmBusy ? (
+            <span className="sps-quiet-link pointer-events-none" title={`LLM · ${llmBusy}`}>
+              LLM
+            </span>
+          ) : null}
           {creditStatus?.relevant && creditStatus.level !== 'ok' ? (
             <button
               type="button"
@@ -688,14 +705,10 @@ export default function Header({
           </button>
           <button
             type="button"
-            onClick={() => onOpenNavigatorShortcutHelp?.()}
+            onClick={onOpenHelpModal}
             className="sps-quiet-link is-muted"
-            title="Navigator shortcut (Shift + Space)"
-            aria-label="Show navigator keyboard shortcut"
+            title="Help and keyboard shortcuts"
           >
-            Keys
-          </button>
-          <button type="button" onClick={onOpenHelpModal} className="sps-quiet-link is-muted" title="Help">
             Help
           </button>
           {typeof onOpenAppVersionModal === 'function' ? (
@@ -713,8 +726,8 @@ export default function Header({
             <button
               type="button"
               className={`sps-quiet-link ${headerPinned ? '' : 'is-muted'}`}
-              title={headerPinned ? 'Unpin studio bar' : 'Pin studio bar'}
-              aria-label={headerPinned ? 'Unpin studio bar' : 'Pin studio bar'}
+              title={headerPinned ? 'Unpin — hide studio bar until you hover' : 'Pin studio bar'}
+              aria-label={headerPinned ? 'Unpin and hide studio bar' : 'Pin studio bar'}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -722,31 +735,6 @@ export default function Header({
               }}
             >
               {headerPinned ? 'Unpin' : 'Pin'}
-            </button>
-          ) : null}
-          {typeof onMinimizeHeader === 'function' ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onMinimizeHeader();
-              }}
-              className="sps-quiet-link is-muted"
-              title="Minimize bar"
-              aria-label="Minimize bar"
-            >
-              Hide
-            </button>
-          ) : null}
-          {typeof onToggleFullscreen === 'function' ? (
-            <button
-              type="button"
-              onClick={onToggleFullscreen}
-              className={`sps-quiet-link ${isFullscreen ? '' : 'is-muted'}`}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            >
-              {isFullscreen ? 'Exit' : 'Full'}
             </button>
           ) : null}
           </div>
