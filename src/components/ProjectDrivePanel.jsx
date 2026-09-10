@@ -27,6 +27,7 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
   const [linked, setLinked] = useState(false);
   const [connected, setConnected] = useState(isDriveConnected);
   const [busy, setBusy] = useState('');
+  const [open, setOpen] = useState(false);
 
   const load = useCallback(() => {
     const rec = getProjectDriveShare(title);
@@ -44,6 +45,14 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
   }, [load]);
 
   if (!title || guestLook) return null;
+
+  if (!open) {
+    return (
+      <button type="button" className="sps-quiet-link is-muted self-start" onClick={() => setOpen(true)}>
+        Drive{linked || connected ? ' · linked' : ''}
+      </button>
+    );
+  }
 
   const clientId = getDriveClientId();
   const drivePath = getProjectDrivePath(title);
@@ -107,15 +116,9 @@ export default function ProjectDrivePanel({ project, guestLook = false, onPullPr
           <Cloud className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--sps-gold)' }} />
           Google Drive · {title}
         </p>
-        {linked || connected ? (
-          <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0 truncate max-w-[45%]" title={linked ? url : drivePath}>
-            {linked ? email || 'Linked' : drivePath}
-          </span>
-        ) : (
-          <span className="text-[9px] font-mono text-slate-400 shrink-0 flex items-center gap-1">
-            <HardDrive className="w-3 h-3" /> Local only
-          </span>
-        )}
+        <button type="button" className="sps-quiet-link is-muted" onClick={() => setOpen(false)}>
+          Hide
+        </button>
       </div>
 
       <p className="text-[9px] text-slate-500 dark:text-zinc-400 m-0 leading-snug hidden sm:block">

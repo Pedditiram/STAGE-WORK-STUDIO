@@ -2964,7 +2964,7 @@ header:has(.sps-console-profile.is-open) {
   font-family: var(--sps-font);
 }
 .sps-prompt-h:first-child { margin-top: 0; }
-.sps-prompt-h--title { color: var(--sps-gold); letter-spacing: 0.16em; font-size: 12px; font-family: var(--sps-font-display); font-weight: 600; text-transform: none; letter-spacing: 0.04em; font-size: 1.15rem; }
+.sps-prompt-h--title { color: var(--sps-gold); letter-spacing: 0.16em; font-size: 12px; font-family: var(--sps-font-display); font-weight: 600; text-transform: none; letter-spacing: 0.04em; font-size: 1.35rem; }
 .sps-prompt-h--intent { color: #e8d5b0; }
 .sps-prompt-h--refs { color: #c4b8a8; }
 .sps-prompt-h--subject { color: #d4b483; }
@@ -3233,7 +3233,8 @@ header:has(.sps-console-profile.is-open) {
 }
 
 .sps-login-legal button,
-.sps-login-link {
+.sps-login-link,
+.sps-quiet-link {
   background: none;
   border: 0;
   padding: 0;
@@ -3241,6 +3242,56 @@ header:has(.sps-console-profile.is-open) {
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 600;
+}
+
+.sps-quiet-link.is-muted {
+  color: var(--sps-muted);
+}
+
+.sps-quiet-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.9rem;
+}
+
+.sps-project-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sps-project-actions .sps-quiet-links {
+  justify-content: flex-start;
+}
+
+.sps-compact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sps-compact-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sps-muted);
+}
+
+.sps-compact-form input,
+.sps-compact-form textarea {
+  width: 100%;
+  border-radius: 7px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sps-text);
 }
 
 .sps-login-link.is-muted,
@@ -3270,8 +3321,8 @@ header:has(.sps-console-profile.is-open) {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  min-height: 3.4rem;
-  padding: 0.7rem 1.1rem;
+  min-height: 2.85rem;
+  padding: 0.55rem 1rem;
   border-bottom: 1px solid var(--sps-border);
   background: color-mix(in srgb, var(--sps-bg-elevated) 80%, transparent);
   flex-shrink: 0;
@@ -3282,7 +3333,7 @@ header:has(.sps-console-profile.is-open) {
 .sps-modal-head h3 {
   margin: 0;
   font-family: var(--sps-font-display);
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -3684,8 +3735,8 @@ header .sps-icon-btn.is-on {
   justify-content: center;
   gap: 0.35rem;
   margin: 0;
-  padding: 0.42rem 0.7rem;
-  min-height: 2rem;
+  padding: 0.32rem 0.55rem;
+  min-height: 1.75rem;
   min-width: 0;
   flex: 0 0 auto;
   position: relative;

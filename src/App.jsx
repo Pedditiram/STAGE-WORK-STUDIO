@@ -173,7 +173,6 @@ import AdminSettingsModal from './components/AdminSettingsModal';
 
 const PromptCompilerModal = lazy(() => import('./components/PromptCompilerModal'));
 const HelpUserGuideModal = lazy(() => import('./components/HelpUserGuideModal'));
-const InvestorDeckModal = lazy(() => import('./components/InvestorDeckModal'));
 const CharacterBibleModal = lazy(() => import('./components/CharacterBibleModal'));
 const WorldEnvironmentConsole = lazy(() => import('./components/WorldEnvironmentConsole'));
 const StudioBrainModal = lazy(() => import('./components/StudioBrainModal'));
@@ -756,7 +755,7 @@ export default function App() {
             '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
           );
           setIsProjectConsoleOpen(false);
-          setIsInvestorDeckOpen(true);
+          setPresentationMode(true);
           return;
         }
         setIsProjectConsoleOpen(true);
@@ -940,7 +939,7 @@ export default function App() {
       setHeaderMinimized(false);
       if (home.open === 'projects' || home.modal === 'projects') {
         setProjectConsoleInitialTab(home.tab || 'library');
-        setIsInvestorDeckOpen(false);
+        setPresentationMode(false);
         setIsProjectConsoleOpen(true);
       }
       let view = home.view || 'spreadsheet';
@@ -974,7 +973,6 @@ export default function App() {
   const [isStudioBrainOpen, setIsStudioBrainOpen] = useState(false);
   const [isProductionDashboardOpen, setIsProductionDashboardOpen] = useState(false);
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
-  const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isUserPackModalOpen, setIsUserPackModalOpen] = useState(false);
   const [studioUpdateBuildId, setStudioUpdateBuildId] = useState('');
@@ -1269,10 +1267,10 @@ export default function App() {
       lastOpenAt = now;
       if (isGuestSession()) {
         alert(
-          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio admin.\n\nOpen the Investor Deck, request access, or log in.'
+          '🔒 GUEST ACCESS\n\nSettings require a signed-in collaborator or studio admin.\n\nOpen Presentation, request access, or log in.'
         );
         setIsAdminModalOpen(false);
-        setIsInvestorDeckOpen(true);
+        setPresentationMode(true);
         return;
       }
       if (!isAdminLoggedIn) {
@@ -2783,7 +2781,7 @@ export default function App() {
     alert(
       `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Admin.`
     );
-    setIsInvestorDeckOpen(true);
+    setPresentationMode(true);
   };
 
   const guestMayLook = (label) => {
@@ -3218,7 +3216,7 @@ export default function App() {
           hint: 'Browse without saving',
           run: () => {
             enterGuestLookSession();
-            setIsInvestorDeckOpen(true);
+            setPresentationMode(true);
           }
         },
       ],
@@ -3253,7 +3251,7 @@ export default function App() {
       run: () => setIsHelpModalOpen(true),
       children: [
         { id: 'help-guide', label: 'User guide', run: () => setIsHelpModalOpen(true) },
-        { id: 'help-deck', label: 'Investor deck', run: () => setIsInvestorDeckOpen(true) },
+        { id: 'help-deck', label: 'Presentation', run: () => setPresentationMode(true) },
       ],
     },
     {
@@ -3265,17 +3263,6 @@ export default function App() {
       run: () => { setIsCollabChatOpen(true); setUnreadChatCount(0); },
       children: [
         { id: 'chat-open', label: 'Open chat', run: () => { setIsCollabChatOpen(true); setUnreadChatCount(0); } },
-      ],
-    },
-    {
-      id: 'deck',
-      group: 'Studio',
-      label: 'Investor Deck',
-      keywords: ['showcase', 'guest'],
-      icon: NAV_ICONS.deck,
-      run: () => setIsInvestorDeckOpen(true),
-      children: [
-        { id: 'deck-open', label: 'Open showcase', run: () => setIsInvestorDeckOpen(true) },
       ],
     },
     {
@@ -3853,7 +3840,7 @@ export default function App() {
         alert(
           '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
         );
-        setIsInvestorDeckOpen(true);
+        setPresentationMode(true);
         return;
       }
       setIsProjectConsoleOpen(true);
@@ -3970,7 +3957,7 @@ export default function App() {
               alert(
                 '🔒 GUEST ACCESS\n\nSign in to use Projects Console, or turn on Guest Browse in Settings.\n\nRequest access from the studio Admin.'
               );
-              setIsInvestorDeckOpen(true);
+              setPresentationMode(true);
               return;
             }
             setProjectConsoleInitialTab('library');
@@ -3986,7 +3973,7 @@ export default function App() {
           onOpenLoginModal={() => setIsLoginModalOpen(true)}
           onSwitchAccount={handleStudioSwitchAccount}
           onLogout={handleStudioLogout}
-          onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
+          onOpenInvestorDeck={() => setPresentationMode(true)}
           appVersionMode={appVersionMode}
           onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
           roomId={roomId}
@@ -4390,7 +4377,7 @@ export default function App() {
         presetProfile={presetProfile}
         setPresetProfile={handleSetPresetProfile}
         isAdminLoggedIn={isAdminLoggedIn}
-        onOpenInvestorDeck={() => setIsInvestorDeckOpen(true)}
+        onOpenInvestorDeck={() => setPresentationMode(true)}
         onOpenLogin={() => {
           setLoginOverlayMode('switch');
           setIsLoginModalOpen(true);
@@ -4404,16 +4391,6 @@ export default function App() {
         }}
         onApplyShots={handleApplyAIShots}
         colorTheme={colorTheme}
-      />
-      )}
-
-      {isInvestorDeckOpen && (
-      <InvestorDeckModal
-        isOpen={isInvestorDeckOpen}
-        onClose={() => setIsInvestorDeckOpen(false)}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
-        projectTitle={projectTitle}
-        shots={shots}
       />
       )}
 

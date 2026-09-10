@@ -843,13 +843,9 @@ export default function Header({
                 <button
                   type="button"
                   onClick={() => { close(); if (onOpenInvestorDeck) onOpenInvestorDeck(); }}
-                  className="w-full py-2.5 px-3 sps-btn sps-btn-primary text-xs flex items-center justify-between"
+                  className="sps-quiet-link"
                 >
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    Investor Deck & Studio Showcase
-                  </span>
-                  <span className="text-[10px] font-mono font-bold">{isGuest ? 'Guest OK' : 'Showcase'}</span>
+                  Presentation
                 </button>
                 {!isGuest && allottedProjects.length > 0 ? (
                   <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">

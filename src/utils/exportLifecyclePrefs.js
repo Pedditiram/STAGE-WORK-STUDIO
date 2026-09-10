@@ -16,7 +16,6 @@ export const EXPORT_LIFECYCLE_PREF_DEFS = Object.freeze([
   { id: 'campaign', key: 'sps_campaign_export_lifecycle', label: 'Campaign kit', defaultStrict: true },
   { id: 'storyboard', key: 'sps_storyboard_export_lifecycle', label: 'Storyboard', defaultStrict: true },
   { id: 'feature_reel', key: 'sps_feature_reel_export_lifecycle', label: 'Feature reel', defaultStrict: true },
-  { id: 'investor', key: 'sps_investor_export_lifecycle', label: 'Investor deck', defaultStrict: true },
   { id: 'budget', key: 'sps_budget_export_lifecycle', label: 'Budget', defaultStrict: true },
   { id: 'collab_chat', key: 'sps_collab_chat_export_lifecycle', label: 'Collab chat', defaultStrict: true },
   { id: 'stage', key: 'sps_stage_export_lifecycle', label: '3D Stage', defaultStrict: true },

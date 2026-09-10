@@ -18,8 +18,11 @@ import DesktopTrialModal from './DesktopTrialModal';
 import StudioTourOverlay from './StudioTourOverlay';
 import LegalDocModal from './LegalDocModal';
 import { LINE, PRODUCT } from '../constants/brand';
+import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { pickPresentationOpening } from '../utils/presentationOpening';
 import { setPresentationMode } from '../utils/projectPermissions';
+
+const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
 const OWNER_EMAIL = 'admin@stageworkstudio.com';
 const SLIDE_MS = 8000;
@@ -39,8 +42,8 @@ const REST_SLIDES = [
     ],
     beats: [
       'Writer Console holds the pages.',
-      'Character bible locks face, walk, and costume.',
-      'World console keeps the geography honest.',
+      'AI breakdown turns the script into a shot list.',
+      'Character bible locks face, walk, and costume. World keeps geography honest.',
     ],
     Icon: ScrollText,
     wash: 'from-violet-800/12 via-transparent to-amber-800/8',
@@ -50,7 +53,7 @@ const REST_SLIDES = [
     scene: 'THE SLATE',
     kicker: 'Matrix · Form',
     title: 'Every craft on the shot',
-    punch: 'Composition, light, lens, and performance — one row per take.',
+    punch: `${CRAFT_COUNT} crafts on one row — composition, light, lens, and performance.`,
     points: [
       { n: 'Grid', label: 'Cinema Matrix' },
       { n: 'Desk', label: 'Single-shot Form' },
@@ -114,9 +117,9 @@ const REST_SLIDES = [
       { n: 'Sync', label: 'Live merge' },
     ],
     beats: [
-      'Directors, DPs, and editors on the same take.',
+      'Isolated rooms. Slot lock. Live merge without overwrite chaos.',
       'Allotted titles. No guest walk into the vault.',
-      'The room remembers who held the slot.',
+      'Invite OTP at the door. The room remembers who held the slot.',
     ],
     Icon: Cloud,
     wash: 'from-sky-900/10 via-transparent to-amber-800/8',
@@ -124,17 +127,17 @@ const REST_SLIDES = [
   {
     id: 'board',
     scene: 'THE BOARDROOM',
-    kicker: 'Investors & access',
-    title: 'Built for the slate and the raise',
-    punch: 'Cut the pre-viz tax. Keep the look. Ship the feature from craft, not chat.',
+    kicker: 'Investment & scale',
+    title: 'Built for studio efficiency and IP velocity',
+    punch: 'Cut pre-viz cost, accelerate turnaround, license the pipeline. This reel is the raise.',
     points: [
       { n: '80%+', label: 'Pre-viz overhead cut' },
-      { n: 'OS', label: 'Not a chatbot' },
-      { n: 'Now', label: 'Ask for the room' },
+      { n: '10×', label: 'Text to camera params' },
+      { n: 'License', label: 'Multi-tenant houses' },
     ],
     beats: [
-      'Turn Presentation mode off when the lights come up.',
-      'Access and partnership: Studio Access & Admin Console',
+      'Direct path into 4K AI video. Export lists, schedules, and reels when the look is locked.',
+      'Login or request access. Collaborators unlock the full studio.',
       LINE,
     ],
     Icon: Clapperboard,
@@ -224,21 +227,23 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
                 <p className="sps-pres-title text-sm m-0 font-display">{PRODUCT}</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.('signin')}>
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+              <button type="button" className="sps-btn sps-btn-primary text-xs" onClick={() => onOpenLogin?.('signin')}>
                 Login
               </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => (onOpenLogin ? onOpenLogin('signup') : setAccessOpen(true))}>
-                Sign up
-              </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => setTrialOpen(true)}>
-                Download app
-              </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => setTourOpen(true)}>
-                Demo mode
-              </button>
-              <p className="sps-pres-meta text-[11px] font-mono tracking-widest m-0 ml-1">
-                SCENE {String(i + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+              <div className="sps-quiet-links">
+                <button type="button" className="sps-quiet-link" onClick={() => (onOpenLogin ? onOpenLogin('signup') : setAccessOpen(true))}>
+                  Sign up
+                </button>
+                <button type="button" className="sps-quiet-link is-muted" onClick={() => setTrialOpen(true)}>
+                  Download app
+                </button>
+                <button type="button" className="sps-quiet-link is-muted" onClick={() => setTourOpen(true)}>
+                  Demo
+                </button>
+              </div>
+              <p className="sps-pres-meta text-[11px] font-mono tracking-widest m-0">
+                {String(i + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
               </p>
             </div>
           </div>

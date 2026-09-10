@@ -130,7 +130,7 @@ export default function ProjectConsoleModal({
   onOpenNavigatorShortcutHelp,
   onApplyShots
 }) {
-  // Guests must never remain in Project Console — redirect to Investor Deck
+  // Guests must never remain in Project Console — redirect to Presentation
   useEffect(() => {
     if (!isOpen) return;
     if (!isGuestSession()) return;
@@ -1677,7 +1677,7 @@ export default function ProjectConsoleModal({
   const applyProjectToStudio = async (proj, { closeConsole = true, guestLook = false } = {}) => {
     if (!proj?.title) return false;
     if (isGuestSession() && !canGuestBrowseApp()) {
-      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view the Investor Deck & Studio Showcase.\n\nSign in to open '${proj.title}', or request access from the studio Admin.`);
+      alert(`🔒 GUEST ACCESS\n\nUnauthenticated visitors may only view Presentation.\n\nSign in to open '${proj.title}', or request access from the studio Admin.`);
       onClose?.();
       if (onOpenInvestorDeck) onOpenInvestorDeck();
       return false;
@@ -2495,18 +2495,6 @@ export default function ProjectConsoleModal({
                             </span>
                           </div>
 
-                          {!guestLook && (isPrimaryOwner || checkIsProjectAllotted(proj.title)) ? (
-                            <button
-                              type="button"
-                              className="sps-btn text-[10px] w-full justify-start gap-1.5"
-                              onClick={() => setAssetFoldersProjId(proj.id)}
-                              title="ASSETS · RENDERS · PROJECT paths for this film"
-                            >
-                              <Folder className="w-3 h-3 shrink-0" />
-                              <span className="truncate">Asset folders</span>
-                            </button>
-                          ) : null}
-
                           <ProjectDrivePanel
                             project={{
                               ...proj,
@@ -2519,125 +2507,102 @@ export default function ProjectConsoleModal({
                           />
                         </div>
 
-                        <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 space-y-2">
-                          {!guestLook && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // Soft-switch only — never close console when opening AI Breakdown
-                              if (!isActive) {
-                                const ok = softSwitchProject(proj);
-                                if (!ok) return;
-                              }
-                              setCustomProjectTitle(proj.title);
-                              setActiveTab('ai_breakdown');
-                            }}
-                            className="sps-btn sps-btn-primary w-full justify-center"
-                            title={`Run AI Script Breakdown for ${proj.title}`}
-                          >
-                            <Wand2 className="w-4 h-4 shrink-0" />
-                            <span>AI Script Breakdown</span>
-                          </button>
-                          )}
-
-                          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedPsychologyProjId(proj.id);
-                                setVaultCategory('director');
-                                setActiveTab('director_psychology');
-                              }}
-                              className="sps-btn text-[11px] justify-center"
-                              title={`Open Director's Vision Vault for ${proj.title}`}
-                            >
-                              <Brain className="w-3.5 h-3.5 shrink-0" />
-                              <span>Director</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedPsychologyProjId(proj.id);
-                                setVaultCategory('dop');
-                                setActiveTab('director_psychology');
-                              }}
-                              className="sps-btn text-[11px] justify-center"
-                              title={`Open DoP Cinematography Vault for ${proj.title}`}
-                            >
-                              <Camera className="w-3.5 h-3.5 shrink-0" />
-                              <span>DoP</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedPsychologyProjId(proj.id);
-                                setVaultCategory('sound');
-                                setActiveTab('director_psychology');
-                              }}
-                              className="sps-btn text-[11px] justify-center"
-                              title={`Open Music Director & Sound Vault for ${proj.title}`}
-                            >
-                              <Music2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Sound</span>
-                            </button>
-                          </div>
-
+                        <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 sps-project-actions">
                           <button
                             type="button"
                             onClick={() => {
                               if (!isActive) handleSwitchProject(proj);
                               onClose();
                             }}
-                            className={`sps-btn w-full justify-center ${isActive ? 'sps-btn-primary' : ''}`}
+                            className="sps-btn sps-btn-primary w-full justify-center"
                           >
                             {isActive ? <Play className="w-4 h-4 fill-current" /> : <ArrowRight className="w-4 h-4" />}
-                            <span>{isActive ? 'Open Active Studio' : 'Switch & Open Project'}</span>
+                            <span>{isActive ? 'Open' : 'Open project'}</span>
                           </button>
-
-                          <div className="grid grid-cols-3 gap-1.5 pt-1">
+                          <div className="sps-quiet-links">
+                            {!guestLook ? (
+                              <button
+                                type="button"
+                                className="sps-quiet-link"
+                                onClick={() => {
+                                  if (!isActive) {
+                                    const ok = softSwitchProject(proj);
+                                    if (!ok) return;
+                                  }
+                                  setCustomProjectTitle(proj.title);
+                                  setActiveTab('ai_breakdown');
+                                }}
+                              >
+                                Breakdown
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="sps-quiet-link is-muted"
+                              onClick={() => {
+                                setSelectedPsychologyProjId(proj.id);
+                                setVaultCategory('director');
+                                setActiveTab('director_psychology');
+                              }}
+                            >
+                              Director
+                            </button>
+                            <button
+                              type="button"
+                              className="sps-quiet-link is-muted"
+                              onClick={() => {
+                                setSelectedPsychologyProjId(proj.id);
+                                setVaultCategory('dop');
+                                setActiveTab('director_psychology');
+                              }}
+                            >
+                              DoP
+                            </button>
+                            <button
+                              type="button"
+                              className="sps-quiet-link is-muted"
+                              onClick={() => {
+                                setSelectedPsychologyProjId(proj.id);
+                                setVaultCategory('sound');
+                                setActiveTab('director_psychology');
+                              }}
+                            >
+                              Sound
+                            </button>
+                            {!guestLook && (isPrimaryOwner || checkIsProjectAllotted(proj.title)) ? (
+                              <button
+                                type="button"
+                                className="sps-quiet-link is-muted"
+                                onClick={() => setAssetFoldersProjId(proj.id)}
+                              >
+                                Folders
+                              </button>
+                            ) : null}
                             {isPrimaryOwner ? (
                               <button
                                 type="button"
+                                className="sps-quiet-link is-muted"
                                 onClick={() => handleDuplicateProject(proj)}
-                                className="sps-btn text-[11px] justify-center"
-                                title="Duplicate Project"
                               >
-                                <Copy className="w-3.5 h-3.5" />
-                                <span>Copy</span>
+                                Copy
                               </button>
-                            ) : (
-                              <div className="py-1.5 px-2 rounded-[var(--sps-radius-sm)] text-[11px] font-semibold text-center" style={{ color: 'var(--sps-muted)', background: 'var(--sps-surface)' }}>
-                                Edit only
-                              </div>
-                            )}
-
+                            ) : null}
                             <button
                               type="button"
+                              className="sps-quiet-link is-muted"
                               onClick={() => exportProjectPackageToFile(proj)}
-                              className="sps-btn text-[11px] justify-center"
-                              title="Download .sps backup file (not the same as Project save folder versioning)"
                             >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Backup</span>
+                              Backup
                             </button>
-
                             {canArchiveProjectTitle(proj.title) ? (
                               <button
                                 type="button"
+                                className="sps-quiet-link is-muted"
                                 onClick={() => handleDeleteProject(proj.id)}
-                                className="sps-btn text-[11px] justify-center"
-                                title="Move project to Archive (can restore later)"
                               >
-                                <Archive className="w-3.5 h-3.5" />
-                                <span>Archive</span>
+                                Archive
                               </button>
-                            ) : (
-                              <div className="py-1.5 px-2 rounded-[var(--sps-radius-sm)] text-[11px] font-semibold text-center" style={{ color: 'var(--sps-muted)', background: 'var(--sps-surface)' }}>
-                                {isPrimaryOwner ? 'Studio' : 'Locked'}
-                              </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
