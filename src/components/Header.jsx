@@ -31,7 +31,8 @@ import {
   IconChevronUp as ChevronUp,
   IconSync as RefreshCw,
   IconBrain as Brain,
-  IconNav as NavMark
+  IconNav as NavMark,
+  IconPeople
 } from './StudioIcons';
 import { PinBarButton } from './HoverPinBar';
 import StudioProfileControl from './StudioProfileControl';
@@ -51,6 +52,22 @@ import {
   areAllConsolesOff,
   setPresentationMode
 } from '../utils/projectPermissions';
+
+function MastTab({ selected = false, onClick, title, label, children }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      aria-label={title}
+      title={title}
+      onClick={onClick}
+    >
+      {children}
+      <span className="sps-mast-label">{label}</span>
+    </button>
+  );
+}
 
 export default function Header({ 
   projectTitle, 
@@ -440,10 +457,10 @@ export default function Header({
               </button>
             ) : null}
             {consoleOn('writer') ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeView === 'screenplay'}
+              <MastTab
+                selected={activeView === 'screenplay'}
+                title="Writer"
+                label="Writer"
                 onClick={() => {
                   if (isGuest && !lookOnly) {
                     redirectGuest('Writer Console');
@@ -453,16 +470,15 @@ export default function Header({
                   if (typeof onOpenWriterConsole === 'function') onOpenWriterConsole('screenplay');
                   else setActiveView('screenplay');
                 }}
-                title="Writer"
               >
                 <Scroll className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
             {consoleOn('matrix') ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeView === 'spreadsheet'}
+              <MastTab
+                selected={activeView === 'spreadsheet'}
+                title="Matrix"
+                label="Matrix"
                 onClick={() => {
                   if (isGuest && !lookOnly) {
                     redirectGuest('Cinema Matrix');
@@ -471,16 +487,15 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('spreadsheet');
                 }}
-                title="Matrix"
               >
                 <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
             {consoleOn('form') ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeView === 'form'}
+              <MastTab
+                selected={activeView === 'form'}
+                title="Form"
+                label="Form"
                 onClick={() => {
                   if (isGuest && !lookOnly) {
                     redirectGuest('Studio Form');
@@ -489,16 +504,15 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('form');
                 }}
-                title="Form"
               >
                 <FileText className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
             {consoleOn('stage') ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeView === 'canvas'}
+              <MastTab
+                selected={activeView === 'canvas'}
+                title="3D Stage"
+                label="Stage"
                 onClick={() => {
                   if (isGuest && !lookOnly) {
                     redirectGuest('Director Canvas');
@@ -507,77 +521,79 @@ export default function Header({
                   if (demoMode) setPresentationMode(false);
                   setActiveView('canvas');
                 }}
-                title="3D Stage"
               >
                 <Video className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
             <span className="sps-tabs-split" aria-hidden="true" />
             {consoleOn('cast') ? (
-              <button type="button" role="tab" aria-selected={activeView === 'cast'} onClick={withGuestGuard('Character Bible', onOpenCharacterBible)} title="Characters">
+              <MastTab selected={activeView === 'cast'} title="Characters" label="Cast" onClick={withGuestGuard('Character Bible', onOpenCharacterBible)}>
                 <Users className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
             {consoleOn('world') ? (
-              <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)} title="World">
+              <MastTab selected={false} title="World" label="World" onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)}>
                 <Globe2 className="w-3.5 h-3.5 shrink-0" />
-              </button>
+              </MastTab>
             ) : null}
           </div>
           <div className="sps-header-tools">
             <div className="sps-tabs sps-tabs-mast" role="tablist" aria-label="Packs and generate">
               {consoleOn('storyboard') ? (
-                <button type="button" role="tab" aria-selected={activeView === 'storyboard'} onClick={withGuestGuard('Storyboard', onOpenStoryboard)} title="Storyboard">
+                <MastTab selected={activeView === 'storyboard'} title="Storyboard" label="Board" onClick={withGuestGuard('Storyboard', onOpenStoryboard)}>
                   <StoryboardMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('promo') ? (
-                <button type="button" role="tab" aria-selected={activeView === 'promo'} onClick={withGuestGuard('Promo Pack', onOpenPromoPack)} title="Promo Pack">
+                <MastTab selected={activeView === 'promo'} title="Promo Pack" label="Promo" onClick={withGuestGuard('Promo Pack', onOpenPromoPack)}>
                   <PromoMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('campaign') ? (
-                <button type="button" role="tab" aria-selected={activeView === 'campaign'} onClick={withGuestGuard('Campaign Kit', onOpenCampaignKit)} title="Campaign Kit">
+                <MastTab selected={activeView === 'campaign'} title="Campaign Kit" label="Camp" onClick={withGuestGuard('Campaign Kit', onOpenCampaignKit)}>
                   <CampaignMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('pitch') ? (
-                <button type="button" role="tab" aria-selected={activeView === 'pitch'} onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)} title="Pitch Deck">
+                <MastTab selected={activeView === 'pitch'} title="Pitch Deck" label="Pitch" onClick={withGuestGuard('Pitch Deck', onOpenPitchDeck)}>
                   <PitchMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('budget') ? (
-                <button type="button" role="tab" aria-selected={activeView === 'budget'} onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })} title="Budget">
+                <MastTab selected={activeView === 'budget'} title="Budget" label="Budget" onClick={withGuestGuard('Budget', onOpenBudgetConsole, { allowLook: false })}>
                   <BudgetMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('reel') ? (
-                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Feature reel', onOpenFeatureReel)} title="Reel">
+                <MastTab selected={false} title="Reel" label="Reel" onClick={withGuestGuard('Feature reel', onOpenFeatureReel)}>
                   <ReelMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               <span className="sps-tabs-split" aria-hidden="true" />
               {consoleOn('compile') ? (
-                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })} title="Compile">
+                <MastTab selected={false} title="Compile" label="Compile" onClick={withGuestGuard('Prompt Compiler', onOpenCompiler, { allowLook: false })}>
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
               {consoleOn('generate') ? (
-                <button type="button" role="tab" aria-selected={false} onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })} title="Generate">
+                <MastTab selected={false} title="Generate" label="Gen" onClick={withGuestGuard('Generate desk', onOpenGenerateDesk, { allowLook: false })}>
                   <GenerateMark className="w-3.5 h-3.5 shrink-0" />
-                </button>
+                </MastTab>
               ) : null}
             </div>
           </div>
         </div>
 
         <div className="sps-header-rail">
+          <div className="sps-header-rail-group" aria-label="Edit history">
           <button type="button" onClick={onUndo} disabled={!canUndo} className="sps-icon-btn" title="Undo">
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
           <button type="button" onClick={onRedo} disabled={!canRedo} className="sps-icon-btn" title="Redo">
             <RotateCw className="w-3.5 h-3.5" />
           </button>
+          </div>
+          <div className="sps-header-rail-group" aria-label="People">
           <button
             type="button"
             onClick={() => onOpenCollabChat?.()}
@@ -614,7 +630,7 @@ export default function Header({
                   aria-label={`Users, ${liveCount} online`}
                   aria-expanded={isActiveUsersOpen}
                 >
-                  <Users className="w-3.5 h-3.5" />
+                  <IconPeople className="w-3.5 h-3.5" />
                 </button>
 
                 {isActiveUsersOpen && (
@@ -697,6 +713,9 @@ export default function Header({
             );
           })()}
 
+          </div>
+
+          <div className="sps-header-rail-group" aria-label="Save and share">
           <HeaderSaveMenu
             lookOnly={lookOnly}
             projectTitle={projectTitle}
@@ -717,10 +736,11 @@ export default function Header({
             title={
               isCloudSyncing
                 ? 'Cloud syncing…'
-                : `Cloud sync · backend ${syncBackendLabel(syncHealth?.backend)}${
+                : `Cloud sync · ${syncBackendLabel(syncHealth?.backend)}${
                     syncHealth?.kvConfigured ? ' (KV)' : ''
-                  }${syncHealth?.failStreak ? ` · ${syncHealth.failStreak} fail(s)` : ''}`
+                  }${syncHealth?.failStreak ? ` · ${syncHealth.failStreak} fail(s)` : ''} — click to push & pull now`
             }
+            aria-label="Cloud sync"
           >
             {isCloudSyncing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
           </button>
@@ -746,6 +766,7 @@ export default function Header({
               roomId,
             }}
           />
+          </div>
           <button
             type="button"
             onClick={() => {

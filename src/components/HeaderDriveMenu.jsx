@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Cloud, Copy, ExternalLink, Link2 } from 'lucide-react';
+import { Copy, ExternalLink, Link2 } from 'lucide-react';
+import { IconDrive } from './StudioIcons';
 import { getCurrentUserEmail } from '../utils/projectPermissions';
 import {
   clearProjectDriveShare,
@@ -66,7 +67,7 @@ export default function HeaderDriveMenu({ project, lookOnly = false }) {
         disabled={lookOnly}
         onClick={() => setOpen((v) => !v)}
       >
-        <Cloud className="w-3.5 h-3.5" />
+        <IconDrive className="w-3.5 h-3.5" />
       </button>
       {open && (
         <>

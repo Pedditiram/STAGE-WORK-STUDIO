@@ -166,6 +166,7 @@ class SWSMetadata:
             ("sws_workflow_version", "1.0"),
             ("provider", ""),
             ("model", ""),
+            ("system_instruction", ""),
         ])
 
     RETURN_TYPES = ("STRING",)
@@ -240,15 +241,30 @@ class _ProviderBase:
         result["seed"] = kwargs.get("seed")
         result["fps"] = kwargs.get("fps")
         result["workflow_type"] = kwargs.get("workflow_type")
+        result["system_instruction"] = str(kwargs.get("system_instruction") or "")
         return (dumps(result),)
 
 
 class SWSVideoProvider(_ProviderBase):
     FAMILY = "video"
 
+    @classmethod
+    def INPUT_TYPES(cls):
+        base = _ProviderBase.INPUT_TYPES()
+        optional = dict(base.get("optional") or {})
+        optional["system_instruction"] = ("STRING", {"default": "", "multiline": True})
+        return {**base, "optional": optional}
+
 
 class SWSImageProvider(_ProviderBase):
     FAMILY = "image"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        base = _ProviderBase.INPUT_TYPES()
+        optional = dict(base.get("optional") or {})
+        optional["system_instruction"] = ("STRING", {"default": "", "multiline": True})
+        return {**base, "optional": optional}
 
 
 class SWSOutput:
@@ -276,6 +292,21 @@ class SWSOutput:
     OUTPUT_NODE = True
 
     def run(self, provider_result, shot_context, project_id, scene_id, shot_id, generation_id, workflow_id, provider, model, extra_json=""):
+        extra = loads_maybe(extra_json)
+        if not isinstance(extra, dict):
+            extra = {}
+        sws = extra.get("sws") if isinstance(extra.get("sws"), dict) else {}
+        sys = str(
+            sws.get("systemInstruction")
+            or sws.get("system_instruction")
+            or extra.get("system_instruction")
+            or ""
+        )
+        extra = {
+            **extra,
+            "system_instruction": sys,
+            "sws": {**sws, "systemInstruction": sws.get("systemInstruction") or sys},
+        }
         payload = {
             "provider_result": loads_maybe(provider_result),
             "shot_context": loads_maybe(shot_context),
@@ -286,7 +317,8 @@ class SWSOutput:
             "workflow_id": workflow_id,
             "provider": provider,
             "model": model,
-            "extra": loads_maybe(extra_json),
+            "extra": extra,
+            "system_instruction": sys,
         }
         return {"ui": {"text": [dumps(payload)]}, "result": (dumps(payload),)}
 

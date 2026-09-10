@@ -13,8 +13,19 @@ import {
   setPresentationMode
 } from '../utils/projectPermissions';
 import { registerThisDevice, getDeviceId } from '../utils/saasControl';
+import { activateSelfServeAccount, isSelfServeSession } from '../utils/tenantScope';
 import { isValidEmail } from '../utils/emailValidation';
+import {
+  collaboratorHasPassword,
+  collaboratorPasswordHint,
+  findAuthorizedUser,
+  isOwnerLoginEmail,
+  isStrongCollaboratorPassword,
+  setCollaboratorPassword,
+  verifyCollaboratorPassword
+} from '../utils/collaboratorPassword';
 import StageWorksMark from './StageWorksMark';
+import LegalDocModal from './LegalDocModal';
 import { CATEGORY, PRODUCT } from '../constants/brand';
 import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 
@@ -30,14 +41,24 @@ function GoogleIcon({ className = 'w-4 h-4' }) {
 }
 
 export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpenAppDemo, onOpenDesktopTrial, overlayMode = 'default', initialMode = 'signin' }) {
-  const [loginMode, setLoginMode] = useState(initialMode || 'signin'); // 'signin' | 'signup' | 'guest' | 'admin'
+  const [loginMode, setLoginMode] = useState(initialMode || 'signin'); // 'signin' | 'signup' | 'guest' | 'admin' | 'createpass' | 'changepass'
   const [emailInput, setEmailInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
+  const [currentPass, setCurrentPass] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingMessage, setPendingMessage] = useState('');
+  const [isSavingPass, setIsSavingPass] = useState(false);
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
   const [signUpRole, setSignUpRole] = useState('');
   const [signUpOtp, setSignUpOtp] = useState('');
   const [isSubmittingSignUp, setIsSubmittingSignUp] = useState(false);
+  const [signupAwaitingCode, setSignupAwaitingCode] = useState(false);
+  const [signupAgreed, setSignupAgreed] = useState(false);
+  const [legalKind, setLegalKind] = useState(null);
   const [adminIdInput, setAdminIdInput] = useState('');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -52,7 +73,17 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     if (remembered) setEmailInput(remembered);
     setErrorMsg('');
     setSuccessMsg('');
+    setPasswordInput('');
+    setNewPass('');
+    setNewPass2('');
+    setCurrentPass('');
+    setPendingEmail(remembered);
+    setPendingMessage('');
     setLoginMode(initialMode || 'signin');
+    setSignupAwaitingCode(false);
+    setSignupAgreed(false);
+    setLegalKind(null);
+    setSignUpOtp('');
   }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
@@ -96,8 +127,8 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
       setErrorMsg(gate.error || 'License or device blocked.');
       return;
     }
-    exitPresentationForWorkspace();
     markCollaboratorSession(clean);
+    exitPresentationForWorkspace();
     const admin = isStudioAdmin(clean);
     if (setIsAdminLoggedIn) setIsAdminLoggedIn(admin);
     try {
@@ -124,10 +155,49 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setTimeout(() => {
       window.dispatchEvent(new Event('sps_collaborators_updated'));
       onClose();
+      if (isSelfServeSession(clean)) {
+        window.location.reload();
+      }
     }, 500);
   };
 
-  const handleGmailLogin = (e, explicitEmail) => {
+  const beginCreatePassword = (email, message) => {
+    setPendingEmail(normalizeEmail(email));
+    setPendingMessage(message);
+    setNewPass('');
+    setNewPass2('');
+    setErrorMsg('');
+    setSuccessMsg('Access granted. Create your own password — you will use it the next time you sign in.');
+    setLoginMode('createpass');
+  };
+
+  const afterAccessGranted = (email, message, user = findAuthorizedUser(email)) => {
+    const clean = normalizeEmail(email);
+    if (isOwnerLoginEmail(clean)) {
+      completeLogin(clean, message);
+      return;
+    }
+    if (collaboratorHasPassword(user)) {
+      completeLogin(clean, message);
+      return;
+    }
+    beginCreatePassword(clean, message);
+  };
+
+  const otpMatches = (cleanEmail, otpVal) => {
+    if (!otpVal || !/^\d{6}$/.test(otpVal)) return false;
+    const urlOtp = new URLSearchParams(window.location.search).get('otp') || '';
+    let issuedOtps = {};
+    try {
+      issuedOtps = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
+    } catch {
+      issuedOtps = {};
+    }
+    const issued = issuedOtps[cleanEmail] || issuedOtps[localStorage.getItem('sps_cloud_room_id') || ''] || '';
+    return otpVal === urlOtp || otpVal === String(issued);
+  };
+
+  const handleGmailLogin = async (e, explicitEmail) => {
     if (e?.preventDefault) e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -148,7 +218,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
       localStorage.removeItem('sps_user_manually_logged_out');
 
       // Admin path: admin@stageworkstudio.com or pedditiram@gmail.com
-      if (PRIMARY_ADMIN_EMAILS.includes(cleanEmail) || cleanEmail === 'admin@stageworkstudio.com' || cleanEmail === 'pedditiram@gmail.com') {
+      if (isOwnerLoginEmail(cleanEmail)) {
         completeLogin(cleanEmail, 'Logged in as Studio Admin (Full studio control unlocked).');
         return;
       }
@@ -158,16 +228,35 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
         (u.phone && u.phone.trim().toLowerCase() === cleanEmail) ||
         (u.name && u.name.trim().toLowerCase().includes(cleanEmail.split('@')[0]))
       );
+      const otpVal = otpInput.trim();
+      const passVal = passwordInput;
+      const welcome = (user) =>
+        `Welcome back, ${user?.name || 'Collaborator'}. You can edit allotted projects only.`;
 
       if (matchedUser) {
         if (matchedUser.status === 'Suspended') {
           setErrorMsg('Access Suspended. Contact Studio Admin to reactivate.');
           return;
         }
-        completeLogin(
-          matchedUser.email || cleanEmail,
-          `Welcome back, ${matchedUser.name || 'Collaborator'}. You can edit allotted projects only.`
-        );
+        const email = normalizeEmail(matchedUser.email || cleanEmail);
+        if (collaboratorHasPassword(matchedUser)) {
+          if (passVal) {
+            const ok = await verifyCollaboratorPassword(matchedUser, passVal);
+            if (!ok) {
+              setErrorMsg('Wrong password. Try again, or use a fresh invite OTP from Admin.');
+              return;
+            }
+            completeLogin(email, welcome(matchedUser));
+            return;
+          }
+          if (otpMatches(email, otpVal)) {
+            afterAccessGranted(email, welcome(matchedUser), matchedUser);
+            return;
+          }
+          setErrorMsg('Enter your password, or a fresh 6-digit invite OTP from Admin.');
+          return;
+        }
+        afterAccessGranted(email, welcome(matchedUser), matchedUser);
         return;
       }
 
@@ -183,18 +272,11 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           });
           localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
         }
-        completeLogin('pedditivarshini@gmail.com', 'Logged in as Pedditi Varshini (collaborator).');
+        afterAccessGranted('pedditivarshini@gmail.com', 'Logged in as Pedditi Varshini (collaborator).');
         return;
       }
 
-      const urlOtp = new URLSearchParams(window.location.search).get('otp') || '';
-      let issuedOtps = {};
-      try {
-        issuedOtps = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
-      } catch (e) {}
-      const issued = issuedOtps[cleanEmail] || issuedOtps[localStorage.getItem('sps_cloud_room_id') || ''] || '';
-      const otpVal = otpInput.trim();
-      if (otpVal && /^\d{6}$/.test(otpVal) && (otpVal === urlOtp || otpVal === String(issued))) {
+      if (otpMatches(cleanEmail, otpVal)) {
         const newUser = {
           name: cleanEmail.split('@')[0].toUpperCase(),
           designation: 'Collaborator',
@@ -205,7 +287,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
         };
         authorizedUsers.push(newUser);
         localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
-        completeLogin(cleanEmail, `OTP verified. Ask admin to allot a project to ${cleanEmail}.`);
+        afterAccessGranted(cleanEmail, `OTP verified. Ask admin to allot a project to ${cleanEmail}.`, newUser);
         return;
       }
 
@@ -255,10 +337,88 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     setErrorMsg('Invalid Admin ID or Password. Admin recovery: use the Sign In tab with the Admin email.');
   };
 
+  const handleCreateMyPassword = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const email = normalizeEmail(pendingEmail || emailInput || getCurrentUserEmail());
+    if (!isValidEmail(email) || isOwnerLoginEmail(email)) {
+      setErrorMsg('Sign in with your allotted collaborator email first.');
+      return;
+    }
+    if (newPass !== newPass2) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+    if (!isStrongCollaboratorPassword(newPass)) {
+      setErrorMsg(collaboratorPasswordHint());
+      return;
+    }
+    setIsSavingPass(true);
+    try {
+      const saved = await setCollaboratorPassword(email, newPass);
+      if (!saved.ok) {
+        setErrorMsg(saved.error || 'Could not save password.');
+        return;
+      }
+      completeLogin(email, pendingMessage || 'Password saved. Welcome to Stage Work Studio.');
+    } catch (err) {
+      setErrorMsg(err?.message || 'Could not save password.');
+    } finally {
+      setIsSavingPass(false);
+    }
+  };
+
+  const handleChangeMyPassword = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const email = normalizeEmail(getCurrentUserEmail() || emailInput);
+    const user = findAuthorizedUser(email);
+    if (!isValidEmail(email) || isOwnerLoginEmail(email)) {
+      setErrorMsg('Only Editors and collaborators set a password here.');
+      return;
+    }
+    if (collaboratorHasPassword(user)) {
+      const ok = await verifyCollaboratorPassword(user, currentPass);
+      if (!ok) {
+        setErrorMsg('Current password is incorrect. Ask Admin to reset it if you forgot.');
+        return;
+      }
+    }
+    if (newPass !== newPass2) {
+      setErrorMsg('New passwords do not match.');
+      return;
+    }
+    if (!isStrongCollaboratorPassword(newPass)) {
+      setErrorMsg(collaboratorPasswordHint());
+      return;
+    }
+    setIsSavingPass(true);
+    try {
+      const saved = await setCollaboratorPassword(email, newPass);
+      if (!saved.ok) {
+        setErrorMsg(saved.error || 'Could not update password.');
+        return;
+      }
+      setSuccessMsg('Password updated. Use it the next time you sign in.');
+      setCurrentPass('');
+      setNewPass('');
+      setNewPass2('');
+      setTimeout(() => onClose(), 600);
+    } catch (err) {
+      setErrorMsg(err?.message || 'Could not update password.');
+    } finally {
+      setIsSavingPass(false);
+    }
+  };
+
   const handleSignUp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    if (!signupAgreed) {
+      setErrorMsg('Accept Privacy and Terms to create an account.');
+      return;
+    }
     const cleanEmail = normalizeEmail(signUpEmail);
     if (!isValidEmail(cleanEmail)) {
       setErrorMsg('invalid mail id');
@@ -268,7 +428,8 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
     const otpVal = signUpOtp.trim();
 
     // If OTP provided and matches an issued OTP or URL OTP, immediately authenticate
-    if (otpVal && /^\d{6}$/.test(otpVal)) {
+    // Studio invite OTP still unlocks a collaborator (Owner issued the code).
+    if (otpVal && /^\d{6}$/.test(otpVal) && !signupAwaitingCode) {
       const urlOtp = new URLSearchParams(window.location.search).get('otp') || '';
       let issuedOtps = {};
       try {
@@ -290,41 +451,70 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
         };
         authorizedUsers.push(newUser);
         localStorage.setItem('sps_authorized_phone_users', JSON.stringify(authorizedUsers));
-        completeLogin(cleanEmail, `Account verified. Welcome to Stage Work Studio, ${cleanName}!`);
+        afterAccessGranted(cleanEmail, `Account verified. Welcome to Stage Work Studio, ${cleanName}!`, newUser);
         return;
       }
     }
 
     setIsSubmittingSignUp(true);
     try {
-      const res = await fetch('/api/request-access', {
+      if (signupAwaitingCode) {
+        if (!/^\d{6}$/.test(otpVal)) {
+          setErrorMsg('Enter the 6-digit code from your email.');
+          return;
+        }
+        const res = await fetch('/api/saas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'verify-signup',
+            email: cleanEmail,
+            otp: otpVal,
+            name: cleanName,
+            deviceId: getDeviceId()
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          setErrorMsg(data?.error || 'That code did not work. Request a new one.');
+          return;
+        }
+        const user = activateSelfServeAccount(cleanEmail, {
+          name: data.name || cleanName,
+          role: signUpRole.trim() || 'Writer'
+        });
+        afterAccessGranted(
+          cleanEmail,
+          `Your web account is ready — Writer, Matrix, and Form. ${cleanName}, this is your library, not the studio vault.`,
+          user
+        );
+        return;
+      }
+
+      const res = await fetch('/api/saas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: cleanName,
+          action: 'signup',
           email: cleanEmail,
-          role: signUpRole.trim() || 'Collaborator',
-          message: 'Sign-up access request from Stage Work Studio client',
-          autoReply: true
-        }),
+          name: cleanName
+        })
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.success) {
-        let msg = data?.message || 'Access request sent to admin@stageworkstudio.com.';
-        if (msg.includes('validation_error') || msg.includes('statusCode') || msg.includes('Email delivery failed')) {
-          msg = 'Access request sent to admin@stageworkstudio.com (Saved in studio vault).';
-        }
-        setSuccessMsg(msg);
+      if (res.ok && data?.success && data?.emailed) {
+        setSignupAwaitingCode(true);
+        setSignUpOtp('');
+        setSuccessMsg(data.message || `We emailed a code to ${cleanEmail}. It is not shown in this window.`);
       } else {
         const err = String(data?.error || '');
         if (err.toLowerCase().includes('invalid mail id') || err.toLowerCase().includes('valid email')) {
           setErrorMsg('invalid mail id');
         } else {
-          setErrorMsg(err || 'Could not send sign-up request. Please try again.');
+          setErrorMsg(err || 'Could not send a sign-up code. Try again, or request a studio invite.');
         }
       }
     } catch {
-      setErrorMsg('invalid mail id');
+      setErrorMsg('Could not reach sign-up. Check your connection.');
     } finally {
       setIsSubmittingSignUp(false);
     }
@@ -352,8 +542,21 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
               <StageWorksMark size={32} className="w-8 h-8 object-cover" />
             </div>
             <div className="min-w-0">
-              <h2>{isSwitch ? 'Switch account' : PRODUCT}</h2>
-              <p>{isSwitch ? 'Sign in as another user — Projects stay open.' : CATEGORY}</p>
+              <h2>
+                {loginMode === 'createpass'
+                  ? 'Create my password'
+                  : loginMode === 'changepass'
+                    ? 'Change password'
+                    : isSwitch ? 'Switch account' : PRODUCT}
+              </h2>
+              <p>
+                {loginMode === 'createpass'
+                  ? 'Choose a password for this collaborator email. Admin already granted access.'
+                  : loginMode === 'changepass'
+                    ? 'Update the password you use on Sign In.'
+                    : isSwitch ? 'Sign in as another user — Projects stay open.' : CATEGORY}
+              </p>
+              {loginMode !== 'createpass' && loginMode !== 'changepass' ? (
               <p
                 className="m-0 mt-1 text-[10px] font-mono tabular-nums"
                 style={{ color: 'var(--sps-gold)', letterSpacing: '0.08em' }}
@@ -361,6 +564,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
               >
                 Build {APP_VERSION_NAME}
               </p>
+              ) : null}
             </div>
           </div>
           <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close login">
@@ -368,6 +572,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           </button>
         </div>
 
+        {loginMode !== 'createpass' && loginMode !== 'changepass' ? (
         <div className="sps-tabs mx-4 mt-3 flex-wrap" role="tablist" aria-label="Login as">
           <button
             type="button"
@@ -406,6 +611,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
             Studio Admin
           </button>
         </div>
+        ) : null}
 
         <div className="sps-modal-body p-5 space-y-4">
           {errorMsg && (
@@ -422,7 +628,126 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
             </div>
           )}
 
-          {loginMode === 'signin' ? (
+          {loginMode === 'createpass' ? (
+            <form onSubmit={handleCreateMyPassword} className="space-y-3.5">
+              <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
+                Access is already granted for{' '}
+                <strong style={{ color: 'var(--sps-text)' }}>{pendingEmail || emailInput}</strong>.
+                Create your own password so you do not need a new OTP every time.
+                Admin can later turn on an Independent settings pack; you export or close it from Profile → My settings pack.
+              </p>
+              <div>
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <Lock className="w-3.5 h-3.5" />
+                  New password
+                </label>
+                <input
+                  type="password"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  placeholder="At least 10 characters"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  Confirm password
+                </label>
+                <input
+                  type="password"
+                  value={newPass2}
+                  onChange={(e) => setNewPass2(e.target.value)}
+                  placeholder="Type it again"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
+                  {collaboratorPasswordHint()}
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={isSavingPass}
+                className="sps-btn sps-btn-primary w-full"
+                style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
+              >
+                {isSavingPass ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                <span>{isSavingPass ? 'Saving…' : 'Save password and open studio'}</span>
+              </button>
+              <button
+                type="button"
+                className="text-[11px] text-[var(--sps-gold)] hover:underline font-semibold"
+                onClick={() => { setLoginMode('signin'); setErrorMsg(''); }}
+              >
+                Back to Sign In
+              </button>
+            </form>
+          ) : loginMode === 'changepass' ? (
+            <form onSubmit={handleChangeMyPassword} className="space-y-3.5">
+              <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
+                Signed in as <strong style={{ color: 'var(--sps-text)' }}>{getCurrentUserEmail() || emailInput}</strong>.
+              </p>
+              {collaboratorHasPassword(findAuthorizedUser(getCurrentUserEmail())) ? (
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                    Current password
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    placeholder="Current password"
+                    className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              ) : null}
+              <div>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  New password
+                </label>
+                <input
+                  type="password"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  placeholder="At least 10 characters"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  Confirm new password
+                </label>
+                <input
+                  type="password"
+                  value={newPass2}
+                  onChange={(e) => setNewPass2(e.target.value)}
+                  placeholder="Type it again"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
+                  {collaboratorPasswordHint()}
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={isSavingPass}
+                className="sps-btn sps-btn-primary w-full"
+                style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
+              >
+                {isSavingPass ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                <span>{isSavingPass ? 'Updating…' : 'Update password'}</span>
+              </button>
+            </form>
+          ) : loginMode === 'signin' ? (
             <form onSubmit={handleGmailLogin} className="space-y-4">
               {rememberedEmail && (
                 <div className="p-2.5 rounded-lg border border-[var(--sps-gold)]/40 bg-[var(--sps-gold)]/5">
@@ -436,11 +761,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                       setErrorMsg('');
                       setSuccessMsg('');
                       localStorage.removeItem('sps_user_manually_logged_out');
-                      const isAdmin = PRIMARY_ADMIN_EMAILS.includes(rememberedEmail) || rememberedEmail === 'admin@stageworkstudio.com' || rememberedEmail === 'pedditiram@gmail.com';
-                      completeLogin(
-                        rememberedEmail,
-                        `Continuing as ${isAdmin ? 'Studio Admin' : rememberedEmail}`
-                      );
+                      handleGmailLogin(null, rememberedEmail);
                     }}
                     className="sps-btn sps-btn-primary w-full flex items-center justify-between"
                     style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
@@ -479,7 +800,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
               <div className="relative flex py-0.5 items-center">
                 <div className="flex-grow border-t border-[var(--sps-border)]/60"></div>
-                <span className="flex-shrink mx-2 text-[10px] text-[var(--sps-muted)] uppercase tracking-wider">or with email & OTP</span>
+                <span className="flex-shrink mx-2 text-[10px] text-[var(--sps-muted)] uppercase tracking-wider">or email, password & OTP</span>
                 <div className="flex-grow border-t border-[var(--sps-border)]/60"></div>
               </div>
 
@@ -499,8 +820,23 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
               </div>
 
               <div>
+                <label className="text-[11px] font-semibold flex items-center gap-1.5 mb-1.5" style={{ color: 'var(--sps-muted)' }}>
+                  <Lock className="w-3.5 h-3.5" />
+                  Password <span className="font-normal">(after you create one)</span>
+                </label>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="Your studio password"
+                  className="w-full rounded-[7px] px-3.5 py-2.5 text-xs"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <div>
                 <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
-                  Invite OTP <span className="font-normal">(optional)</span>
+                  Invite OTP <span className="font-normal">(first unlock or forgot password)</span>
                 </label>
                 <input
                   type="text"
@@ -539,22 +875,12 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                   Browse as Guest
                 </button>
               </div>
-
-              {onOpenDesktopTrial ? (
-                <button
-                  type="button"
-                  className="sps-btn w-full mt-2"
-                  onClick={() => onOpenDesktopTrial()}
-                >
-                  <Monitor className="w-4 h-4" />
-                  <span>Download desktop trial</span>
-                </button>
-              ) : null}
             </form>
           ) : loginMode === 'signup' ? (
             <form onSubmit={handleSignUp} className="space-y-3.5">
               <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
-                Request access to Stage Work Studio. If you already received a 6-digit invite code from the Studio Admin, enter it below for instant activation.
+                Create a web account (Writer, Matrix, Form). This is not a Mac app download.
+                You will not see studio pictures such as MVK. We email a 6-digit code — it is never shown in this window.
               </p>
 
               <div>
@@ -602,7 +928,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
 
               <div>
                 <label className="text-[11px] font-semibold block mb-1.5" style={{ color: 'var(--sps-muted)' }}>
-                  Invite OTP <span className="font-normal">(optional — instant unlock if provided)</span>
+                  {signupAwaitingCode ? 'Code from email' : 'Studio invite OTP (optional)'}
                 </label>
                 <input
                   type="text"
@@ -615,6 +941,37 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 />
               </div>
 
+              <div className="flex items-start gap-2">
+                <input
+                  id="sps-signup-agree"
+                  type="checkbox"
+                  checked={signupAgreed}
+                  onChange={(e) => setSignupAgreed(e.target.checked)}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className="text-[11px] leading-relaxed" style={{ color: 'var(--sps-muted)' }}>
+                  <label htmlFor="sps-signup-agree" className="cursor-pointer">I agree to the </label>
+                  <button
+                    type="button"
+                    className="underline bg-transparent border-0 p-0 cursor-pointer"
+                    style={{ color: 'var(--sps-gold)' }}
+                    onClick={() => setLegalKind('privacy')}
+                  >
+                    Privacy
+                  </button>
+                  {' '}and{' '}
+                  <button
+                    type="button"
+                    className="underline bg-transparent border-0 p-0 cursor-pointer"
+                    style={{ color: 'var(--sps-gold)' }}
+                    onClick={() => setLegalKind('terms')}
+                  >
+                    Terms
+                  </button>
+                  .
+                </span>
+              </div>
+
               <button
                 type="submit"
                 disabled={isSubmittingSignUp}
@@ -622,7 +979,43 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                 style={{ backgroundColor: 'var(--sps-gold)', color: '#1c1712', WebkitTextFillColor: '#1c1712' }}
               >
                 {isSubmittingSignUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                <span>{isSubmittingSignUp ? 'Submitting request…' : 'Complete Sign Up'}</span>
+                <span>{isSubmittingSignUp ? 'Working…' : signupAwaitingCode ? 'Create my account' : 'Email me a code'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="w-full text-[10px] underline bg-transparent border-0 cursor-pointer"
+                style={{ color: 'var(--sps-muted)' }}
+                onClick={async () => {
+                  setErrorMsg('');
+                  const cleanEmail = normalizeEmail(signUpEmail);
+                  if (!isValidEmail(cleanEmail)) {
+                    setErrorMsg('invalid mail id');
+                    return;
+                  }
+                  setIsSubmittingSignUp(true);
+                  try {
+                    const res = await fetch('/api/request-access', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: signUpName.trim() || cleanEmail.split('@')[0],
+                        email: cleanEmail,
+                        role: signUpRole.trim() || 'Collaborator',
+                        message: 'Studio invite request (not public trial)',
+                        autoReply: true
+                      })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    setSuccessMsg(data?.message || 'Studio invite requested. The owner will email you.');
+                  } catch {
+                    setErrorMsg('Could not send a studio invite request.');
+                  } finally {
+                    setIsSubmittingSignUp(false);
+                  }
+                }}
+              >
+                Need a studio invite instead? Ask the owner
               </button>
 
               <div className="text-center text-[11px] pt-1">
@@ -683,7 +1076,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
           ) : (
             <div className="space-y-3">
               <p className="text-[11px] leading-relaxed m-0" style={{ color: 'var(--sps-muted)' }}>
-                No account required. Look through the studio, play the presentation reel, or take the guided demo.
+                No account required. Look through the studio reel. On the downloaded desktop app this stays presentation-only until the studio Admin allots your email.
                 Nothing saves until you sign in with Email or Studio Admin.
               </p>
 
@@ -725,7 +1118,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
                   onClick={() => onOpenDesktopTrial()}
                 >
                   <Monitor className="w-4 h-4" />
-                  <span>Download desktop trial</span>
+                  <span>Download app</span>
                 </button>
               ) : null}
             </div>
@@ -744,8 +1137,14 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, onOpen
               <Film className="w-3 h-3" /> Cinema craft
             </span>
           </div>
+          <p className="text-[10px] text-center m-0 pt-2" style={{ color: 'var(--sps-muted)' }}>
+            <button type="button" className="underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: 'var(--sps-gold)' }} onClick={() => setLegalKind('privacy')}>Privacy</button>
+            {' · '}
+            <button type="button" className="underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: 'var(--sps-gold)' }} onClick={() => setLegalKind('terms')}>Terms</button>
+          </p>
         </div>
       </div>
+      <LegalDocModal kind={legalKind} onClose={() => setLegalKind(null)} />
     </div>
   );
 }

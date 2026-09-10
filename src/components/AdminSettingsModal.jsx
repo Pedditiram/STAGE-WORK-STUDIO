@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Share2, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink, FileText, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
-import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, saveStoredDbConfig, getStoredDbConfig, subscribeToPresenceEmails } from '../services/dbService';
+import { X, Lock, ShieldCheck, Cpu, Key, AlertCircle, CheckCircle2, Eye, EyeOff, Server, Wand2, TestTube2, Loader2, Save, Film, Video, Image as ImageIcon, Sparkles, Cloud, Phone, Users, UserCheck, Activity, Clock, Copy, Send, Wifi, ShieldAlert, Mail, Trash2, Download, Zap, Edit3, FolderKanban, Upload, ChevronDown, ChevronUp, ExternalLink, FileText, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
+import { testDatabaseConnection, syncCollaboratorsToCloud, syncProjectLibraryToCloud, fetchProjectLibraryFromCloud, fetchCollaboratorsFromCloud, fetchStudioSettingsFromCloud, syncStudioSettingsToCloud, saveStoredDbConfig, getStoredDbConfig, subscribeToPresenceEmails } from '../services/dbService';
 import { 
   getAllottedSettingsFolderPath, setAllottedSettingsFolderPath, 
   getAllottedStorageFolderPath, setAllottedStorageFolderPath,
   exportAppSettingsToFile, importAppSettingsFromFile,
   saveAppSettingToVault
 } from '../services/appSettingsDiskVault';
-import { PRIMARY_ADMIN_EMAILS, STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS } from '../utils/projectPermissions';
+import { PRIMARY_ADMIN_EMAILS, STUDIO_DESIGNATIONS, ACCESS_LEVELS, normalizeAccessLevel, ensurePrimaryAdminUser, getPrimaryAdminProfile, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary, filterAllottedTitlesToLiveLibrary, setGuestBrowseEnabled, isGuestUrlEnabled, setGuestUrlEnabled, getGuestLookShareUrl, isStudioModuleEnabled, setStudioModuleEnabled, setPresentationMode, isPresentationMode, getStudioDefaultConsoleMap, getUserConsoleMap, setUserConsoleEnabled, getAuthorizedUsers, getCurrentUserEmail, CONSOLE_SWITCH_IDS, CONSOLE_SWITCH_LABELS, userIsInCloudRoom, addUserToCloudRoom, removeUserFromCloudRoom, setCloudRoomAccessRole, ensureUserCloudRoom, normalizeCloudRoomId } from '../utils/projectPermissions';
 import { fetchGeminiContent, resolveGeminiLlmConfig, getGeminiModelChain, extractGeminiResponseText } from '../services/aiScriptParser';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import GoogleDrivePanel from './GoogleDrivePanel';
@@ -16,6 +16,9 @@ import ByokKeysPanel from './ByokKeysPanel';
 import StudioProfileControl from './StudioProfileControl';
 import { runFactoryReset } from '../utils/factoryReset';
 import { studioApiUrl, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
+import { clearCollaboratorPassword, collaboratorHasPassword, isOwnerLoginEmail } from '../utils/collaboratorPassword';
+import { patchUserPackFlags } from '../utils/userSettingsPack';
+import { saasAdminHeaders, withSaasAdminBody } from '../utils/saasAdminClient';
 
 /** Persist collaborators to localStorage synchronously, then notify other UI (not this modal). */
 function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
@@ -312,7 +315,7 @@ export default function AdminSettingsModal({
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetError, setFactoryResetError] = useState('');
 
-  // Active category filter tab: 'all' | 'image' | 'video' | 'llm' | 'tokens' | 'cloud_collab' | 'security'
+  // Active category filter tab: 'all' | 'image' | 'video' | 'llm' | 'tokens' | 'users' | 'cloud_collab' | 'security'
   const [activeCategoryTab, setActiveCategoryTab] = useState(initialCategoryTab || 'all');
   const [showAllModels, setShowAllModels] = useState(false);
 
@@ -600,8 +603,8 @@ export default function AdminSettingsModal({
     try {
       await fetch('/api/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: targetClean, otp: otpCode }),
+        headers: saasAdminHeaders(),
+        body: JSON.stringify(withSaasAdminBody({ email: targetClean, otp: otpCode, actor: targetClean })),
       });
     } catch {
       /* ignore */
@@ -901,6 +904,10 @@ export default function AdminSettingsModal({
   const [collabOtpError, setCollabOtpError] = useState('');
   const [otpSuccessMsg, setOtpSuccessMsg] = useState('');
   const [selectedDateFilter, setSelectedDateFilter] = useState('ALL');
+  const [roomMemberEmail, setRoomMemberEmail] = useState('');
+  const [roomMemberAccess, setRoomMemberAccess] = useState('Editor');
+  const [roomMemberMsg, setRoomMemberMsg] = useState('');
+  const [roomMemberOtp, setRoomMemberOtp] = useState('');
 
   // CLOUD DATABASE MANAGEMENT STATES
   const [dbTestResult, setDbTestResult] = useState(null);
@@ -1083,14 +1090,15 @@ export default function AdminSettingsModal({
     // Best-effort Resend when configured; in-UI OTP + mailto/share remain the fallback
     fetch(studioApiUrl('/api/send-otp'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      headers: saasAdminHeaders(),
+      body: JSON.stringify(withSaasAdminBody({
         to: email.trim().toLowerCase(),
         otp: newCode,
         purpose: 'invite',
         name: collaboratorName.trim(),
-        roomId: roomId || 'sps_local_dev'
-      })
+        roomId: roomId || 'sps_local_dev',
+        actor: getCurrentUserEmail()
+      }))
     })
       .then((r) => r.json().catch(() => ({})))
       .then((data) => {
@@ -1110,12 +1118,15 @@ export default function AdminSettingsModal({
 
     // Automatically add/update authorized collaborators list immediately
     setAuthorizedUsers(prev => {
+      const existing = prev.find((u) => String(u?.email || '').toLowerCase() === cleanMail) || null;
       const filtered = prev.filter(u => !u.email || u.email.toLowerCase() !== cleanMail);
       const accessLevel = normalizeAccessLevel(selectedRole);
       const isOwnerInvite = accessLevel === 'Owner';
-      const updatedUser = {
-        name: collaboratorName.trim(),
-        designation: designation || 'Lead Editor',
+      const pinNewToRoom = !existing;
+      const updatedUser = ensureUserCloudRoom({
+        ...(existing || {}),
+        name: collaboratorName.trim() || existing?.name || cleanMail.split('@')[0],
+        designation: designation || existing?.designation || 'Lead Editor',
         email: cleanMail,
         role: accessLevel,
         isStudioAdmin: isOwnerInvite,
@@ -1125,7 +1136,7 @@ export default function AdminSettingsModal({
         currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
-      };
+      }, roomId || 'sps_local_dev', { pinIfUnset: pinNewToRoom });
       return persistAuthorizedUsersAndNotify([updatedUser, ...filtered]);
     });
 
@@ -1158,7 +1169,7 @@ export default function AdminSettingsModal({
       const accessLevel = normalizeAccessLevel(selectedRole);
       const isOwnerInvite = accessLevel === 'Owner';
 
-      const newUser = {
+      const newUser = ensureUserCloudRoom({
         name: userName,
         designation: userDesig,
         email: userMail,
@@ -1174,7 +1185,7 @@ export default function AdminSettingsModal({
         currentProject: selectedProjectToAllot || 'STAGE PRODUCTION STUDIO',
         status: 'Active',
         verifiedAt: `${todayFormatted}, ${nowStr}`
-      };
+      }, roomId || 'sps_local_dev', { pinIfUnset: true });
       setAuthorizedUsers(prev => persistAuthorizedUsersAndNotify([newUser, ...prev]));
 
       const newActivity = {
@@ -1230,6 +1241,132 @@ export default function AdminSettingsModal({
       status: 'system'
     };
     setActivityLog(prev => [newActivity, ...prev]);
+  };
+
+  const currentRoomAllotTitle = () => {
+    try {
+      const live = String(localStorage.getItem('sps_current_project_title') || '').trim();
+      if (live) return live;
+    } catch {
+      /* ignore */
+    }
+    const first = (projectLibraryList || []).find((p) => String(p?.title || '').trim());
+    return String(first?.title || '').trim() || 'STAGE PRODUCTION STUDIO';
+  };
+
+  const handleAddToCloudRoom = (e) => {
+    e.preventDefault();
+    const clean = String(roomMemberEmail || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@')) {
+      setRoomMemberMsg('Enter an email to add to this room.');
+      setRoomMemberOtp('');
+      return;
+    }
+    if (PRIMARY_ADMIN_EMAILS.includes(clean)) {
+      setRoomMemberMsg('Studio Owner is always in every production room.');
+      setRoomMemberOtp('');
+      return;
+    }
+    const rid = normalizeCloudRoomId(roomId);
+    const role = roomMemberAccess === 'Viewer' ? 'Viewer' : 'Editor';
+    const allotTitle = currentRoomAllotTitle();
+    let created = false;
+    setAuthorizedUsers((prev) => {
+      const result = addUserToCloudRoom(prev, clean, rid, {
+        role,
+        allotTitle,
+        name: clean.split('@')[0]
+      });
+      created = Boolean(result.created);
+      return persistAuthorizedUsersAndNotify(result.users);
+    });
+
+    const accessLabel = role === 'Viewer' ? 'View only' : 'Editor allotted';
+    if (created) {
+      const newCode = String(Math.floor(100000 + Math.random() * 900000));
+      setRoomMemberOtp(newCode);
+      try {
+        const issued = JSON.parse(localStorage.getItem('sps_issued_invite_otps') || '{}');
+        issued[rid] = newCode;
+        issued[clean] = newCode;
+        localStorage.setItem('sps_issued_invite_otps', JSON.stringify(issued));
+      } catch {
+        /* ignore */
+      }
+      fetch(studioApiUrl('/api/send-otp'), {
+        method: 'POST',
+        headers: saasAdminHeaders(),
+        body: JSON.stringify(withSaasAdminBody({
+          to: clean,
+          otp: newCode,
+          purpose: 'invite',
+          name: clean.split('@')[0],
+          roomId: rid,
+          actor: getCurrentUserEmail()
+        }))
+      }).catch(() => {});
+      setRoomMemberMsg(`Added to this room as ${accessLabel}. First-time login OTP: ${newCode}`);
+    } else {
+      setRoomMemberOtp('');
+      setRoomMemberMsg(`In this room as ${accessLabel}.`);
+    }
+
+    const now = new Date();
+    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const todayIso = now.toISOString().split('T')[0];
+    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    setActivityLog((prev) => [
+      {
+        id: `act_${Date.now()}`,
+        date: todayIso,
+        dateFormatted: todayFormatted,
+        time: nowStr,
+        user: 'Studio Admin',
+        action: `Added ${clean} to room ${rid} as ${accessLabel}`,
+        status: 'system'
+      },
+      ...prev
+    ]);
+    setRoomMemberEmail('');
+  };
+
+  const handleRemoveFromCloudRoom = (userToRemove) => {
+    const em = String(userToRemove?.email || '').trim().toLowerCase();
+    if (!em || PRIMARY_ADMIN_EMAILS.includes(em)) {
+      alert('Studio Owner always stays in the production room.');
+      return;
+    }
+    const rid = normalizeCloudRoomId(roomId);
+    setAuthorizedUsers((prev) =>
+      persistAuthorizedUsersAndNotify(removeUserFromCloudRoom(prev, em, rid))
+    );
+    const now = new Date();
+    const nowStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const todayIso = now.toISOString().split('T')[0];
+    const todayFormatted = `Today, ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    setActivityLog((prev) => [
+      {
+        id: `act_${Date.now()}`,
+        date: todayIso,
+        dateFormatted: todayFormatted,
+        time: nowStr,
+        user: 'Studio Admin',
+        action: `Removed ${userToRemove?.name || em} from room ${rid} (studio account kept)`,
+        status: 'system'
+      },
+      ...prev
+    ]);
+  };
+
+  const handleRoomAccessChange = (targetUser, nextRole) => {
+    const em = String(targetUser?.email || '').trim().toLowerCase();
+    if (!em || PRIMARY_ADMIN_EMAILS.includes(em)) return;
+    const role = nextRole === 'Viewer' ? 'Viewer' : 'Editor';
+    setAuthorizedUsers((prev) =>
+      persistAuthorizedUsersAndNotify(
+        setCloudRoomAccessRole(prev, em, role, currentRoomAllotTitle())
+      )
+    );
   };
 
   const handleRoleChange = (targetUser, newRole) => {
@@ -2050,12 +2187,26 @@ export default function AdminSettingsModal({
 
                   <button
                     type="button"
+                    onClick={() => setActiveCategoryTab('users')}
+                    className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
+                      activeCategoryTab === 'users'
+                        ? 'bg-amber-400 text-zinc-950 shadow'
+                        : 'bg-zinc-900 text-amber-300 hover:text-amber-200 border border-zinc-800'
+                    }`}
+                  >
+                    <Users className="w-3 h-3 text-amber-400" />
+                    Users
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveCategoryTab('cloud_collab')}
                     className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 font-bold ${
                       activeCategoryTab === 'cloud_collab'
                         ? 'bg-cyan-500 text-zinc-950 shadow'
                         : 'bg-zinc-900 text-cyan-300 hover:text-cyan-200 border border-zinc-800'
                     }`}
+                    title="Production cloud room — add or remove people in this room"
                   >
                     <Cloud className="w-3 h-3 text-cyan-400" />
                     {roomId || 'sps_local_dev'}
@@ -3152,24 +3303,21 @@ export default function AdminSettingsModal({
                 </div>
               )}
 
-              {/* ========================================================= */}
-              {/* SECTION 4: REAL-TIME CLOUD COLLAB, PHONE SECURITY OTP & DATE-WISE AUDIT */}
-              {/* ========================================================= */}
+              {/* Production Cloud Room — add / remove people in this room only */}
               {(activeCategoryTab === 'all' || activeCategoryTab === 'cloud_collab') && (
                 <div className="space-y-4 font-mono">
                   <div className="flex items-center gap-2 text-xs font-bold text-cyan-400 border-b border-cyan-500/20 pb-1">
                     <Cloud className="w-4 h-4 text-cyan-400" />
-                    SECTION 4: REAL-TIME CLOUD COLLAB, PHONE SECURITY OTP & DATE-WISE USER TRACKING
+                    Production Cloud Room
                   </div>
 
                   <GoogleDrivePanel compact={false} />
 
-                  {/* Active Cloud Room Code & WhatsApp Share Bar */}
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3">
                       <div>
                         <span className="text-[11px] text-zinc-400 block mb-1">
-                          Active Production Cloud Room Code:
+                          Active Production Cloud Room
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="text-lg font-black text-amber-300 tracking-widest bg-zinc-950 px-3 py-1 rounded-lg border border-amber-500/30">
@@ -3181,31 +3329,9 @@ export default function AdminSettingsModal({
                           </span>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const link = `${window.location.origin}?room=${roomId || 'sps_local_dev'}`;
-                            const msg = `🎬 *STAGEWORKS — AI CINEMA PRODUCTION OS*\nJoin my Active Production Cloud Room *${roomId || 'sps_local_dev'}*\nLink: ${link}`;
-                            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                          <span>WhatsApp Share</span>
-                        </button>
-                      </div>
                     </div>
-                    <p className="text-[10px] text-zinc-400 leading-relaxed">
-                      <span className="block mb-1 font-bold" style={{ color: 'var(--sps-warn)' }}>
-                        SMS and WhatsApp alerts are on hold. Numbers can still be saved; nothing is sent.
-                      </span>
-                    </p>
-
-                    {/* Public Shareable URL Link */}
                     <div className="pt-1">
-                      <label className="text-[11px] font-mono text-zinc-400 font-bold block mb-1">Public Shareable Cloud URL Link:</label>
+                      <label className="text-[11px] font-mono text-zinc-400 font-bold block mb-1">Shareable room link</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -3220,7 +3346,7 @@ export default function AdminSettingsModal({
                             if (typeof navigator !== 'undefined' && navigator.clipboard) {
                               navigator.clipboard.writeText(url);
                             }
-                            alert("✓ Copied Cloud Shareable Link to Clipboard!");
+                            alert('Copied room link.');
                           }}
                           className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs font-mono shadow flex items-center gap-1.5 shrink-0"
                         >
@@ -3231,11 +3357,158 @@ export default function AdminSettingsModal({
                     </div>
                   </div>
 
-                    {/* Grant Collaborator Credentials Form */}
+                  <div className="p-4 rounded-xl bg-zinc-900/90 border border-cyan-500/40 space-y-3 shadow-md">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2 font-sans border-b border-zinc-800 pb-2">
+                      <UserCheck className="w-4 h-4 text-emerald-400" />
+                      People in this room
+                    </h4>
+                    <p className="text-[11px] text-zinc-400 m-0 leading-relaxed">
+                      Add or remove access to <strong className="text-amber-300">{roomId || 'sps_local_dev'}</strong> only.
+                      Editor allotted can edit the open film. View only is read-only. Invite, pack, password, and delete from studio are on the Users tab.
+                    </p>
+                    <form onSubmit={handleAddToCloudRoom} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                      <div className="flex-1 min-w-0">
+                        <label className="text-[11px] text-zinc-300 font-bold block mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={roomMemberEmail}
+                          onChange={(e) => setRoomMemberEmail(e.target.value)}
+                          list="sps-studio-user-emails"
+                          placeholder="name@studio.com"
+                          className="w-full bg-zinc-950 border border-zinc-700 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                          required
+                        />
+                        <datalist id="sps-studio-user-emails">
+                          {authorizedUsers
+                            .filter((u) => !userIsInCloudRoom(u, roomId || 'sps_local_dev'))
+                            .map((u) => (
+                              <option key={u.email} value={u.email}>{u.name}</option>
+                            ))}
+                        </datalist>
+                      </div>
+                      <div className="flex flex-col gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-zinc-200">
+                          <input
+                            type="radio"
+                            name="sps_room_access"
+                            checked={roomMemberAccess === 'Editor'}
+                            onChange={() => setRoomMemberAccess('Editor')}
+                            className="accent-amber-500"
+                          />
+                          Editor allotted
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-zinc-200">
+                          <input
+                            type="radio"
+                            name="sps_room_access"
+                            checked={roomMemberAccess === 'Viewer'}
+                            onChange={() => setRoomMemberAccess('Viewer')}
+                            className="accent-cyan-500"
+                          />
+                          View only
+                        </label>
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow shrink-0"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Add to room
+                      </button>
+                    </form>
+                    {roomMemberMsg ? (
+                      <p className="text-[11px] text-emerald-300 font-bold m-0">{roomMemberMsg}</p>
+                    ) : null}
+                    {roomMemberOtp ? (
+                      <button
+                        type="button"
+                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-amber-600 text-amber-300 bg-amber-950"
+                        onClick={() => {
+                          const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(roomId || 'sps_local_dev')}&otp=${roomMemberOtp}`;
+                          if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                            navigator.clipboard.writeText(inviteUrl);
+                          }
+                          alert('Copied room invite link.');
+                        }}
+                      >
+                        Copy invite · OTP {roomMemberOtp}
+                      </button>
+                    ) : null}
+                    <div className="grid grid-cols-1 gap-2 pt-1">
+                      {authorizedUsers
+                        .filter((u) => userIsInCloudRoom(u, roomId || 'sps_local_dev'))
+                        .map((user) => {
+                          const em = String(user.email || '').toLowerCase();
+                          const isOwnerRow = PRIMARY_ADMIN_EMAILS.includes(em) || normalizeAccessLevel(user.role) === 'Owner';
+                          const roomRole = normalizeAccessLevel(user.role) === 'Viewer' ? 'Viewer' : 'Editor';
+                          return (
+                            <div
+                              key={em || user.name}
+                              className="p-3 rounded-xl border border-slate-800 bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-black text-white text-sm m-0">{user.name || 'Collaborator'}</p>
+                                <p className="text-[11px] text-zinc-400 m-0 truncate">{user.email}</p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                {isOwnerRow ? (
+                                  <span className="text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg border font-bold bg-amber-950 text-amber-300 border-amber-600">
+                                    Owner
+                                  </span>
+                                ) : (
+                                  <select
+                                    value={roomRole}
+                                    onChange={(e) => handleRoomAccessChange(user, e.target.value)}
+                                    className={`text-[10.5px] font-mono px-2.5 py-1 rounded-lg border font-bold cursor-pointer bg-slate-900 focus:outline-none ${
+                                      roomRole === 'Viewer'
+                                        ? 'text-cyan-300 border-cyan-700'
+                                        : 'text-emerald-300 border-emerald-700'
+                                    }`}
+                                  >
+                                    <option value="Editor">Editor allotted</option>
+                                    <option value="Viewer">View only</option>
+                                  </select>
+                                )}
+                                {!isOwnerRow ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`Remove ${user.name || user.email} from this room? They stay in the studio Users list.`)) {
+                                        handleRemoveFromCloudRoom(user);
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-[11px] font-bold"
+                                  >
+                                    Remove from room
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategoryTab('users')}
+                      className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline"
+                    >
+                      Open Users tab for invite, pack, password, and remove from studio
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Studio Users — invite, allot, pack, remove from studio */}
+              {(activeCategoryTab === 'all' || activeCategoryTab === 'users') && (
+                <div className="space-y-4 font-mono">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-400 border-b border-amber-500/20 pb-1">
+                    <Users className="w-4 h-4 text-amber-400" />
+                    Studio Users
+                  </div>
                     <div className="space-y-3 pt-1">
                       <h4 className="text-xs font-bold text-white flex items-center gap-2 font-sans">
                         <Users className="w-4 h-4 text-cyan-400" />
-                        ➕ Add New Collaborator & Assign Credentials:
+                        Invite to studio
                       </h4>
 
                       {!otpSent ? (
@@ -3304,10 +3577,13 @@ export default function AdminSettingsModal({
                                 onChange={(e) => setSelectedProjectToAllot(e.target.value)}
                                 className="w-full bg-zinc-950 border border-amber-500/60 text-amber-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 font-bold"
                               >
-                                <option value="STAGE PRODUCTION STUDIO">🎬 STAGE PRODUCTION STUDIO</option>
+                                {projectLibraryList.map((p, pIdx) => (
+                                  <option key={pIdx} value={p.title}>🎬 {p.title}</option>
+                                ))}
+                                {selectedProjectToAllot && !projectLibraryList.some((p) => p.title === selectedProjectToAllot) ? (
+                                  <option value={selectedProjectToAllot}>🎬 {selectedProjectToAllot}</option>
+                                ) : null}
                                 <option value="All Studio Projects">🌐 All Studio Projects (Full Access)</option>
-                                <option value="Commercial Campaign Project">🎬 Commercial Campaign Project</option>
-                                <option value="Short Film Scene Project">🎬 Short Film Scene Project</option>
                               </select>
                             </div>
 
@@ -3417,7 +3693,7 @@ export default function AdminSettingsModal({
                   <div className="p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-3 shadow-md">
                     <h4 className="text-xs font-bold text-white flex items-center gap-2 font-sans border-b border-zinc-800 pb-2">
                       <UserCheck className="w-4 h-4 text-emerald-400" />
-                      Active Studio Collaborators & Access Controls ({authorizedUsers.length})
+                      Studio people ({authorizedUsers.length})
                     </h4>
 
                     <div className="grid grid-cols-1 gap-2.5">
@@ -3524,7 +3800,67 @@ export default function AdminSettingsModal({
                                       {user.email}
                                     </span>
                                   ) : null}
+                                  {!isOwnerLoginEmail(user.email) ? (
+                                    collaboratorHasPassword(user) ? (
+                                      <button
+                                        type="button"
+                                        className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-700 text-amber-300 bg-amber-950/80"
+                                        title="Clear their password so they can create a new one after the next invite OTP or allotted sign-in"
+                                        onClick={() => {
+                                          const result = clearCollaboratorPassword(user.email);
+                                          if (result.ok) {
+                                            setAuthorizedUsers(getAuthorizedUsers());
+                                          }
+                                        }}
+                                      >
+                                        Password set · Reset
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-700 text-slate-400">
+                                        No password yet
+                                      </span>
+                                    )
+                                  ) : null}
                                 </div>
+
+                                {!isOwnerLoginEmail(user.email) ? (
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] font-bold" style={{ color: 'var(--sps-text)' }}>
+                                    <label className="inline-flex items-center gap-1.5 cursor-pointer" title="Own engines, keys, theme, Comfy — not the studio shared pack">
+                                      <input
+                                        type="checkbox"
+                                        checked={user.independentPack === true}
+                                        onChange={(e) => {
+                                          const on = e.target.checked;
+                                          patchUserPackFlags(user.email, { independentPack: on, ownLibrary: on ? Boolean(user.ownLibrary) : false });
+                                          setAuthorizedUsers(getAuthorizedUsers());
+                                        }}
+                                      />
+                                      Independent settings pack
+                                    </label>
+                                    <label
+                                      className={`inline-flex items-center gap-1.5 ${user.independentPack ? 'cursor-pointer' : 'opacity-50'}`}
+                                      title="Create and delete only this user's pack titles. Studio allotted films stay Admin-owned."
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        disabled={!user.independentPack}
+                                        checked={user.independentPack === true && user.ownLibrary === true}
+                                        onChange={(e) => {
+                                          patchUserPackFlags(user.email, { independentPack: true, ownLibrary: e.target.checked });
+                                          setAuthorizedUsers(getAuthorizedUsers());
+                                        }}
+                                      />
+                                      Own library (create / delete pack titles)
+                                    </label>
+                                    <span className="text-[10px] font-medium" style={{ color: 'var(--sps-muted)' }}>
+                                      Pack OFF parks settings. They export & close from Profile. Studio films stay yours.
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] m-0" style={{ color: 'var(--sps-muted)' }}>
+                                    Studio Owner always uses the studio settings pack.
+                                  </p>
+                                )}
 
                                 <div className="rounded-[var(--sps-radius-sm)] border border-[var(--sps-border)] bg-[var(--sps-surface)] p-2 space-y-1.5">
                                   <label className="text-[10px] font-bold flex items-center gap-1" style={{ color: 'var(--sps-muted)' }}>
@@ -3718,12 +4054,12 @@ export default function AdminSettingsModal({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete collaborator ${user.name} (${user.email || user.phone}) and permanently revoke app access?`)) {
+                                  if (window.confirm(`Remove ${user.name} (${user.email || user.phone}) from the studio? They will lose app access. This does not only remove them from the room.`)) {
                                     handleRemoveCollaborator(user);
                                   }
                                 }}
                                 className="p-2.5 sm:p-2 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-bold shadow-sm transition-all flex items-center justify-center shrink-0 cursor-pointer min-w-[2.25rem] min-h-[2.25rem]"
-                                title="Delete / Remove Collaborator"
+                                title="Remove from studio"
                               >
                                 <Trash2 className="w-4 h-4 text-red-400" />
                               </button>
@@ -3852,6 +4188,7 @@ export default function AdminSettingsModal({
                         try {
                           // 1. PUSH LOCAL DATA TO CLOUD
                           await syncCollaboratorsToCloud(authorizedUsers);
+                          await syncStudioSettingsToCloud();
                           const savedLib = localStorage.getItem('sps_project_library');
                           if (savedLib) {
                             try {
@@ -3862,6 +4199,7 @@ export default function AdminSettingsModal({
                           // 2. PULL LATEST REMOTE DATA FROM CLOUD (force bypasses local write guard)
                           const cloudLib = await fetchProjectLibraryFromCloud();
                           const cloudUsers = await fetchCollaboratorsFromCloud();
+                          await fetchStudioSettingsFromCloud();
                           if (Array.isArray(cloudLib) && cloudLib.length > 0) {
                             setProjectLibraryList(cloudLib);
                           }

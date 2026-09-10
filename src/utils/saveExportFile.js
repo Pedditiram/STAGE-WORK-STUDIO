@@ -47,6 +47,7 @@ function extFilters(filename) {
   if (ext === 'png') return [{ name: 'PNG image', extensions: ['png'] }];
   if (ext === 'mp4') return [{ name: 'MP4 video', extensions: ['mp4'] }];
   if (ext === 'webm') return [{ name: 'WebM video', extensions: ['webm'] }];
+  if (ext === 'zip') return [{ name: 'ZIP archive', extensions: ['zip'] }];
   return [{ name: 'All files', extensions: ['*'] }];
 }
 
@@ -57,6 +58,9 @@ function acceptTypes(filename) {
   }
   if (ext === 'mp4') {
     return [{ description: 'MP4 video', accept: { 'video/mp4': ['.mp4'] } }];
+  }
+  if (ext === 'zip') {
+    return [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }];
   }
   return undefined;
 }
@@ -91,7 +95,8 @@ export async function saveExportBlob(blob, filename, opts = {}) {
     showAlert: opts.showAlert !== false,
     lifecycleMode: gateMode,
     shots: opts.shots,
-    roomId: opts.roomId || ''
+    roomId: opts.roomId || '',
+    personalTakeout: Boolean(opts.personalTakeout)
   });
   if (!gate.ok) {
     return { success: false, blocked: true, error: gate.message };

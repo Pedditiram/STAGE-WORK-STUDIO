@@ -1,26 +1,36 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import SplashScreen from './components/SplashScreen';
 import { APP_VERSION_NAME, isLocalStudioHost } from './utils/runtimeEnv';
-import Header from './components/Header';
+import {
+  fetchStudioServerBuildId,
+  isStudioUpdateSnoozed,
+  shouldWatchStudioUpdates,
+  STUDIO_BOOT_BUILD_ID
+} from './utils/studioUpdateCheck';
 import {
   STUDIO_SWITCH_ACCOUNT_EVENT,
   STUDIO_LOGOUT_EVENT,
-  STUDIO_OPEN_LOGIN_EVENT
-} from './components/StudioProfileControl';
-import SpreadsheetView from './components/SpreadsheetView';
-import StudioFormView from './components/StudioFormView';
-import DirectorCanvas from './components/DirectorCanvas';
-import ScreenplayEditor from './components/ScreenplayEditor';
-import TemplateSelector from './components/TemplateSelector';
+  STUDIO_OPEN_LOGIN_EVENT,
+  STUDIO_OPEN_PASSWORD_EVENT,
+  STUDIO_OPEN_PACK_EVENT
+} from './components/studioProfileEvents';
+const Header = lazy(() => import('./components/Header'));
+const SpreadsheetView = lazy(() => import('./components/SpreadsheetView'));
+const StudioFormView = lazy(() => import('./components/StudioFormView'));
+const DirectorCanvas = lazy(() => import('./components/DirectorCanvas'));
+const ScreenplayEditor = lazy(() => import('./components/ScreenplayEditor'));
+const TemplateSelector = lazy(() => import('./components/TemplateSelector'));
+const CollabChatPanel = lazy(() => import('./components/CollabChatPanel'));
 import PhoneOtpGuardModal from './components/PhoneOtpGuardModal';
 import LoginModal from './components/LoginModal';
+import UserPackModal from './components/UserPackModal';
+import StudioUpdateModal from './components/StudioUpdateModal';
 import DesktopTrialModal from './components/DesktopTrialModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
 import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import { saveStoredCharacterProfiles, getStoredCharacterProfiles } from './components/CharacterBibleModal';
 import { saveStoredWorldEnvironmentAssets } from './components/WorldEnvironmentConsole';
-import CollabChatPanel from './components/CollabChatPanel';
 import { subscribeToCollabChat } from './services/collabChat';
 import { syncCanvasVaultToCloud, getStoredCanvasVaultImages } from './services/canvasVault';
 import { hydrateImageBlobStore, offloadShotMedia } from './utils/imageBlobStore';
@@ -33,6 +43,7 @@ import {
   writeLocalProjectLibrary,
   roomIdForProject,
   titlesMatch,
+  writeWorkspaceOntoLibrary,
   resolveActiveTitleForBoot,
   LEGACY_SHARED_ROOM
 } from './utils/projectWorkspace';
@@ -77,7 +88,7 @@ import { auditPresenceIfChanged, auditPresenceConflict, auditPeerPresenceDiff, r
 import { syncProductionSpine, autoSyncProductionSpine } from './utils/productionSpine';
 import { saveProjectToVault, loadProjectsFromVault, loadActiveWorkspaceFromDisk, saveActiveWorkspaceToDisk, loadProjectFromDiskByTitle, loadUiPrefsFromDisk, saveUiPrefsToDisk } from './services/projectDiskVault';
 import { autoRestoreAppSettingsFromVault } from './services/appSettingsDiskVault';
-import { subscribeToCloudRoom, publishToCloudRoom, enableCloudCollaborationMode } from './services/cloudSync';
+import { subscribeToCloudRoom, publishToCloudRoom, enableCloudCollaborationMode, getNativeSyncUrl, fetchSyncJson } from './services/cloudSync';
 import {
   normalizeAssetRoots,
   readAssetRootsFromLibrary,
@@ -95,13 +106,15 @@ import {
   subscribeToCollaboratorUpdates,
   fetchProjectLibraryFromCloud,
   fetchCollaboratorsFromCloud,
+  fetchStudioSettingsFromCloud,
   broadcastActiveSlotEditing,
   subscribeToActiveEditingSlots,
   notifyStudioOnlineWhatsApp,
   filterOutDeletedProjects,
   isProjectTitleDeleted,
   healActiveProjectFromArchive,
-  clearDeletedProjectTitles
+  clearDeletedProjectTitles,
+  reviveProjectTitleForOpen
 } from './services/dbService';
 import {
   learnFromProject,
@@ -128,14 +141,21 @@ import {
   filterAccessibleProjects,
   markCollaboratorSession,
   canAccessBudgetConsole,
+  canAccessCloudRoom,
   isLookOnlySession,
   isStudioModuleEnabled,
   areAllConsolesOff,
   setPresentationMode,
   isPresentationMode,
-  purgeWeakAdminCredentials
+  purgeWeakAdminCredentials,
+  isDownloadedStudioApp,
+  hasAdminGrantedWorkspace,
+  downloadedAppPresentationOnly
 } from './utils/projectPermissions';
+import { isSelfServeSession } from './utils/tenantScope';
+import { activatePackForSession, persistLivePackIfActive, claimNewLibraryTitleIfPackUser, packLibraryRestrictedMessage } from './utils/userSettingsPack';
 import { heartbeat, getDeviceId, canUseSaasFeature, assertCanGenerate, upsertLicense } from './utils/saasControl';
+import { collaboratorHasPassword, findAuthorizedUser } from './utils/collaboratorPassword';
 import { assertExportAllowed, logExportSuccess, EXPORT_LIFECYCLE } from './utils/exportGate';
 import DemoModeView from './components/DemoModeView';
 import StudioTourOverlay from './components/StudioTourOverlay';
@@ -334,6 +354,19 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const onPack = () => {
+      try {
+        const t = localStorage.getItem('sps_color_theme');
+        if (t === 'paper' || t === 'dark') setColorTheme(t);
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('sps_user_pack_changed', onPack);
+    return () => window.removeEventListener('sps_user_pack_changed', onPack);
+  }, []);
+
   const handleSetColorTheme = (theme) => {
     const next = theme === 'dark' ? 'dark' : 'paper';
     setColorTheme(next);
@@ -352,6 +385,8 @@ export default function App() {
       } catch {
         /* ignore */
       }
+      // Presentation reel must not JSON.parse a vault-sized shot list on first paint.
+      if (isPresentationMode()) return INITIAL_SHOTS;
       const saved = localStorage.getItem('sps_current_shots');
       if (saved) {
         try {
@@ -390,7 +425,7 @@ export default function App() {
   useEffect(() => {
     if (isGuestSession()) return;
     try {
-      const library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+      const library = readLocalProjectLibrary();
       const proj = Array.isArray(library)
         ? library.find((p) => String(p?.title || '').trim() === String(projectTitle || '').trim())
         : null;
@@ -539,6 +574,8 @@ export default function App() {
       setActiveView(isStudioModuleEnabled('matrix') ? 'spreadsheet' : 'demo');
     }
   }, [activeView, budgetAccessTick]);
+
+  const presentationDesk = activeView === 'demo';
 
   const [isFeatureReelOpen, setIsFeatureReelOpen] = useState(false);
   const [isGenerateDeskOpen, setIsGenerateDeskOpen] = useState(false);
@@ -788,9 +825,7 @@ export default function App() {
       if (invite) return invite;
       const savedRoom = localStorage.getItem('sps_current_room_id');
       const title = localStorage.getItem('sps_current_project_title') || '';
-      return savedRoom && savedRoom !== LEGACY_SHARED_ROOM
-        ? savedRoom
-        : roomIdForProject(title, savedRoom);
+      return roomIdForProject(title, savedRoom);
     }
     return roomIdForProject('untitled');
   });
@@ -802,9 +837,9 @@ export default function App() {
         localStorage.setItem('sps_app_version_mode', 'cloud');
         return 'cloud';
       }
-      return localStorage.getItem('sps_app_version_mode') || 'local';
+      return localStorage.getItem('sps_app_version_mode') || 'cloud';
     }
-    return 'local';
+    return 'cloud';
   });
   const [isAppVersionModalOpen, setIsAppVersionModalOpen] = useState(false);
 
@@ -815,24 +850,52 @@ export default function App() {
     } catch {
       /* ignore */
     }
-    if (roomId && roomId !== LEGACY_SHARED_ROOM) return;
-    const next = roomIdForProject(projectTitle);
+    if (roomId === GUEST_PLAY_ROOM) return;
+    const next = roomIdForProject(projectTitle, roomId);
+    if (!next || next === roomId) return;
+    const prev = roomId;
     setRoomId(next);
     try {
       localStorage.setItem('sps_current_room_id', next);
     } catch {
       /* ignore */
     }
-  }, [projectTitle]);
+    // Carry leftover untitled-room shots into the film's canonical room once
+    (async () => {
+      if (!prev || prev === next) return;
+      try {
+        const base = getNativeSyncUrl();
+        const dest = await fetchSyncJson(`${base}?type=room&roomId=${encodeURIComponent(next)}`);
+        const destN = Array.isArray(dest?.data?.shots) ? dest.data.shots.length : 0;
+        if (destN > 0) return;
+        const src = await fetchSyncJson(`${base}?type=room&roomId=${encodeURIComponent(prev)}`);
+        if (Array.isArray(src?.data?.shots) && src.data.shots.length > 0) {
+          await publishToCloudRoom(next, {
+            ...src.data,
+            roomId: next,
+            projectTitle
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [projectTitle, roomId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onModeChanged = (e) => {
-      const mode = e?.detail || localStorage.getItem('sps_app_version_mode') || 'local';
+      const mode = e?.detail || localStorage.getItem('sps_app_version_mode') || 'cloud';
       setAppVersionMode(mode);
     };
     window.addEventListener('sps_app_version_mode_changed', onModeChanged);
     return () => window.removeEventListener('sps_app_version_mode_changed', onModeChanged);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isGuestSession()) return;
+    enableCloudCollaborationMode();
   }, []);
 
   const handleSelectAppVersionMode = async (mode) => {
@@ -879,8 +942,6 @@ export default function App() {
         setProjectConsoleInitialTab(home.tab || 'library');
         setIsInvestorDeckOpen(false);
         setIsProjectConsoleOpen(true);
-        // Project Console hides the header — always surface Shift+Space tip after login
-        window.setTimeout(() => openNavigatorShortcutHelp(), 650);
       }
       let view = home.view || 'spreadsheet';
       if (view === 'canvas' && !showCanvasTab) view = 'spreadsheet';
@@ -915,6 +976,8 @@ export default function App() {
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
   const [isInvestorDeckOpen, setIsInvestorDeckOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isUserPackModalOpen, setIsUserPackModalOpen] = useState(false);
+  const [studioUpdateBuildId, setStudioUpdateBuildId] = useState('');
   const [loginInitialMode, setLoginInitialMode] = useState('signin');
   const [isDesktopTrialOpen, setIsDesktopTrialOpen] = useState(false);
 
@@ -925,6 +988,32 @@ export default function App() {
     if (trial === '1' || trial === 'true' || trial === 'desktop') {
       setIsDesktopTrialOpen(true);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!shouldWatchStudioUpdates()) return undefined;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const serverId = await fetchStudioServerBuildId();
+        if (cancelled || !serverId || serverId === STUDIO_BOOT_BUILD_ID) return;
+        if (isStudioUpdateSnoozed(serverId)) return;
+        setStudioUpdateBuildId(serverId);
+      } catch {
+        /* ignore */
+      }
+    };
+    check();
+    const timer = setInterval(check, 60 * 1000);
+    const onVis = () => {
+      if (!document.hidden) check();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
   const [loginOverlayMode, setLoginOverlayMode] = useState('default');
   const [isNavigatorOpen, setIsNavigatorOpen] = useState(false);
@@ -1084,6 +1173,11 @@ export default function App() {
     try {
       if (sessionStorage.getItem('sps_login_prompted') === '1') return;
       sessionStorage.setItem('sps_login_prompted', '1');
+      if (isDownloadedStudioApp() && !hasAdminGrantedWorkspace()) {
+        setPresentationMode(true);
+        setIsLoginModalOpen(true);
+        return;
+      }
       if (consumeGuestLookFromUrl() || canGuestBrowseApp()) {
         enterGuestLookSession();
         setIsLoginModalOpen(false);
@@ -1313,7 +1407,7 @@ export default function App() {
 
     let library = [];
     try {
-      library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+      library = readLocalProjectLibrary();
     } catch (e) {
       library = [];
     }
@@ -1388,7 +1482,7 @@ export default function App() {
       'sps_export_project': () => electronMenuRef.current.exportProject?.(),
       'sps_import_project': () => {
         if (!canCreateOrDeleteProjects()) {
-          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
+          alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('import projects')}`);
           return;
         }
         const input = document.createElement('input');
@@ -1399,7 +1493,7 @@ export default function App() {
       },
       'sps_new_project': () => {
         if (!canCreateOrDeleteProjects()) {
-          alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create projects. Open Project Console to edit an allotted project.');
+          alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('create projects')}`);
           return;
         }
         electronMenuRef.current.openNewProject?.();
@@ -1420,6 +1514,7 @@ export default function App() {
   // Automatic Vault & Projects Restoration on App Mount (Local & Cloud Modes)
   useEffect(() => {
     const autoRestoreAppVault = async () => {
+      if (isPresentationMode()) return;
       // 0. Hydrate Studio Brain from IndexedDB
       try {
         await hydrateStudioBrainFromDisk();
@@ -1601,6 +1696,10 @@ export default function App() {
   // Local Storage & Library Persistence — debounced so Matrix typing does not rewrite the library every key.
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
+    if (presentationDesk || isPresentationMode()) {
+      safeLocalStorageSetItem('sps_active_view', 'demo');
+      return undefined;
+    }
     const timer = setTimeout(async () => {
       if (isGuestSession()) {
         try {
@@ -1625,8 +1724,7 @@ export default function App() {
             return;
           }
           if (!canAccessProject(projectTitle)) return;
-          const savedLibStr = localStorage.getItem('sps_project_library');
-          let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+          let library = readLocalProjectLibrary();
           if (!Array.isArray(library)) library = [];
           library = filterOutDeletedProjects(library);
 
@@ -1652,6 +1750,7 @@ export default function App() {
             library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
           } else {
             library.unshift(updatedProjectData);
+            claimNewLibraryTitleIfPackUser(projectTitle);
           }
 
           writeLocalProjectLibrary(filterOutDeletedProjects(library));
@@ -1666,16 +1765,20 @@ export default function App() {
       }
     }, 420);
     return () => clearTimeout(timer);
-  }, [shots, projectTitle, targetModel, aspectRatio, activeView, activeShotIndex, effectiveRoomId, presetProfile]);
+  }, [shots, projectTitle, targetModel, aspectRatio, activeView, activeShotIndex, effectiveRoomId, presetProfile, presentationDesk]);
 
   // Hydrate projects & collaborators from Vercel cloud (source of truth) on every open.
   // Local disk/localStorage RECEIVES from cloud; do not echo-push stale local back.
+  // Skip while the presentation reel is up — a logged-in library hydrate freezes the reel.
   useEffect(() => {
+    if (presentationDesk || isPresentationMode()) return undefined;
+    if (isGuestSession() || isSelfServeSession()) return undefined;
     let cancelled = false;
 
     fetchProjectLibraryFromCloud().then(async (projs) => {
       if (cancelled) return;
       if (isGuestSession()) return;
+      if (isSelfServeSession()) return;
       // Undo false archive/tombstone for the project currently open
       const healed = healActiveProjectFromArchive();
       let updatedProjs = Array.isArray(projs)
@@ -1731,7 +1834,7 @@ export default function App() {
 
       const localLib = (() => {
         try {
-          return JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+          return readLocalProjectLibrary();
         } catch {
           return [];
         }
@@ -1745,9 +1848,7 @@ export default function App() {
       }
       writeLocalProjectLibrary(mergedCloud);
       window.dispatchEvent(new Event('sps_projects_updated'));
-      if (healed || (activeTitle && mergedCloud.some((p) => titlesMatch(p.title, activeTitle)))) {
-        syncProjectLibraryToCloud(mergedCloud);
-      }
+      // Pull-only on hydrate — never echo a partial local library back to KV
 
       const openTitle = projectTitle;
       const activeProj = mergedCloud.find((p) => titlesMatch(p.title, openTitle));
@@ -1781,6 +1882,8 @@ export default function App() {
       })
       .catch(() => {});
 
+    fetchStudioSettingsFromCloud().catch(() => {});
+
     // Live cloud polls — keep library / allotments fresh without full reload
     const unsubLib = subscribeToProjectLibraryUpdates(() => {
       if (!cancelled) window.dispatchEvent(new Event('sps_projects_updated'));
@@ -1794,11 +1897,12 @@ export default function App() {
       unsubLib();
       unsubCollab();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / mode change hydrate only
-  }, [appVersionMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate when leaving the reel or switching local/cloud mode
+  }, [appVersionMode, presentationDesk]);
 
   // Auto-Save Active Project to Physical Hard Drive Folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
   useEffect(() => {
+    if (presentationDesk || isPresentationMode()) return;
     if (isGuestSession()) return;
     if (!shots || shots.length === 0 || !projectTitle) return;
 
@@ -1826,12 +1930,22 @@ export default function App() {
       title: projectTitle,
       roomId: roomIdForProject(projectTitle, effectiveRoomId)
     }).catch(() => {});
-  }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId]);
+  }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId, presentationDesk]);
+
+  const [cloudRoomMembershipTick, setCloudRoomMembershipTick] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const bump = () => setCloudRoomMembershipTick((n) => n + 1);
+    window.addEventListener('sps_collaborators_updated', bump);
+    return () => window.removeEventListener('sps_collaborators_updated', bump);
+  }, []);
 
   // Cloud room sync always on — Local badge is storage preference; Vercel is SoT
   useEffect(() => {
+    if (presentationDesk || isPresentationMode()) return undefined;
     if (isGuestSession()) return undefined;
     if (!effectiveRoomId) return;
+    if (!canAccessCloudRoom(getCurrentUserEmail(), effectiveRoomId)) return undefined;
     const unsubscribe = subscribeToCloudRoom(
       effectiveRoomId,
       (cloudData) => {
@@ -1874,7 +1988,7 @@ export default function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [effectiveRoomId]);
+  }, [effectiveRoomId, cloudRoomMembershipTick, presentationDesk]);
 
   // -------------------------------------------------------------
   // REAL-TIME SLOT PRESENCE BROADCASTING & CONFLICT DETECTION
@@ -1888,8 +2002,10 @@ export default function App() {
   // Presence always publishes when logged in + room (works in Local UI mode too)
   useEffect(() => {
     if (typeof window === 'undefined' || !effectiveRoomId) return;
+    if (presentationDesk || isPresentationMode()) return;
     const currentUserEmail = localStorage.getItem('sps_authorized_user_email');
     if (!currentUserEmail) return;
+    if (!canAccessCloudRoom(currentUserEmail, effectiveRoomId)) return;
 
     const publishPresence = (isEditing = false) => {
       const activeShot = shotsRef.current[activeShotIndexRef.current];
@@ -1921,10 +2037,10 @@ export default function App() {
     });
     const heartbeat = setInterval(() => publishPresence(false), 20000);
     return () => clearInterval(heartbeat);
-  }, [activeShotIndex, projectTitle, effectiveRoomId]);
+  }, [activeShotIndex, projectTitle, effectiveRoomId, cloudRoomMembershipTick, presentationDesk]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !effectiveRoomId) {
+    if (typeof window === 'undefined' || !effectiveRoomId || presentationDesk || isPresentationMode()) {
       setActiveRemoteUsers([]);
       return;
     }
@@ -1981,12 +2097,14 @@ export default function App() {
       resetPeerPresenceRoom(effectiveRoomId);
       if (typeof unsubPresence === 'function') unsubPresence();
     };
-  }, [effectiveRoomId]);
+  }, [effectiveRoomId, presentationDesk]);
 
   // Room chat / shot comments — unread badge while panel closed
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
+    if (presentationDesk || isPresentationMode()) return undefined;
     const key = effectiveRoomId;
+    if (!canAccessCloudRoom(getCurrentUserEmail(), key)) return undefined;
     let lastSeen = 0;
     try {
       lastSeen = Number(localStorage.getItem(`sps_chat_last_seen_${key}`) || 0) || 0;
@@ -2009,7 +2127,7 @@ export default function App() {
       setUnreadChatCount(unread);
     });
     return () => unsub();
-  }, [effectiveRoomId, isCollabChatOpen]);
+  }, [effectiveRoomId, isCollabChatOpen, cloudRoomMembershipTick, presentationDesk]);
 
   // -------------------------------------------------------------
   // Timed durable auto-save (vault + optional projectSave version)
@@ -2155,9 +2273,20 @@ export default function App() {
     if (!ms || isGuestSession()) return undefined;
     const id = setInterval(() => {
       durableSaveRef.current?.({ source: 'auto' });
+      persistLivePackIfActive();
     }, ms);
     return () => clearInterval(id);
   }, [autoSaveIntervalId]);
+
+  useEffect(() => {
+    const persist = () => persistLivePackIfActive();
+    window.addEventListener('beforeunload', persist);
+    document.addEventListener('visibilitychange', persist);
+    return () => {
+      window.removeEventListener('beforeunload', persist);
+      document.removeEventListener('visibilitychange', persist);
+    };
+  }, []);
 
   // Legacy 30-min localStorage-only snapshot (kept light; durable save is the real versioning)
   useEffect(() => {
@@ -2169,10 +2298,9 @@ export default function App() {
         const dateStr = now.toLocaleDateString();
         const backupName = `Auto-Backup 30m - ${timeStr} - ${dateStr}`;
 
-        const savedLibStr = localStorage.getItem('sps_project_library');
         let library = [];
         try {
-          library = savedLibStr ? JSON.parse(savedLibStr) : [];
+          library = readLocalProjectLibrary();
         } catch (_) {
           library = [];
         }
@@ -2250,6 +2378,7 @@ export default function App() {
   const syncToCloud = (updatedState = {}) => {
     if (isGuestSession()) return;
     if (isReceivingCloudUpdate.current) return;
+    if (presentationDesk || isPresentationMode()) return;
     if (!canEditProjects()) return;
     try {
     const nextTitle = updatedState?.projectTitle || projectTitle;
@@ -2274,8 +2403,7 @@ export default function App() {
       }
 
       try {
-        const savedLibStr = localStorage.getItem('sps_project_library');
-        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        let library = readLocalProjectLibrary();
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === newTitle);
@@ -2301,17 +2429,19 @@ export default function App() {
             library[existingIdx] = { ...library[existingIdx], ...updatedProjectData };
           } else if (canCreateOrDeleteProjects()) {
             library.unshift(updatedProjectData);
+            claimNewLibraryTitleIfPackUser(newTitle);
           }
 
           library = filterOutDeletedProjects(library);
           writeLocalProjectLibrary(library);
-          // Always mirror library to Vercel (Local badge does not disable cloud SoT)
-          if (library.length > 0) syncProjectLibraryToCloud(library);
+          // Shot edits travel via publishToCloudRoom below — do not push a
+          // partial local library into KV on every keystroke.
         }
       } catch (e) {}
     }
 
     // Always publish room shots to Vercel — Local mode still receives/sends via getNativeSyncUrl
+    if (!canAccessCloudRoom(getCurrentUserEmail(), effectiveRoomId)) return;
     setIsCloudSyncing(true);
     publishToCloudRoom(effectiveRoomId, {
       projectTitle: newTitle,
@@ -2340,10 +2470,9 @@ export default function App() {
       const mergedImages = { ...projectGeneratedImages, ...vaultImages };
       setProjectGeneratedImages(mergedImages);
 
-      const savedLibStr = localStorage.getItem('sps_project_library');
       let library = [];
       try {
-        library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        library = readLocalProjectLibrary();
       } catch (_) {
         library = [];
       }
@@ -2548,6 +2677,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || isGuestSession()) return undefined;
+    if (isPresentationMode()) return undefined;
     fetchCloudSyncHealth();
     const timer = setInterval(() => fetchCloudSyncHealth(), 5 * 60 * 1000);
     return () => clearInterval(timer);
@@ -2555,6 +2685,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || isGuestSession()) return undefined;
+    if (isPresentationMode()) return undefined;
     if (!isUsableProjectTitle(projectTitle)) return undefined;
     const handlers = {
       onTaskCreated: (job) => {
@@ -2642,6 +2773,13 @@ export default function App() {
   };
 
   const guestBlock = (label) => {
+    if (downloadedAppPresentationOnly()) {
+      alert(
+        `🔒 PRESENTATION ONLY\n\nThe downloaded app is a showcase until the studio Admin grants access.\n\nSign in with your allotted email (invite OTP or your password) to work in ${label}.`
+      );
+      setIsLoginModalOpen(true);
+      return;
+    }
     alert(
       `🔒 GUEST ACCESS\n\nSign in to open ${label}.\n\nRequest access from the studio Admin.`
     );
@@ -2649,6 +2787,10 @@ export default function App() {
   };
 
   const guestMayLook = (label) => {
+    if (downloadedAppPresentationOnly()) {
+      guestBlock(label);
+      return false;
+    }
     if (!isGuestSession()) return true;
     if (canGuestBrowseApp()) return true;
     guestBlock(label);
@@ -2714,18 +2856,21 @@ export default function App() {
 
   const handleStudioLogout = () => {
     try {
+      const prev = getCurrentUserEmail();
+      activatePackForSession(prev, '');
       localStorage.setItem('sps_user_manually_logged_out', 'true');
       localStorage.removeItem('sps_authorized_user_email');
       localStorage.setItem('sps_is_admin_logged_in', 'false');
       sessionStorage.removeItem('sps_session_authed');
-      // Re-offer Shift+Space tip on next login (Project Console hides the header)
       localStorage.removeItem('sps_nav_shortcut_chip_seen');
+      if (isDownloadedStudioApp()) setPresentationMode(true);
     } catch {
       /* ignore */
     }
     setIsAdminLoggedIn(false);
     setIsAdminModalOpen(false);
     setIsProjectConsoleOpen(false);
+    setIsUserPackModalOpen(false);
     try {
       window.history.replaceState({}, '', window.location.pathname);
       window.dispatchEvent(new Event('sps_collaborators_updated'));
@@ -2746,15 +2891,27 @@ export default function App() {
     const onLogout = () => handleStudioLogout();
     const onLogin = () => {
       setLoginOverlayMode('default');
+      setLoginInitialMode('signin');
       setIsLoginModalOpen(true);
     };
+    const onPassword = () => {
+      const user = findAuthorizedUser(getCurrentUserEmail());
+      setLoginOverlayMode('switch');
+      setLoginInitialMode(collaboratorHasPassword(user) ? 'changepass' : 'createpass');
+      setIsLoginModalOpen(true);
+    };
+    const onPack = () => setIsUserPackModalOpen(true);
     window.addEventListener(STUDIO_SWITCH_ACCOUNT_EVENT, onSwitch);
     window.addEventListener(STUDIO_LOGOUT_EVENT, onLogout);
     window.addEventListener(STUDIO_OPEN_LOGIN_EVENT, onLogin);
+    window.addEventListener(STUDIO_OPEN_PASSWORD_EVENT, onPassword);
+    window.addEventListener(STUDIO_OPEN_PACK_EVENT, onPack);
     return () => {
       window.removeEventListener(STUDIO_SWITCH_ACCOUNT_EVENT, onSwitch);
       window.removeEventListener(STUDIO_LOGOUT_EVENT, onLogout);
       window.removeEventListener(STUDIO_OPEN_LOGIN_EVENT, onLogin);
+      window.removeEventListener(STUDIO_OPEN_PASSWORD_EVENT, onPassword);
+      window.removeEventListener(STUDIO_OPEN_PACK_EVENT, onPack);
     };
   }, []);
 
@@ -2977,12 +3134,13 @@ export default function App() {
       group: 'Studio',
       label: 'Settings',
       hint: 'Admin',
-      keywords: ['admin', 'models', 'cloud', 'keys', 'drive', 'google'],
+      keywords: ['admin', 'models', 'cloud', 'keys', 'drive', 'google', 'users'],
       icon: NAV_ICONS.settings,
       run: () => openSettingsTab('all'),
       children: [
         { id: 'settings-all', label: 'All settings', run: () => openSettingsTab('all') },
-        { id: 'settings-cloud', label: 'Cloud & collab', run: () => openSettingsTab('cloud_collab') },
+        { id: 'settings-users', label: 'Users', run: () => openSettingsTab('users') },
+        { id: 'settings-cloud', label: 'Cloud room', run: () => openSettingsTab('cloud_collab') },
         { id: 'settings-drive', label: 'Google Drive', run: () => openSettingsTab('cloud_collab') },
         { id: 'settings-image', label: 'Image models', run: () => openSettingsTab('image') },
         { id: 'settings-video', label: 'Video models', run: () => openSettingsTab('video') },
@@ -3021,12 +3179,19 @@ export default function App() {
       id: 'presentation',
       group: 'Studio',
       label: 'Presentation',
-      hint: isPresentationMode() ? 'On · exit reel' : 'Guest reel',
+      hint: downloadedAppPresentationOnly()
+        ? 'Showcase · wait for Admin grant'
+        : isPresentationMode() ? 'On · exit reel' : 'Guest reel',
       keywords: ['presentation', 'guest', 'demo mode', 'reel', 'showcase', 'investor'],
       icon: NAV_ICONS.deck,
       run: () => {
-        if (isPresentationMode()) setPresentationMode(false);
-        else setPresentationMode(true);
+        if (isPresentationMode()) {
+          if (downloadedAppPresentationOnly()) {
+            setIsLoginModalOpen(true);
+            return;
+          }
+          setPresentationMode(false);
+        } else setPresentationMode(true);
       },
       children: [
         {
@@ -3039,7 +3204,13 @@ export default function App() {
           id: 'presentation-exit',
           label: 'Exit presentation',
           hint: 'Restore consoles',
-          run: () => setPresentationMode(false)
+          run: () => {
+            if (downloadedAppPresentationOnly()) {
+              setIsLoginModalOpen(true);
+              return;
+            }
+            setPresentationMode(false);
+          }
         },
         {
           id: 'presentation-guest',
@@ -3312,7 +3483,7 @@ export default function App() {
     if (!canCreateOrDeleteProjects()) {
       let library = [];
       try {
-        library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+        library = readLocalProjectLibrary();
       } catch (e) {}
       const exists = Array.isArray(library) && library.some((p) => String(p?.title || '').toLowerCase() === String(nextTitle || '').toLowerCase());
       if (!exists || !canAccessProject(nextTitle)) {
@@ -3342,6 +3513,13 @@ export default function App() {
     setShots(finalShots);
     setProjectTitle(nextTitle);
     setRoomId(roomIdForProject(nextTitle, roomId));
+    try {
+      const library = readLocalProjectLibrary();
+      const exists = Array.isArray(library) && library.some((p) => String(p?.title || '').toLowerCase() === String(nextTitle || '').toLowerCase());
+      if (!exists) claimNewLibraryTitleIfPackUser(nextTitle);
+    } catch {
+      /* ignore */
+    }
     setActiveShotIndex(0);
     setActiveView("spreadsheet");
 
@@ -3369,8 +3547,7 @@ export default function App() {
 
     if (typeof window !== 'undefined') {
       try {
-        const savedLibStr = localStorage.getItem('sps_project_library');
-        let library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        let library = readLocalProjectLibrary();
         if (!Array.isArray(library)) library = [];
 
         const existingIdx = library.findIndex(p => p.title === nextTitle);
@@ -3506,8 +3683,7 @@ export default function App() {
 
     if (typeof window !== 'undefined') {
       try {
-        const savedLibStr = localStorage.getItem('sps_project_library');
-        const library = savedLibStr ? JSON.parse(savedLibStr) : [];
+        const library = readLocalProjectLibrary();
         const found = library.find((p) => p.title === titleToApply);
         if (found && Array.isArray(found.shots) && found.shots.length > 0) {
           targetExistingShots = found.shots;
@@ -3587,36 +3763,78 @@ export default function App() {
 
   const importJSONProject = (e) => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
+      alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('import projects')}`);
       if (e?.target) e.target.value = '';
       return;
     }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        const json = JSON.parse(event.target.result);
-        if (json.shots && Array.isArray(json.shots)) {
-          updateShotsWithHistory(json.shots);
-          if (json.projectTitle) setProjectTitle(json.projectTitle);
-          if (json.targetModel) setTargetModel(json.targetModel);
-          if (json.aspectRatio) setAspectRatio(json.aspectRatio);
-          if (json.projectGeneratedImages) {
-            setProjectGeneratedImages(json.projectGeneratedImages);
-            try {
-              localStorage.setItem('sps_generated_images_map', JSON.stringify(json.projectGeneratedImages));
-            } catch (e) {}
-          }
-          setActiveShotIndex(0);
-          syncToCloud({
-            shots: json.shots,
-            projectTitle: json.projectTitle,
-            targetModel: json.targetModel,
-            aspectRatio: json.aspectRatio,
-            projectGeneratedImages: json.projectGeneratedImages || {}
-          });
+        const parsed = JSON.parse(event.target.result);
+        const json = parsed?.project && typeof parsed.project === 'object' ? parsed.project : parsed;
+        const title = String(json?.title || json?.projectTitle || '').trim();
+        if (!title || !Array.isArray(json.shots)) {
+          alert('That file needs a project title and shots. It was not merged into the open film.');
+          return;
         }
+        const imported = { ...json, title };
+        reviveProjectTitleForOpen(title);
+        try {
+          const saved = readLocalProjectLibrary();
+          const parked = writeWorkspaceOntoLibrary(saved, projectTitle);
+          writeLocalProjectLibrary(filterOutDeletedProjects(parked));
+        } catch {
+          /* ignore */
+        }
+        await saveProjectToVault(imported);
+        try {
+          const library = readLocalProjectLibrary();
+          const key = title.toUpperCase();
+          const already = (Array.isArray(library) ? library : []).some(
+            (p) => String(p?.title || '').trim().toUpperCase() === key
+          );
+          const next = already
+            ? library.map((p) =>
+                String(p?.title || '').trim().toUpperCase() === key
+                  ? { ...p, ...imported, title, id: p.id }
+                  : p
+              )
+            : [...(library || []), imported];
+          writeLocalProjectLibrary(next);
+          if (!already) claimNewLibraryTitleIfPackUser(title);
+        } catch {
+          /* ignore */
+        }
+        setProjectTitle(title);
+        setShots(imported.shots);
+        if (imported.targetModel) setTargetModel(imported.targetModel);
+        if (imported.aspectRatio) setAspectRatio(imported.aspectRatio);
+        if (imported.roomId) setRoomId(roomIdForProject(title, imported.roomId));
+        if (imported.projectGeneratedImages) {
+          setProjectGeneratedImages(imported.projectGeneratedImages);
+          try {
+            localStorage.setItem('sps_generated_images_map', JSON.stringify(imported.projectGeneratedImages));
+          } catch (err) {}
+        }
+        applyOpenWorkspace(imported);
+        try {
+          localStorage.setItem('sps_current_project_title', title);
+          localStorage.setItem('sps_current_shots', JSON.stringify(imported.shots || []));
+          localStorage.setItem('sps_current_room_id', roomIdForProject(title, imported.roomId));
+        } catch {
+          /* ignore */
+        }
+        setActiveShotIndex(0);
+        window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'App' } }));
+        syncToCloud({
+          shots: imported.shots,
+          projectTitle: title,
+          targetModel: imported.targetModel,
+          aspectRatio: imported.aspectRatio,
+          projectGeneratedImages: imported.projectGeneratedImages || {}
+        });
       } catch (err) {
         alert("Invalid project JSON file.");
       }
@@ -3659,6 +3877,11 @@ export default function App() {
             (async () => {
               try {
                 await hydrateGuestUrlFromServer();
+                if (isDownloadedStudioApp() && !hasAdminGrantedWorkspace()) {
+                  setPresentationMode(true);
+                  setIsLoginModalOpen(true);
+                  return;
+                }
                 if (consumeGuestLookFromUrl() || canGuestBrowseApp()) {
                   enterGuestLookSession();
                   setIsLoginModalOpen(false);
@@ -3666,7 +3889,7 @@ export default function App() {
                 }
                 const email = getCurrentUserEmail();
                 const loggedOut = localStorage.getItem('sps_user_manually_logged_out') === 'true';
-                if (email && !loggedOut) {
+                if (email && !loggedOut && hasAdminGrantedWorkspace(email)) {
                   sessionStorage.setItem('sps_session_authed', '1');
                   sessionStorage.setItem('sps_login_prompted', '1');
                   setIsLoginModalOpen(false);
@@ -3677,15 +3900,16 @@ export default function App() {
               } catch {
                 /* ignore */
               }
-              // Start with presentation mode for visitors
+              // Start with presentation mode for visitors — login lives on the reel, not a popup
               setPresentationMode(true);
-              setIsLoginModalOpen(true);
+              setIsLoginModalOpen(false);
             })();
           }}
         />
       )}
-      {/* Top Header Bar — visible & pinned by default even in fullscreen */}
-      {!studioShellHidden && (
+      {/* Top Header Bar — hidden on the presentation reel so the desk chrome does not freeze the page */}
+      {!studioShellHidden && !presentationDesk && (
+        <Suspense fallback={null}>
         <div
           className={`sps-hover-chrome sps-app-hover-chrome ${
             headerMinimized && !headerPinned ? 'is-collapsed' : 'is-pinned'
@@ -3816,9 +4040,10 @@ export default function App() {
           unreadChatCount={unreadChatCount}
         />
         </div>
+        </Suspense>
       )}
 
-      {isGuestSession() && canGuestBrowseApp() && !studioShellHidden && (
+      {isGuestSession() && canGuestBrowseApp() && !studioShellHidden && !presentationDesk && (
         <div className="shrink-0 px-3 py-1.5 text-[11px] text-center border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)]" style={{ color: 'var(--sps-muted)' }}>
           Guest playground — dummy film only. Play in the rooms. Studio titles stay locked. Sign in for the real library.
         </div>
@@ -3833,6 +4058,13 @@ export default function App() {
         
         {/* DYNAMICALLY SEGREGATED WORKSPACE VIEW CONTAINER */}
         <div key={activeView} className="flex-1 w-full min-h-0 overflow-hidden flex flex-col sps-view-enter">
+          <Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center text-[11px] uppercase tracking-widest text-[var(--sps-muted)]">
+                Opening desk…
+              </div>
+            }
+          >
 
           {activeView === 'demo' && (
             <DemoModeView
@@ -3842,6 +4074,19 @@ export default function App() {
               }}
               onEnterStudio={() => {
                 setPresentationMode(false);
+                try {
+                  const saved = localStorage.getItem('sps_current_shots');
+                  if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                      setShots(parsed.length > 150 ? parsed.slice(0, 150) : parsed);
+                    }
+                  }
+                  const title = localStorage.getItem('sps_current_project_title');
+                  if (title) setProjectTitle(title);
+                } catch {
+                  /* ignore */
+                }
                 setActiveView('spreadsheet');
               }}
             />
@@ -4039,7 +4284,7 @@ export default function App() {
               <TemplateSelector onLoadTemplate={handleLoadTemplate} />
             </div>
           )}
-
+          </Suspense>
         </div>
       </main>
 
@@ -4265,6 +4510,16 @@ export default function App() {
           setIsDesktopTrialOpen(true);
         }}
       />
+      <UserPackModal
+        isOpen={isUserPackModalOpen}
+        onClose={() => setIsUserPackModalOpen(false)}
+        onAccountClosed={handleStudioLogout}
+      />
+      <StudioUpdateModal
+        isOpen={Boolean(studioUpdateBuildId)}
+        serverBuildId={studioUpdateBuildId}
+        onSnooze={() => setStudioUpdateBuildId('')}
+      />
       <DesktopTrialModal isOpen={isDesktopTrialOpen} onClose={() => setIsDesktopTrialOpen(false)} />
 
       {/* Real-Time Active User Slot Conflict Alert Modal */}
@@ -4457,6 +4712,8 @@ export default function App() {
         items={navigatorItems}
       />
 
+      {!presentationDesk && (
+      <Suspense fallback={null}>
       <CollabChatPanel
         isOpen={isCollabChatOpen}
         onClose={() => setIsCollabChatOpen(false)}
@@ -4469,6 +4726,8 @@ export default function App() {
         currentUserEmail={typeof window !== 'undefined' ? (localStorage.getItem('sps_authorized_user_email') || '') : ''}
         colorTheme={colorTheme}
       />
+      </Suspense>
+      )}
     </div>
   );
 }

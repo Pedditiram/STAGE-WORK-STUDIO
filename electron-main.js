@@ -17,6 +17,7 @@ const { app, BrowserWindow, Menu, shell, ipcMain, dialog, nativeTheme, nativeIma
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { ensureShelfDirs, shelfProjectOnDisk, restoreProjectOnDisk } = require('./src/utils/projectShelfFs.cjs');
 
 /** Unpackaged = always talk to Vite. Packaged = dist/. */
 const isPackaged = app.isPackaged;
@@ -49,6 +50,7 @@ function ensureStudioDirs() {
   for (const d of [PROJECTS_DIR, SETTINGS_DIR, path.join(PROJECTS_DIR, 'posters')]) {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
   }
+  ensureShelfDirs(PROJECTS_DIR);
 }
 
 function posterSafeName(title) {
@@ -443,7 +445,14 @@ ipcMain.handle('dialog:openFile', async () => {
 ipcMain.handle('vault:listProjects', async () => {
   try {
     ensureStudioDirs();
-    const files = fs.readdirSync(PROJECTS_DIR).filter((f) => f.endsWith('.json'));
+    const files = fs.readdirSync(PROJECTS_DIR).filter((f) => {
+      if (!f.endsWith('.json')) return false;
+      try {
+        return fs.statSync(path.join(PROJECTS_DIR, f)).isFile();
+      } catch {
+        return false;
+      }
+    });
     const projects = [];
     for (const f of files) {
       try {
@@ -455,6 +464,31 @@ ipcMain.handle('vault:listProjects', async () => {
     return { ok: true, projects };
   } catch (err) {
     return { ok: false, error: err.message, projects: [] };
+  }
+});
+
+ipcMain.handle('vault:deleteProject', async (_, titleOrPayload, maybeShelf) => {
+  try {
+    ensureStudioDirs();
+    const payload = titleOrPayload && typeof titleOrPayload === 'object'
+      ? titleOrPayload
+      : { title: titleOrPayload, shelf: maybeShelf };
+    const clean = String(payload?.title || '').trim();
+    if (!clean) return { ok: false, error: 'title required' };
+    return shelfProjectOnDisk(PROJECTS_DIR, clean, payload?.shelf);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('vault:restoreProject', async (_, title) => {
+  try {
+    ensureStudioDirs();
+    const clean = String(title || '').trim();
+    if (!clean) return { ok: false, error: 'title required' };
+    return restoreProjectOnDisk(PROJECTS_DIR, clean);
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 });
 

@@ -32,6 +32,7 @@ import {
 import { exportDownloadText, EXPORT_LIFECYCLE } from '../utils/exportGate';
 import { resolveActiveProjectTitle } from '../utils/creativeAuditLog';
 import { estimateLocalStorageUsage, pruneLocalStoragePressure } from '../utils/safeStorage';
+import { getStudioAdminSecret, setStudioAdminSecret } from '../utils/saasAdminClient';
 
 export default function SaasAdminPanel() {
   const users = getAuthorizedUsers();
@@ -49,6 +50,7 @@ export default function SaasAdminPanel() {
   const [ledgerPlanPulse, setLedgerPlanPulse] = useState('');
   const [ledgerStatusPulse, setLedgerStatusPulse] = useState('');
   const [emailNoMatchPulse, setEmailNoMatchPulse] = useState(false);
+  const [adminKey, setAdminKey] = useState(() => getStudioAdminSecret());
   const refresh = () => bump((n) => n + 1);
   const refreshStorage = () => setStorage(estimateLocalStorageUsage());
   const lic = getLicense(email);
@@ -220,6 +222,25 @@ export default function SaasAdminPanel() {
       </div>
 
       <label className="block space-y-1">
+        <span className="text-[10px] font-bold text-zinc-500 uppercase">Server admin key</span>
+        <input
+          type="password"
+          autoComplete="off"
+          className="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 text-[11px] font-mono rounded-lg px-2 py-1.5"
+          value={adminKey}
+          onChange={(e) => {
+            const v = e.target.value;
+            setAdminKey(v);
+            setStudioAdminSecret(v);
+          }}
+          placeholder="SPS_ADMIN_SECRET from Vercel (this device only)"
+        />
+        <span className="block text-[10px] text-zinc-500">
+          Required on production to grant credits, toggle guest URL, or email OTPs. Never stored in the film library.
+        </span>
+      </label>
+
+      <label className="block space-y-1">
         <span className="text-[10px] font-bold text-zinc-500 uppercase">User</span>
         <select
           className="w-full bg-zinc-900 border border-zinc-700 text-amber-200 text-[11px] font-mono rounded-lg px-2 py-1.5"
@@ -327,19 +348,19 @@ export default function SaasAdminPanel() {
                 const res = await checkoutCreditPack(pack.id);
                 if (res.url) {
                   window.open(res.url, '_blank', 'noopener');
-                  setNote('Stripe checkout opened.');
+                  setNote('Payment checkout opened.');
                   return;
                 }
                 if (String(actor).toLowerCase() === 'admin@stageworkstudio.com' || String(actor).toLowerCase() === 'pedditiram@gmail.com' || isStudioAdmin(actor)) {
                   addCredits(email, pack.credits);
                   const grant = await grantCreditPack(email, pack.id, actor);
                   setNote(grant.success
-                    ? `Granted ${pack.label} (ledger + local). Stripe not configured.`
+                    ? `Granted ${pack.label} (ledger + local). Payment system is held.`
                     : `Local +${pack.credits} credits. ${grant.error || res.message || ''}`);
                   refresh();
                   return;
                 }
-                setNote(res.message || 'Ask the owner to grant credits, or set STRIPE_SECRET_KEY.');
+                setNote(res.message || 'Ask the owner to grant credits. Payment system is held.');
               }}
             >
               {pack.label} · ${pack.usd}

@@ -11,7 +11,7 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [org, setOrg] = useState('');
-  const [why, setWhy] = useState('I would like a Mac desktop trial of Stage Work Studio.');
+  const [why, setWhy] = useState('I would like to download the Stage Work Studio app.');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
   const [error, setError] = useState('');
@@ -40,9 +40,9 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         }
         return;
       }
-      let msg = data?.message || 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.';
+      let msg = data?.message || 'Thank you for requesting access to Stage Work Studio! We have received your application to download the app. Your access is currently being provisioned.';
       if (typeof msg === 'string' && (msg.includes('validation_error') || msg.includes('statusCode') || msg.startsWith('{'))) {
-        msg = 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.';
+        msg = 'Thank you for requesting access to Stage Work Studio! We have received your application to download the app. Your access is currently being provisioned.';
       }
       setDone(msg);
     } catch {
@@ -63,7 +63,7 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] m-0" style={{ color: 'var(--sps-gold)' }}>{PRODUCT}</p>
             <h3 className="text-sm font-semibold m-0 font-display" style={{ color: 'var(--sps-text)' }}>
-              Download desktop trial
+              Download app
             </h3>
           </div>
           <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close">
@@ -72,7 +72,7 @@ export default function DesktopTrialModal({ isOpen, onClose }) {
         </div>
         <form className="p-4 space-y-3" onSubmit={submit}>
           <p className="text-[12px] m-0" style={{ color: 'var(--sps-muted)' }}>
-            Request with your professional email. Studio administration (<code className="text-amber-300">admin@stageworkstudio.com</code>) will review your application and issue your personal desktop download link upon approval.
+            Request with your professional email. Studio administration (<code className="text-amber-300">admin@stageworkstudio.com</code>) will review your application and issue your personal app download link upon approval.
           </p>
           <label className="block space-y-1">
             <span className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--sps-muted)' }}>Name</span>

@@ -1,17 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LogOut, Repeat2, UserRound } from 'lucide-react';
+import { KeyRound, LogOut, Package, Repeat2, UserRound } from 'lucide-react';
 import {
   getCurrentUserEmail,
   getCurrentUserProfile,
   getDesignationForEmail,
   isGuestSession,
-  isStudioAdmin
+  isStudioAdmin,
+  isStudioOwner
 } from '../utils/projectPermissions';
+import { collaboratorHasPassword, isOwnerLoginEmail } from '../utils/collaboratorPassword';
 import { getLicense, getPlan } from '../utils/saasControl';
+import { getUserPackFlags, getPackOwnedTitles } from '../utils/userSettingsPack';
+import {
+  STUDIO_SWITCH_ACCOUNT_EVENT,
+  STUDIO_LOGOUT_EVENT,
+  STUDIO_OPEN_LOGIN_EVENT,
+  STUDIO_OPEN_PASSWORD_EVENT,
+  STUDIO_OPEN_PACK_EVENT
+} from './studioProfileEvents';
 
-export const STUDIO_SWITCH_ACCOUNT_EVENT = 'sps_studio_switch_account';
-export const STUDIO_LOGOUT_EVENT = 'sps_studio_logout';
-export const STUDIO_OPEN_LOGIN_EVENT = 'sps_studio_open_login';
+export {
+  STUDIO_SWITCH_ACCOUNT_EVENT,
+  STUDIO_LOGOUT_EVENT,
+  STUDIO_OPEN_LOGIN_EVENT,
+  STUDIO_OPEN_PASSWORD_EVENT,
+  STUDIO_OPEN_PACK_EVENT
+};
 
 function emit(name) {
   try {
@@ -40,7 +54,9 @@ function readAccount() {
     planLabel = '';
   }
   const initial = (name || email || 'S').charAt(0).toUpperCase();
-  return { email, name, designation, role, planLabel, guest, initial };
+  const packFlags = guest || isStudioOwner(email) ? { independentPack: false, ownLibrary: false } : getUserPackFlags(email);
+  const packTitleCount = guest || isStudioOwner(email) ? 0 : getPackOwnedTitles(email).length;
+  return { email, name, designation, role, planLabel, guest, initial, packFlags, packTitleCount };
 }
 
 /**
@@ -64,10 +80,12 @@ export default function StudioProfileControl({
     window.addEventListener('storage', refresh);
     window.addEventListener('sps_collaborators_updated', refresh);
     window.addEventListener('sps_saas_changed', refresh);
+    window.addEventListener('sps_user_pack_changed', refresh);
     return () => {
       window.removeEventListener('storage', refresh);
       window.removeEventListener('sps_collaborators_updated', refresh);
       window.removeEventListener('sps_saas_changed', refresh);
+      window.removeEventListener('sps_user_pack_changed', refresh);
     };
   }, []);
 
@@ -111,6 +129,19 @@ export default function StudioProfileControl({
     if (typeof onOpenLogin === 'function') onOpenLogin();
     else emit(STUDIO_OPEN_LOGIN_EVENT);
   };
+
+  const handlePassword = () => {
+    close();
+    emit(STUDIO_OPEN_PASSWORD_EVENT);
+  };
+
+  const handlePack = () => {
+    close();
+    emit(STUDIO_OPEN_PACK_EVENT);
+  };
+
+  const canSetPassword = !account.guest && !isOwnerLoginEmail(account.email) && !isStudioAdmin(account.email);
+  const canOpenPack = !account.guest;
 
   return (
     <div
@@ -156,7 +187,7 @@ export default function StudioProfileControl({
                     {account.email}
                   </div>
                 ) : null}
-                {account.designation || account.role || account.planLabel ? (
+                {account.designation || account.role || account.planLabel || account.packFlags?.independentPack ? (
                   <div className="flex flex-wrap items-center gap-1 mt-1">
                     {account.designation ? (
                       <span className="sps-chip text-[9px] py-0 px-1.5">{account.designation}</span>
@@ -166,6 +197,11 @@ export default function StudioProfileControl({
                     ) : null}
                     {account.planLabel ? (
                       <span className="sps-chip text-[9px] py-0 px-1.5">{account.planLabel}</span>
+                    ) : null}
+                    {account.packFlags?.independentPack ? (
+                      <span className="sps-chip text-[9px] py-0 px-1.5">
+                        Pack{account.packFlags.ownLibrary ? ' · library' : ''}{account.packTitleCount ? ` · ${account.packTitleCount}` : ''}
+                      </span>
                     ) : null}
                   </div>
                 ) : null}
@@ -185,6 +221,28 @@ export default function StudioProfileControl({
                 </button>
               ) : (
                 <>
+                  {canSetPassword ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sps-btn text-[10px] w-full justify-start py-1.5"
+                      onClick={handlePassword}
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      {collaboratorHasPassword(getCurrentUserProfile(account.email)) ? 'Change password' : 'Create my password'}
+                    </button>
+                  ) : null}
+                  {canOpenPack ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sps-btn text-[10px] w-full justify-start py-1.5"
+                      onClick={handlePack}
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      My settings pack
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     role="menuitem"

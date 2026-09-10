@@ -67,7 +67,7 @@ function buildGuideSections(isAdmin) {
       icon: Film,
       title: '1. First 5 minutes',
       badge: 'START HERE',
-      keywords: 'beginner new user welcome start open studio what is',
+      keywords: 'beginner new user welcome start open studio what is password pack export close account',
       content: (
         <div className="space-y-4 text-[11px]">
           <Callout title="What is Stage Work Studio?">
@@ -82,8 +82,14 @@ function buildGuideSections(isAdmin) {
           </Callout>
 
           <Step n={1} title="Sign in">
-            Use the login screen with your studio email. Guests can look around if Guest Browse is on, but cannot save
-            films.
+            Use the login screen with your studio email. After Admin allots you (or sends a 6-digit invite OTP),
+            create your own password on the <strong>Create my password</strong> screen. Later sign-ins use email +
+            that password. Forgot it? Ask Admin for a new OTP or a password reset.
+            The <strong>downloaded desktop app</strong> is presentation-only until Admin grants access — then you can work.
+            If the website says <strong>Studio updated</strong>, tap <strong>Refresh now</strong> (you do not need a hard refresh).
+            Admin can turn on an <strong>Independent settings pack</strong> (your engines/theme) and <strong>Own library</strong> (create/delete only titles you created).
+            Allotted studio films stay Admin-owned. Profile → <strong>My settings pack</strong> shows pack status; <strong>Export pack &amp; close account</strong> saves your pack ZIP then removes your login (studio films are not deleted).
+            Guests can look around on the website if Guest Browse is on, but cannot save films.
           </Step>
           <Step n={2} title="Open Projects">
             Click the <strong>Projects</strong> (folder) button in the top bar. That opens the <strong>Project Console</strong>{' '}
@@ -126,8 +132,9 @@ function buildGuideSections(isAdmin) {
               <li>
                 <strong>Open a project file from disk</strong> — Project Console top bar →{' '}
                 <strong>Open Project File</strong> (same as Import Backup). Choose a <code>.sps</code> or{' '}
-                <code>.json</code> backup. Studio admins see this button; collaborators open films they were given from
-                the library cards.
+                <code>.json</code> backup. Studio admins and Own-library pack users see this button; other
+                collaborators open films they were given from the library cards. Pack users cannot overwrite
+                studio titles they did not create.
               </li>
             </ol>
           </Callout>
@@ -160,8 +167,8 @@ function buildGuideSections(isAdmin) {
               also writes <code>TITLE_v001.json</code>, <code>v002</code>, … into that folder.
             </p>
             <p>
-              Cloud sync (cloud icon next to Save) shares with teammates — use both: Save for safety on disk, Sync for
-              the room.
+              Cloud sync (cloud with up/down arrows, next to Save) shares with teammates. Google Drive (triangle
+              mark) is a folder link, not the same as sync. Use both: Save for safety on disk, Sync for the room.
             </p>
           </Callout>
 
@@ -379,7 +386,7 @@ function buildGuideSections(isAdmin) {
       icon: Settings,
       title: '11. Admin Settings (admins only)',
       badge: 'ADMIN',
-      keywords: 'admin settings saas byok keys credits collaborators revoke devices stripe',
+      keywords: 'admin settings saas byok keys credits users collaborators room revoke devices stripe',
       content: (
         <div className="space-y-3 text-[11px]">
           <Callout title="Visible only to studio admins">
@@ -395,10 +402,10 @@ function buildGuideSections(isAdmin) {
               <strong>SaaS</strong> — plans, credits, device revoke, feature flags (generate / export / collab).
             </li>
             <li>
-              <strong>Collaborators</strong> — invite emails, allot projects, Admin vs Editor.
+              <strong>Users</strong> — invite emails, OTP, designation, Owner / Editor / Viewer, allot films, suspend, and remove from the studio. After grant they create their own password. Turn on <strong>Independent settings pack</strong> for their own engines/theme (parked if you turn it off — nothing is deleted). <strong>Own library</strong> lets them create/delete only their pack titles.
             </li>
             <li>
-              <strong>Cloud / rooms</strong> — sync health, invite links.
+              <strong>Production cloud room</strong> (the room-code tab) — add or remove people <em>in this room only</em>, with two options: <strong>Editor allotted</strong> or <strong>View only</strong>. Removing from the room does not delete their studio account.
             </li>
             <li>
               The Admin email (set in Admin Settings) is always Enterprise.

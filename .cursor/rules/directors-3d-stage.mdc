@@ -1,0 +1,77 @@
+---
+description: Director's 3D Stage — SHOT DIRECTOR DATA, previs, prompt sync. HELD until user says "lets complete 3d stage pending works". Do not treat "go" as Stage work.
+alwaysApply: true
+---
+
+# Director's 3D Stage
+
+**Spec:** `docs/SWS_Directors_3D_Stage_Implementation_Specification.pdf`  
+**Reuse:** `SceneBuilder3D.jsx`, `compose3DStageWithLLM.js`, `makeStudioMannequin.js`, `mannequinPose.js`. Evolve Stage. Do not rebuild a generic 3D editor.
+
+**Core:** Video prompt is primary shot-direction input. Parse into **SHOT DIRECTOR DATA**, then the viewport. Stage is a visual interpretation of the prompt, not an independent director.
+
+**Preserve:** Project Console, Writer, Matrix/Form, Character, World, Compile, Generate, Stage, BYOK, ComfyUI, Simple/Advanced, one-active-project isolation.
+
+## Hold
+
+**On hold.** Do **not** ship Stage polish, Mixamo/practical/viseme slices, or §30 phases when the user says **go** / **goo**. `go` follows `docs/STAGEWORKS_MASTER_SPEC_GAP_ANALYSIS.md` (gap-slice-go).
+
+Resume Stage **only** when the user says **lets complete 3d stage pending works** (typos OK). Then ship the next 3-item slice from **On resume** below (same Mixamo / practical / viseme pattern).
+
+## `go` (this workstream — paused)
+
+Paused. Phase order when resumed: 1 viewport → 2 mannequin → 3 place/rotate → 4 env/props → 5 camera/lens → 6 cam move → 7 char move → 8 eye/head → 9 expression → 10 interaction → 11 dialogue → 12 timeline → 13 prompt parser → 14 two-way sync → 15 continuity → 16 preview → 17 export → 18 ComfyUI.
+
+## Musts
+
+- Structured SHOT DIRECTOR DATA (ids, duration, env, characters/blocking, movement, expression/eyes, interaction, dialogue, camera/lens/move, composition, lighting, props, continuity, generation, original video prompt).
+- Cinematic mannequin (not grey stick). Keep SWS character names/ids. GLB later without changing shot-data shape.
+- Real perspective camera + focal presets (14–200mm) that change composition. Shot size from camera-to-subject.
+- Two-way: Video Prompt ↔ Shot Director Data ↔ Stage. Stage edits update data; **Update Video Prompt** is explicit — never silent rewrite.
+- Priority: (1) explicit prompt (2) shot data (3) scene/character (4) previous-shot continuity (5) inference. Mark **INFERRED** / **Needs Direction**. Do not invent moves (look ≠ walk).
+- Export stems match ComfyUI workflow name: `_DirectorStage.json`, `_StagePreview.png`, `_VideoPrompt.txt`, optional `_Camera.json` / `_ShotData.json`. Validate before export; optional gaps warn, do not hard-block.
+- Simple vs Pro UI. Autosave + undo/redo. Stage data feeds generate + ComfyUI.
+
+## Progress
+
+- **Phase 1** — Viewport + frame/guides/slate. Simple/Pro desk, compact Frame select, timeline-only Play; Pro keeps guides + technical exports (`SceneBuilder3D.jsx`).
+- **Phase 2 (partial)** — Cinematic shading + fingered hands; SWS Cast names/CHAR_ ids on mannequins (`figureSource: mannequin` for later GLB); nameplates (`makeStudioMannequin.js`, `stageCast.js`, `compose3DStageWithLLM.js`).
+- **Phase 3** — Place/rotate complete: Snap, Frame, Focus, Dup, Reset, Lock, Hide/Show; XYZ persist (`SceneBuilder3D.jsx`).
+- **Phase 4 (partial)** — Prompt/location → procedural set (street/interior/forest/yard), atmosphere, plan-backed props (`stageEnvironment.js`, `makeStageEnvironment.js`, Stage Set/Prop chips).
+- **Phase 5 (partial)** — Spec focals (incl. 65mm), stored sensor/FOV/aperture/focus distance; shot size from camera-to-subject (`stageLens.js`).
+- **Phase 6 (partial)** — Spec camera moves with start/end/duration/speed/easing/target; path bake; Simple Hold/Push/Pull/Pan/Orbit, Pro full list (`stageCameraMove.js`).
+- **Phase 7 (partial)** — Character Hold/Walk/Toward; Pro turn, BG→FG, beside; straight/curve/spline + ease. Look ≠ walk (`stageCharacterMove.js`).
+- **Phase 8 (partial)** — Eye / head / body tracked separately; Simple Hold/Co-star/Camera; Pro Left/Right/Down/Prop/Custom + head Follow/Hold + body Hold/Camera/Co-star. Look does not become walk (`stageEyeHead.js`).
+- **Phase 9 (partial)** — Spec expressions + preview face channels (brow/eyes/mouth) ready for a later rig (`stageExpression.js`).
+- **Phase 10 (partial)** — Interaction None/Look/Point; Pro Touch/Hold/Toward. Look ≠ walk (`stageInteraction.js`).
+- **Phase 11 (partial)** — Dialogue speaker/listener/start/end; speaking mouth on timeline (`stageDialogue.js`).
+- **Phase 12 (partial)** — Play/Pause/Stop/scrub + lane tracks for cam, move, look, face, interact, dialogue, light (`stageTimeline.js`).
+- **Phase 13 (partial)** — Prompt language → camera/lens/move tokens + craft infers (`stagePromptParser.js`).
+- **Phase 14 (partial)** — Explicit **Update Video Prompt**; Stage never silent-rewrites (`stageDirectorData.js`).
+- **Phase 15 (partial)** — Match Prev + ghost overlay (`matchPreviousStagePlan`).
+- **Phase 16 (partial)** — Camera-lens Preview PNG (`_StagePreview.png` in pack).
+- **Phase 17 (partial)** — `{stem}_DirectorStage.zip` with JSON/txt/png/camera/shotdata; optional gaps warn (`stageExportBundle.js`).
+- **Phase 18 (partial)** — `stageVideoPrompt` + `directorStage` feed Generate/Comfy contract (`comfyPromptComposer.js`, `swsWorkflowContract.js`).
+- **Polish** — Optional GLB figure (`figureSource`/`glbUrl`, Pro file load) without changing shot-data shape (`stageFigure.js`). 3-point lighting rig from craft tags (`stageLighting.js`). Dialogue viseme lip-sync on mannequin + GLB morphs (`stageLipSync.js`).
+- **Polish** — Stage Undo/Redo (⌘Z / ⇧⌘Z) (`stagePlanHistory.js`). Deeper prompt parse: duration, placement, practicals, look≠walk (`stagePromptDirection.js`). Set practicals (lantern/torch/neon/bulb) emit light (`makeStageEnvironment.js`).
+- **Polish** — Stage autosave to shot (`directorStage`) follows Header Save interval (`autoSaveIntervals.js`); restore on reopen. Match Prev preview + Apply/Reject. **Send Comfy** loads Director Stage into local ComfyUI (`stageComfySend.js`).
+- **Polish** — Practicals pulse on the playhead (`stagePracticals.js`); lantern/torch/neon/bulb tagged in the set (`makeStageEnvironment.js`); practical lanes on the timeline (`stageTimeline.js`). Stage ⌘Z / ⇧⌘Z only inside `[data-stage-root]`; App shot-history undo yields on Stage and in text fields (`stageHotkeys.js`).
+- **Polish** — GLB Mixamo/idle clip via `AnimationMixer` (`stageFigure.js`). Keyed practical on/off from prompt (`parsePromptPracticalKeys`, `practicalOnFactor`). ARPAbet phoneme dictionary for lip-sync (`stageLipSync.js`).
+- **Polish** — Mixamo walk/run clip from character **movement** only (look ≠ walk) (`pickGlbClip`, `glbClipIntentFromHuman`). Pro practical on/off seconds (`patchPracticalPiece` in Stage desk). Mixamo/ARKit viseme morph aliases (`MIXAMO_VISEME_MORPHS`).
+- **Polish** — Mixamo clip **crossfade** (`GLB_CLIP_FADE_SEC`). Practical **intensity** keys + Pro level field (`practicalIntensityAt`). Ready Player Me visemes (`viseme_sil` / `viseme_I` / `viseme_TH`).
+- **Polish** — Mixamo **root-motion freeze** (in-place walk; blocking stays on the wrapper) (`freezeGlbRootMotion`). Practical **kelvin** color (`kelvinToRgb`, Pro K field). Viseme **hold** between phonemes (`VISEME_HOLD_SEC`).
+- **Polish** — Mixamo **foot-plant** (`lockGlbFootPlant`). Practical **gel / gobo** (`applyGelToRgb`, `practicalGoboFactor`). Viseme **coarticulation** (`blendVisemeShapes`).
+- **Polish** — Mixamo **foot-slide lock** (`lockGlbFootSlide`). Practical **barn doors** (`practicalBarnFactor`, Pro barn field). Viseme **stress emphasis** (`emphasizeVisemeShape`, ARPAbet 1/2).
+- **Polish** — Mixamo **two-bone IK polish** (`polishGlbTwoBoneIk`). Practical **shutters** (`practicalShutterFactor`, Pro shutter field). Viseme **plosive pops** (`applyPlosivePop`, B/P/M into a vowel).
+- **Polish** — Mixamo **shoulder/hip counter-rotate** (`counterRotateGlbShoulderHip`). Practical **bounce/fill** (`practicalBounceFactor`, Pro bounce field). Viseme **inhale rest** (`applyInhaleRest`).
+- **Polish** — Mixamo **arm swing damp** (`dampGlbArmSwing`). Practical **bounce card** in the set (`bounceCardPieceFromPractical`). Viseme **breath noise** (`applyBreathNoise`).
+- **Polish** — Mixamo **head bob damp** (`dampGlbHeadBob`, look Y stays). Practical **bounce color** (`bounceCardColorRgb`, Pro warm/cool/silver). Viseme **nasal hum** (`applyNasalHum`, N/NG/M not B/P).
+- **Polish** — Mixamo **wrist settle** (`settleGlbWrist`, hands out of arm damp). Practical **bounce angle** (`bounceCardAngleRad`, Pro °). Viseme **lateral lisp** (`applyLateralLisp`, S/Z/SH/ZH not every E).
+- **Polish** — Mixamo **finger curl** (`curlGlbFingers`). Practical **bounce distance** (`bounceCardDistanceM`, Pro m). Viseme **rounded /w/ funnel** (`applyWFunnel`, W not every U).
+- **Polish** — Mixamo **toe roll** (`rollGlbToes`, toes out of foot plant). Practical **bounce height** (`bounceCardHeightM`, Pro h). Viseme **/f/ bite** (`applyFBite`, F/V not TH).
+- **Polish** — Mixamo **heel settle** (`settleGlbHeel`). Practical **bounce tilt** (`bounceCardTiltRad`, Pro tilt). Viseme **/l/ tongue** (`applyLTongue`, L not N/T).
+- **Polish** — Mixamo **knee lock** (`lockGlbKnee`). Practical **bounce spread** (`bounceCardScale`, Pro ×). Viseme **/r/ bunch** (`applyRBunch`, R not L).
+- **Polish** — Mixamo **hip sway damp** (`dampGlbHipSway`, Y stays). Practical **bounce+fill mix** (`practicalBounceFactor` mix). Viseme **/th/ dental** (`applyThDental`, TH not F/V).
+- **Polish** — Mixamo **clavicle settle** (`settleGlbClavicle`, Y stays). Practical **bounce feather** (`bounceCardFeather`, Pro %). Viseme **/ch/ hush** (`applyChHush`, CH not SH/E).
+- **Polish** — Mixamo **elbow damp** (`dampGlbElbow`, forearm out of arm swing). Practical **bounce spill** (`bounceCardSpill`, Pro sp). Viseme **/ng/ velar** (`applyNgVelar`, NG not N/M).
+- **On resume:** Mixamo scapula roll, practical bounce kick, or viseme /y/ palatal.

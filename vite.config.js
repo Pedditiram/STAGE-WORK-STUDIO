@@ -14,6 +14,12 @@ function loadAssetRootsFs() {
   return require('./src/utils/projectAssetRootsFs.cjs')
 }
 
+function loadProjectShelfFs() {
+  const modPath = require.resolve('./src/utils/projectShelfFs.cjs')
+  delete require.cache[modPath]
+  return require('./src/utils/projectShelfFs.cjs')
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -82,6 +88,7 @@ function localDiskVaultPlugin() {
   });
   const postersDir = path.join(projectsDir, 'posters');
   if (!fs.existsSync(postersDir)) fs.mkdirSync(postersDir, { recursive: true });
+  loadProjectShelfFs().ensureShelfDirs(projectsDir);
 
   function posterSafeName(title) {
     return `${String(title || 'UNTITLED').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'UNTITLED'}.png`;
@@ -537,13 +544,87 @@ function localDiskVaultPlugin() {
             const roomId = url.searchParams.get('roomId') || 'sps_local_dev';
 
             if (req.method === 'GET') {
+              if (type === 'tick') {
+                const projects = readJsonFile(cloudProjectsPath, { projects: [] });
+                const collab = readJsonFile(collaboratorsPath, { users: [] });
+                const settings = readJsonFile(path.join(cloudDir, 'settings.json'), collab.studioSettings || {});
+                const roomPath = path.join(cloudRoomsDir, safeRoomFileName(roomId));
+                const roomData = readJsonFile(roomPath, null);
+                const chatPath = path.join(cloudChatDir, `${safeRoomFileName(roomId)}.json`);
+                const chatData = readJsonFile(chatPath, { messages: [] });
+                const messages = Array.isArray(chatData.messages) ? chatData.messages : [];
+                const lastChat = messages[messages.length - 1] || {};
+                const projList = Array.isArray(projects.projects) ? projects.projects : [];
+                const userList = Array.isArray(collab.users) ? collab.users : [];
+                return sendJson(res, 200, {
+                  success: true,
+                  kvConfigured: false,
+                  durableOk: true,
+                  roomId,
+                  room: {
+                    revision: roomData?.revision || 0,
+                    lastUpdated: roomData?.lastUpdated || '',
+                    shotCount: Array.isArray(roomData?.shots) ? roomData.shots.length : 0
+                  },
+                  chat: {
+                    revision: messages.length,
+                    lastId: lastChat.id || '',
+                    count: messages.length,
+                    lastUpdated: lastChat.createdAt || ''
+                  },
+                  screenplay: { revision: 0, lastUpdated: '' },
+                  projects: {
+                    stamp: `${projList.length}:${projects.updatedAt || ''}`,
+                    count: projList.length,
+                    lastUpdated: projects.updatedAt || ''
+                  },
+                  collaborators: {
+                    stamp: `${userList.length}:${collab.updatedAt || ''}`,
+                    count: userList.length,
+                    lastUpdated: collab.updatedAt || ''
+                  },
+                  settings: {
+                    stamp: String(settings.updatedAt || collab.updatedAt || ''),
+                    lastUpdated: settings.updatedAt || collab.updatedAt || ''
+                  }
+                });
+              }
               if (type === 'projects') {
                 const data = readJsonFile(cloudProjectsPath, { projects: [] });
-                return sendJson(res, 200, { success: true, projects: data.projects || [] });
+                const deletedTitles = (Array.isArray(data.deletedTitles) ? data.deletedTitles : [])
+                  .map((t) => String(t || '').trim().toUpperCase())
+                  .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO');
+                const deletedSet = new Set(deletedTitles);
+                const projects = (data.projects || []).filter((p) => {
+                  const key = String(p?.title || '').trim().toUpperCase();
+                  return key && key !== 'STAGE PRODUCTION STUDIO' && !deletedSet.has(key);
+                });
+                return sendJson(res, 200, {
+                  success: true,
+                  projects,
+                  deletedTitles,
+                  durableOk: true,
+                  kvConfigured: false
+                });
+              }
+              if (type === 'settings') {
+                const collab = readJsonFile(collaboratorsPath, { users: [] });
+                const data = readJsonFile(path.join(cloudDir, 'settings.json'), collab.studioSettings || { studioModules: {} });
+                return sendJson(res, 200, {
+                  success: true,
+                  settings: data.settings || data,
+                  durableOk: true,
+                  kvConfigured: false
+                });
               }
               if (type === 'collaborators') {
                 const data = readJsonFile(collaboratorsPath, { users: [] });
-                return sendJson(res, 200, { success: true, users: data.users || [] });
+                return sendJson(res, 200, {
+                  success: true,
+                  users: data.users || [],
+                  studioSettings: data.studioSettings || null,
+                  durableOk: true
+                });
               }
               if (type === 'presence') {
                 const data = readJsonFile(presencePath, {});
@@ -587,14 +668,61 @@ function localDiskVaultPlugin() {
                   const title = String(p?.title || '').trim().toUpperCase();
                   if (title) prevByTitle.set(title, p);
                 });
-                // Incoming owns membership (deletes stick); merge fields for same titles
-                const projects = cleanedIncoming.map((p) => {
-                  const key = String(p.title).trim().toUpperCase();
-                  const prev = prevByTitle.get(key);
-                  return prev ? { ...prev, ...p } : p;
+                const incomingKeys = new Set(cleanedIncoming.map((p) => String(p.title || '').trim().toUpperCase()));
+                const incomingDeleted = (Array.isArray(body.deletedTitles) ? body.deletedTitles : [])
+                  .map((t) => String(t || '').trim().toUpperCase())
+                  .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO');
+                const incomingDeletedSet = new Set(incomingDeleted);
+                const deletedSet = new Set(
+                  [...(existing.deletedTitles || []), ...incomingDeleted]
+                    .map((t) => String(t || '').trim().toUpperCase())
+                    .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO')
+                );
+                incomingKeys.forEach((k) => {
+                  if (!incomingDeletedSet.has(k)) deletedSet.delete(k);
                 });
-                writeJsonFile(cloudProjectsPath, { projects, updatedAt: new Date().toISOString() });
-                return sendJson(res, 200, { success: true, projects });
+                const projects = cleanedIncoming
+                  .filter((p) => !deletedSet.has(String(p.title || '').trim().toUpperCase()))
+                  .map((p) => {
+                    const key = String(p.title).trim().toUpperCase();
+                    const prev = prevByTitle.get(key);
+                    return prev ? { ...prev, ...p } : p;
+                  });
+                (existing.projects || []).forEach((p) => {
+                  const key = String(p?.title || '').trim().toUpperCase();
+                  if (!key || incomingKeys.has(key) || deletedSet.has(key)) return;
+                  if (!projects.some((x) => String(x.title || '').trim().toUpperCase() === key)) {
+                    projects.push(p);
+                  }
+                });
+                writeJsonFile(cloudProjectsPath, {
+                  projects: projects.filter((p) => !deletedSet.has(String(p?.title || '').trim().toUpperCase())),
+                  deletedTitles: Array.from(deletedSet),
+                  updatedAt: new Date().toISOString()
+                });
+                return sendJson(res, 200, { success: true, projects, durableOk: true });
+              }
+
+              if (type === 'settings') {
+                const incoming = body.settings || body.studioSettings || body;
+                const existing = readJsonFile(path.join(cloudDir, 'settings.json'), { studioModules: {} });
+                const next = {
+                  ...existing,
+                  ...(incoming && typeof incoming === 'object' ? incoming : {}),
+                  studioModules: {
+                    ...(existing.studioModules || {}),
+                    ...(incoming?.studioModules || {})
+                  },
+                  updatedAt: new Date().toISOString()
+                };
+                writeJsonFile(path.join(cloudDir, 'settings.json'), next);
+                const collab = readJsonFile(collaboratorsPath, { users: [] });
+                writeJsonFile(collaboratorsPath, {
+                  ...collab,
+                  studioSettings: next,
+                  updatedAt: new Date().toISOString()
+                });
+                return sendJson(res, 200, { success: true, settings: next, durableOk: true });
               }
 
               if (type === 'collaborators') {
@@ -604,11 +732,23 @@ function localDiskVaultPlugin() {
                   return sendJson(res, 200, {
                     success: true,
                     users: existing.users || [],
+                    studioSettings: existing.studioSettings || null,
                     ignoredEmpty: true
                   });
                 }
-                writeJsonFile(collaboratorsPath, { users, updatedAt: new Date().toISOString() });
-                return sendJson(res, 200, { success: true, users });
+                const studioSettings = body.studioSettings || body.settings || existing.studioSettings || null;
+                writeJsonFile(collaboratorsPath, {
+                  users,
+                  studioSettings,
+                  updatedAt: new Date().toISOString()
+                });
+                if (studioSettings) {
+                  writeJsonFile(path.join(cloudDir, 'settings.json'), {
+                    ...studioSettings,
+                    updatedAt: new Date().toISOString()
+                  });
+                }
+                return sendJson(res, 200, { success: true, users, studioSettings, durableOk: true });
               }
 
               if (type === 'presence') {
@@ -883,6 +1023,32 @@ function localDiskVaultPlugin() {
           return;
         }
 
+        // 1b. SHELVE PROJECT ON DISK: POST /api/delete-project-disk  { title, shelf: archived|purged }
+        if (req.url === '/api/delete-project-disk' && req.method === 'POST') {
+          try {
+            const body = await readJsonBody(req);
+            const title = String(body?.title || '').trim();
+            if (!title) return sendJson(res, 400, { ok: false, error: 'title required' });
+            const result = loadProjectShelfFs().shelfProjectOnDisk(projectsDir, title, body?.shelf);
+            return sendJson(res, 200, result);
+          } catch (err) {
+            return sendJson(res, 500, { ok: false, error: err.message });
+          }
+        }
+
+        // 1c. RESTORE ARCHIVED PROJECT TO LIVE DISK: POST /api/restore-project-disk
+        if (req.url === '/api/restore-project-disk' && req.method === 'POST') {
+          try {
+            const body = await readJsonBody(req);
+            const title = String(body?.title || '').trim();
+            if (!title) return sendJson(res, 400, { ok: false, error: 'title required' });
+            const result = loadProjectShelfFs().restoreProjectOnDisk(projectsDir, title);
+            return sendJson(res, 200, result);
+          } catch (err) {
+            return sendJson(res, 500, { ok: false, error: err.message });
+          }
+        }
+
         // 1. SAVE PROJECT TO PHYSICAL DISK: POST /api/save-project-disk
         if (req.url === '/api/save-project-disk' && req.method === 'POST') {
           let body = '';
@@ -993,7 +1159,14 @@ function localDiskVaultPlugin() {
         // 4. LIST ALL PROJECTS FROM PHYSICAL DISK: GET /api/list-projects-disk
         if (req.url === '/api/list-projects-disk' && req.method === 'GET') {
           try {
-            const files = fs.readdirSync(projectsDir).filter(f => f.endsWith('.json'));
+            const files = fs.readdirSync(projectsDir).filter((f) => {
+              if (!f.endsWith('.json')) return false;
+              try {
+                return fs.statSync(path.join(projectsDir, f)).isFile();
+              } catch {
+                return false;
+              }
+            });
             const projects = [];
             for (const f of files) {
               try {
@@ -1118,16 +1291,45 @@ function localDiskVaultPlugin() {
 // https://vite.dev/config/
 const isElectronBuild = process.env.ELECTRON_BUILD === 'true';
 
+function resolveSwsBuildId() {
+  const sha = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || '').trim();
+  if (sha) return sha.slice(0, 40);
+  const git = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' });
+  if (git.status === 0) return String(git.stdout || '').trim() || 'dev';
+  return 'dev';
+}
+
+const SWS_BUILD_ID = resolveSwsBuildId();
+
+function studioBuildStampPlugin(buildId) {
+  const source = `${JSON.stringify({ buildId }, null, 2)}\n`;
+  return {
+    name: 'sws-build-stamp',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'sws-build.json', source });
+    }
+  };
+}
+
 export default defineConfig({
   // Use './' base for Electron (file:// protocol) or '/' for web server
   base: isElectronBuild ? './' : '/',
+  define: {
+    'import.meta.env.VITE_SWS_BUILD_ID': JSON.stringify(SWS_BUILD_ID)
+  },
   plugins: [
     react(),
     tailwindcss(),
-    localDiskVaultPlugin()
+    localDiskVaultPlugin(),
+    studioBuildStampPlugin(SWS_BUILD_ID)
   ],
   build: {
     sourcemap: false,
+    minify: true,
+    cssMinify: true,
+    target: 'es2022',
+    assetsInlineLimit: 2048,
+    modulePreload: { polyfill: false },
     reportCompressedSize: true,
     chunkSizeWarningLimit: 1500
   },

@@ -19,7 +19,7 @@ function escapeHtml(value) {
  */
 export function generateDesktopTrialReceivedEmail({ name, email }) {
   const recipientName = name ? escapeHtml(name) : 'there';
-  const subject = `🎬 Stage Work Studio — Download Trial Application Received`;
+  const subject = `🎬 Stage Work Studio — Download App Application Received`;
 
   const html = `
 <!DOCTYPE html>
@@ -27,7 +27,7 @@ export function generateDesktopTrialReceivedEmail({ name, email }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Download Trial Application Received</title>
+  <title>Download App Application Received</title>
 </head>
 <body style="margin:0;padding:0;background-color:#070605;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e8e2d8;">
   <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070605;padding:36px 14px 50px;">
@@ -85,7 +85,7 @@ export function generateDesktopTrialReceivedEmail({ name, email }) {
                 Thank you for requesting access to Stage Work Studio!
               </p>
               <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#d6cfc4;">
-                We have received your application for download trial.
+                We have received your application to download the app.
               </p>
               <p style="margin:0 0 24px;font-size:14px;line-height:1.65;color:#d6cfc4;">
                 Your access is currently being provisioned. If you have any specific requirements or questions regarding your production slate, please feel free to let us know.
@@ -135,7 +135,7 @@ Hi ${name || 'there'},
 
 Thank you for requesting access to Stage Work Studio!
 
-We have received your application for download trial.
+We have received your application to download the app.
 
 Your access is currently being provisioned. If you have any specific requirements or questions regarding your production slate, please feel free to let us know.
 
@@ -156,7 +156,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
   const recipientEmail = escapeHtml(email);
   const safeDownloadUrl = escapeHtml(downloadUrl);
 
-  const subject = `🎬 Your Stage Work Studio Desktop Trial is Approved — Welcome to AI Cinema`;
+  const subject = `🎬 Your Stage Work Studio App Download is Approved — Welcome to AI Cinema`;
 
   const html = `
 <!DOCTYPE html>
@@ -164,7 +164,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Stage Work Studio Desktop Trial Access</title>
+  <title>Your Stage Work Studio App Download</title>
 </head>
 <body style="margin:0;padding:0;background-color:#070605;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e8e2d8;">
   <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070605;padding:36px 14px 50px;">
@@ -192,7 +192,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
                 STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
               </p>
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#fdfbf7;letter-spacing:-0.01em;">
-                Your Desktop Trial is Approved
+                Your App Download is Approved
               </h1>
               <p style="margin:8px 0 0;font-size:13px;color:#9e9587;font-style:italic;">
                 "From Script to Screen at the Speed of Thought."
@@ -214,7 +214,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
                 Hi <strong>${recipientName}</strong>,
               </p>
               <p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#d6cfc4;">
-                Thank you for your interest in <strong>Stage Work Studio</strong>! Your desktop trial has been approved. You can download the application using your personal, secure link below:
+                Thank you for your interest in <strong>Stage Work Studio</strong>! Your app download has been approved. You can download the application using your personal, secure link below:
               </p>
 
               <!-- Download Action Box -->
@@ -236,7 +236,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
                       <tr>
                         <td align="center" style="border-radius:8px;background:linear-gradient(135deg, #d4af37 0%, #aa842c 100%);box-shadow:0 4px 18px rgba(212,175,55,0.3);">
                           <a href="${safeDownloadUrl}" target="_blank" style="font-size:13px;font-weight:700;color:#0b0a09;text-decoration:none;padding:13px 26px;display:inline-block;letter-spacing:0.04em;">
-                            ⚡ DOWNLOAD DESKTOP APP NOW
+                            DOWNLOAD APP
                           </a>
                         </td>
                       </tr>
@@ -306,7 +306,7 @@ Hi ${name || 'there'},
 
 Thank you for your interest in Stage Work Studio!
 
-Your desktop trial has been approved. You can download the application using your personal, secure link below:
+Your app download has been approved. You can download the application using your personal, secure link below:
 ${downloadUrl}
 
 (Note: This personal link is valid for ${expiryDays} days and up to ${maxDownloads} downloads. Sign in with ${email} after launch.)
@@ -624,7 +624,7 @@ export function generateColdPromotionalEmail({
                     </table>
 
                     <p style="margin:16px 0 0;font-size:11px;color:#857c70;">
-                      Or request a macOS Desktop Trial directly at <a href="${cleanAppUrl}" style="color:#c9a36a;text-decoration:none;">${cleanAppUrl}</a>
+                      Or request to download the app at <a href="${cleanAppUrl}" style="color:#c9a36a;text-decoration:none;">${cleanAppUrl}</a>
                     </p>
                   </td>
                 </tr>

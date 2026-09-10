@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Allow: /privacy.html
+Allow: /terms.html
+Sitemap: https://www.stageworkstudio.com/sitemap.xml

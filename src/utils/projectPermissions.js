@@ -3,7 +3,7 @@
  *
  * Access levels (single-select):
  * - Owner  → create / delete / duplicate / import + full library
- * - Editor → edit allotted projects only (no create/delete)
+ * - Editor → edit allotted projects; with Independent pack + Own library may create/delete pack titles only
  * - Viewer → read-only allotted projects (no create/delete)
  *
  * Job-title designations (Lead Director, DOP, etc.) never grant create/delete by themselves.
@@ -12,7 +12,9 @@
 
 import { isGuestPlayTitle, getGuestPlayProject } from './guestPlayground';
 import { canUseSaasConsole } from './saasControl';
-import { PRODUCTION_ORIGIN } from './runtimeEnv';
+import { PRODUCTION_ORIGIN, getStudioShell } from './runtimeEnv';
+import { projectLibraryStorageKey } from './tenantScope';
+import { saasAdminHeaders, withSaasAdminBody } from './saasAdminClient';
 
 export const DEFAULT_ADMIN_EMAIL = 'admin@stageworkstudio.com';
 export const PRIMARY_ADMIN_EMAILS = [
@@ -152,9 +154,10 @@ export function setGuestUrlEnabled(on) {
     window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { urlEnabled: next } }));
     fetch('/api/guest-access', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urlEnabled: next })
+      headers: saasAdminHeaders(),
+      body: JSON.stringify(withSaasAdminBody({ urlEnabled: next, actor: getCurrentUserEmail() }))
     }).catch(() => {});
+    scheduleCloudSettingsPush();
   } catch {
     /* ignore */
   }
@@ -194,12 +197,17 @@ export function consumeGuestLookFromUrl() {
 export function enterGuestLookSession() {
   if (typeof window === 'undefined') return;
   try {
+    const prev = getCurrentUserEmail();
+    import('./userSettingsPack')
+      .then((m) => m.activatePackForSession(prev, ''))
+      .catch(() => {});
     sessionStorage.setItem(GUEST_LOOK_SESSION_KEY, '1');
     sessionStorage.setItem('sps_login_prompted', '1');
     sessionStorage.setItem('sps_guest_look_session', '1');
     localStorage.removeItem('sps_authorized_user_email');
     window.dispatchEvent(new Event('sps_collaborators_updated'));
     window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', { detail: { enabled: true } }));
+    if (isDownloadedStudioApp()) setPresentationMode(true);
   } catch {
     /* ignore */
   }
@@ -230,8 +238,36 @@ export function setGuestBrowseEnabled(on) {
   return next;
 }
 
+/** Packaged Electron / file:// download — not localhost Vite in a browser. */
+export function isDownloadedStudioApp() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (getStudioShell() === 'electron') return true;
+    if (window.location.protocol === 'file:') return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/** Admin allotted / Owner session — may leave presentation and work. */
+export function hasAdminGrantedWorkspace(email = getCurrentUserEmail()) {
+  if (isGuestSession(email)) return false;
+  if (isStudioOwner(email)) return true;
+  const profile = getCurrentUserProfile(email);
+  if (!profile) return false;
+  if (String(profile.status || '').toLowerCase() === 'suspended') return false;
+  return true;
+}
+
+/** Downloaded app with no Admin grant: reel only, no editing. */
+export function downloadedAppPresentationOnly(email = getCurrentUserEmail()) {
+  return isDownloadedStudioApp() && !hasAdminGrantedWorkspace(email);
+}
+
 /** Guest who may walk rooms / open desks in look-only mode. */
 export function canGuestBrowseApp(email = getCurrentUserEmail()) {
+  if (downloadedAppPresentationOnly(email)) return false;
   return isGuestSession(email) && isGuestBrowseEnabled();
 }
 
@@ -325,15 +361,17 @@ export function isPresentationMode() {
 
 export function setPresentationMode(on) {
   if (typeof window === 'undefined') return Boolean(on);
+  const lockPresentation = !on && downloadedAppPresentationOnly();
+  const next = lockPresentation ? true : Boolean(on);
   try {
-    sessionStorage.setItem(PRESENTATION_MODE_KEY, on ? 'true' : 'false');
-    localStorage.setItem(PRESENTATION_MODE_KEY, on ? 'true' : 'false');
-    window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { presentation: Boolean(on) } }));
-    window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { presentation: Boolean(on) } }));
+    sessionStorage.setItem(PRESENTATION_MODE_KEY, next ? 'true' : 'false');
+    localStorage.setItem(PRESENTATION_MODE_KEY, next ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { presentation: next } }));
+    window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { presentation: next } }));
   } catch {
     /* ignore */
   }
-  return Boolean(on);
+  return next;
 }
 
 /** Real login must leave the reel and guest-look tab. */
@@ -357,6 +395,68 @@ export function isStudioModuleEnabled(id, email = getCurrentUserEmail()) {
   return readStudioDefaultModule(id);
 }
 
+let applyingCloudStudioSettings = false;
+
+function scheduleCloudSettingsPush() {
+  if (applyingCloudStudioSettings || typeof window === 'undefined') return;
+  import('../services/dbService')
+    .then((m) => {
+      if (typeof m.scheduleStudioSettingsSync === 'function') m.scheduleStudioSettingsSync();
+    })
+    .catch(() => {});
+}
+
+function scheduleCollaboratorsPush() {
+  if (applyingCloudStudioSettings || typeof window === 'undefined') return;
+  import('../services/dbService')
+    .then((m) => {
+      if (typeof m.scheduleCollaboratorsCloudSync === 'function') m.scheduleCollaboratorsCloudSync();
+    })
+    .catch(() => {});
+}
+
+export function collectStudioSettings() {
+  return {
+    studioModules: getStudioDefaultConsoleMap(),
+    guestUrlEnabled: isGuestUrlEnabled(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/** Apply Owner console defaults from cloud. Does not rewrite API keys or the signed-in session. */
+export function applyStudioSettings(settings, { notify = true } = {}) {
+  if (!settings || typeof settings !== 'object' || typeof window === 'undefined') return false;
+  const mods = settings.studioModules && typeof settings.studioModules === 'object'
+    ? settings.studioModules
+    : {};
+  const hasMods = Object.keys(mods).length > 0;
+  const hasGuest = typeof settings.guestUrlEnabled === 'boolean' && Boolean(settings.updatedAt);
+  if (!hasMods && !hasGuest) return false;
+  applyingCloudStudioSettings = true;
+  try {
+    Object.entries(mods).forEach(([id, on]) => {
+      if (typeof on === 'boolean') setStudioModuleEnabled(id, on, { silent: true });
+    });
+    if (hasGuest) {
+      try {
+        localStorage.setItem(GUEST_URL_KEY, settings.guestUrlEnabled ? 'true' : 'false');
+        sessionStorage.setItem('sps_guest_url_public', settings.guestUrlEnabled ? 'true' : 'false');
+      } catch {
+        /* ignore */
+      }
+    }
+    if (notify) {
+      window.dispatchEvent(new CustomEvent('sps_studio_modules_changed', { detail: { source: 'cloud' } }));
+      window.dispatchEvent(new CustomEvent('sps_guest_browse_changed', {
+        detail: { urlEnabled: settings.guestUrlEnabled }
+      }));
+    }
+  } finally {
+    applyingCloudStudioSettings = false;
+  }
+  return true;
+}
+
 export function setStudioModuleEnabled(id, on, { silent = false } = {}) {
   const key = STUDIO_MODULE_KEYS[id];
   if (!key || typeof window === 'undefined') return false;
@@ -368,6 +468,7 @@ export function setStudioModuleEnabled(id, on, { silent = false } = {}) {
       if (id === 'budget') {
         window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { enabled: next } }));
       }
+      scheduleCloudSettingsPush();
     }
   } catch {
     /* ignore */
@@ -396,6 +497,7 @@ export function setUserConsoleEnabled(email, id, on) {
     if (id === 'budget') {
       window.dispatchEvent(new CustomEvent('sps_budget_console_changed', { detail: { enabled: nextVal, email: clean } }));
     }
+    scheduleCollaboratorsPush();
   } catch {
     /* ignore */
   }
@@ -608,12 +710,16 @@ export function canAccessProject(projectTitle, email = getCurrentUserEmail()) {
 }
 
 /**
- * Only Owner can create, delete, duplicate, or import projects.
- * Editors / Viewers (and all craft designations) cannot.
+ * Owner always. Editors with Independent pack + Own library may create/delete
+ * titles in their pack library (not studio films they were only allotted).
  */
 export function canCreateOrDeleteProjects(email = getCurrentUserEmail()) {
   if (isGuestSession(email)) return false;
-  return isStudioOwner(email);
+  if (downloadedAppPresentationOnly(email)) return false;
+  if (isStudioOwner(email)) return true;
+  if (getAccessLevel(email) === 'Viewer') return false;
+  const profile = getCurrentUserProfile(email);
+  return Boolean(profile?.independentPack && profile?.ownLibrary);
 }
 
 /** Owner + Editor may edit allotted projects; Viewer is read-only. */
@@ -623,8 +729,176 @@ export function canEditProjects(email = getCurrentUserEmail()) {
   return getAccessLevel(email) === 'Editor';
 }
 
+/** Parse / live screenplay mutate — Viewer and look-only stay off the script. */
+export function assertCanWriteScreenplay(projectTitle, email = getCurrentUserEmail()) {
+  if (isLookOnlySession(email) && !isGuestSession(email)) {
+    return { ok: false, code: 'LOOK_ONLY', message: 'View only — this account cannot parse or edit the screenplay.' };
+  }
+  if (isGuestSession(email)) {
+    if (!canGuestBrowseApp(email) || !isGuestPlayTitle(projectTitle)) {
+      return { ok: false, code: 'GUEST', message: 'Guest can only work in Guest Playground.' };
+    }
+    return { ok: true };
+  }
+  if (!canEditProjects(email)) {
+    return { ok: false, code: 'NO_EDIT', message: 'Editor access is required to parse a screenplay.' };
+  }
+  if (!canAccessProject(projectTitle, email)) {
+    return { ok: false, code: 'NO_ACCESS', message: 'This film is not allotted to your account.' };
+  }
+  return { ok: true };
+}
+
 export function isViewerOnly(email = getCurrentUserEmail()) {
   return getAccessLevel(email) === 'Viewer';
+}
+
+/** Active production room id — trim only; compare case-insensitively. */
+export function normalizeCloudRoomId(roomId) {
+  const raw = String(roomId || '').trim();
+  return raw || 'sps_local_dev';
+}
+
+function cloudRoomIdsMatch(a, b) {
+  return normalizeCloudRoomId(a).toLowerCase() === normalizeCloudRoomId(b).toLowerCase();
+}
+
+/**
+ * Room allow-list on a collaborator.
+ * - missing / non-array `cloudRooms` → legacy: in every room
+ * - `[]` → in no rooms
+ * - `['sps_mvk']` → only those rooms
+ */
+export function getUserCloudRooms(user) {
+  if (!user || typeof user !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(user, 'cloudRooms')) return null;
+  const raw = user.cloudRooms;
+  if (!Array.isArray(raw)) return null;
+  return raw.map((r) => normalizeCloudRoomId(r)).filter(Boolean);
+}
+
+function isPermanentRoomMember(user) {
+  const email = normalizeEmail(user?.email);
+  if (PRIMARY_ADMIN_EMAILS.includes(email)) return true;
+  return profileHasOwnerAccess(user);
+}
+
+/** True when this person belongs in the production cloud room. */
+export function userIsInCloudRoom(user, roomId) {
+  if (isPermanentRoomMember(user)) return true;
+  const rooms = getUserCloudRooms(user);
+  if (rooms === null) return true;
+  const rid = normalizeCloudRoomId(roomId);
+  return rooms.some((r) => cloudRoomIdsMatch(r, rid));
+}
+
+/** Session may subscribe / publish this production room. */
+export function canAccessCloudRoom(email = getCurrentUserEmail(), roomId) {
+  const clean = normalizeEmail(email);
+  if (!clean || isGuestSession(clean)) return false;
+  if (PRIMARY_ADMIN_EMAILS.includes(clean)) return true;
+  const profile = getCurrentUserProfile(clean);
+  if (!profile) return false;
+  return userIsInCloudRoom(profile, roomId);
+}
+
+function allotTitleToUser(user, title) {
+  const t = String(title || '').trim();
+  if (!t || !user) return user;
+  if (isPermanentRoomMember(user)) return user;
+  const current = Array.isArray(user.allottedProjects) ? user.allottedProjects : [];
+  const has = current.some(
+    (x) =>
+      projectTitlesMatch(x, t) || String(x || '').toLowerCase().startsWith('all studio projects')
+  );
+  if (has) return { ...user, currentProject: user.currentProject || t };
+  return { ...user, allottedProjects: [t, ...current], currentProject: t };
+}
+
+function mergeUserIntoCloudRoom(user, roomId) {
+  const rid = normalizeCloudRoomId(roomId);
+  const rooms = getUserCloudRooms(user);
+  if (rooms === null) return user;
+  if (rooms.some((r) => cloudRoomIdsMatch(r, rid))) return user;
+  return { ...user, cloudRooms: [...rooms, rid] };
+}
+
+/**
+ * Put a studio person in this production room as Editor (allotted) or Viewer (view only).
+ * Creates the account if needed. Does not delete anyone from the studio.
+ */
+export function addUserToCloudRoom(users, email, roomId, opts = {}) {
+  const clean = normalizeEmail(email);
+  const rid = normalizeCloudRoomId(roomId);
+  const list = Array.isArray(users) ? [...users] : [];
+  if (!clean) return { users: list, created: false };
+  const role = opts.role === 'Viewer' ? 'Viewer' : 'Editor';
+  const allotTitle = String(opts.allotTitle || '').trim();
+  const name = String(opts.name || '').trim() || clean.split('@')[0] || 'Collaborator';
+  const idx = list.findIndex((u) => normalizeEmail(u?.email) === clean);
+
+  if (idx === -1) {
+    list.unshift({
+      name,
+      designation: 'Production Staff',
+      email: clean,
+      role,
+      isStudioAdmin: false,
+      allottedProjects: allotTitle ? [allotTitle] : [],
+      currentProject: allotTitle || '',
+      status: 'Active',
+      cloudRooms: [rid],
+      verifiedAt: new Date().toISOString()
+    });
+    return { users: list, created: true };
+  }
+
+  let next = mergeUserIntoCloudRoom(list[idx], rid);
+  if (!isPermanentRoomMember(next)) {
+    next = { ...next, role, isStudioAdmin: false };
+    next = allotTitleToUser(next, allotTitle);
+  }
+  list[idx] = next;
+  return { users: list, created: false };
+}
+
+/** Take a person out of this room only. Studio account stays on the Users tab. */
+export function removeUserFromCloudRoom(users, email, roomId) {
+  const clean = normalizeEmail(email);
+  const rid = normalizeCloudRoomId(roomId);
+  if (!clean || PRIMARY_ADMIN_EMAILS.includes(clean)) {
+    return Array.isArray(users) ? users : [];
+  }
+  return (Array.isArray(users) ? users : []).map((u) => {
+    if (normalizeEmail(u?.email) !== clean) return u;
+    if (isPermanentRoomMember(u)) return u;
+    const rooms = getUserCloudRooms(u);
+    if (rooms === null) return { ...u, cloudRooms: [] };
+    return { ...u, cloudRooms: rooms.filter((r) => !cloudRoomIdsMatch(r, rid)) };
+  });
+}
+
+/** Editor allotted vs View only inside a room — never demotes Owner. */
+export function setCloudRoomAccessRole(users, email, role, allotTitle = '') {
+  const clean = normalizeEmail(email);
+  const nextRole = role === 'Viewer' ? 'Viewer' : 'Editor';
+  return (Array.isArray(users) ? users : []).map((u) => {
+    if (normalizeEmail(u?.email) !== clean) return u;
+    if (isPermanentRoomMember(u)) return u;
+    return allotTitleToUser({ ...u, role: nextRole, isStudioAdmin: false }, allotTitle);
+  });
+}
+
+/** Stamp this production room onto a user. Legacy (no cloudRooms) stays in all rooms unless pinIfUnset. */
+export function ensureUserCloudRoom(user, roomId, { pinIfUnset = false } = {}) {
+  if (!user || typeof user !== 'object') return user;
+  const rid = normalizeCloudRoomId(roomId);
+  const rooms = getUserCloudRooms(user);
+  if (rooms === null) {
+    return pinIfUnset ? { ...user, cloudRooms: [rid] } : user;
+  }
+  if (rooms.some((r) => cloudRoomIdsMatch(r, rid))) return user;
+  return { ...user, cloudRooms: [...rooms, rid] };
 }
 
 /**
@@ -652,7 +926,7 @@ export function stripTitleFromAllottedProjects(users, deletedTitle) {
 export function getLiveProjectLibrary() {
   if (typeof window === 'undefined') return [];
   try {
-    const parsed = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+    const parsed = JSON.parse(localStorage.getItem(projectLibraryStorageKey()) || '[]');
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     return [];
@@ -712,13 +986,16 @@ export function filterAccessibleProjects(projectLibrary, email = getCurrentUserE
 
 export function markCollaboratorSession(email) {
   if (typeof window === 'undefined') return;
+  const prev = getCurrentUserEmail();
   const clean = normalizeEmail(email);
   if (!clean) return;
   localStorage.setItem('sps_authorized_user_email', clean);
   localStorage.setItem('sps_is_admin_logged_in', isStudioOwner(clean) ? 'true' : 'false');
+  import('./userSettingsPack')
+    .then((m) => m.activatePackForSession(prev, clean))
+    .catch(() => {});
 }
 
-/** Default Owner/Admin profile for the primary studio email. */
 /** Default Owner/Admin profile for the primary studio email. */
 export function getPrimaryAdminProfile() {
   return {

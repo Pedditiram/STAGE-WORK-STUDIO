@@ -71,12 +71,13 @@ export const SWS_NODE_IO = Object.freeze({
       'template_version',
       'sws_workflow_version',
       'provider',
-      'model'
+      'model',
+      'system_instruction'
     ].map((name) => ({ name, type: 'STRING' })),
     outputs: [{ name: 'metadata', type: 'STRING' }]
   },
-  [SWS_COMFY_NODE_CLASSES.PROVIDER_VIDEO]: providerIo(),
-  [SWS_COMFY_NODE_CLASSES.PROVIDER_IMAGE]: providerIo(),
+  [SWS_COMFY_NODE_CLASSES.PROVIDER_VIDEO]: providerIo([{ name: 'system_instruction', type: 'STRING' }]),
+  [SWS_COMFY_NODE_CLASSES.PROVIDER_IMAGE]: providerIo([{ name: 'system_instruction', type: 'STRING' }]),
   [SWS_COMFY_NODE_CLASSES.OUTPUT]: {
     inputs: [
       { name: 'provider_result', type: 'STRING' },
@@ -94,7 +95,7 @@ export const SWS_NODE_IO = Object.freeze({
   }
 });
 
-function providerIo() {
+function providerIo(extraInputs = []) {
   return {
     inputs: [
       { name: 'shot_context', type: 'STRING' },
@@ -113,7 +114,8 @@ function providerIo() {
       { name: 'height', type: 'INT' },
       { name: 'fps', type: 'INT' },
       { name: 'seed', type: 'INT' },
-      { name: 'workflow_type', type: 'STRING' }
+      { name: 'workflow_type', type: 'STRING' },
+      ...extraInputs
     ],
     outputs: [{ name: 'provider_result', type: 'STRING' }]
   };

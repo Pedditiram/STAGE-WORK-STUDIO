@@ -11,6 +11,7 @@ import {
 import { detectScriptGenre, SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { writeOpenScreenplayText, importScreenplayFile } from '../utils/screenplayInterop';
 import { assertProjectWriteGate } from '../utils/productionLifecycle';
+import { assertCanWriteScreenplay } from '../utils/projectPermissions';
 import ActiveProjectConfirmModal from './ActiveProjectConfirmModal';
 import StoryPackageReview from './StoryPackageReview';
 import {
@@ -220,6 +221,14 @@ export default function AiScriptBreakdownPanel({
       return;
     }
 
+    const fileGate = assertCanWriteScreenplay(projectTitle);
+    if (!fileGate.ok) {
+      alert(fileGate.message);
+      setParseStatusBanner(`⚠️ ${fileGate.message}`);
+      resetScriptFileInput();
+      return;
+    }
+
     parseInFlightRef.current = true;
     setIsLoadingFile(true);
     setPdfFailure(null);
@@ -267,7 +276,7 @@ export default function AiScriptBreakdownPanel({
       setRawScriptText(extractedText);
       setPdfFailure(null);
       if (typeof window !== 'undefined') {
-        writeOpenScreenplayText(extractedText, { silent: true });
+        writeOpenScreenplayText(extractedText, { silent: true, title: projectTitle });
         try {
           window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: eventSource } }));
         } catch (e) {}
@@ -380,6 +389,12 @@ export default function AiScriptBreakdownPanel({
       setParseStatusBanner('⚠️ Parse disabled — no usable screenplay text yet.');
       return;
     }
+    const accessGate = assertCanWriteScreenplay(projectTitle);
+    if (!accessGate.ok) {
+      alert(accessGate.message);
+      setParseStatusBanner(`⚠️ ${accessGate.message}`);
+      return;
+    }
     const parseGate = assertProjectWriteGate(projectTitle, { auditLabel: `${eventSource}_parse` });
     if (!parseGate.ok) {
       alert(parseGate.message);
@@ -395,7 +410,7 @@ export default function AiScriptBreakdownPanel({
     try {
       if (typeof window !== 'undefined') {
         try {
-          writeOpenScreenplayText(rawScriptText, { silent: true });
+          writeOpenScreenplayText(rawScriptText, { silent: true, title: projectTitle });
           window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: `${eventSource}_parse` } }));
         } catch {
           /* SoT write must not abort breakdown */
@@ -422,7 +437,9 @@ export default function AiScriptBreakdownPanel({
       if (meta?.warning) {
         console.info('[AI Breakdown]', meta.warning);
       }
-      if (meta?.source === 'feature_expand') {
+      if (meta?.truncated) {
+        setParseStatusBanner(`⚠️ ${meta.warning}`);
+      } else if (meta?.source === 'feature_expand') {
         setParseStatusBanner(`✓ Expanded ${meta.shotCount || parsedShots.length} shots · ${meta.sequenceCount || ''} sequences · ${meta.runtimeMinutes || ''} min feature`);
       } else if (meta?.source === 'built_in' || meta?.source === 'built_in_expand') {
         setParseStatusBanner(`✓ Parsed ${meta.shotCount || parsedShots.length} shots (Built-In cinema engine)`);
@@ -535,8 +552,8 @@ export default function AiScriptBreakdownPanel({
       setParseStatusBanner(
         `✓ ${shotsToApply.length} shots queued — approve in Production → LLM command review`
       );
-    } else if (setShots) {
-      setShots(shotsToApply);
+    } else {
+      setParseStatusBanner('⚠️ Apply needs a review step — Matrix was not overwritten.');
     }
     onApplied?.();
   };

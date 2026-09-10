@@ -1,17 +1,13 @@
-import { checkServerRate, consumeServerCredits, getOrCreateRow } from './_saasLedger.js';
+import { checkServerRate, consumeServerCredits, assertManagedAccount } from './_saasLedger.js';
+import { applyCors, assertByteplusEndpoint, clientIp, rateLimit } from './_httpSecurity.js';
 
 const DEFAULT_HOST = 'https://ark.ap-southeast.bytepluses.com/api/v3';
 const DEFAULT_VIDEO_MODEL = 'seedance-1-0-pro-250528';
 const VIDEO_CREDIT_COST = 2;
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
-
-function hostBase(endpointUrl) {
-  return String(endpointUrl || DEFAULT_HOST).replace(/\/$/, '');
+function hostBaseFromGate(endpointUrl) {
+  const gate = assertByteplusEndpoint(endpointUrl, DEFAULT_HOST);
+  return gate.ok ? gate.hostBase : '';
 }
 
 function pickVideoUrl(data) {
@@ -39,7 +35,7 @@ function parseQuery(req) {
 }
 
 async function resolveCreateAuth(reqBody, res) {
-  const { apiKey: clientKey, managed, email } = reqBody || {};
+  const { apiKey: clientKey, managed, email, deviceId } = reqBody || {};
   let apiKey = String(clientKey || '').trim();
   const isManaged = managed === true || managed === 'true';
   let remainingCredits;
@@ -50,12 +46,12 @@ async function resolveCreateAuth(reqBody, res) {
       res.status(400).json({ success: false, error: 'Account email required for managed generate.' });
       return null;
     }
-    const { row } = getOrCreateRow(user);
-    if (row.status === 'DISABLED' || row.status === 'REVOKED') {
-      res.status(403).json({ success: false, error: 'License revoked.' });
+    const gate = assertManagedAccount(user, deviceId);
+    if (!gate.ok) {
+      res.status(gate.status || 403).json({ success: false, error: gate.error });
       return null;
     }
-    const rate = checkServerRate(user, row.plan);
+    const rate = checkServerRate(user, gate.row.plan);
     if (!rate.ok) {
       res.status(429).json({ success: false, error: `Rate limit ${rate.max}/min. Wait ${rate.waitSec}s.` });
       return null;
@@ -86,8 +82,13 @@ async function resolveCreateAuth(reqBody, res) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const ipLimit = rateLimit(`gen-video:${clientIp(req)}`, 12, 60_000);
+  if (!ipLimit.ok) {
+    return res.status(429).json({ success: false, error: `Rate limit. Wait ${ipLimit.waitSec}s.` });
+  }
 
   try {
     const query = parseQuery(req);
@@ -99,17 +100,26 @@ export default async function handler(req, res) {
       if (!taskIdIn) {
         return res.status(400).json({ success: false, error: 'taskId required.' });
       }
-      const key = String(
-        (req.body && req.body.apiKey) ||
-          process.env.SPS_BYTEPLUS_API_KEY ||
-          process.env.BYTEPLUS_API_KEY ||
-          ''
-      ).trim();
+      const body = req.body || {};
+      const isManaged = body.managed === true || body.managed === 'true' || query.managed === 'true';
+      let key = String(body.apiKey || query.apiKey || '').trim();
+      if (isManaged) {
+        const user = String(body.email || query.email || '').trim().toLowerCase();
+        const gate = assertManagedAccount(user, body.deviceId || query.deviceId);
+        if (!gate.ok) {
+          return res.status(gate.status || 403).json({ success: false, error: gate.error });
+        }
+        key = String(process.env.SPS_BYTEPLUS_API_KEY || process.env.BYTEPLUS_API_KEY || '').trim();
+      }
       if (!key) {
         return res.status(400).json({ success: false, error: 'API key required to poll.' });
       }
-      const endpointUrl = (req.body && req.body.endpointUrl) || query.endpointUrl;
-      const url = `${hostBase(endpointUrl)}/contents/generations/tasks/${encodeURIComponent(taskIdIn)}`;
+      const endpointUrl = body.endpointUrl || query.endpointUrl;
+      const host = hostBaseFromGate(endpointUrl);
+      if (!host) {
+        return res.status(400).json({ success: false, error: 'Generation endpoint is not an allowed BytePlus host.' });
+      }
+      const url = `${host}/contents/generations/tasks/${encodeURIComponent(taskIdIn)}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: { Authorization: `Bearer ${key}` },
@@ -144,6 +154,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Prompt required.' });
     }
 
+    const host = hostBaseFromGate(endpointUrl);
+    if (!host) {
+      return res.status(400).json({ success: false, error: 'Generation endpoint is not an allowed BytePlus host.' });
+    }
+
     const model = String(modelId || '').trim() || DEFAULT_VIDEO_MODEL;
     const sec = Math.min(12, Math.max(4, Number(duration) || 5));
     const content = [{ type: 'text', text: text.slice(0, 2500) }];
@@ -156,7 +171,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch(`${hostBase(endpointUrl)}/contents/generations/tasks`, {
+    const response = await fetch(`${host}/contents/generations/tasks`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${auth.apiKey}`,
@@ -190,6 +205,6 @@ export default async function handler(req, res) {
       credits: auth.remainingCredits,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'Video generate failed' });
   }
 }

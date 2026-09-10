@@ -16,6 +16,8 @@
  *   SPS_TWILIO_WHATSAPP_FROM    e.g. whatsapp:+14155238886
  */
 
+import { applyCors } from './_httpSecurity.js';
+
 const JSONBLOB_COLLABORATORS_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-79e0-75d9-9312-53b71c76be18';
 const COOLDOWN_MS = 20 * 60 * 1000;
 const lastSent = new Map(); // `${fromEmail}::${toPhone}` -> ts
@@ -187,10 +189,7 @@ async function sendOne(toE164Num, text, templateParams) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
+  applyCors(req, res, { methods: 'POST, GET, OPTIONS' });
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 

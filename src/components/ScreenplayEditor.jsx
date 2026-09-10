@@ -92,7 +92,7 @@ import {
   hasTeluguScript,
   commitRomanWordBeforeCaret
 } from '../utils/teluguVoiceText';
-import { isGuestSession, canGuestBrowseApp } from '../utils/projectPermissions';
+import { isGuestSession, canGuestBrowseApp, assertCanWriteScreenplay, isLookOnlySession } from '../utils/projectPermissions';
 import { GUEST_PLAY_SCREENPLAY } from '../utils/guestPlayground';
 
 const DEFAULT_SAMPLE_SCREENPLAY = `ACT I: THE THREAT OF JANASTHANA — DEMON LEGION ARRIVES
@@ -264,7 +264,7 @@ EXT. PANCHAVATI FOREST - DAWN
 Camera: Slow Aerial Drift
 Camera drifts up from Rama — sky cracks to actual blue, actual sun. Saffron and celestial warm the forest canopy.`;
 
-function readStoredScreenplay() {
+function readStoredScreenplay(projectTitle) {
   if (typeof window === 'undefined') return DEFAULT_SAMPLE_SCREENPLAY;
   try {
     if (isGuestSession() && canGuestBrowseApp()) {
@@ -273,7 +273,7 @@ function readStoredScreenplay() {
   } catch {
     /* ignore */
   }
-  const saved = readOpenScreenplayText();
+  const saved = readOpenScreenplayText(projectTitle);
   return saved && saved.trim() ? saved : DEFAULT_SAMPLE_SCREENPLAY;
 }
 
@@ -306,7 +306,7 @@ export default function ScreenplayEditor({
   const [writerCustomSynopsis, setWriterCustomSynopsis] = useState('');
   const [isGeneratingSynopsis, setIsGeneratingSynopsis] = useState(false);
 
-  const [scriptText, setScriptText] = useState(readStoredScreenplay);
+  const [scriptText, setScriptText] = useState(() => readStoredScreenplay(projectTitle));
   const [writerChromePinned, setWriterChromePinned] = useState(() => {
     try {
       const v = localStorage.getItem('sps_pin_writer_chrome');
@@ -459,7 +459,9 @@ export default function ScreenplayEditor({
 
   const applyScriptText = useCallback((next, opts = {}) => {
     setScriptText(next);
-    persistLiveScreenplay(next);
+    if (!(isLookOnlySession() && !isGuestSession())) {
+      persistLiveScreenplay(next, projectTitle);
+    }
     if (typeof opts.caret === 'number' && textareaRef.current) {
       const c = opts.caret;
       requestAnimationFrame(() => {
@@ -470,12 +472,12 @@ export default function ScreenplayEditor({
         setCaretPos(c);
       });
     }
-  }, []);
+  }, [projectTitle]);
 
   const reloadFromStorage = useCallback(() => {
-    const next = readStoredScreenplay();
+    const next = readStoredScreenplay(projectTitle);
     setScriptText(next);
-  }, []);
+  }, [projectTitle]);
 
   useEffect(() => {
     if (activeConsoleTab === 'screenplay') {
@@ -488,6 +490,7 @@ export default function ScreenplayEditor({
       if (
         e.key === 'sps_current_screenplay_text' ||
         e.key === 'sps_live_screenplay_text' ||
+        (e.key && String(e.key).startsWith('sps_open_screenplay_text')) ||
         e.key === null
       ) {
         reloadFromStorage();
@@ -1063,6 +1066,12 @@ export default function ScreenplayEditor({
   const handleParseScriptToMatrix = async (textToParse = scriptText) => {
     if (!textToParse || !String(textToParse).trim()) {
       setParseStatusMsg('⚠️ Paste screenplay text before syncing to matrix.');
+      return;
+    }
+    const accessGate = assertCanWriteScreenplay(projectTitle);
+    if (!accessGate.ok) {
+      setParseStatusMsg(`⚠️ ${accessGate.message}`);
+      alert(accessGate.message);
       return;
     }
     const writeGate = assertProjectWriteGate(projectTitle, { auditLabel: 'writer_parse_start' });

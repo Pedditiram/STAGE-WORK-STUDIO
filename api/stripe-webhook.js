@@ -6,6 +6,7 @@
 
 import crypto from 'crypto';
 import { grantFromStripeSession } from './_saasLedger.js';
+import { applyCors } from './_httpSecurity.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -43,9 +44,7 @@ async function readRaw(req) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
+  applyCors(req, res, { methods: 'POST, OPTIONS' });
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -53,7 +52,10 @@ export default async function handler(req, res) {
     const raw = await readRaw(req);
     const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
     const sig = req.headers?.['stripe-signature'] || req.headers?.['Stripe-Signature'] || '';
-    if (secret && !verifyStripeSignature(raw, sig, secret)) {
+    if (!secret) {
+      return res.status(503).json({ success: false, error: 'STRIPE_WEBHOOK_SECRET is not configured.' });
+    }
+    if (!verifyStripeSignature(raw, sig, secret)) {
       return res.status(400).json({ success: false, error: 'Invalid Stripe signature' });
     }
     const event = JSON.parse(raw || '{}');

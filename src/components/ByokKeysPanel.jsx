@@ -8,7 +8,7 @@ import {
   setByokKey
 } from '../utils/saasControl';
 import { getCurrentUserEmail } from '../utils/projectPermissions';
-import { checkoutCreditPack, fetchSaasStatus, syncManagedCredits } from '../services/saasGenerateClient';
+import { checkoutCreditPack, fetchSaasStatus, syncManagedCredits, setServerApiMode } from '../services/saasGenerateClient';
 
 export default function ByokKeysPanel() {
   const email = getCurrentUserEmail();
@@ -72,10 +72,10 @@ export default function ByokKeysPanel() {
     const res = await checkoutCreditPack(pack.id);
     if (res.url) {
       window.open(res.url, '_blank', 'noopener');
-      setPackNote('Stripe checkout opened in a new tab.');
+      setPackNote('Payment checkout opened in a new tab.');
       return;
     }
-    setPackNote(res.message || 'Stripe is not configured — ask the studio admin to grant credits.');
+    setPackNote(res.message || 'Payment system is held — ask the studio admin to grant credits.');
   };
 
   return (
@@ -91,6 +91,7 @@ export default function ByokKeysPanel() {
           onClick={() => {
             setApiMode(email, 'byok');
             setMode('byok');
+            setServerApiMode(email, 'byok', email);
           }}
         >
           Bring your own key
@@ -101,6 +102,7 @@ export default function ByokKeysPanel() {
           onClick={() => {
             setApiMode(email, 'managed');
             setMode('managed');
+            setServerApiMode(email, 'managed', email);
           }}
         >
           Stage Work Studio credits
@@ -114,21 +116,26 @@ export default function ByokKeysPanel() {
             <span className="text-[11px] font-mono text-amber-100">{credits} credits</span>
           </div>
           <p className="text-[10px] text-zinc-400 m-0 leading-relaxed">
-            Still image = 1 credit · video create = 2 credits. {stripeReady ? 'Pay with Stripe below.' : 'Owner grants packs in Settings → SaaS until Stripe is live.'}
+            Still image = 1 credit · video create = 2 credits.{' '}
+            {stripeReady
+              ? 'Buy a pack below.'
+              : 'Payment system is held. The owner grants packs in Settings → SaaS.'}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {CREDIT_PACKS.map((pack) => (
-              <button
-                key={pack.id}
-                type="button"
-                className="sps-btn text-xs flex flex-col items-start gap-0.5 py-2 px-2.5 text-left"
-                onClick={() => buyPack(pack)}
-              >
-                <span className="font-bold text-zinc-100">{pack.label}</span>
-                <span className="text-[10px] text-zinc-400">${pack.usd} USD</span>
-              </button>
-            ))}
-          </div>
+          {stripeReady ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {CREDIT_PACKS.map((pack) => (
+                <button
+                  key={pack.id}
+                  type="button"
+                  className="sps-btn text-xs flex flex-col items-start gap-0.5 py-2 px-2.5 text-left"
+                  onClick={() => buyPack(pack)}
+                >
+                  <span className="font-bold text-zinc-100">{pack.label}</span>
+                  <span className="text-[10px] text-zinc-400">${pack.usd} USD</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           {packNote ? <p className="text-[11px] text-amber-300 m-0">{packNote}</p> : null}
         </div>
       ) : null}

@@ -27,6 +27,7 @@ import {
   fetchProjectLibraryFromCloud,
   syncCollaboratorsToCloud,
   clearDeletedProjectTitles,
+  reviveProjectTitleForOpen,
   filterOutDeletedProjects,
   isProjectTitleDeleted,
   archiveProjectSnapshot,
@@ -72,8 +73,19 @@ import {
   filterAccessibleProjects,
   stripTitleFromAllottedProjects,
   ensurePrimaryAdminUser,
-  sanitizeAuthorizedUsers
+  sanitizeAuthorizedUsers,
+  isStudioOwner
 } from '../utils/projectPermissions';
+import {
+  canArchiveProjectTitle,
+  canRenameProjectTitle,
+  claimNewLibraryTitleIfPackUser,
+  getPackOwnedTitles,
+  getUserPackFlags,
+  packLibraryRestrictedMessage,
+    renameTitleAcrossPackOwned,
+    stripTitleFromPackOwned
+} from '../utils/userSettingsPack';
 import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch } from '../utils/projectWorkspace';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlobStore';
@@ -199,15 +211,12 @@ export default function ProjectConsoleModal({
   // Project Library state stored in localStorage 'sps_project_library'
   const [projectLibrary, setProjectLibrary] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sps_project_library');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return filterOutDeletedProjects(parsed);
-          }
-        } catch (e) {}
-      }
+      try {
+        const parsed = readLocalProjectLibrary();
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return filterOutDeletedProjects(parsed);
+        }
+      } catch (e) {}
     }
     return [
       {
@@ -239,7 +248,7 @@ export default function ProjectConsoleModal({
     setProjectLibrary((prev) => {
       const migrated = migrateLegacyRoomInLibrary(prev);
       const changed = migrated.some((p, i) => p?.roomId !== prev[i]?.roomId);
-      if (changed) safeLocalStorageSetItem('sps_project_library', JSON.stringify(migrated));
+      if (changed) writeLocalProjectLibrary(migrated);
       return changed ? migrated : prev;
     });
   }, [isOpen]);
@@ -660,7 +669,7 @@ export default function ProjectConsoleModal({
         return p;
       });
       if (typeof window !== 'undefined') {
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
+        writeLocalProjectLibrary(updated);
       }
       return updated;
     });
@@ -883,7 +892,7 @@ export default function ProjectConsoleModal({
           p.id === proj.id ? { ...p, assetRoots: result.roots, projectVersion: result.roots.projectVersion } : p
         );
         try {
-          localStorage.setItem('sps_project_library', JSON.stringify(updated));
+          writeLocalProjectLibrary(updated);
         } catch {
           /* ignore */
         }
@@ -908,31 +917,49 @@ export default function ProjectConsoleModal({
   };
 
   const registerOpenedProjectFolder = async (importedProj, meta = {}) => {
-    const cleanTitle = (importedProj.title || 'IMPORTED PROJECT').trim().toUpperCase();
-    clearDeletedProjectTitles([importedProj.title]);
-    await saveProjectToVault(importedProj);
-    if (importedProj.assetRoots) {
-      stampAssetRootsIntoLibrary(importedProj.title, importedProj.assetRoots);
+    const cleanTitle = String(importedProj.title || importedProj.projectTitle || 'IMPORTED PROJECT').trim();
+    if (!cleanTitle) {
+      alert('That file has no project title.');
+      return;
+    }
+    const film = { ...importedProj, title: cleanTitle };
+    const exists = projectLibrary.some((p) => p.title.trim().toUpperCase() === cleanTitle.toUpperCase());
+    if (exists && !isStudioOwner() && !canArchiveProjectTitle(cleanTitle)) {
+      alert('🔒 ACCESS RESTRICTED:\nThat title is a studio film. You can open it if allotted, but you cannot overwrite it from a folder. Import under a new title, or ask Admin.');
+      return;
+    }
+    reviveProjectTitleForOpen(cleanTitle);
+    await saveProjectToVault(film);
+    if (film.assetRoots) {
+      stampAssetRootsIntoLibrary(film.title, film.assetRoots);
     }
     setProjectLibrary((prev) => {
-      const exists = prev.some((p) => p.title.trim().toUpperCase() === cleanTitle);
-      const updated = exists
-        ? prev.map((p) => (p.title.trim().toUpperCase() === cleanTitle ? { ...p, ...importedProj } : p))
-        : [...prev, importedProj];
+      const key = cleanTitle.toUpperCase();
+      const already = prev.some((p) => String(p.title || '').trim().toUpperCase() === key);
+      const updated = already
+        ? prev.map((p) => (String(p.title || '').trim().toUpperCase() === key ? { ...p, ...film, title: cleanTitle, id: p.id } : p))
+        : [...prev, film];
       writeLocalProjectLibrary(updated);
       return updated;
     });
     window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
-    const shotsN = importedProj.shots?.length || 0;
-    const from = meta.sourceFile || meta.filmRoot || importedProj.openedFromFolder || '';
+    if (!exists) claimNewLibraryTitleIfPackUser(film.title);
+    try {
+      await applyProjectToStudio(film, { closeConsole: false });
+    } catch {
+      /* library row is enough */
+    }
+    const shotsN = film.shots?.length || 0;
+    const from = meta.sourceFile || meta.filmRoot || film.openedFromFolder || '';
+    const kind = meta.kind === 'file' ? 'FILE' : 'FOLDER';
     alert(
-      `📂 PROJECT FOLDER OPENED\n\n"${importedProj.title}" — ${shotsN} shot(s)\nAsset roots wired to disk.${from ? `\n\nSource: ${from}` : ''}`
+      `📂 PROJECT ${kind} OPENED\n\n"${film.title}" — ${shotsN} shot(s)\nAdded to Library as its own film.${from ? `\n\nSource: ${from}` : ''}`
     );
   };
 
   const handleOpenProjectFolder = async () => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can open project folders.');
+      alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('open project folders')}`);
       return;
     }
 
@@ -983,7 +1010,7 @@ export default function ProjectConsoleModal({
 
   const handleBackupFileImport = async (e) => {
     if (!canCreateOrDeleteProjects()) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can import projects.');
+      alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('import projects')}`);
       if (e.target) e.target.value = '';
       return;
     }
@@ -992,19 +1019,7 @@ export default function ProjectConsoleModal({
 
     try {
       const importedProj = await importProjectPackageFromFile(file);
-      setProjectLibrary(prev => {
-        const cleanTitle = (importedProj.title || 'IMPORTED PROJECT').trim().toUpperCase();
-        const exists = prev.some(p => p.title.trim().toUpperCase() === cleanTitle);
-        let updated;
-        if (exists) {
-          updated = prev.map(p => p.title.trim().toUpperCase() === cleanTitle ? { ...p, ...importedProj } : p);
-        } else {
-          updated = [...prev, importedProj];
-        }
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
-        return updated;
-      });
-      alert(`📥 PROJECT RESTORED SUCCESSFULLY:\nProject "${importedProj.title}" (${importedProj.shots?.length || 0} shots) imported into studio library & saved to persistent vault!`);
+      await registerOpenedProjectFolder(importedProj, { kind: 'file', sourceFile: file.name });
     } catch (err) {
       alert(`❌ IMPORT ERROR:\n${err.message}`);
     }
@@ -1026,6 +1041,11 @@ export default function ProjectConsoleModal({
   const handleRenameProject = (projId, newName) => {
     const cleanName = newName.trim().toUpperCase();
     if (!cleanName) return;
+    const target = projectLibrary.find((p) => p.id === projId);
+    if (!canRenameProjectTitle(target?.title)) {
+      alert('🔒 ACCESS RESTRICTED:\nYou can rename only pack titles you created. Allotted studio films stay Admin-owned.');
+      return;
+    }
 
     // Check if another project already has this exact title
     const isDuplicate = projectLibrary.some(p => p.id !== projId && p.title.trim().toUpperCase() === cleanName);
@@ -1034,6 +1054,7 @@ export default function ProjectConsoleModal({
       return;
     }
 
+    const oldTitle = target?.title || '';
     setProjectLibrary(prev => {
       const updated = prev.map(p => {
         if (p.id === projId) {
@@ -1044,9 +1065,10 @@ export default function ProjectConsoleModal({
         }
         return p;
       });
-      safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
+      writeLocalProjectLibrary(updated);
       return updated;
     });
+    if (oldTitle) renameTitleAcrossPackOwned(oldTitle, cleanName);
     setEditingProjectId(null);
   };
 
@@ -1223,6 +1245,7 @@ export default function ProjectConsoleModal({
     const put = (p) => {
       if (!p?.title) return;
       const key = String(p.title).trim().toUpperCase();
+      if (isProjectTitleDeleted(key) || key === 'STAGE PRODUCTION STUDIO') return;
       const old = map.get(key);
       if (!old) {
         map.set(key, p);
@@ -1257,8 +1280,11 @@ export default function ProjectConsoleModal({
         const merged = await hydrateProjectLibraryFromStores();
         const withPosters = await ensureElectronPosterRefs(merged);
         if (cancelled) return;
-        setProjectLibrary((prev) => mergeLibraryPreservingUnion(withPosters, prev));
-        writeLocalProjectLibrary(withPosters);
+        setProjectLibrary((prev) => {
+          const next = mergeLibraryPreservingUnion(withPosters, prev);
+          writeLocalProjectLibrary(next);
+          return next;
+        });
       } catch (err) {
         console.warn('Project library disk hydrate failed', err);
       } finally {
@@ -1322,7 +1348,7 @@ export default function ProjectConsoleModal({
           base = [healed, ...base.filter((p) => String(p?.title || '').trim().toUpperCase() !== key)];
         }
         try {
-          const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+          const saved = JSON.parse(JSON.stringify(readLocalProjectLibrary()));
           if (Array.isArray(saved) && saved.length) {
             const map = new Map();
             [...saved, ...base].forEach((p) => {
@@ -1426,12 +1452,17 @@ export default function ProjectConsoleModal({
     if (typeof window === 'undefined') return;
     if (isGuestSession()) return;
     if (!libraryHydrated) return;
-    writeLocalProjectLibrary(projectLibrary);
+    const liveLibrary = filterOutDeletedProjects(projectLibrary);
+    if (liveLibrary.length !== (Array.isArray(projectLibrary) ? projectLibrary : []).length) {
+      setProjectLibrary(liveLibrary);
+      return undefined;
+    }
+    writeLocalProjectLibrary(liveLibrary);
     // Defer past React commit so AdminSettingsModal listeners don't setState mid-render
     const t = setTimeout(() => {
       window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
       // Never push huge data: posters to cloud — keep idb/http refs only
-      const forCloud = (Array.isArray(projectLibrary) ? projectLibrary : []).map((p) => {
+      const forCloud = (Array.isArray(liveLibrary) ? liveLibrary : []).map((p) => {
         const slim = slimProjectForLocalMirror(p);
         if (slim?.posterUrl && String(slim.posterUrl).startsWith('idb:')) {
           const rest = { ...slim };
@@ -1510,6 +1541,9 @@ export default function ProjectConsoleModal({
   // EVALUATE CURRENT USER PERMISSIONS & ALLOTTED PROJECTS
   const currentUserEmail = getCurrentUserEmail();
   const currentUserProfile = getCurrentUserProfile(currentUserEmail);
+  const isOwnerUser = isStudioOwner(currentUserEmail);
+  const packFlags = getUserPackFlags(currentUserEmail);
+  const packOwnedTitles = getPackOwnedTitles(currentUserEmail);
   const isPrimaryOwner = canCreateOrDeleteProjects(currentUserEmail);
   const guestLook = canGuestBrowseApp();
   const visibleProjectLibrary = filterAccessibleProjects(projectLibrary, currentUserEmail);
@@ -1665,9 +1699,9 @@ export default function ProjectConsoleModal({
     }
     if (currentProjectTitle && !isProjectTitleDeleted(currentProjectTitle)) {
       try {
-        const saved = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+        const saved = JSON.parse(JSON.stringify(readLocalProjectLibrary()));
         const parked = writeWorkspaceOntoLibrary(saved, currentProjectTitle);
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(filterOutDeletedProjects(parked)));
+        writeLocalProjectLibrary(filterOutDeletedProjects(parked));
       } catch {
         /* ignore */
       }
@@ -1733,7 +1767,7 @@ export default function ProjectConsoleModal({
   const handleCreateProject = (e) => {
     e.preventDefault();
     if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create new projects.");
+      alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('create new projects')}`);
       return;
     }
     if (!newTitle.trim()) return;
@@ -1781,7 +1815,7 @@ export default function ProjectConsoleModal({
       genreKey: newGenreKey || 'mythological',
       genreLabel: genreProfile?.label || genreProfile?.name || 'Stage Production Feature',
       presetProfile: newGenreKey || 'mythological',
-      roomId: `SPS-${cleanTitle.slice(0, 4)}-${Math.floor(Math.random() * 8999 + 1000)}`,
+      roomId: roomIdForProject(cleanTitle),
       lastModified: new Date().toLocaleDateString(),
       shots: initialShots,
       versions: [
@@ -1796,13 +1830,14 @@ export default function ProjectConsoleModal({
 
     clearDeletedProjectTitles([cleanTitle]);
     setProjectLibrary(prev => [...prev, newProjObj]);
+    claimNewLibraryTitleIfPackUser(cleanTitle);
     handleSwitchProject(newProjObj);
   };
 
   // 4. DUPLICATE PROJECT (admin only — creates a new project)
   const handleDuplicateProject = (proj) => {
     if (!isPrimaryOwner) {
-      alert('🔒 ACCESS RESTRICTED:\nOnly the studio Admin can create or duplicate projects.');
+      alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('duplicate projects')}`);
       return;
     }
     const dupId = `proj_${Date.now()}`;
@@ -1816,15 +1851,18 @@ export default function ProjectConsoleModal({
       ...proj,
       id: dupId,
       title: dupTitle,
+      roomId: roomIdForProject(dupTitle),
       lastModified: new Date().toLocaleDateString()
     };
     setProjectLibrary(prev => [...prev, dupObj]);
+    claimNewLibraryTitleIfPackUser(dupTitle);
   };
 
   // 5. ARCHIVE PROJECT (PRIMARY ADMIN) — remove from library, keep in Archive for restore
   const handleDeleteProject = async (projId) => {
-    if (!isPrimaryOwner) {
-      alert("🔒 ACCESS RESTRICTED:\nOnly the studio Admin can archive projects.");
+    const targetProj = projectLibrary.find(p => p.id === projId);
+    if (!canArchiveProjectTitle(targetProj?.title)) {
+      alert("🔒 ACCESS RESTRICTED:\nYou can archive only pack titles you created. Allotted studio films stay Admin-owned.");
       return;
     }
 
@@ -1833,7 +1871,6 @@ export default function ProjectConsoleModal({
       return;
     }
 
-    const targetProj = projectLibrary.find(p => p.id === projId);
     if (confirm(`Archive project "${targetProj?.title || projId}"?\n\nIt will leave the Library and move to Archive so you can restore it later.`)) {
       const deletedTitle = targetProj?.title || '';
       if (targetProj) archiveProjectSnapshot(targetProj);
@@ -1841,12 +1878,14 @@ export default function ProjectConsoleModal({
 
       const updated = filterOutDeletedProjects(projectLibrary.filter(p => p.id !== projId));
 
-      // Strip dead title from all collaborators' allotments (local + cloud)
+      // Strip dead title from all collaborators' allotments and pack-owned lists (local + cloud)
       try {
         const rawUsers = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
         if (Array.isArray(rawUsers) && deletedTitle) {
           const pruned = ensurePrimaryAdminUser(
-            sanitizeAuthorizedUsers(stripTitleFromAllottedProjects(rawUsers, deletedTitle))
+            sanitizeAuthorizedUsers(
+              stripTitleFromPackOwned(stripTitleFromAllottedProjects(rawUsers, deletedTitle), deletedTitle)
+            )
           );
           localStorage.setItem('sps_authorized_phone_users', JSON.stringify(pruned));
           window.dispatchEvent(new Event('sps_collaborators_updated'));
@@ -1871,7 +1910,7 @@ export default function ProjectConsoleModal({
 
       setProjectLibrary(updated);
       try {
-        safeLocalStorageSetItem('sps_project_library', JSON.stringify(updated));
+        writeLocalProjectLibrary(updated);
         window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
         syncProjectLibraryToCloud(updated);
       } catch (e) {}
@@ -1879,7 +1918,7 @@ export default function ProjectConsoleModal({
   };
 
   const handleRestoreArchivedProject = (archiveId) => {
-    if (!isPrimaryOwner) {
+    if (!isOwnerUser) {
       alert('🔒 Only the studio Admin can restore archived projects.');
       return;
     }
@@ -1896,17 +1935,26 @@ export default function ProjectConsoleModal({
     });
     try {
       syncProjectLibraryToCloud(
-        JSON.parse(localStorage.getItem('sps_project_library') || '[]')
+        JSON.parse(JSON.stringify(readLocalProjectLibrary()))
       );
     } catch (e) {}
     setActiveTab('library');
   };
 
   const handlePurgeArchivedProject = (archiveId, title) => {
-    if (!isPrimaryOwner) return;
-    if (!confirm(`Permanently delete archived project "${title}"?\nThis cannot be undone.`)) return;
+    if (!isOwnerUser) return;
+    if (!confirm(`Move archived project "${title}" to the purged folder on disk?\nIt leaves Library and Archive. The files stay in projects/purged.`)) return;
     purgeArchivedProject(archiveId);
     setArchivedProjects(getArchivedProjects());
+    setProjectLibrary((prev) => filterOutDeletedProjects(prev));
+    try {
+      const live = filterOutDeletedProjects(readLocalProjectLibrary());
+      writeLocalProjectLibrary(live);
+      window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
+      syncProjectLibraryToCloud(live);
+    } catch {
+      /* ignore */
+    }
   };
 
   // 6. CREATE VERSION SNAPSHOT
@@ -1998,7 +2046,7 @@ export default function ProjectConsoleModal({
               <Folder className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">Library</span>
             </button>
-            {isPrimaryOwner && (
+            {isOwnerUser && (
               <button
                 type="button"
                 onClick={() => {
@@ -2175,15 +2223,22 @@ export default function ProjectConsoleModal({
               {/* Hidden File Input for Custom Movie Poster Art Upload */}
               <input type="file" ref={posterFileInputRef} onChange={handlePosterFileChange} accept="image/*" className="hidden" />
 
-              {!isPrimaryOwner && (
+              {!isOwnerUser && (
                 <div className="sps-project-library-banner w-full px-4 py-2.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-100 text-[11px] font-mono flex flex-wrap items-center justify-between gap-2">
                   <span>
                     Showing <strong>{visibleProjectLibrary.length}</strong> allotted project{visibleProjectLibrary.length === 1 ? '' : 's'} for <strong>{currentUserEmail || 'your account'}</strong>
                     {allottedTitles.length > 0 ? (
                       <> — {allottedTitles.join(', ')}</>
                     ) : null}
+                    {packOwnedTitles.length > 0 ? (
+                      <> · Pack titles you created: {packOwnedTitles.join(', ')}</>
+                    ) : null}
                   </span>
-                  <span className="text-[10px] text-cyan-300/80">Other studio projects are hidden</span>
+                  <span className="text-[10px] text-cyan-300/80">
+                    {packFlags.ownLibrary
+                      ? 'Studio allotted films stay Admin-owned'
+                      : 'Other studio projects are hidden'}
+                  </span>
                 </div>
               )}
               {visibleProjectLibrary.length === 0 && (
@@ -2258,7 +2313,7 @@ export default function ProjectConsoleModal({
                           ) : (
                             <span />
                           )}
-                          {isPrimaryOwner && (
+                          {canArchiveProjectTitle(proj.title) && (
                             <button
                               type="button"
                               className="sps-project-gallery-archive-btn"
@@ -2414,6 +2469,7 @@ export default function ProjectConsoleModal({
                               <h4 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight truncate min-w-0" style={{ fontFamily: 'var(--sps-font-display)' }}>
                                 {proj.title}
                               </h4>
+                              {canRenameProjectTitle(proj.title) ? (
                               <button
                                 type="button"
                                 onClick={() => { setEditingProjectId(proj.id); setRenameInput(proj.title); }}
@@ -2422,6 +2478,7 @@ export default function ProjectConsoleModal({
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
+                              ) : null}
                             </div>
                           )}
 
@@ -2566,7 +2623,7 @@ export default function ProjectConsoleModal({
                               <span>Backup</span>
                             </button>
 
-                            {isPrimaryOwner ? (
+                            {canArchiveProjectTitle(proj.title) ? (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteProject(proj.id)}
@@ -2578,7 +2635,7 @@ export default function ProjectConsoleModal({
                               </button>
                             ) : (
                               <div className="py-1.5 px-2 rounded-[var(--sps-radius-sm)] text-[11px] font-semibold text-center" style={{ color: 'var(--sps-muted)', background: 'var(--sps-surface)' }}>
-                                Locked
+                                {isPrimaryOwner ? 'Studio' : 'Locked'}
                               </div>
                             )}
                           </div>
@@ -2593,7 +2650,7 @@ export default function ProjectConsoleModal({
           )}
 
           {/* TAB: PROJECT ARCHIVE — restore or permanently purge */}
-          {activeTab === 'archive' && isPrimaryOwner && (
+          {activeTab === 'archive' && isOwnerUser && (
             <div className="h-full overflow-y-auto p-4 sm:p-5 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -2649,7 +2706,7 @@ export default function ProjectConsoleModal({
                           type="button"
                           onClick={() => handlePurgeArchivedProject(proj.archiveId || proj.id, proj.title)}
                           className="py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="Permanently delete from Archive"
+                          title="Move to projects/purged on disk"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Purge
@@ -2688,7 +2745,11 @@ export default function ProjectConsoleModal({
                 <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <Plus className="w-4 h-4 text-cyan-500" /> Create New Cinema Production Project
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">Initialize a new master project with custom framing, model specs, and initial shot template.</p>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                  {isOwnerUser
+                    ? 'Initialize a new master project with custom framing, model specs, and initial shot template.'
+                    : 'Creates a pack title you own. You can archive it later. Allotted studio films stay Admin-owned.'}
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -2780,7 +2841,7 @@ export default function ProjectConsoleModal({
             ) : (
               <div className="max-w-xl mx-auto p-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-100 text-xs font-mono space-y-2">
                 <p className="font-bold">Project creation is Admin-only.</p>
-                <p>Editors and Viewers can only open allotted projects. Only the studio Admin can create, delete, duplicate, or import projects.</p>
+                <p>Editors and Viewers can only open allotted projects. With Independent pack + Own library you can create pack titles and archive those only. Studio films stay Admin-owned.</p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('library')}

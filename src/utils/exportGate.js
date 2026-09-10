@@ -81,10 +81,14 @@ export function assertExportAllowed({
   showAlert = true,
   lifecycleMode = EXPORT_LIFECYCLE.NONE,
   shots = [],
-  roomId = ''
+  roomId = '',
+  personalTakeout = false
 } = {}) {
   const title = normalizeProjectTitle(projectTitle || resolveActiveProjectTitle());
   const collabRoomId = resolveCollabRoomId(roomId);
+  if (personalTakeout) {
+    return { ok: true, takeout: true, projectTitle: title, roomId: collabRoomId };
+  }
   const gate = assertCanExport(email);
 
   if (!gate.ok) {

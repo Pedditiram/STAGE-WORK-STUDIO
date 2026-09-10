@@ -8,6 +8,7 @@ import {
   upsertLicense,
 } from '../utils/saasControl';
 import { getSeedanceStillModel, getSeedanceVideoModel } from './seedanceModels';
+import { saasAdminHeaders, withSaasAdminBody } from '../utils/saasAdminClient';
 
 function sessionEmail() {
   return String(localStorage.getItem('sps_authorized_user_email') || '').trim().toLowerCase();
@@ -35,6 +36,7 @@ export async function generateStudioImage({ prompt, width = 1280, height = 720, 
     endpointUrl,
     email,
     managed,
+    deviceId: getDeviceId(),
   };
   if (!managed) {
     body.apiKey = resolveByteplusKey();
@@ -98,6 +100,7 @@ export async function generateStudioVideo({
     endpointUrl: endpointUrl || localStorage.getItem('sps_byteplus_endpoint_url') || undefined,
     email,
     managed,
+    deviceId: getDeviceId(),
   };
   if (!managed) {
     body.apiKey = resolveByteplusKey();
@@ -134,6 +137,7 @@ export async function pollStudioVideo({ taskId, endpointUrl, signal } = {}) {
     endpointUrl: endpointUrl || localStorage.getItem('sps_byteplus_endpoint_url') || undefined,
     email,
     managed,
+    deviceId: getDeviceId(),
   };
   if (!managed) {
     body.apiKey = resolveByteplusKey();
@@ -199,13 +203,27 @@ export async function checkoutCreditPack(packId) {
 export async function grantCreditPack(targetEmail, packId, actorEmail) {
   const res = await fetch('/api/saas', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    headers: saasAdminHeaders(),
+    body: JSON.stringify(withSaasAdminBody({
       action: 'grant-credits',
       email: targetEmail,
       packId,
       actor: actorEmail,
-    }),
+    })),
   });
   return res.json();
+}
+
+export async function setServerApiMode(targetEmail, apiMode, actorEmail) {
+  const res = await fetch('/api/saas', {
+    method: 'POST',
+    headers: saasAdminHeaders(),
+    body: JSON.stringify(withSaasAdminBody({
+      action: 'set-api-mode',
+      email: targetEmail,
+      apiMode,
+      actor: actorEmail,
+    })),
+  });
+  return res.json().catch(() => ({ success: false }));
 }

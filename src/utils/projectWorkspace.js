@@ -44,8 +44,10 @@ import {
 } from './productionLifecycle';
 import { readOpenScreenplayText, writeOpenScreenplayText } from './screenplayInterop';
 import { safeLocalStorageSetItem } from './safeStorage';
+import { projectLibraryStorageKey, isSelfServeSession } from './tenantScope';
 
 export const LEGACY_SHARED_ROOM = 'SPS-CLOUD-8821';
+const UNTITLED_ROOM_IDS = new Set(['', 'sps_untitled', 'untitled', 'sps_untitled_project']);
 
 export function slugProjectTitle(title) {
   const s = String(title || 'untitled')
@@ -60,10 +62,32 @@ export function titlesMatch(a, b) {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 }
 
+/**
+ * One collab room per film. Stale sps_untitled / leftover sps_<other> ids
+ * must not keep two users on different rooms for the same title.
+ * Custom invite ids (not sps_*) and GUEST-PLAY are kept.
+ */
 export function roomIdForProject(title, existingRoomId = '') {
   const existing = String(existingRoomId || '').trim();
-  if (existing && existing !== LEGACY_SHARED_ROOM) return existing;
-  return `sps_${slugProjectTitle(title)}`;
+  const slug = slugProjectTitle(title);
+  const canonical = `sps_${slug}`;
+
+  if (existing === 'GUEST-PLAY' || existing.toUpperCase().startsWith('GUEST')) {
+    return existing;
+  }
+
+  if (!existing || existing === LEGACY_SHARED_ROOM || UNTITLED_ROOM_IDS.has(existing)) {
+    return canonical;
+  }
+
+  if (existing.startsWith('sps_')) {
+    const existingSlug = existing.slice(4);
+    if (slug !== 'untitled' && existingSlug !== slug) {
+      return canonical;
+    }
+  }
+
+  return existing;
 }
 
 /** Migrate legacy shared room to per-title room id. */
@@ -231,7 +255,7 @@ export function mergeLibrarySources({ local = [], vault = [], cloud = [] } = {})
 export function readLocalProjectLibrary() {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem('sps_project_library');
+    const raw = localStorage.getItem(projectLibraryStorageKey());
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -280,19 +304,39 @@ export function slimProjectForLocalMirror(project) {
 export function writeLocalProjectLibrary(library) {
   if (typeof window === 'undefined') return false;
   const slim = (Array.isArray(library) ? library : []).map(slimProjectForLocalMirror);
-  return safeLocalStorageSetItem('sps_project_library', JSON.stringify(slim));
+  return safeLocalStorageSetItem(projectLibraryStorageKey(), JSON.stringify(slim));
 }
 
-/** Disk + IDB vault is SoT for membership — cloud must never drop local-only films. */
+/** Disk + IDB vault is SoT for membership — cloud must never drop local-only films.
+ * Archived / tombstoned titles stay out of the live library even if disk still has a file.
+ */
 export async function enrichLibraryWithDiskVault(library) {
   const base = Array.isArray(library) ? library : [];
+  if (isSelfServeSession()) {
+    try {
+      const { filterOutDeletedProjects } = await import('../services/dbService');
+      return filterOutDeletedProjects(base);
+    } catch {
+      return base;
+    }
+  }
   try {
     const { loadProjectsFromVault } = await import('../services/projectDiskVault');
     const vault = await loadProjectsFromVault();
-    if (!Array.isArray(vault) || vault.length === 0) return base;
-    return mergeLibrarySources({ local: base, vault });
+    if (!Array.isArray(vault) || vault.length === 0) {
+      const { filterOutDeletedProjects } = await import('../services/dbService');
+      return filterOutDeletedProjects(base);
+    }
+    const merged = mergeLibrarySources({ local: base, vault });
+    const { filterOutDeletedProjects } = await import('../services/dbService');
+    return filterOutDeletedProjects(merged);
   } catch {
-    return base;
+    try {
+      const { filterOutDeletedProjects } = await import('../services/dbService');
+      return filterOutDeletedProjects(base);
+    } catch {
+      return base;
+    }
   }
 }
 
@@ -305,6 +349,12 @@ export async function hydrateProjectLibraryFromStores({ cloud = [] } = {}) {
     cloud: Array.isArray(cloud) ? cloud : []
   });
   merged = await enrichLibraryWithDiskVault(merged);
+  try {
+    const { filterOutDeletedProjects } = await import('../services/dbService');
+    merged = filterOutDeletedProjects(merged);
+  } catch {
+    /* ignore */
+  }
   return migrateLegacyRoomInLibrary(merged);
 }
 
@@ -332,7 +382,7 @@ export function collectOpenWorkspace() {
   try {
     const title = currentWorkspaceTitle();
     return {
-      screenplayText: readOpenScreenplayText() || '',
+      screenplayText: readOpenScreenplayText(title) || '',
       characterProfiles: getActiveCharacterProfiles(),
       worldAssets: getActiveWorldAssets(),
       extractedMasterStory: localStorage.getItem('sps_extracted_master_story') || '',
@@ -382,15 +432,7 @@ export function applyOpenWorkspace(project) {
     applyOpenProjectLifecycle(p);
 
     const sp = String(p.screenplayText || p.rawScriptText || '');
-    if (sp) {
-      writeOpenScreenplayText(sp, { silent: true });
-    } else {
-      try {
-        localStorage.removeItem('sps_open_screenplay_text');
-        localStorage.removeItem('sps_current_screenplay_text');
-        localStorage.removeItem('sps_live_screenplay_text');
-      } catch { /* ignore */ }
-    }
+    writeOpenScreenplayText(sp, { silent: true, title: p.title });
     window.dispatchEvent(new CustomEvent('sps_screenplay_updated', { detail: { source: 'project_switch' } }));
 
     localStorage.setItem('sps_extracted_master_story', String(p.extractedMasterStory || ''));

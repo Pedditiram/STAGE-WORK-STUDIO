@@ -1,9 +1,10 @@
-# Vercel: ship dist + api only. Do not upload Electron builds or local vaults.
+# Vercel: ship source needed to build dist + api. Skip desktop, vaults, tests.
 release
 release-old
 node_modules
 .git
 .cursor
+.github
 *.electron-bak
 .index.html.electron-bak
 docs
@@ -12,7 +13,26 @@ settings
 projects
 ComfyUI-SWS
 ComfyUI-SWS.zip
+StageWorkStudio_App_Screenshots
+scratch
+public/cmaps
+public/standard_fonts
+public/pdf.worker.min.mjs
+electron-main.js
+electron-preload.js
+build
+scripts/electron-build.js
+scripts/electron-before-build.js
+scripts/test-*.mjs
+scripts/test-stage-*.mjs
+scripts/debug-*.mjs
+scripts/capture-*.mjs
+scripts/run-extract-kara.mjs
+scripts/_aiScriptParser.bundle.mjs
+scripts/fixtures
+playwright.config.*
 tmp-*.json
 .env
 .env.*
 *.local
+*.md

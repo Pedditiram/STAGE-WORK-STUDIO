@@ -8,10 +8,11 @@ import {
   collection, 
   getDocs 
 } from 'firebase/firestore';
-import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, pruneAllottedProjectsToLibrary } from '../utils/projectPermissions';
+import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, applyStudioSettings, collectStudioSettings } from '../utils/projectPermissions';
+import { studioCollaboratorsForCloud, isSelfServeSession } from '../utils/tenantScope';
 import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
-import { slimProjectForLocalMirror } from '../utils/projectWorkspace';
+import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary } from '../utils/projectWorkspace';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -28,16 +29,11 @@ function secureCollaboratorList(users) {
   return ensurePrimaryAdminUser(sanitizeAuthorizedUsers(Array.isArray(users) ? users : []));
 }
 
-/** Strip allotted titles that no longer exist in the live project library; persist if changed. */
-function pruneAndPersistCollaboratorAllotments(projectLibrary) {
+/** Drop allotments only for tombstoned titles — never for films this device has not hydrated yet. */
+function pruneAndPersistCollaboratorAllotments() {
   if (typeof window === 'undefined') return;
-  const live = Array.isArray(projectLibrary) ? projectLibrary : [];
-  // Only prune against a hydrated non-empty library (prevents wiping allotments on empty cold start)
-  const realTitles = live.filter((p) => {
-    const t = String(p?.title || '').trim().toUpperCase();
-    return t && t !== 'STAGE PRODUCTION STUDIO';
-  });
-  if (realTitles.length === 0) return;
+  const deleted = readDeletedTitleKeys();
+  if (!deleted.size) return;
 
   let users = [];
   try {
@@ -46,34 +42,31 @@ function pruneAndPersistCollaboratorAllotments(projectLibrary) {
     return;
   }
   if (!Array.isArray(users) || users.length === 0) return;
-  const pruned = secureCollaboratorList(pruneAllottedProjectsToLibrary(users, live));
-  if (JSON.stringify(pruned) === JSON.stringify(users)) return;
-  localStorage.setItem('sps_authorized_phone_users', JSON.stringify(pruned));
+  const pruned = users.map((u) => {
+    if (!u || !Array.isArray(u.allottedProjects)) return u;
+    const next = u.allottedProjects.filter((t) => {
+      const key = String(t || '').trim().toUpperCase();
+      if (!key) return false;
+      if (key.includes('ALL STUDIO PROJECTS')) return true;
+      return !deleted.has(key);
+    });
+    if (next.length === u.allottedProjects.length) return u;
+    return { ...u, allottedProjects: next };
+  });
+  const secured = secureCollaboratorList(pruned);
+  if (JSON.stringify(secured) === JSON.stringify(users)) return;
+  localStorage.setItem('sps_authorized_phone_users', JSON.stringify(secured));
   window.dispatchEvent(new CustomEvent('sps_collaborators_updated', { detail: { source: 'dbService' } }));
-  // Fire-and-forget cloud heal so profile menus on other devices drop dead titles (002, etc.)
-  syncCollaboratorsToCloud(pruned);
 }
 
 /**
  * Cloud is source of truth — always apply sanitized cloud collaborators to localStorage.
- * Local UI may push edits up; on pull/reload Vercel/cloud wins.
+ * Do not prune allotments against this device's library (it may be a subset).
  */
 function applyCloudCollaborators(users) {
   if (typeof window === 'undefined') return null;
   if (!Array.isArray(users) || users.length === 0) return null;
-  let library = [];
-  try {
-    library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
-  } catch (e) {}
-  const live = Array.isArray(library) ? library : [];
-  // Prune only when we have a real hydrated library; otherwise keep cloud allotments intact
-  const realTitles = live.filter((p) => {
-    const t = String(p?.title || '').trim().toUpperCase();
-    return t && t !== 'STAGE PRODUCTION STUDIO';
-  });
-  const secured = secureCollaboratorList(
-    realTitles.length > 0 ? pruneAllottedProjectsToLibrary(users, live) : users
-  );
+  const secured = secureCollaboratorList(users);
   const newStr = JSON.stringify(secured);
   const oldStr = localStorage.getItem('sps_authorized_phone_users');
   if (newStr !== oldStr) {
@@ -84,6 +77,13 @@ function applyCloudCollaborators(users) {
     window.dispatchEvent(new CustomEvent('sps_collaborators_updated', { detail: { source: 'dbService' } }));
   }
   return secured;
+}
+
+function applyCloudStudioSettings(settings) {
+  if (!settings || typeof settings !== 'object') return;
+  try {
+    applyStudioSettings(settings);
+  } catch (e) {}
 }
 
 function syncApiUrl() {
@@ -177,9 +177,10 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
   if (!secured.length) return;
 
   const payload = {
-    users: secured,
+    users: studioCollaboratorsForCloud(secured),
+    studioSettings: collectStudioSettings(),
     lastSynced: new Date().toISOString(),
-    totalCollaborators: secured.length
+    totalCollaborators: studioCollaboratorsForCloud(secured).length
   };
 
   const newStr = JSON.stringify(secured);
@@ -215,6 +216,55 @@ export async function syncCollaboratorsToCloud(authorizedUsers) {
   }
 }
 
+let studioSettingsSyncTimer = null;
+let collaboratorsSyncTimer = null;
+
+export function scheduleStudioSettingsSync() {
+  if (typeof window === 'undefined') return;
+  if (studioSettingsSyncTimer) clearTimeout(studioSettingsSyncTimer);
+  studioSettingsSyncTimer = setTimeout(() => {
+    syncStudioSettingsToCloud().catch(() => {});
+  }, 450);
+}
+
+export function scheduleCollaboratorsCloudSync() {
+  if (typeof window === 'undefined') return;
+  if (collaboratorsSyncTimer) clearTimeout(collaboratorsSyncTimer);
+  collaboratorsSyncTimer = setTimeout(() => {
+    try {
+      const users = JSON.parse(localStorage.getItem('sps_authorized_phone_users') || '[]');
+      if (Array.isArray(users) && users.length) syncCollaboratorsToCloud(users);
+    } catch (e) {}
+    syncStudioSettingsToCloud().catch(() => {});
+  }, 450);
+}
+
+export async function syncStudioSettingsToCloud() {
+  if (typeof window === 'undefined') return;
+  const settings = collectStudioSettings();
+  try {
+    await fetchJsonTimed(`${syncApiUrl()}?type=settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings })
+    });
+  } catch (e) {}
+}
+
+export async function fetchStudioSettingsFromCloud() {
+  try {
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=settings`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.settings && (data.settings.updatedAt || Object.keys(data.settings.studioModules || {}).length)) {
+        applyCloudStudioSettings(data.settings);
+        return data.settings;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 // 2. Fetch All Collaborators from Cloud Database (cloud wins → local)
 export async function fetchCollaboratorsFromCloud() {
   const base = syncApiUrl();
@@ -247,6 +297,9 @@ export async function fetchCollaboratorsFromCloud() {
           return [];
         }
       }
+      if (data.studioSettings && (data.studioSettings.updatedAt || Object.keys(data.studioSettings.studioModules || {}).length)) {
+        applyCloudStudioSettings(data.studioSettings);
+      }
       if (Array.isArray(data.users) && data.users.length > 0) {
         const applied = applyCloudCollaborators(data.users);
         if (applied) return applied;
@@ -258,6 +311,7 @@ export async function fetchCollaboratorsFromCloud() {
     const res = await fetchJsonTimed(`${SPS_COLLABORATORS_BLOB_URL}?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
+      if (data?.studioSettings) applyCloudStudioSettings(data.studioSettings);
       if (Array.isArray(data.users) && data.users.length > 0) {
         const applied = applyCloudCollaborators(data.users);
         if (applied) return applied;
@@ -272,6 +326,9 @@ export async function fetchCollaboratorsFromCloud() {
       if (snap.exists()) {
         const data = snap.data();
         if (Array.isArray(data.users)) {
+          if (data.studioSettings && (data.studioSettings.updatedAt || Object.keys(data.studioSettings.studioModules || {}).length)) {
+        applyCloudStudioSettings(data.studioSettings);
+      }
           const applied = applyCloudCollaborators(data.users);
           if (applied) return applied;
         }
@@ -327,15 +384,24 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
   pull();
   schedule();
   let lastCollabStamp = '';
+  let lastSettingsStamp = '';
   const unsubTick = subscribeToCollabTick(liveRoomId(), '', (tick, reason) => {
     if (cancelled || reason === 'init') {
       lastCollabStamp = String(tick?.collaborators?.stamp || '');
+      lastSettingsStamp = String(tick?.settings?.stamp || '');
       return;
     }
-    const sig = String(tick?.collaborators?.stamp || '');
-    if (sig && sig !== lastCollabStamp) {
-      lastCollabStamp = sig;
+    const collabSig = String(tick?.collaborators?.stamp || '');
+    const settingsSig = String(tick?.settings?.stamp || '');
+    const collabChanged = Boolean(collabSig) && collabSig !== lastCollabStamp;
+    const settingsChanged = Boolean(settingsSig) && settingsSig !== lastSettingsStamp;
+    if (collabChanged) lastCollabStamp = collabSig;
+    if (settingsChanged) lastSettingsStamp = settingsSig;
+    if (collabChanged || settingsChanged) {
       pull();
+      if (settingsChanged && !collabChanged) {
+        fetchStudioSettingsFromCloud().catch(() => {});
+      }
     }
   });
   if (typeof window !== 'undefined') {
@@ -349,6 +415,7 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
       unsubscribe = onSnapshot(collabRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
+          if (data?.studioSettings) applyCloudStudioSettings(data.studioSettings);
           if (Array.isArray(data.users)) {
             const applied = applyCloudCollaborators(data.users);
             if (typeof onUsersReceived === 'function') {
@@ -375,12 +442,17 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
 // 4. Sync Whole Studio Project Library to Cloud Database
 export async function syncProjectLibraryToCloud(projectLibrary) {
   if (typeof window === 'undefined') return;
-  const list = Array.isArray(projectLibrary) ? projectLibrary : [];
+  if (isSelfServeSession()) return;
+  const list = filterOutDeletedProjects(Array.isArray(projectLibrary) ? projectLibrary : []);
   // Never push empty library to cloud — empty overwrite guard on server is backup only
   if (list.length === 0) return;
 
   const slimmedList = list.map(slimProjectForLocalMirror);
-  const deletedTitles = Array.from(readDeletedTitleKeys());
+  const liveKeys = new Set(slimmedList.map((p) => projectKey(p)).filter(Boolean));
+  const pinned = readPinnedLiveTitleKeys();
+  const deletedTitles = Array.from(readDeletedTitleKeys()).filter(
+    (t) => !liveKeys.has(t) && !pinned.has(t)
+  );
   const payload = {
     projects: slimmedList,
     deletedTitles,
@@ -388,10 +460,8 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
     totalProjects: slimmedList.length
   };
 
-  const newStr = JSON.stringify(slimmedList);
-  const oldStr = localStorage.getItem('sps_project_library');
-  if (newStr !== oldStr) {
-    safeLocalStorageSetItem('sps_project_library', newStr);
+  writeLocalProjectLibrary(slimmedList);
+  if (JSON.stringify(slimmedList) !== JSON.stringify(readLocalProjectLibrary())) {
     window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   }
 
@@ -525,6 +595,7 @@ function projectKey(p) {
 
 const DELETED_TITLES_KEY = 'sps_deleted_project_titles';
 const PROJECT_ARCHIVE_KEY = 'sps_project_archive';
+const OPENED_LIVE_TITLES_KEY = 'sps_opened_live_titles';
 const MAX_ARCHIVED_PROJECTS = 40;
 
 function readDeletedTitleKeys() {
@@ -541,11 +612,69 @@ function readDeletedTitleKeys() {
   }
 }
 
+function readArchivedTitleKeys() {
+  return new Set(
+    readProjectArchive()
+      .map((p) => String(p?.title || '').trim().toUpperCase())
+      .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO')
+  );
+}
+
+function readPinnedLiveTitleKeys() {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = JSON.parse(localStorage.getItem(OPENED_LIVE_TITLES_KEY) || '[]');
+    return new Set(
+      (Array.isArray(raw) ? raw : [])
+        .map((t) => String(t || '').trim().toUpperCase())
+        .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO')
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writePinnedLiveTitleKeys(set) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(OPENED_LIVE_TITLES_KEY, JSON.stringify(Array.from(set)));
+}
+
+function pinLiveTitle(title) {
+  const key = String(title || '').trim().toUpperCase();
+  if (!key || key === 'STAGE PRODUCTION STUDIO') return;
+  const set = readPinnedLiveTitleKeys();
+  set.add(key);
+  writePinnedLiveTitleKeys(set);
+}
+
+function unpinLiveTitles(titles) {
+  const list = Array.isArray(titles) ? titles : [titles];
+  const set = readPinnedLiveTitleKeys();
+  let changed = false;
+  list.forEach((t) => {
+    const key = String(t || '').trim().toUpperCase();
+    if (set.delete(key)) changed = true;
+  });
+  if (changed) writePinnedLiveTitleKeys(set);
+}
+
+export function isTitlePinnedLive(title) {
+  const key = String(title || '').trim().toUpperCase();
+  return Boolean(key && readPinnedLiveTitleKeys().has(key));
+}
+
+function blockedLibraryTitleKeys() {
+  const pinned = readPinnedLiveTitleKeys();
+  return new Set(
+    [...readDeletedTitleKeys(), ...readArchivedTitleKeys()].filter((k) => !pinned.has(k))
+  );
+}
+
 /** True when a title was deleted/archived and must not re-enter the live library. */
 export function isProjectTitleDeleted(title) {
   const key = String(title || '').trim().toUpperCase();
   if (!key || key === 'STAGE PRODUCTION STUDIO') return false;
-  return readDeletedTitleKeys().has(key);
+  return blockedLibraryTitleKeys().has(key);
 }
 
 function readProjectArchive() {
@@ -593,6 +722,7 @@ export function archiveProjectSnapshot(project) {
   );
   writeProjectArchive([entry, ...prev]);
   markProjectTitlesDeleted([title]);
+  import('./projectDiskVault').then((m) => m.removeProjectFromVault(title, 'archived')).catch(() => {});
   return entry;
 }
 
@@ -612,7 +742,7 @@ export function restoreProjectFromArchive(archiveId) {
 
   let library = [];
   try {
-    library = JSON.parse(localStorage.getItem('sps_project_library') || '[]');
+    library = readLocalProjectLibrary();
   } catch (e) {}
   if (!Array.isArray(library)) library = [];
 
@@ -628,22 +758,31 @@ export function restoreProjectFromArchive(archiveId) {
   if (existingIdx >= 0) library[existingIdx] = { ...library[existingIdx], ...restored };
   else library.unshift(restored);
 
-  safeLocalStorageSetItem('sps_project_library', JSON.stringify(library));
+  writeLocalProjectLibrary(library);
   writeProjectArchive(archive.filter((_, i) => i !== idx));
+  import('./projectDiskVault').then((m) => m.restoreProjectToVault(title)).catch(() => {});
   window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   return restored;
 }
 
-/** Permanently remove from Archive (cannot restore). */
+/** Remove from Archive (cannot restore in-app). Disk copy moves to projects/purged/. Title stays tombstoned. */
 export function purgeArchivedProject(archiveId) {
   if (typeof window === 'undefined' || !archiveId) return;
-  writeProjectArchive(readProjectArchive().filter((p) => p.archiveId !== archiveId && p.id !== archiveId));
+  const archive = readProjectArchive();
+  const entry = archive.find((p) => p.archiveId === archiveId || p.id === archiveId);
+  const title = String(entry?.title || '').trim();
+  writeProjectArchive(archive.filter((p) => p.archiveId !== archiveId && p.id !== archiveId));
+  if (title) {
+    markProjectTitlesDeleted([title]);
+    import('./projectDiskVault').then((m) => m.removeProjectFromVault(title, 'purged')).catch(() => {});
+  }
 }
 
 /** Record deleted titles so cloud hydrates cannot resurrect them. */
 export function markProjectTitlesDeleted(titles) {
   if (typeof window === 'undefined') return;
   const list = Array.isArray(titles) ? titles : [titles];
+  unpinLiveTitles(list);
   const set = readDeletedTitleKeys();
   list.forEach((t) => {
     const key = String(t || '').trim().toUpperCase();
@@ -654,37 +793,21 @@ export function markProjectTitlesDeleted(titles) {
 }
 
 /**
- * Apply cloud tombstones carefully: never mark a title deleted if it is still
- * present in the live projects payload (restore / library push wins).
+ * Merge cloud delete tombstones into this device.
+ * Never un-tombstone a title just because a stale cloud library still lists it —
+ * that is what put archived/purged films back in Library.
+ * Titles the user just Open-file'd stay live on this device.
  */
-export function applyCloudDeletedTitles(deletedTitles, liveProjects = []) {
+export function applyCloudDeletedTitles(deletedTitles, _liveProjects = []) {
   if (typeof window === 'undefined') return;
-  const liveKeys = new Set(
-    (Array.isArray(liveProjects) ? liveProjects : [])
-      .map((p) => String(p?.title || '').trim().toUpperCase())
-      .filter(Boolean)
-  );
-  // Active project must never stay tombstoned UNLESS it was explicitly deleted or archived
-  try {
-    const active =
-      localStorage.getItem('sps_active_project_title') ||
-      localStorage.getItem('sps_project_title') ||
-      '';
-    const activeKey = String(active).trim().toUpperCase();
-    const isDeletedOrArchived =
-      isProjectTitleDeleted(activeKey) ||
-      readProjectArchive().some((p) => String(p?.title || '').trim().toUpperCase() === activeKey);
-    if (activeKey && !isDeletedOrArchived) liveKeys.add(activeKey);
-  } catch (e) {}
-
+  const pinned = readPinnedLiveTitleKeys();
   const incoming = (Array.isArray(deletedTitles) ? deletedTitles : [])
     .map((t) => String(t || '').trim().toUpperCase())
-    .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO' && !liveKeys.has(t));
-
-  if (incoming.length) markProjectTitlesDeleted(incoming);
-
-  // Clear tombstones for anything that is live again
-  if (liveKeys.size) clearDeletedTitleKeys(Array.from(liveKeys));
+    .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO' && !pinned.has(t));
+  if (!incoming.length) return;
+  const set = readDeletedTitleKeys();
+  incoming.forEach((t) => set.add(t));
+  localStorage.setItem(DELETED_TITLES_KEY, JSON.stringify(Array.from(set)));
 }
 
 /**
@@ -713,12 +836,23 @@ export function clearDeletedProjectTitles(titles) {
   clearDeletedTitleKeys(titles);
 }
 
+/** Open File / Restore: this title is allowed back into Library (out of Archive + tombstones). */
+export function reviveProjectTitleForOpen(title) {
+  const clean = String(title || '').trim();
+  if (!clean) return;
+  clearDeletedTitleKeys([clean]);
+  const archive = readProjectArchive();
+  const key = clean.toUpperCase();
+  const next = archive.filter((p) => String(p?.title || '').trim().toUpperCase() !== key);
+  if (next.length !== archive.length) writeProjectArchive(next);
+  pinLiveTitle(clean);
+}
+
 export function filterOutDeletedProjects(projects) {
-  const deleted = readDeletedTitleKeys();
-  if (!deleted.size) return Array.isArray(projects) ? projects : [];
+  const blocked = blockedLibraryTitleKeys();
   return (Array.isArray(projects) ? projects : []).filter((p) => {
     const key = projectKey(p);
-    return key && key !== 'STAGE PRODUCTION STUDIO' && !deleted.has(key);
+    return key && key !== 'STAGE PRODUCTION STUDIO' && !blocked.has(key);
   });
 }
 
@@ -739,7 +873,8 @@ function projectRecency(p) {
  * titles (e.g. 002) linger on Owner devices and reappear in allotment UI.
  */
 function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true } = {}) {
-  const deleted = readDeletedTitleKeys();
+  const deleted = blockedLibraryTitleKeys();
+  const pinned = readPinnedLiveTitleKeys();
   const map = new Map();
   const localByKey = new Map();
 
@@ -766,12 +901,11 @@ function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true 
     }
   });
 
-  // Only keep unsynced local drafts when cloud hydrate failed / was skipped
-  if (!cloudAuthoritative) {
-    localByKey.forEach((p, key) => {
-      if (!map.has(key)) map.set(key, p);
-    });
-  }
+  // Cloud membership is SoT except titles this device just Open-file'd / restored.
+  localByKey.forEach((p, key) => {
+    if (map.has(key)) return;
+    if (!cloudAuthoritative || pinned.has(key)) map.set(key, p);
+  });
 
   return Array.from(map.values());
 }
@@ -779,12 +913,8 @@ function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true 
 let healCloudLibraryTimer = null;
 
 async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true } = {}) {
-  const localStr = localStorage.getItem('sps_project_library');
-  let localProjs = [];
-  if (localStr) {
-    try { localProjs = JSON.parse(localStr); } catch (e) {}
-  }
-  if (!Array.isArray(localProjs)) localProjs = [];
+  if (isSelfServeSession()) return readLocalProjectLibrary();
+  const localProjs = readLocalProjectLibrary();
 
   // Durable failed with no usable list — keep local intact (+ disk vault)
   if (!cloudAuthoritative && (!Array.isArray(rawCloudProjects) || rawCloudProjects.length === 0)) {
@@ -801,7 +931,7 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
     return kept;
   }
 
-  const deletedKeys = readDeletedTitleKeys();
+  const deletedKeys = blockedLibraryTitleKeys();
   const cloudHadGhosts = (rawCloudProjects || []).some((p) => deletedKeys.has(projectKey(p)));
   // When durableOk is false, keep local-only drafts (do not treat cloud as full membership SoT)
   const merged = mergeProjectArrays(rawCloudProjects, localProjs, {
@@ -835,14 +965,17 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
 
 // 6. Fetch Latest Project Library from Cloud Database (cloud → local)
 export async function fetchProjectLibraryFromCloud() {
+  if (typeof window !== 'undefined' && isSelfServeSession()) {
+    return readLocalProjectLibrary();
+  }
   // 1. Try Native Vercel Serverless Sync Engine (authoritative when reachable)
   try {
     const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects`);
     if (res.status === 304) {
       // Local library is already up to date with cloud
-      const saved = localStorage.getItem('sps_project_library');
+      const savedLib = readLocalProjectLibrary();
       try {
-        return saved ? filterOutDeletedProjects(JSON.parse(saved)) : [];
+        return filterOutDeletedProjects(savedLib);
       } catch (e) {
         return [];
       }
@@ -856,10 +989,14 @@ export async function fetchProjectLibraryFromCloud() {
       if (data?.durableFailed || data?.projects === null) {
         return processAndStoreProjects([], { cloudAuthoritative: false });
       }
-      if (Array.isArray(data.deletedTitles) && data.deletedTitles.length) {
-        applyCloudDeletedTitles(data.deletedTitles, Array.isArray(data.projects) ? data.projects : []);
-      }
+      applyCloudDeletedTitles(
+        Array.isArray(data.deletedTitles) ? data.deletedTitles : [],
+        Array.isArray(data.projects) ? data.projects : []
+      );
       if (Array.isArray(data.projects)) {
+        if (data.projects.length === 0) {
+          return processAndStoreProjects([], { cloudAuthoritative: false });
+        }
         // Empty cloud library is valid only when durableOk (explicit empty SoT)
         return processAndStoreProjects(data.projects, {
           cloudAuthoritative: data.durableOk !== false
@@ -873,9 +1010,10 @@ export async function fetchProjectLibraryFromCloud() {
     const res = await fetchJsonTimed(`${JSONBLOB_PROJECTS_URL}?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.deletedTitles)) {
-        applyCloudDeletedTitles(data.deletedTitles, Array.isArray(data.projects) ? data.projects : []);
-      }
+      applyCloudDeletedTitles(
+        Array.isArray(data.deletedTitles) ? data.deletedTitles : [],
+        Array.isArray(data.projects) ? data.projects : []
+      );
       if (Array.isArray(data.projects)) {
         return processAndStoreProjects(data.projects);
       }
@@ -907,9 +1045,9 @@ export async function fetchProjectLibraryFromCloud() {
   }
 
   // Cloud unreachable — keep local (non-authoritative)
-  const saved = localStorage.getItem('sps_project_library');
+  const savedLib = readLocalProjectLibrary();
   try {
-    return saved ? filterOutDeletedProjects(JSON.parse(saved)) : [];
+    return filterOutDeletedProjects(savedLib);
   } catch (e) {
     return [];
   }

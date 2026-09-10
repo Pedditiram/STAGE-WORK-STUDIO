@@ -13,6 +13,7 @@
 
 import { sendResend, mailConfigured, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
 import { validateEmail } from './_emailValidator.js';
+import { applyCors, clientIp, rateLimit, requireStudioAdmin, adminSecretConfigured } from './_httpSecurity.js';
 
 const PRIMARY_ADMIN_EMAILS = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
 const PRIMARY_ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
@@ -33,17 +34,28 @@ function isAllowedRecipient(to) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-store');
+  applyCors(req, res, { methods: 'POST, OPTIONS' });
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const body = req.body || {};
+    if (adminSecretConfigured() || process.env.VERCEL) {
+      const admin = requireStudioAdmin(req, { ...body, actor: body.actor || body.authorizedEmail || body.email });
+      if (!admin.ok) {
+        return res.status(admin.status).json({ success: false, emailed: false, error: admin.error });
+      }
+    }
+    const ipLimit = rateLimit(`otp-ip:${clientIp(req)}`, 12, 60 * 60 * 1000);
+    if (!ipLimit.ok) {
+      return res.status(429).json({ success: false, error: `Too many OTP emails. Wait ${ipLimit.waitSec}s.` });
+    }
     const to = normalizeEmail(body.to || body.email);
+    const mailLimit = rateLimit(`otp-to:${to}`, 6, 60 * 60 * 1000);
+    if (!mailLimit.ok) {
+      return res.status(429).json({ success: false, error: `Too many OTP emails to this address. Wait ${mailLimit.waitSec}s.` });
+    }
     const otp = String(body.otp || body.code || '').trim();
     const purpose = String(body.purpose || 'invite').toLowerCase();
     const collaboratorName = String(body.name || '').trim();

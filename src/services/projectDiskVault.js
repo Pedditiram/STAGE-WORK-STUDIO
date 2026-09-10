@@ -193,10 +193,34 @@ export const saveProjectToVault = async (project) => {
   if (!project || typeof project !== 'object') return false;
   const title = String(project.title || '').trim();
   if (!project.id && !title) return false;
+  try {
+    const { isProjectTitleDeleted } = await import('./dbService');
+    if (title && isProjectTitleDeleted(title)) return false;
+  } catch {
+    /* ignore */
+  }
   const ensured = {
     ...project,
+    title,
     id: project.id || `proj_${title.replace(/[^\w.-]+/g, '_').toLowerCase() || Date.now()}`
   };
+
+  try {
+    const { projectLibraryStorageKey } = await import('../utils/tenantScope');
+    const savedLib = localStorage.getItem(projectLibraryStorageKey());
+    const lib = savedLib ? JSON.parse(savedLib) : [];
+    if (Array.isArray(lib)) {
+      const want = title.toLowerCase();
+      const clash = lib.find((p) =>
+        p?.id && p.id === ensured.id && String(p.title || '').trim().toLowerCase() !== want
+      );
+      if (clash) {
+        ensured.id = `proj_${title.replace(/[^\w.-]+/g, '_').toLowerCase() || 'film'}_${Date.now()}`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 
   try {
     const db = await initDiskVaultDB();
@@ -214,18 +238,22 @@ export const saveProjectToVault = async (project) => {
     console.warn('Error saving to IndexedDB Vault:', e);
   }
 
-  // Backup slim mirror to localStorage (full project is on disk)
   try {
-    const savedLib = localStorage.getItem('sps_project_library');
+    const { projectLibraryStorageKey } = await import('../utils/tenantScope');
+    const { isProjectTitleDeleted, filterOutDeletedProjects } = await import('./dbService');
+    if (isProjectTitleDeleted(title)) return false;
+    const savedLib = localStorage.getItem(projectLibraryStorageKey());
     let lib = savedLib ? JSON.parse(savedLib) : [];
+    if (!Array.isArray(lib)) lib = [];
     const slim = slimProjectForLocalMirror(ensured);
-    const idx = lib.findIndex(p => p.id === ensured.id || String(p.title || '').toLowerCase() === String(ensured.title || '').toLowerCase());
+    const want = String(ensured.title || '').trim().toLowerCase();
+    const idx = lib.findIndex((p) => String(p.title || '').trim().toLowerCase() === want);
     if (idx !== -1) {
-      lib[idx] = { ...lib[idx], ...slim };
+      lib[idx] = { ...lib[idx], ...slim, title: ensured.title, id: lib[idx].id || slim.id };
     } else {
       lib.push(slim);
     }
-    safeLocalStorageSetItem('sps_project_library', JSON.stringify(lib.map(slimProjectForLocalMirror)));
+    safeLocalStorageSetItem(projectLibraryStorageKey(), JSON.stringify(filterOutDeletedProjects(lib).map(slimProjectForLocalMirror)));
   } catch (e) {}
 
   // Auto-Save directly to physical local disk folder (shared by browser Vite + Electron)
@@ -244,6 +272,73 @@ export const saveProjectToVault = async (project) => {
 
   return true;
 };
+
+/** Remove a title from the live vault (IndexedDB + projects/*.json) without erasing the film. */
+export async function removeProjectFromVault(title, shelf = 'archived') {
+  const clean = String(title || '').trim();
+  if (!clean) return false;
+  const dest = String(shelf || '').toLowerCase() === 'purged' ? 'purged' : 'archived';
+  const want = clean.toLowerCase();
+
+  try {
+    const db = await initDiskVaultDB();
+    if (db) {
+      const rows = await new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      (Array.isArray(rows) ? rows : []).forEach((p) => {
+        if (String(p?.title || '').trim().toLowerCase() === want && p.id) {
+          try { store.delete(p.id); } catch { /* ignore */ }
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Error removing from IndexedDB Vault:', e);
+  }
+
+  try {
+    const api = electronVaultApi();
+    if (api?.deleteProjectFromDisk) {
+      await api.deleteProjectFromDisk(clean, dest);
+    } else {
+      await fetch('/api/delete-project-disk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: clean, shelf: dest })
+      }).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('Error shelving project on disk:', e);
+  }
+
+  return true;
+}
+
+/** Move an archived film back to live projects/ (JSON + poster). */
+export async function restoreProjectToVault(title) {
+  const clean = String(title || '').trim();
+  if (!clean) return false;
+  try {
+    const api = electronVaultApi();
+    if (api?.restoreProjectFromDisk) {
+      await api.restoreProjectFromDisk(clean);
+    } else {
+      await fetch('/api/restore-project-disk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: clean })
+      }).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('Error restoring project on disk:', e);
+  }
+  return true;
+}
 
 async function fetchDiskProjects() {
   const api = electronVaultApi();
@@ -368,7 +463,13 @@ export const loadProjectsFromVault = async () => {
     console.warn('Error fetching physical disk projects:', e);
   }
 
-  return Array.from(projectsMap.values());
+  const list = Array.from(projectsMap.values());
+  try {
+    const { filterOutDeletedProjects } = await import('./dbService');
+    return filterOutDeletedProjects(list);
+  } catch {
+    return list;
+  }
 };
 
 export async function loadUiPrefsFromDisk() {
@@ -490,11 +591,27 @@ export const importProjectPackageFromFile = (file) => {
         const content = e.target.result;
         const parsed = JSON.parse(content);
 
-        const projectData = parsed.project || parsed;
+        const projectData = parsed.project && typeof parsed.project === 'object'
+          ? parsed.project
+          : parsed;
 
         if (!projectData || !Array.isArray(projectData.shots)) {
           reject(new Error('Invalid SPS project file format. Missing shots data.'));
           return;
+        }
+
+        const title = String(projectData.title || projectData.projectTitle || '').trim();
+        if (!title) {
+          reject(new Error('That file has no project title. Open a Stage Work Studio project JSON.'));
+          return;
+        }
+        projectData.title = title;
+
+        try {
+          const { reviveProjectTitleForOpen } = await import('./dbService');
+          reviveProjectTitleForOpen(title);
+        } catch {
+          /* ignore */
         }
 
         if (projectData.directorPsychology && projectData.title) {

@@ -387,7 +387,7 @@ export function purgeScreenplayArchiveEntry(id) {
   return writeArchive(loadScreenplayArchive().filter((a) => a.id !== id));
 }
 
-export function persistLiveScreenplay(text) {
+export function persistLiveScreenplay(text, title) {
   if (typeof window === 'undefined') return;
   try {
     const email = String(localStorage.getItem('sps_authorized_user_email') || '').trim();
@@ -398,7 +398,31 @@ export function persistLiveScreenplay(text) {
   } catch {
     /* ignore */
   }
-  writeOpenScreenplayText(text, { silent: true });
+  writeOpenScreenplayText(text, { silent: true, title });
+}
+
+function slugScreenplayTitle(title) {
+  const s = String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  return s || '';
+}
+
+function activeScreenplayTitle(explicit) {
+  const t = String(explicit || '').trim();
+  if (t) return t;
+  try {
+    return String(localStorage.getItem('sps_current_project_title') || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function titledScreenplayKey(title) {
+  const slug = slugScreenplayTitle(activeScreenplayTitle(title));
+  return slug ? `sps_open_screenplay_text::${slug}` : OPEN_SCREENPLAY_SOT_KEY;
 }
 
 /** P103 — Canonical open-screenplay SoT (legacy live/current are write-through mirrors). */
@@ -419,16 +443,27 @@ function readLegacyScreenplayPair() {
   }
 }
 
-/** Prefer SoT key; migrate from live/current once if needed. */
-export function readOpenScreenplayText() {
+/** Prefer per-title SoT. Empty pad for this film is not filled from another title. */
+export function readOpenScreenplayText(title) {
   if (typeof window === 'undefined') return '';
   try {
-    const sot = String(localStorage.getItem(OPEN_SCREENPLAY_SOT_KEY) || '');
-    if (sot) return sot;
-    const legacy = readLegacyScreenplayPair();
-    if (legacy) {
-      writeOpenScreenplayText(legacy, { silent: true });
-      return legacy;
+    const key = titledScreenplayKey(title);
+    const own = localStorage.getItem(key);
+    if (own !== null) return String(own);
+    const requested = activeScreenplayTitle(title);
+    const active = activeScreenplayTitle('');
+    const sameFilm = slugScreenplayTitle(requested) === slugScreenplayTitle(active);
+    if (sameFilm && key !== OPEN_SCREENPLAY_SOT_KEY) {
+      const sot = String(localStorage.getItem(OPEN_SCREENPLAY_SOT_KEY) || '');
+      if (sot) {
+        localStorage.setItem(key, sot);
+        return sot;
+      }
+      const legacy = readLegacyScreenplayPair();
+      if (legacy) {
+        writeOpenScreenplayText(legacy, { silent: true, title: requested });
+        return legacy;
+      }
     }
     return '';
   } catch {
@@ -436,17 +471,19 @@ export function readOpenScreenplayText() {
   }
 }
 
-/** Write SoT + keep legacy mirrors in sync for older readers. */
-export function writeOpenScreenplayText(text, { silent = false } = {}) {
+/** Write the active film's screenplay. Other titles keep their own pads. */
+export function writeOpenScreenplayText(text, { silent = false, title } = {}) {
   if (typeof window === 'undefined') return;
   const payload = String(text || '');
   try {
+    const key = titledScreenplayKey(title);
+    localStorage.setItem(key, payload);
     localStorage.setItem(OPEN_SCREENPLAY_SOT_KEY, payload);
     localStorage.setItem(LEGACY_LIVE_SCREENPLAY_KEY, payload);
     localStorage.setItem(LEGACY_CURRENT_SCREENPLAY_KEY, payload);
     if (!silent) {
       window.dispatchEvent(
-        new CustomEvent('sps_screenplay_updated', { detail: { source: 'open_screenplay_write' } })
+        new CustomEvent('sps_screenplay_updated', { detail: { source: 'open_screenplay_write', title: activeScreenplayTitle(title) } })
       );
     }
   } catch {

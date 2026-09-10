@@ -71,7 +71,7 @@ export default function DesktopTrialAdminSection() {
 
   return (
     <div className="p-2.5 rounded-lg border border-amber-500/30 bg-zinc-900/80 space-y-2">
-      <p className="text-[10px] uppercase tracking-widest text-amber-400 m-0">Desktop trial requests</p>
+      <p className="text-[10px] uppercase tracking-widest text-amber-400 m-0">App download requests</p>
       <p className="text-[11px] text-zinc-400 m-0 leading-relaxed">
         Email request → you are notified → Approve emails the same address a tokenized download link.
         Do not upload the ~500MB .app to Vercel. Host a GitHub Release (or signed HTTPS URL) and paste it below.
@@ -103,7 +103,7 @@ export default function DesktopTrialAdminSection() {
       </div>
 
       {pending.length === 0 ? (
-        <p className="text-[11px] text-zinc-500 m-0">No pending desktop trial requests.</p>
+        <p className="text-[11px] text-zinc-500 m-0">No pending app download requests.</p>
       ) : (
         <div className="space-y-2 max-h-56 overflow-y-auto">
           {pending.map((r) => (

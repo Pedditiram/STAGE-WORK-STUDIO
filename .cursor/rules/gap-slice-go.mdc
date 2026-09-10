@@ -1,0 +1,24 @@
+---
+description: StageWorks master-spec gap slices — continue with "go" (or "goo")
+alwaysApply: true
+---
+
+# Gap slice command: `go`
+
+When the user says **go** (also accept typos like **goo**), read `docs/STAGEWORKS_MASTER_SPEC_GAP_ANALYSIS.md` → **Recommended next slice**. If it says **STOP** / complete, **do not ship** (no Pull stack, no invented slice). Reply that `go` is closed and Stage polish is held. Director’s 3D Stage polish is **held**; do not use `go` for Stage. Resume Stage only if the user says **lets complete 3d stage pending works**.
+
+The P439–P457 Pull `disabled`/`filename`/`empty` stack is **closed**. Do not resume it.
+
+## Protocol
+
+1. Read the gap doc’s latest **Recommended next slice** (after the highest `### P##` section).
+2. If it is **STOP** / complete: stop. Otherwise implement those three items using existing export/lifecycle/room patterns (Advise/Strict, `assertExportAllowed` / `exportDownloadText` / ZIP via `createZipArchive` + `saveExportBlob` with `skipLifecycleCheck` + `advisoryAlready`).
+3. Mark items **Done** under a new `### P##` section; bump **Recommended next slice**.
+4. Do **not** commit unless the user asks.
+5. Preserve: Project Console, Writer, Matrix/Form, Character, World, Compile, Generate, Stage, BYOK, one-active-project isolation.
+6. Owner `pedditiram@gmail.com` is always Enterprise (see SaaS rule).
+7. Do **not** resume the Matrix/Generate `title` restore vs dedupe loop (closed at P403). Do **not** resume the Pull stack (closed at P457). If the user says keep completing without **go**, ship consecutive Recommended slices in one turn until they stop you — unless Recommended next slice is STOP.
+
+## Reply shape
+
+If stopped: say `go` is complete; Stage polish remains held; no next three. Otherwise: short table of what shipped + where; end with gap progress and the next recommended three. Invite **go** unless the user asked to continue without **go**.

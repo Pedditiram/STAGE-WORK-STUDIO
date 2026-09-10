@@ -186,7 +186,8 @@ export function buildComfyPromptGraph(contract) {
         height: Number(params.height) || 1080,
         fps: Number(params.fps) || 24,
         seed: Number(params.seed) || -1,
-        workflow_type: c.workflowType || ''
+        workflow_type: c.workflowType || '',
+        system_instruction: link(ids.PROMPT, 2)
       },
       video ? 'SWS Video Provider' : 'SWS Image Provider'
     ),
@@ -211,7 +212,8 @@ export function buildComfyPromptGraph(contract) {
             template: c.workflowType,
             templateVersion: c.templateVersion,
             generatedBy: 'SWS',
-            directorStage: c.directorStage || null
+            directorStage: c.directorStage || null,
+            systemInstruction: c.systemInstruction || ''
           }
         })
       },
@@ -228,7 +230,8 @@ export function buildComfyPromptGraph(contract) {
         template_version: c.templateVersion || '',
         sws_workflow_version: SWS_WORKFLOW_CONTRACT_VERSION,
         provider: c.provider || '',
-        model: c.model || ''
+        model: c.model || '',
+        system_instruction: c.systemInstruction || ''
       },
       'SWS Metadata'
     )
@@ -257,7 +260,8 @@ export function buildWorkflowManifest(contract, { workflowId, validation } = {})
     reference_dependencies: refs,
     required_custom_nodes: Object.values(SWS_COMFY_NODE_CLASSES),
     created_at: new Date().toISOString(),
-    validation: validation || null
+    validation: validation || null,
+    systemInstruction: String(contract.systemInstruction || '').trim()
   };
 }
 
@@ -283,7 +287,8 @@ export function buildComfyExportBundle(contract, { objectInfo } = {}) {
     template: contract.workflowType,
     generatedAt: manifest.created_at,
     generatedBy: 'SWS',
-    workflowId
+    workflowId,
+    systemInstruction: String(contract.systemInstruction || '').trim()
   };
   const frontend = apiPromptToFrontendWorkflow(prompt, { objectInfo, extra: { sws: swsExtra } });
   const workflowUi = frontend;

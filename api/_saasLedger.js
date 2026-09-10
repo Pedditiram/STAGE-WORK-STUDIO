@@ -50,22 +50,69 @@ export function writeLedger(list) {
   }
 }
 
-export function getOrCreateRow(email) {
+export function findRow(email) {
   const clean = String(email || '').trim().toLowerCase();
   const list = readLedger();
   const idx = list.findIndex((l) => l.email === clean);
-  const row = idx >= 0
-    ? list[idx]
-    : {
-        email: clean,
-        plan: isOwner(clean) ? 'enterprise' : 'studio',
-        status: 'ACTIVE',
-        apiMode: 'byok',
-        credits: isOwner(clean) ? 999999 : 25000,
-        devices: [],
-        heartbeats: [],
-      };
-  return { list, idx, row, clean };
+  return { list, idx, row: idx >= 0 ? list[idx] : null, clean };
+}
+
+export function getOrCreateRow(email) {
+  const found = findRow(email);
+  if (found.row) return found;
+  const row = {
+    email: found.clean,
+    plan: isOwner(found.clean) ? 'enterprise' : 'trial',
+    status: 'ACTIVE',
+    apiMode: 'byok',
+    credits: isOwner(found.clean) ? 999999 : 50,
+    devices: [],
+    heartbeats: [],
+  };
+  return { list: found.list, idx: -1, row, clean: found.clean };
+}
+
+/** First device may register; later unknown device ids are ignored. */
+export function rememberDevice(row, deviceId) {
+  if (!row) return row;
+  const id = String(deviceId || '').trim();
+  if (!id) return row;
+  const devices = Array.isArray(row.devices) ? row.devices : [];
+  const now = new Date().toISOString();
+  const existing = devices.find((x) => x.id === id);
+  if (existing) {
+    existing.lastSeen = now;
+  } else if (devices.length === 0) {
+    devices.push({ id, lastSeen: now, status: 'ACTIVE' });
+  }
+  row.devices = devices;
+  return row;
+}
+
+export function assertManagedAccount(email, deviceId) {
+  const found = findRow(email);
+  if (!found.row) {
+    return { ok: false, status: 403, error: 'Unknown account.' };
+  }
+  const row = found.row;
+  if (row.status === 'DISABLED' || row.status === 'REVOKED') {
+    return { ok: false, status: 403, error: 'License revoked.' };
+  }
+  if (String(row.apiMode || '') !== 'managed') {
+    return { ok: false, status: 403, error: 'Studio-key generate is off. Use BYOK or buy credits.' };
+  }
+  const devices = Array.isArray(row.devices) ? row.devices : [];
+  const id = String(deviceId || '').trim();
+  if (devices.length > 0) {
+    const d = devices.find((x) => x.id === id);
+    if (!d) {
+      return { ok: false, status: 403, error: 'This device is not registered for managed generate.' };
+    }
+    if (String(d.status || '').toUpperCase() === 'DISABLED') {
+      return { ok: false, status: 403, error: 'This device was deactivated.' };
+    }
+  }
+  return { ok: true, ...found };
 }
 
 export function saveRow(list, idx, row) {
@@ -90,9 +137,13 @@ export function checkServerRate(email, planId) {
 }
 
 export function consumeServerCredits(email, n = 1) {
-  const { list, idx, row, clean } = getOrCreateRow(email);
+  const found = findRow(email);
+  if (!found.row) return { ok: false, error: 'Unknown account' };
+  const { list, idx, row, clean } = found;
+  if (String(row.apiMode || '') !== 'managed') {
+    return { ok: false, error: 'Managed credits are not enabled' };
+  }
   if (isOwner(clean)) return { ok: true, credits: row.credits, skipped: true };
-  if (row.apiMode !== 'managed') return { ok: true, credits: row.credits, skipped: true };
   const cost = Math.max(1, Math.floor(Number(n) || 1));
   if ((row.credits || 0) < cost) return { ok: false, error: 'No managed credits' };
   row.credits = Math.max(0, (row.credits || 0) - cost);
@@ -113,7 +164,7 @@ export function grantFromStripeSession(session) {
   }
   if (sid) row.stripeSessions = [...seen, sid].slice(-80);
   row.credits = (row.credits || 0) + pack.credits;
-  row.apiMode = row.apiMode || 'managed';
+  row.apiMode = 'managed';
   saveRow(list, idx, row);
   return { ok: true, credits: row.credits, email, granted: pack.credits, pack: pack.id };
 }

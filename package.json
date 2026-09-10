@@ -34,6 +34,9 @@
     "copyright": "Copyright © 2026 Stage Work Studio",
     "npmRebuild": false,
     "nodeGypRebuild": false,
+    "asar": true,
+    "compression": "maximum",
+    "removePackageScripts": true,
     "beforeBuild": "./scripts/electron-before-build.js",
     "electronLanguages": [
       "en"
@@ -87,7 +90,9 @@
       "electron-preload.js",
       "src/utils/factoryResetFs.cjs",
       "src/utils/projectAssetRootsFs.cjs",
+      "src/utils/projectShelfFs.cjs",
       "!**/*.map",
+      "!**/*.md",
       "!**/node_modules/**",
       "!docs/**",
       "!projects/**",

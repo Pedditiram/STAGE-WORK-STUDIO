@@ -37,12 +37,10 @@ import {
   resolveReleaseUrl,
   writeTrialState,
 } from './_desktopTrialStore.js';
+import { allowlistedCheckoutOrigin, applyCors, requireStudioAdmin } from './_httpSecurity.js';
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
+function cors(req, res) {
+  applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
 }
 
 function normalizeEmail(value) {
@@ -88,12 +86,7 @@ function isSaasAdmin(email) {
 function publicOrigin(req, body) {
   const fromEnv = String(process.env.SPS_PUBLIC_ORIGIN || '').replace(/\/$/, '');
   if (fromEnv) return fromEnv;
-  const fromBody = String(body?.origin || '').replace(/\/$/, '');
-  if (fromBody.startsWith('http')) return fromBody;
-  const proto = String(req.headers?.['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0].trim();
-  if (host) return `${proto}://${host}`;
-  return 'https://www.stageworkstudio.com';
+  return allowlistedCheckoutOrigin(body?.origin || '');
 }
 
 function publicize(row) {
@@ -122,7 +115,7 @@ function findByEmail(state, email) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
@@ -154,8 +147,9 @@ export default async function handler(req, res) {
     }
 
     if (action === 'list' && req.method === 'POST') {
-      if (!isSaasAdmin(body.actor)) {
-        return res.status(403).json({ success: false, error: 'Only the studio admin can list trial requests.' });
+      const admin = requireStudioAdmin(req, body);
+      if (!admin.ok) {
+        return res.status(admin.status).json({ success: false, error: admin.error });
       }
       const { state, backend } = await readTrialState();
       const release = resolveReleaseUrl(state);
@@ -172,8 +166,9 @@ export default async function handler(req, res) {
     }
 
     if (action === 'set-release-url' && req.method === 'POST') {
-      if (!isSaasAdmin(body.actor)) {
-        return res.status(403).json({ success: false, error: 'Only the studio admin can set the desktop release URL.' });
+      const admin = requireStudioAdmin(req, body);
+      if (!admin.ok) {
+        return res.status(admin.status).json({ success: false, error: admin.error });
       }
       const url = String(body.releaseUrl || '').trim();
       if (url && !isHttpsUrl(url)) {
@@ -230,7 +225,7 @@ async function createRequest(req, res, body) {
       duplicate: true,
       emailed: Boolean(existing.adminEmailed),
       configured: mailConfigured(),
-      message: 'This email already has a pending desktop trial request. The owner will follow up at the same address.',
+      message: 'This email already has a pending app download request. The owner will follow up at the same address.',
     });
   }
   if (existing && existing.status === 'approved') {
@@ -240,7 +235,7 @@ async function createRequest(req, res, body) {
       duplicate: true,
       alreadyApproved: true,
       configured: mailConfigured(),
-      message: 'This email already has an approved desktop trial. Check that inbox, or ask the owner to resend the download from Settings → SaaS.',
+      message: 'This email already has an approved app download. Check that inbox, or ask the owner to resend the download from Settings → SaaS.',
     });
   }
 
@@ -253,7 +248,7 @@ async function createRequest(req, res, body) {
     name,
     email,
     org,
-    why: why || 'I would like a desktop trial of Stage Work Studio.',
+    why: why || 'I would like to download the Stage Work Studio app.',
     status: 'approved', // Pre-approved so personal token is immediately valid for the applicant
     createdAt: new Date().toISOString(),
     decidedAt: new Date().toISOString(),
@@ -279,7 +274,7 @@ async function createRequest(req, res, body) {
 
 Thank you for requesting access to Stage Work Studio!
 
-We have received your application for download trial.
+We have received your application to download the app.
 
 Your access is currently being provisioned. If you have any specific requirements or questions regarding your production slate, please feel free to let us know.
 
@@ -293,7 +288,7 @@ https://www.stageworkstudio.com`;
 
 Thank you for your interest in Stage Work Studio!
 
-Your desktop trial has been approved. You can download the application using your personal, secure link below:
+Your app download has been approved. You can download the application using your personal, secure link below:
 ${directDownloadUrl}
 
 (Note: This personal link is valid for 7 days and up to 5 downloads. Sign in with ${record.email} after launch.)
@@ -308,15 +303,15 @@ Stage Work Studio Administration
 admin@stageworkstudio.com
 https://www.stageworkstudio.com`;
 
-  const mailtoSubject = encodeURIComponent('Stage Work Studio — Download Trial Access');
+  const mailtoSubject = encodeURIComponent('Stage Work Studio — Download App Access');
   const mailtoUrl = `mailto:${encodeURIComponent(record.email)}?subject=${mailtoSubject}&body=${encodeURIComponent(titanReplyBody)}`;
-  const mailtoApproveUrl = `mailto:${encodeURIComponent(record.email)}?subject=${encodeURIComponent('Your Stage Work Studio Desktop Trial Access')}&body=${encodeURIComponent(titanApprovalBody)}`;
+  const mailtoApproveUrl = `mailto:${encodeURIComponent(record.email)}?subject=${encodeURIComponent('Your Stage Work Studio App Download')}&body=${encodeURIComponent(titanApprovalBody)}`;
 
-  const subject = `[Stage Work Studio] Desktop Trial Request: ${record.name} (${record.email})`;
+  const subject = `[Stage Work Studio] App Download Request: ${record.name} (${record.email})`;
   const html = `
     <div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:580px;margin:0 auto;padding:24px;background:#0b0a09;color:#f4ecde;border:1px solid #3f3a34;border-radius:12px;">
       <p style="margin:0 0 6px;color:#c9a36a;font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;">Stage Work Studio · Admin Alert</p>
-      <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#fff;">New Desktop Trial Request</h1>
+      <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#fff;">New App Download Request</h1>
 
       <div style="background:#171411;border:1px solid #2e2820;border-radius:8px;padding:16px;margin-bottom:20px;">
         <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#c9a36a;">Name:</strong> ${escapeHtml(record.name)}</p>
@@ -351,7 +346,7 @@ https://www.stageworkstudio.com`;
       </p>
     </div>
   `;
-  const text = `Stage Work Studio desktop trial request\n\nName: ${record.name}\nEmail: ${record.email}\nOrg: ${record.org || '—'}\n\n${record.why}\n\nPre-minted download URL:\n${directDownloadUrl}\n\nReply from admin@stageworkstudio.com using Titan Email.`;
+  const text = `Stage Work Studio app download request\n\nName: ${record.name}\nEmail: ${record.email}\nOrg: ${record.org || '—'}\n\n${record.why}\n\nPre-minted download URL:\n${directDownloadUrl}\n\nReply from admin@stageworkstudio.com using Titan Email.`;
 
   // Dual delivery to both official studio mailbox and owner account
   const notifyRecipients = ['admin@stageworkstudio.com', 'pedditiram@gmail.com'];
@@ -401,13 +396,14 @@ https://www.stageworkstudio.com`;
     configured: mailConfigured(),
     durable: wrote.durable,
     backend: wrote.backend || backend,
-    message: 'Thank you for requesting access to Stage Work Studio! We have received your application for download trial. Your access is currently being provisioned.',
+    message: 'Thank you for requesting access to Stage Work Studio! We have received your application to download the app. Your access is currently being provisioned.',
   });
 }
 
 async function decide(req, res, body, status) {
-  if (!isSaasAdmin(body.actor)) {
-    return res.status(403).json({ success: false, error: 'Only the studio admin can approve or deny trial requests.' });
+  const admin = requireStudioAdmin(req, body);
+  if (!admin.ok) {
+    return res.status(admin.status).json({ success: false, error: admin.error });
   }
   const id = String(body.requestId || body.id || '').trim();
   if (!id) return res.status(400).json({ success: false, error: 'requestId required' });
@@ -438,9 +434,9 @@ async function decide(req, res, body, status) {
     row.tokenExp = null;
     requesterSend = await sendResend({
       to: row.email,
-      subject: 'Stage Work Studio — desktop trial not approved',
-      text: `Hi${row.name ? ` ${row.name}` : ''},\n\nThe studio admin did not approve a desktop trial for ${row.email} at this time. You can request again later or write ${adminInbox()}.\n\n— Stage Work Studio`,
-      html: `<p>Hi${row.name ? ` ${escapeHtml(row.name)}` : ''},</p><p>The studio admin did not approve a desktop trial for ${escapeHtml(row.email)} at this time.</p><p>— Stage Work Studio</p>`,
+      subject: 'Stage Work Studio — app download not approved',
+      text: `Hi${row.name ? ` ${row.name}` : ''},\n\nThe studio admin did not approve an app download for ${row.email} at this time. You can request again later or write ${adminInbox()}.\n\n— Stage Work Studio`,
+      html: `<p>Hi${row.name ? ` ${escapeHtml(row.name)}` : ''},</p><p>The studio admin did not approve an app download for ${escapeHtml(row.email)} at this time.</p><p>— Stage Work Studio</p>`,
     });
     row.requesterEmailed = Boolean(requesterSend.emailed);
   }
@@ -465,8 +461,9 @@ async function decide(req, res, body, status) {
 }
 
 async function resendApproved(req, res, body) {
-  if (!isSaasAdmin(body.actor)) {
-    return res.status(403).json({ success: false, error: 'Only the studio admin can resend download mail.' });
+  const admin = requireStudioAdmin(req, body);
+  if (!admin.ok) {
+    return res.status(admin.status).json({ success: false, error: admin.error });
   }
   const id = String(body.requestId || body.id || '').trim();
   const { state } = await readTrialState();

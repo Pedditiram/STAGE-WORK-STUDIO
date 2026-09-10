@@ -2391,10 +2391,238 @@ Stage, SaaS                     Review → Continuity → Export
 2. Comfy: after Send, offer Pull latest if history already has a viewable output — **Done** (`offerPullLatest`, `SwsComfyWorkflowModal.jsx`)  
 3. Comfy: SWS Prompt Python returns `system_instruction` as a third output (not dropped) — **Done** (`SWSPrompt` in `sws_nodes.py`, `SWS_NODE_IO` in `swsComfyFrontend.js`)  
 
+### P412 — Class inventory · empty Pull hint · Video Provider system_instruction
+1. Comfy: Debug panel lists `installedClassCount` next to missing required class names — **Done** (`classInventory` / `missingRequiredClasses` in `debugPanel`; `missingComfyClassStatusLine` includes count beside missing names)  
+2. Comfy: Pull latest disabled hint when history is empty after Send — **Done** (`offerPullLatestFromHistoryPeek`, `SwsComfyWorkflowModal.jsx`)  
+3. Comfy: SWS Video Provider accepts optional `system_instruction` from Prompt slot 2 — **Done** (`SWSVideoProvider` in `sws_nodes.py`, `link(ids.PROMPT, 2)` in `swsComfyJson.js`)  
+
+### P413 — Film-queue inventory · Pull version · Image Provider system_instruction
+1. Comfy: film-queue progress lists `installedClassCount` next to missing required class names — **Done** (`classInventory` / `installedClassCount` on `runComfyFilmQueue` progress; `formatComfyClassInventory`)  
+2. Comfy: empty-history Pull hint includes ComfyUI version — **Done** (`offerPullLatestFromHistoryPeek(..., { comfyuiVersion })`)  
+3. Comfy: SWS Image Provider accepts optional `system_instruction` from Prompt slot 2 — **Done** (`SWSImageProvider` in `sws_nodes.py`, `link(ids.PROMPT, 2)` in `swsComfyJson.js`)  
+
+### P414 — Success inventory · has-file Pull version · Output extra_json
+1. Comfy: film-queue success progress lists `installedClassCount` when all required classes are present — **Done** (`reportProgress` spreads `classInventory` onto assembling/succeeded)  
+2. Comfy: Pull-latest has-file offer includes ComfyUI version — **Done** (`offerPullLatestFromHistoryPeek` hint)  
+3. Comfy: SWS Output extra_json records `system_instruction` without folding into prompt — **Done** (`sws.systemInstruction` in `swsComfyJson.js`; `SWSOutput` in `sws_nodes.py`)  
+
+### P415 — Queue version · Debug Pull version · Metadata system_instruction
+1. Comfy: film-queue progress includes ComfyUI version next to classInventory — **Done** (`formatComfyClassInventoryWithVersion` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists Pull-latest offer `comfyuiVersion` after Send — **Done** (`debugPanel.pullLatestOffer` in `SwsComfyWorkflowModal.jsx`)  
+3. Comfy: SWS Metadata records `system_instruction` without folding into prompt — **Done** (`SWSMetadata` in `sws_nodes.py`; metadata node in `swsComfyJson.js`)  
+
+### P416 — Result payload · Pull fileVersion · Manifest systemInstruction
+1. Comfy: film-queue result payload lists `comfyuiVersion` next to classInventory — **Done** (`runComfyFilmQueue` return; finished status in `SwsComfyWorkflowModal.jsx`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to comfyuiVersion — **Done** (`fileVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS workflow manifest records `systemInstruction` without folding into prompt — **Done** (`buildWorkflowManifest` in `swsComfyJson.js`)  
+
+### P417 — Early queue inventory · empty next to fileVersion · export extra.sws
+1. Comfy: film-queue unreachable/empty results still include `comfyuiVersion` next to classInventory — **Done** (`filmQueueEarlyResult` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to fileVersion — **Done** (`emptyFileVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS export `extra.sws` records `systemInstruction` without folding into prompt — **Done** (`swsExtra` in `buildComfyExportBundle`)  
+
+### P418 — Cancelled inventory · disabled next to emptyFileVersion · clapboard vs systemInstruction
+1. Comfy: film-queue cancelled result includes `comfyuiVersion` next to classInventory — **Done** (`filmQueueCancelledRow` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFileVersion — **Done** (`disabledFileVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard label stays separate from `systemInstruction` — **Done** (`clapboardSidecarJson` in `shotClapboard.js`)  
+
+### P419 — Failed inventory · filename next to disabledFileVersion · CSV clapboard
+1. Comfy: film-queue failed result rows include `comfyuiVersion` next to classInventory — **Done** (`filmQueueFailedRow` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to disabledFileVersion — **Done** (`filenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS Resolve CSV clapboard column stays separate from `systemInstruction` — **Done** (`clapboardResolveCsv` System Instruction column)  
+
+### P420 — Succeeded inventory · empty next to filenameDisabledVersion · EDL
+1. Comfy: film-queue succeeded result rows include `classInventory` next to comfyuiVersion — **Done** (`filmQueueSucceededRow` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to filenameDisabledVersion — **Done** (`emptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS Resolve EDL stays separate from `systemInstruction` — **Done** (`clapboardResolveEdl` COMMENT SYSTEM line)  
+
+### P421 — Succeeded progress inventory · disabled next to emptyFilenameDisabledVersion · Resolve JSON
+1. Comfy: film-queue succeeded progress includes `classInventory` next to comfyuiVersion — **Done** (`formatFilmProgressInventory` / `inventoryVersion` in `comfyuiClient.js`, `comfyFilmQueue.js`, `SwsComfyWorkflowModal.jsx`)  
+2. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFilenameDisabledVersion — **Done** (`disabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS Resolve pack JSON clapboards stay separate from `systemInstruction` — **Done** (`buildResolvePackFiles` clapboards.json + sidecars)
+
+### P422 — Failed progress inventory · filename next to disabledEmptyFilenameDisabledVersion · Resolve README
+1. Comfy: film-queue failed progress includes `classInventory` next to comfyuiVersion — **Done** (`inventoryVersion` on `filmQueueFailedRow` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to disabledEmptyFilenameDisabledVersion — **Done** (`filenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS Resolve pack README stays free of `systemInstruction` — **Done** (`resolvePackReadme` in `shotClapboard.js`)
+
+### P423 — Cancelled progress inventory · empty next to filenameDisabledEmptyFilenameDisabledVersion · Resolve filenames
+1. Comfy: film-queue cancelled progress includes `classInventory` next to comfyuiVersion — **Done** (`inventoryVersion` on `filmQueueCancelledRow` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to filenameDisabledEmptyFilenameDisabledVersion — **Done** (`emptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS Resolve pack filenames stay free of `systemInstruction` — **Done** (`resolvePackFilename` in `shotClapboard.js`)
+
+### P424 — Early inventoryVersion · disabled next to emptyFilenameDisabledEmptyFilenameDisabledVersion · clapboard stems
+1. Comfy: film-queue early result includes `classInventory` next to comfyuiVersion as `inventoryVersion` — **Done** (`filmQueueEarlyResult` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`disabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `fileStem` / `videoFilename` stay free of `systemInstruction` — **Done** (`clapboardFileNames` / `omitSystemInstruction` in `shotClapboard.js`)
+
+### P425 — Missing-nodes inventoryVersion · filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · workflow/sidecar
+1. Comfy: film-queue missing-nodes result includes `classInventory` next to comfyuiVersion as `inventoryVersion` — **Done** (`filmQueueMissingNodesResult` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `workflowFilename` / `sidecarFilename` stay free of `systemInstruction` — **Done** (`clapboardWorkflowSidecarNames` in `shotClapboard.js`)
+
+### P426 — Final inventoryVersion · empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · display ids
+1. Comfy: film-queue final result includes `classInventory` next to comfyuiVersion as `inventoryVersion` — **Done** (`filmQueueFinalResult` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `displayName` / `shotId` stay free of `systemInstruction` — **Done** (`clapboardDisplayIds` in `shotClapboard.js`)
+
+### P427 — Progress JSDoc inventoryVersion · disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · project/scene
+1. Comfy: film-queue progress JSDoc lists `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`FILM_QUEUE_PROGRESS_KEYS` / `runComfyFilmQueue` JSDoc in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `projectId` / `sceneId` stay free of `systemInstruction` — **Done** (`clapboardProjectSceneIds` in `shotClapboard.js`)
+
+### P428 — classFields inventoryVersion · filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · label/duration
+1. Comfy: film-queue `classFields` comment lists `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`FILM_QUEUE_CLASS_FIELDS_KEYS` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `label` / `durationLabel` stay free of `systemInstruction` — **Done** (`clapboardLabelText` in `shotClapboard.js`)
+
+### P429 — reportProgress inventoryVersion · empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · scene/shot nums
+1. Comfy: film-queue `reportProgress` comment lists `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`FILM_QUEUE_REPORT_PROGRESS_KEYS` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `sceneNum` / `shotNum` stay free of `systemInstruction` — **Done** (`clapboardSceneShotNums` in `shotClapboard.js`)
+
+### P430 — Assembling inventoryVersion · disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · durationSec
+1. Comfy: film-queue assembling progress keeps `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`filmQueueAssemblingProgress` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard `durationSec` stays free of `systemInstruction` — **Done** (`clapboardDurationSec` in `shotClapboard.js`)
+
+### P431 — Loading inventoryVersion · filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · sidecar durationSec
+1. Comfy: film-queue loading progress keeps `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`filmQueueLoadingProgress` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard sidecar `durationSec` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardDurationSec` after extra)
+
+### P432 — Generating inventoryVersion · empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · sidecar fileStem
+1. Comfy: film-queue generating progress keeps `inventoryVersion` next to `classInventory` / `comfyuiVersion` — **Done** (`filmQueueGeneratingProgress` in `comfyFilmQueue.js`)  
+2. Comfy: Debug panel lists pullLatestOffer.empty next to filenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: SWS clapboard sidecar `fileStem` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` forces `fileStem` after extra)
+
+### P433 — disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion · sidecar videoFilename · sidecar projectId
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to emptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion — **Done** (`disabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledEmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `videoFilename` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` forces `videoFilename` after extra)  
+3. Comfy: SWS clapboard sidecar `projectId` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardProjectSceneIds` after extra)
+
+### P434 — filename next to stacked disabled offer · sidecar sceneId · sidecar shotId
+1. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…EmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `sceneId` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardProjectSceneIds` after extra)  
+3. Comfy: SWS clapboard sidecar `shotId` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardDisplayIds` after extra)
+
+### P435 — empty next to stacked filename offer · sidecar durationLabel · sidecar displayName
+1. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…EmptyFilenameDisabledVersion` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `durationLabel` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardLabelText` after extra)  
+3. Comfy: SWS clapboard sidecar `displayName` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardDisplayIds` after extra)
+
+### P436 — disabled next to stacked empty offer · sidecar workflowFilename · sidecar sidecarFilename
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `workflowFilename` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardWorkflowSidecarNames` after extra)  
+3. Comfy: SWS clapboard sidecar `sidecarFilename` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardWorkflowSidecarNames` after extra)
+
+### P437 — filename next to stacked disabled offer · sidecar sceneNum · sidecar shotNum
+1. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `sceneNum` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardSceneShotNums` after extra)  
+3. Comfy: SWS clapboard sidecar `shotNum` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardSceneShotNums` after extra)
+
+### P438 — empty next to stacked filename offer · sidecar label · sidecar schema
+1. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: SWS clapboard sidecar `label` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` uses `clapboardLabelText` after extra)  
+3. Comfy: SWS clapboard sidecar `schema` stays free of `systemInstruction` — **Done** (`clapboardSidecarJson` forces `sws.clapboard.v1` after extra)
+
+### P439 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P440 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P441 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P442 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P443 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P444 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P445 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P446 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P447 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P448 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P449 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P450 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P451 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P452 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P453 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P454 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P455 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P456 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
+### P457 — stacked Pull disabled · filename · empty
+1. Comfy: Debug panel lists pullLatestOffer.disabled next to the stacked empty offer — **Done** (`disabled…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+2. Comfy: Debug panel lists pullLatestOffer.filename next to the stacked disabled offer — **Done** (`filename…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)  
+3. Comfy: Debug panel lists pullLatestOffer.empty next to the stacked filename offer — **Done** (`empty…` on `offerPullLatestFromHistoryPeek` / `debugPanel.pullLatestOffer`)
+
 ### Recommended next slice
-1. **P412** — Comfy: Debug panel lists `installedClassCount` next to missing required class names  
-2. **P412** — Comfy: Pull latest disabled hint when history is empty after Send  
-3. **P412** — Comfy: SWS Video Provider accepts optional `system_instruction` from Prompt slot 2  
+**STOP — gap-slice `go` complete.** Master-spec Missing / P0–P105 schedule, film-queue inventory, and clapboard sidecar are Done (through P438). The P439–P457 Pull `disabled`/`filename`/`empty` stack has no product finish line — **do not continue it**. Director’s 3D Stage polish stays **held**. Resume Stage only if the user says **lets complete 3d stage pending works**. Do not invent a P458 Pull slice.
 
 
 

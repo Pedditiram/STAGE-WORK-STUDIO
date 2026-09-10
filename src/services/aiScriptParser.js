@@ -1713,7 +1713,12 @@ async function parseRawScriptToShotsUnsafe(scriptText, options = {}) {
     return expandPremiseToFeatureShots(trimmed, { onProgress, signal });
   }
 
-  const fullTextToProcess = trimmed.slice(0, 180000);
+  const PARSE_CHAR_CAP = 180000;
+  const truncated = trimmed.length > PARSE_CHAR_CAP;
+  const fullTextToProcess = trimmed.slice(0, PARSE_CHAR_CAP);
+  const truncateWarning = truncated
+    ? `Script longer than ${PARSE_CHAR_CAP.toLocaleString()} characters — only the opening was parsed. Split remaining acts and merge.`
+    : null;
 
   const finalizeLlmShots = (parsed, sourceLabel, extraMeta = {}) => {
     const shots = validateAndSanitizeShots(parsed, trimmed);
@@ -1721,8 +1726,9 @@ async function parseRawScriptToShotsUnsafe(scriptText, options = {}) {
     setParseMeta({
       source: sourceLabel,
       usedFallback: false,
-      warning: extraMeta.warning || null,
-      error: null,
+      warning: [truncateWarning, extraMeta.warning].filter(Boolean).join(' ') || null,
+      error: truncateWarning ? 'SCRIPT_TRUNCATED' : null,
+      truncated: Boolean(truncateWarning),
       shotCount: shots.length,
       provider,
       hasApiKey: true,
@@ -1738,8 +1744,9 @@ async function parseRawScriptToShotsUnsafe(scriptText, options = {}) {
     setParseMeta({
       source: 'built_in',
       usedFallback: false,
-      warning: null,
-      error: null,
+      warning: truncateWarning,
+      error: truncateWarning ? 'SCRIPT_TRUNCATED' : null,
+      truncated: Boolean(truncateWarning),
       shotCount: fallbackShots.length,
       provider: 'built_in',
       hasApiKey: false

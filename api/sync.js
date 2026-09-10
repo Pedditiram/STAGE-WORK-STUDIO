@@ -11,11 +11,12 @@
  *   (aliases) KV_REST_API_URL / KV_REST_API_TOKEN
  *             UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
  * Uses Upstash command-array REST: POST baseUrl with ["GET"|"SET", key, value?]
- * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence | sps:screenplay | sps:ticks
+ * Keys used: sps:rooms | sps:projects | sps:collaborators | sps:chat | sps:presence | sps:screenplay | sps:ticks | sps:settings
  * Without KV env vars the API safely falls back to JSONBlob (+ RESTFUL best-effort).
  */
 
 import crypto from 'crypto';
+import { applyCors, requireStudioAdmin } from './_httpSecurity.js';
 
 let memoryRooms = {};
 let memoryProjects = [];
@@ -24,8 +25,14 @@ let memoryPresence = {};
 let memoryChat = {}; // roomId -> messages[]
 let memoryScreenplay = {}; // `${roomId}::${projectKey}` -> screenplay collab doc
 let memoryDeletedTitles = []; // uppercase title keys tombstoned across instances
+let memoryStudioSettings = { studioModules: {}, guestUrlEnabled: true, updatedAt: '' };
 let projectsHydrated = false;
 let collaboratorsHydrated = false;
+let settingsHydrated = false;
+let lastSettingsDurableOk = false;
+let lastProjectsHydrateAt = 0;
+let lastCollaboratorsHydrateAt = 0;
+let lastSettingsHydrateAt = 0;
 let roomsHydrated = false;
 let chatHydrated = false;
 let presenceHydrated = false;
@@ -40,6 +47,7 @@ let memoryTicks = {
   screenplay: {},
   projects: { stamp: '' },
   collaborators: { stamp: '' },
+  settings: { stamp: '' },
   updatedAt: ''
 };
 let ticksHydrated = false;
@@ -131,13 +139,20 @@ async function kvCommand(argv) {
 
 async function kvGet(kind) {
   if (!kvConfigured()) return null;
-  try {
-    const data = await kvCommand(['GET', kvKey(kind)]);
-    if (!data) return null;
-    return parseKvResult(data.result);
-  } catch (e) {
-    return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await kvCommand(['GET', kvKey(kind)]);
+      if (!data) {
+        if (attempt === 0) continue;
+        return null;
+      }
+      return parseKvResult(data.result);
+    } catch (e) {
+      if (attempt === 0) continue;
+      return null;
+    }
   }
+  return null;
 }
 
 async function kvSet(kind, body) {
@@ -207,13 +222,8 @@ function mergeChatMessages(localList, remoteList) {
     .slice(-MAX_CHAT_MESSAGES);
 }
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match, If-Modified-Since, X-Requested-With, Cache-Control, Pragma');
-  res.setHeader('Access-Control-Expose-Headers', 'ETag');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Cache-Control', 'private, no-cache');
+function setCors(req, res) {
+  applyCors(req, res, { methods: 'GET, POST, PUT, OPTIONS' });
 }
 
 function etagOf(body) {
@@ -255,6 +265,28 @@ function revisionOf(payload) {
   return Date.parse(payload?.lastUpdated || '') || 0;
 }
 
+function stampMs(stamp) {
+  return Date.parse(stamp?.lastUpdated || '') || 0;
+}
+
+function pickNewerStamp(a, b) {
+  if (!a || !a.stamp) return b || a || { stamp: '' };
+  if (!b || !b.stamp) return a;
+  return stampMs(b) > stampMs(a) ? b : a;
+}
+
+function newerIso(a, b) {
+  const am = Date.parse(a || '') || 0;
+  const bm = Date.parse(b || '') || 0;
+  if (!am && !bm) return a || b || '';
+  return bm > am ? b : a;
+}
+
+/** Warm Vercel instances must re-read KV; JSONBlob GETs are TTL-cached to avoid 429s. */
+function hydrateTtlMs() {
+  return kvConfigured() ? 0 : 2000;
+}
+
 function mergeTickMaps(base = {}, extra = {}) {
   const out = { ...(base || {}) };
   Object.entries(extra || {}).forEach(([id, stamp]) => {
@@ -279,17 +311,10 @@ async function loadTicks() {
           rooms: mergeTickMaps(data.rooms, memoryTicks.rooms),
           chat: mergeTickMaps(data.chat, memoryTicks.chat),
           screenplay: mergeTickMaps(data.screenplay, memoryTicks.screenplay),
-          projects:
-            (Date.parse(memoryTicks.projects?.lastUpdated || '') || 0) >=
-            (Date.parse(data.projects?.lastUpdated || '') || 0)
-              ? memoryTicks.projects
-              : data.projects || memoryTicks.projects,
-          collaborators:
-            (Date.parse(memoryTicks.collaborators?.lastUpdated || '') || 0) >=
-            (Date.parse(data.collaborators?.lastUpdated || '') || 0)
-              ? memoryTicks.collaborators
-              : data.collaborators || memoryTicks.collaborators,
-          updatedAt: data.updatedAt || memoryTicks.updatedAt
+          projects: pickNewerStamp(data.projects, memoryTicks.projects),
+          collaborators: pickNewerStamp(data.collaborators, memoryTicks.collaborators),
+          settings: pickNewerStamp(data.settings, memoryTicks.settings),
+          updatedAt: newerIso(data.updatedAt, memoryTicks.updatedAt)
         };
         ticksHydrated = true;
       }
@@ -353,6 +378,32 @@ function stampCollaboratorsTick(users) {
     stamp: `${list.length}:${Date.now()}`,
     count: list.length,
     lastUpdated: new Date().toISOString()
+  };
+}
+
+function stampSettingsTick(settings) {
+  const mods = settings?.studioModules && typeof settings.studioModules === 'object'
+    ? settings.studioModules
+    : {};
+  memoryTicks.settings = {
+    stamp: `${Object.keys(mods).length}:${settings?.updatedAt || Date.now()}`,
+    lastUpdated: settings?.updatedAt || new Date().toISOString()
+  };
+}
+
+function normalizeStudioSettings(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const studioModules = src.studioModules && typeof src.studioModules === 'object'
+    ? src.studioModules
+    : {};
+  const cleanMods = {};
+  Object.entries(studioModules).forEach(([id, val]) => {
+    if (typeof val === 'boolean') cleanMods[String(id)] = val;
+  });
+  return {
+    studioModules: cleanMods,
+    guestUrlEnabled: src.guestUrlEnabled !== false,
+    updatedAt: src.updatedAt || new Date().toISOString()
   };
 }
 
@@ -648,9 +699,10 @@ async function loadHub() {
   if (kvConfigured()) {
     try {
       const data = await kvGet('rooms');
-      if (data && typeof data === 'object') {
+      const rooms = data?.rooms;
+      if (rooms && typeof rooms === 'object' && Object.keys(rooms).length > 0) {
         return {
-          rooms: data.rooms || {},
+          rooms,
           presence: data.presence || {},
           updatedAt: data.updatedAt || null
         };
@@ -685,9 +737,19 @@ async function loadHub() {
 }
 
 async function saveHub(hub) {
+  // Merge with KV so a cold instance posting one room cannot wipe sibling rooms
+  let kvRooms = {};
+  if (kvConfigured()) {
+    try {
+      const data = await kvGet('rooms');
+      if (data?.rooms && typeof data.rooms === 'object') kvRooms = data.rooms;
+    } catch (e) {}
+  }
+  const rooms = { ...kvRooms, ...(hub.rooms || {}) };
+
   // Presence lives in JSONBLOB_PRESENCE_URL — never write it into the rooms hub
   const body = {
-    rooms: hub.rooms || {},
+    rooms,
     updatedAt: new Date().toISOString(),
     app: 'stage-production-studio'
   };
@@ -792,7 +854,7 @@ async function loadProjectsStore() {
   if (kvConfigured()) {
     try {
       const data = await kvGet('projects');
-      if (data && Array.isArray(data.projects)) {
+      if (data && Array.isArray(data.projects) && data.projects.length > 0) {
         return {
           projects: data.projects,
           deletedTitles: normalizeDeletedTitles(data.deletedTitles),
@@ -844,8 +906,8 @@ async function saveProjectsStore(projects, deletedTitles = memoryDeletedTitles) 
     app: 'stage-production-studio'
   });
 
-  // Empty overwrite guard at durable layer
-  if (payload.projects.length === 0 && memoryProjects.length > 0) {
+  // Never persist an empty library — cold instances used to wipe KV
+  if (!payload.projects.length) {
     return false;
   }
 
@@ -1063,21 +1125,39 @@ async function loadCollaboratorsStore() {
   if (kvConfigured()) {
     try {
       const data = await kvGet('collaborators');
-      if (Array.isArray(data?.users)) return { users: data.users, ok: true };
+      if (Array.isArray(data?.users)) {
+        return {
+          users: data.users,
+          studioSettings: data.studioSettings || data.settings || null,
+          ok: true
+        };
+      }
     } catch (e) {}
   }
   try {
     const data = await fetchJsonBlob(JSONBLOB_COLLABORATORS_URL);
-    if (Array.isArray(data?.users)) return { users: data.users, ok: true };
-    if (Array.isArray(data?.data?.users)) return { users: data.data.users, ok: true };
+    const users = Array.isArray(data?.users)
+      ? data.users
+      : Array.isArray(data?.data?.users)
+        ? data.data.users
+        : null;
+    if (users) {
+      return {
+        users,
+        studioSettings: data?.studioSettings || data?.data?.studioSettings || data?.settings || null,
+        ok: true
+      };
+    }
   } catch (e) {}
-  return { users: null, ok: false };
+  return { users: null, studioSettings: null, ok: false };
 }
 
-async function saveCollaboratorsStore(users) {
+async function saveCollaboratorsStore(users, studioSettings = memoryStudioSettings) {
   const secured = ensurePrimaryAdmin(users);
+  const settings = normalizeStudioSettings(studioSettings);
   const body = {
     users: secured,
+    studioSettings: settings,
     lastSynced: new Date().toISOString(),
     totalCollaborators: secured.length,
     app: 'stage-production-studio'
@@ -1098,7 +1178,47 @@ async function saveCollaboratorsStore(users) {
     return saved;
   });
   if (!ok) throw new Error('collaborators durable save failed');
+  memoryStudioSettings = settings;
   return secured;
+}
+
+async function loadSettingsStore() {
+  if (kvConfigured()) {
+    try {
+      const data = await kvGet('settings');
+      if (data && typeof data === 'object' && (data.studioModules || data.studioSettings)) {
+        return { settings: normalizeStudioSettings(data.studioSettings || data), ok: true };
+      }
+    } catch (e) {}
+  }
+  try {
+    const collab = await loadCollaboratorsStore();
+    if (collab.ok && collab.studioSettings) {
+      return { settings: normalizeStudioSettings(collab.studioSettings), ok: true };
+    }
+  } catch (e) {}
+  return { settings: null, ok: false };
+}
+
+async function saveSettingsStore(settings) {
+  const payload = {
+    ...normalizeStudioSettings(settings),
+    app: 'stage-production-studio'
+  };
+  memoryStudioSettings = payload;
+  let ok = false;
+  if (kvConfigured()) {
+    try {
+      ok = (await kvSet('settings', payload)) || ok;
+    } catch (e) {}
+  }
+  try {
+    if (memoryCollaborators.length > 0) {
+      await saveCollaboratorsStore(memoryCollaborators, payload);
+      ok = true;
+    }
+  } catch (e) {}
+  return ok;
 }
 
 async function hydrateRoomsFromDurable() {
@@ -1106,23 +1226,29 @@ async function hydrateRoomsFromDurable() {
     const hub = await loadHub();
     if (!hub) return { ok: false, hub: null };
     const remoteRooms = hub.rooms || {};
+    const hasRooms = Object.keys(remoteRooms).length > 0;
     Object.entries(remoteRooms).forEach(([id, room]) => {
       memoryRooms[id] = pickNewerRoom(memoryRooms[id], room);
     });
-    roomsHydrated = true;
-    lastRoomsDurableOk = true;
-    return { ok: true, hub };
+    if (hasRooms) {
+      roomsHydrated = true;
+      lastRoomsDurableOk = true;
+    }
+    return { ok: hasRooms, hub };
   } catch (e) {
     return { ok: false, hub: null };
   }
 }
 
 async function hydrateProjectsFromDurable({ force = false } = {}) {
-  if (projectsHydrated && !force && memoryProjects.length > 0) {
+  const ttl = hydrateTtlMs();
+  const fresh = Date.now() - lastProjectsHydrateAt < ttl;
+  if (!force && projectsHydrated && memoryProjects.length > 0 && ttl > 0 && fresh) {
     return { ok: lastProjectsDurableOk, projects: memoryProjects };
   }
   const result = await loadProjectsStore();
   lastProjectsDurableOk = result.ok;
+  lastProjectsHydrateAt = Date.now();
   if (result.ok && Array.isArray(result.projects)) {
     memoryDeletedTitles = normalizeDeletedTitles([
       ...memoryDeletedTitles,
@@ -1135,16 +1261,39 @@ async function hydrateProjectsFromDurable({ force = false } = {}) {
 }
 
 async function hydrateCollaboratorsFromDurable({ force = false } = {}) {
-  if (collaboratorsHydrated && !force && memoryCollaborators.length > 0) {
+  const ttl = hydrateTtlMs();
+  const fresh = Date.now() - lastCollaboratorsHydrateAt < ttl;
+  if (!force && collaboratorsHydrated && memoryCollaborators.length > 0 && ttl > 0 && fresh) {
     return { ok: lastCollaboratorsDurableOk, users: memoryCollaborators };
   }
   const result = await loadCollaboratorsStore();
   lastCollaboratorsDurableOk = result.ok;
+  lastCollaboratorsHydrateAt = Date.now();
   if (result.ok && Array.isArray(result.users)) {
     memoryCollaborators = ensurePrimaryAdmin(result.users);
     collaboratorsHydrated = true;
   }
-  return { ok: result.ok, users: memoryCollaborators };
+  if (result.ok && result.studioSettings) {
+    memoryStudioSettings = normalizeStudioSettings(result.studioSettings);
+    settingsHydrated = true;
+  }
+  return { ok: result.ok, users: memoryCollaborators, studioSettings: memoryStudioSettings };
+}
+
+async function hydrateSettingsFromDurable({ force = false } = {}) {
+  const ttl = hydrateTtlMs();
+  const fresh = Date.now() - lastSettingsHydrateAt < ttl;
+  if (!force && settingsHydrated && memoryStudioSettings?.updatedAt && ttl > 0 && fresh) {
+    return { ok: lastSettingsDurableOk, settings: memoryStudioSettings };
+  }
+  const result = await loadSettingsStore();
+  lastSettingsDurableOk = result.ok;
+  lastSettingsHydrateAt = Date.now();
+  if (result.ok && result.settings) {
+    memoryStudioSettings = normalizeStudioSettings(result.settings);
+    settingsHydrated = true;
+  }
+  return { ok: result.ok, settings: memoryStudioSettings };
 }
 
 async function kvStorePopulated(kind) {
@@ -1161,6 +1310,9 @@ async function kvStorePopulated(kind) {
     const chat = data.chat || data;
     return Boolean(chat && typeof chat === 'object' && Object.keys(chat).length);
   }
+  if (kind === 'settings') {
+    return Boolean(data.studioModules || data.studioSettings);
+  }
   return false;
 }
 
@@ -1173,7 +1325,7 @@ async function kvMigrationStatus() {
       message: 'Set SPS_KV_REST_URL + SPS_KV_REST_TOKEN on the server'
     };
   }
-  const kinds = ['projects', 'collaborators', 'rooms', 'presence', 'chat'];
+  const kinds = ['projects', 'collaborators', 'rooms', 'presence', 'chat', 'settings'];
   const stores = {};
   for (const kind of kinds) {
     stores[kind] = { kvPopulated: await kvStorePopulated(kind) };
@@ -1266,12 +1418,19 @@ async function migrateKvFromJsonBlob({ force = false } = {}) {
     return { chat, updatedAt: new Date().toISOString(), app: 'sps-chat' };
   });
 
+  await migrateOne('settings', async () => {
+    const data = await fetchJsonBlob(JSONBLOB_COLLABORATORS_URL);
+    const raw = data?.studioSettings || data?.data?.studioSettings;
+    if (!raw || typeof raw !== 'object') return null;
+    return { ...normalizeStudioSettings(raw), app: 'stage-production-studio' };
+  });
+
   const ok = results.every((r) => r.ok || r.skipped);
   return { ok, results, status: await kvMigrationStatus() };
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const { type = 'room', roomId = 'SPS-CLOUD-8821' } = req.query || {};
@@ -1308,13 +1467,18 @@ export default async function handler(req, res) {
       }
       if (!memoryTicks.projects?.stamp) {
         await hydrateProjectsFromDurable();
-        stampProjectsTick(memoryProjects);
+        if (memoryProjects.length) stampProjectsTick(memoryProjects);
       }
       if (!memoryTicks.collaborators?.stamp) {
         await hydrateCollaboratorsFromDurable();
-        stampCollaboratorsTick(memoryCollaborators);
+        if (memoryCollaborators.length) stampCollaboratorsTick(memoryCollaborators);
       }
-      await persistTicks();
+      if (!memoryTicks.settings?.stamp) {
+        await hydrateSettingsFromDurable();
+        if (memoryStudioSettings?.updatedAt) stampSettingsTick(memoryStudioSettings);
+      }
+      // GET never persistTicks — a cold instance minting Date.now() stamps would
+      // overwrite a peer's real project/settings tick in KV.
       return sendJson(req, res, {
         success: true,
         kvConfigured: kvConfigured(),
@@ -1324,12 +1488,13 @@ export default async function handler(req, res) {
         screenplay: memoryTicks.screenplay[docKey] || { revision: 0, lastUpdated: '' },
         projects: memoryTicks.projects || { stamp: '', count: 0 },
         collaborators: memoryTicks.collaborators || { stamp: '', count: 0 },
+        settings: memoryTicks.settings || { stamp: '', lastUpdated: '' },
         updatedAt: memoryTicks.updatedAt || ''
       });
     }
 
     if (type === 'projects') {
-      const { ok } = await hydrateProjectsFromDurable({ force: memoryProjects.length === 0 });
+      const { ok } = await hydrateProjectsFromDurable();
       if (!ok && memoryProjects.length === 0) {
         return res.status(503).json({
           success: false,
@@ -1348,8 +1513,18 @@ export default async function handler(req, res) {
       });
     }
 
+    if (type === 'settings') {
+      const { ok, settings } = await hydrateSettingsFromDurable();
+      return sendJson(req, res, {
+        success: true,
+        settings: settings || memoryStudioSettings,
+        durableOk: ok,
+        kvConfigured: kvConfigured()
+      });
+    }
+
     if (type === 'collaborators') {
-      const { ok } = await hydrateCollaboratorsFromDurable({ force: memoryCollaborators.length === 0 });
+      const { ok, studioSettings } = await hydrateCollaboratorsFromDurable();
       if (!ok && memoryCollaborators.length === 0) {
         return res.status(503).json({
           success: false,
@@ -1360,7 +1535,12 @@ export default async function handler(req, res) {
       }
       const users = ensurePrimaryAdmin(memoryCollaborators);
       memoryCollaborators = users;
-      return sendJson(req, res, { success: true, users, durableOk: ok });
+      return sendJson(req, res, {
+        success: true,
+        users,
+        studioSettings: studioSettings || memoryStudioSettings,
+        durableOk: ok
+      });
     }
 
     if (type === 'presence') {
@@ -1418,6 +1598,10 @@ export default async function handler(req, res) {
     const body = req.body || {};
 
     if (type === 'kv_migration') {
+      const admin = requireStudioAdmin(req, body);
+      if (!admin.ok) {
+        return res.status(admin.status).json({ success: false, error: admin.error });
+      }
       const result = await migrateKvFromJsonBlob({ force: Boolean(body.force) });
       return sendJson(req, res, { success: result.ok, ...result });
     }
@@ -1426,7 +1610,7 @@ export default async function handler(req, res) {
       const incomingProjs = body.projects || body;
       const incomingDeleted = normalizeDeletedTitles(body.deletedTitles);
 
-      await hydrateProjectsFromDurable({ force: !memoryProjects.length });
+      await hydrateProjectsFromDurable();
 
       if (Array.isArray(incomingProjs)) {
         const cleanedIncoming = incomingProjs.filter((p) => {
@@ -1434,8 +1618,8 @@ export default async function handler(req, res) {
           return title && title.toUpperCase() !== 'STAGE PRODUCTION STUDIO';
         });
 
-        // Empty overwrite guard — never wipe a non-empty library
-        if (cleanedIncoming.length === 0 && memoryProjects.length > 0) {
+        // Empty overwrite guard — never wipe a library (including cold instances)
+        if (cleanedIncoming.length === 0) {
           return res.status(200).json({
             success: true,
             projects: filterDeletedProjects(memoryProjects),
@@ -1452,10 +1636,14 @@ export default async function handler(req, res) {
             ...incomingDeleted
           ]);
         }
-        // Live library wins: any title in this push is removed from the delete tombstone list
+        const incomingDeletedSet = new Set(incomingDeleted.map((t) => titleKey(t)));
+        // Live push un-tombstones only when the client did not also mark the title deleted.
+        // Stale vault echoes must not revive Archive/Purge.
         if (incomingKeys.size) {
           memoryDeletedTitles = normalizeDeletedTitles(
-            memoryDeletedTitles.filter((t) => !incomingKeys.has(titleKey(t)))
+            memoryDeletedTitles.filter(
+              (t) => incomingDeletedSet.has(titleKey(t)) || !incomingKeys.has(titleKey(t))
+            )
           );
         }
 
@@ -1505,9 +1693,48 @@ export default async function handler(req, res) {
       });
     }
 
+    if (type === 'settings') {
+      await hydrateSettingsFromDurable();
+      await hydrateCollaboratorsFromDurable();
+      const incoming = body.settings || body.studioSettings || body;
+      if (!incoming || typeof incoming !== 'object') {
+        return res.status(200).json({
+          success: true,
+          settings: memoryStudioSettings
+        });
+      }
+      const next = normalizeStudioSettings({
+        ...memoryStudioSettings,
+        ...incoming,
+        studioModules: {
+          ...(memoryStudioSettings?.studioModules || {}),
+          ...(incoming.studioModules || {})
+        },
+        updatedAt: new Date().toISOString()
+      });
+      memoryStudioSettings = next;
+      settingsHydrated = true;
+      let durableOk = false;
+      try {
+        durableOk = await saveSettingsStore(next);
+        lastSettingsDurableOk = durableOk;
+      } catch (e) {
+        durableOk = false;
+      }
+      await loadTicks();
+      stampSettingsTick(next);
+      await persistTicks();
+      return res.status(200).json({
+        success: true,
+        settings: next,
+        durableOk
+      });
+    }
+
     if (type === 'collaborators') {
       const users = body.users || body;
-      const hydrate = await hydrateCollaboratorsFromDurable({ force: !memoryCollaborators.length });
+      const hydrate = await hydrateCollaboratorsFromDurable();
+      const incomingSettings = body.studioSettings || body.settings || null;
 
       if (Array.isArray(users)) {
         // Empty overwrite guard
@@ -1515,6 +1742,7 @@ export default async function handler(req, res) {
           return res.status(200).json({
             success: true,
             users: ensurePrimaryAdmin(memoryCollaborators),
+            studioSettings: memoryStudioSettings,
             ignoredEmpty: true
           });
         }
@@ -1531,24 +1759,41 @@ export default async function handler(req, res) {
 
         memoryCollaborators = ensurePrimaryAdmin(users);
         collaboratorsHydrated = true;
+        if (incomingSettings && typeof incomingSettings === 'object') {
+          memoryStudioSettings = normalizeStudioSettings({
+            ...memoryStudioSettings,
+            ...incomingSettings,
+            updatedAt: incomingSettings.updatedAt || new Date().toISOString()
+          });
+          settingsHydrated = true;
+        }
         let durableOk = false;
         try {
-          memoryCollaborators = await saveCollaboratorsStore(memoryCollaborators);
+          memoryCollaborators = await saveCollaboratorsStore(
+            memoryCollaborators,
+            memoryStudioSettings
+          );
+          if (kvConfigured()) {
+            await kvSet('settings', memoryStudioSettings);
+          }
           durableOk = true;
         } catch (e) {}
         lastCollaboratorsDurableOk = durableOk;
         await loadTicks();
         stampCollaboratorsTick(memoryCollaborators);
+        stampSettingsTick(memoryStudioSettings);
         await persistTicks();
         return res.status(200).json({
           success: true,
           users: memoryCollaborators,
+          studioSettings: memoryStudioSettings,
           durableOk
         });
       }
       return res.status(200).json({
         success: true,
-        users: ensurePrimaryAdmin(memoryCollaborators)
+        users: ensurePrimaryAdmin(memoryCollaborators),
+        studioSettings: memoryStudioSettings
       });
     }
 
@@ -1658,7 +1903,7 @@ export default async function handler(req, res) {
     // Room write — last-write-wins by revision; await durable save so peer GETs see it
     const payload = body.data || body;
     if (payload && typeof payload === 'object') {
-      const hydrate = await hydrateRoomsFromDurable();
+      await hydrateRoomsFromDurable();
       const existingRoom = memoryRooms[safeRoomId] || {};
       const stamped = {
         ...payload,
@@ -1680,22 +1925,18 @@ export default async function handler(req, res) {
       };
 
       memoryRooms[safeRoomId] = mergedPayload;
+      roomsHydrated = true;
 
-      // CRITICAL: never PUT a partial hub after failed hydrate on a cold instance
-      // (would wipe sibling rooms that only exist in durable storage).
+      // Always merge-save to KV. saveHub unions existing KV rooms so a cold
+      // instance cannot wipe sibling films.
       let durableOk = false;
-      const safeToPersist = hydrate.ok || roomsHydrated;
-
-      if (safeToPersist) {
-        try {
-          durableOk = await saveHub({
-            rooms: { ...memoryRooms, [safeRoomId]: mergedPayload }
-          });
-          lastRoomsDurableOk = durableOk;
-          if (durableOk) roomsHydrated = true;
-        } catch (e) {
-          durableOk = false;
-        }
+      try {
+        durableOk = await saveHub({
+          rooms: { ...memoryRooms, [safeRoomId]: mergedPayload }
+        });
+        lastRoomsDurableOk = durableOk;
+      } catch (e) {
+        durableOk = false;
       }
 
       await loadTicks();

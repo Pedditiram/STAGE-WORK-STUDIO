@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const SEEN_KEY = 'sps_nav_shortcut_chip_seen';
+const SEEN_KEY = 'sps_nav_shortcut_chip_seen_v2';
 const FORCE_OPEN_EVENT = 'sps_nav_shortcut_help';
 
 function isDesktop() {
@@ -8,23 +8,37 @@ function isDesktop() {
   return window.matchMedia('(min-width: 768px)').matches;
 }
 
+function hasDismissedChip() {
+  try {
+    return localStorage.getItem(SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markChipDismissed() {
+  try {
+    localStorage.setItem(SEEN_KEY, '1');
+    localStorage.setItem('sps_nav_shortcut_chip_seen', '1');
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Desktop first-run chip: Shift+Space opens Navigator.
  * Reopen via window event `sps_nav_shortcut_help` (header / Project Console ⇧␣).
+ * Got it always persists — presentation desk must not pin the chip.
  */
 export default function NavigatorShortcutChip({
   hidden = false,
   onOpenNavigator,
-  roleHint = ''
+  roleHint = '',
 }) {
   const [visible, setVisible] = useState(() => {
     if (typeof window === 'undefined') return false;
-    try {
-      if (!isDesktop()) return false;
-      return localStorage.getItem(SEEN_KEY) !== '1';
-    } catch {
-      return isDesktop();
-    }
+    if (!isDesktop()) return false;
+    return !hasDismissedChip();
   });
   const [forced, setForced] = useState(false);
 
@@ -40,32 +54,22 @@ export default function NavigatorShortcutChip({
 
   useEffect(() => {
     if (hidden) return undefined;
-    const onResize = () => {
+    const sync = () => {
       if (!isDesktop()) {
         setVisible(false);
         setForced(false);
-      } else if (localStorage.getItem(SEEN_KEY) !== '1') {
-        setVisible(true);
+        return;
       }
+      if (forced) return;
+      if (hasDismissedChip()) setVisible(false);
     };
-    window.addEventListener('resize', onResize);
-    // After login / Project Console open, re-check once (chip was hidden under Login)
-    try {
-      if (isDesktop() && localStorage.getItem(SEEN_KEY) !== '1') {
-        setVisible(true);
-      }
-    } catch {
-      /* ignore */
-    }
-    return () => window.removeEventListener('resize', onResize);
-  }, [hidden]);
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, [hidden, forced]);
 
   const dismiss = () => {
-    try {
-      localStorage.setItem(SEEN_KEY, '1');
-    } catch {
-      /* ignore */
-    }
+    markChipDismissed();
     setVisible(false);
     setForced(false);
   };

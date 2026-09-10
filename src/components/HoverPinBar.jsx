@@ -36,6 +36,8 @@ export default function HoverPinBar({
   className = '',
   barClassName = '',
   wrap = true,
+  /** Header already has account. Matrix craft bar should not add a second P. */
+  showProfile = true,
   children
 }) {
   const [pinned, setPinned] = useState(() => {
@@ -97,7 +99,7 @@ export default function HoverPinBar({
           label={pinLabel}
           title={pinTitle}
         />
-        <StudioProfileControl onOpenChange={setProfileOpen} />
+        {showProfile ? <StudioProfileControl onOpenChange={setProfileOpen} /> : null}
       </div>
     </div>
   );

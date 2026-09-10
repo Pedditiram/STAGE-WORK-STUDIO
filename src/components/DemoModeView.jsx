@@ -16,6 +16,7 @@ import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
 import DesktopTrialModal from './DesktopTrialModal';
 import StudioTourOverlay from './StudioTourOverlay';
+import LegalDocModal from './LegalDocModal';
 import { LINE, PRODUCT } from '../constants/brand';
 import { pickPresentationOpening } from '../utils/presentationOpening';
 import { setPresentationMode } from '../utils/projectPermissions';
@@ -161,6 +162,7 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   const [accessOpen, setAccessOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [legalKind, setLegalKind] = useState(null);
   const slide = slides[i];
   const Icon = slide.Icon;
   const dwell = slide.kind === 'thesis' ? OPEN_SLIDE_MS : SLIDE_MS;
@@ -179,13 +181,13 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   }, []);
 
   useEffect(() => {
-    if (!playing || tourOpen) return undefined;
+    if (!playing || tourOpen || legalKind) return undefined;
     const t = setInterval(next, dwell);
     return () => clearInterval(t);
-  }, [playing, next, tick, tourOpen, dwell]);
+  }, [playing, next, tick, tourOpen, legalKind, dwell]);
 
   useEffect(() => {
-    if (tourOpen) return undefined;
+    if (tourOpen || legalKind) return undefined;
     const onKey = (e) => {
       if (e.key === 'ArrowRight') next();
       if (e.key === 'ArrowLeft') prev();
@@ -196,7 +198,7 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [next, prev, tourOpen]);
+  }, [next, prev, tourOpen, legalKind]);
 
   return (
     <div className="sps-pres-root flex-1 min-h-0 w-full relative overflow-hidden">
@@ -213,18 +215,32 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
       <div className="relative z-10 h-full min-h-0 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-6 py-8 sm:py-12 min-h-full flex flex-col gap-8">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <StageWorksMark size={48} className="w-12 h-12 rounded-xl overflow-hidden border border-amber-400/40 shadow-[0_0_28px_rgba(245,158,11,0.25)]" />
-              <div>
+              <div className="min-w-0">
                 <p className="sps-pres-kicker text-[10px] uppercase tracking-[0.28em] m-0 font-semibold">
                   Presentation mode
                 </p>
                 <p className="sps-pres-title text-sm m-0 font-display">{PRODUCT}</p>
               </div>
             </div>
-            <p className="sps-pres-meta text-[11px] font-mono tracking-widest m-0">
-              SCENE {String(i + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
-            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.('signin')}>
+                Login
+              </button>
+              <button type="button" className="sps-btn text-xs" onClick={() => (onOpenLogin ? onOpenLogin('signup') : setAccessOpen(true))}>
+                Sign up
+              </button>
+              <button type="button" className="sps-btn text-xs" onClick={() => setTrialOpen(true)}>
+                Download app
+              </button>
+              <button type="button" className="sps-btn text-xs" onClick={() => setTourOpen(true)}>
+                Demo mode
+              </button>
+              <p className="sps-pres-meta text-[11px] font-mono tracking-widest m-0 ml-1">
+                SCENE {String(i + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+              </p>
+            </div>
           </div>
 
           <div key={`${slide.id}-${tick}`} className="sps-pres-enter grid lg:grid-cols-[1.15fr_0.85fr] gap-8 items-start">
@@ -326,6 +342,13 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
               </button>
               <span className="sps-pres-meta text-[11px] ml-1">← →  ·  space</span>
               <span className="flex-1" />
+              <p className="sps-pres-meta text-[11px] m-0">
+                <button type="button" className="underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: 'var(--sps-gold)' }} onClick={() => setLegalKind('privacy')}>Privacy</button>
+                {' · '}
+                <button type="button" className="underline bg-transparent border-0 p-0 cursor-pointer" style={{ color: 'var(--sps-gold)' }} onClick={() => setLegalKind('terms')}>Terms</button>
+                {' · '}
+                <a href="mailto:admin@stageworkstudio.com" className="underline" style={{ color: 'var(--sps-gold)' }}>Contact</a>
+              </p>
               <button
                 type="button"
                 className="sps-btn text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
@@ -342,18 +365,6 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
               >
                 Enter Studio →
               </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => onOpenLogin?.('signin')}>
-                Sign in
-              </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => (onOpenLogin ? onOpenLogin('signup') : setAccessOpen(true))}>
-                Sign up
-              </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => setTrialOpen(true)}>
-                Download desktop trial
-              </button>
-              <button type="button" className="sps-btn text-xs" onClick={() => setTourOpen(true)}>
-                Demo mode
-              </button>
             </div>
           </div>
         </div>
@@ -361,6 +372,7 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
       <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
       <DesktopTrialModal isOpen={trialOpen} onClose={() => setTrialOpen(false)} />
       <StudioTourOverlay isOpen={tourOpen} onClose={() => setTourOpen(false)} />
+      <LegalDocModal kind={legalKind} onClose={() => setLegalKind(null)} />
     </div>
   );
 }

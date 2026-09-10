@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shared disk vault — same projects/ + settings/ folders as Vite localhost
   listProjectsFromDisk: () => ipcRenderer.invoke('vault:listProjects'),
   saveProjectToDisk: (project) => ipcRenderer.invoke('vault:saveProject', project),
+  deleteProjectFromDisk: (title, shelf) => ipcRenderer.invoke('vault:deleteProject', { title, shelf }),
+  restoreProjectFromDisk: (title) => ipcRenderer.invoke('vault:restoreProject', title),
   savePosterToDisk: (payload) => ipcRenderer.invoke('vault:savePoster', payload),
   listPostersFromDisk: () => ipcRenderer.invoke('vault:listPosters'),
   readPosterDataUrl: (title) => ipcRenderer.invoke('vault:readPosterDataUrl', title),

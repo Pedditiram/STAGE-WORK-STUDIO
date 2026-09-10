@@ -85,9 +85,9 @@ export function getNativeSyncUrl() {
     if (isProductionHost(hostname)) {
       return `${origin}${NATIVE_SYNC_PATH}`;
     }
-    const syncTarget = (localStorage.getItem('sps_sync_target') || localStorage.getItem('sps_sync_mode') || '').toLowerCase();
     const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    if ((syncTarget === 'lan' || syncTarget === 'local' || isOffline) && isLocalOrLanHost(hostname)) {
+    // Offline LAN only — never pin online localhost/Electron to a machine-local store
+    if (isOffline && isLocalOrLanHost(hostname)) {
       return `${origin}${NATIVE_SYNC_PATH}`;
     }
     return `${PRODUCTION_SYNC_ORIGIN}${NATIVE_SYNC_PATH}`;
@@ -180,7 +180,17 @@ export async function fetchSyncJson(url, options = {}, { timeoutMs = FETCH_TIMEO
       headers,
       signal: controller.signal,
     });
-    if (method === 'GET' && res.status === 304) return syncBodies.get(key) || {};
+    if (method === 'GET' && res.status === 304) {
+      const cached = syncBodies.get(key);
+      if (cached) return cached;
+      const retry = await fetch(key, { cache: 'no-store', signal: controller.signal });
+      if (!retry.ok) throw new Error(`HTTP ${retry.status}`);
+      const json = await retry.json();
+      const tag = retry.headers.get('etag');
+      if (tag) syncEtags.set(key, tag);
+      syncBodies.set(key, json);
+      return json;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     if (method === 'GET') {
@@ -216,7 +226,8 @@ export function serializeCollabTick(tick) {
     tick.screenplay?.revision,
     tick.screenplay?.lastUpdated,
     tick.projects?.stamp,
-    tick.collaborators?.stamp
+    tick.collaborators?.stamp,
+    tick.settings?.stamp
   ].join('|');
 }
 

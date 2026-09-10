@@ -16,7 +16,10 @@ import {
   probeComfyUi,
   setComfyUiBaseUrl,
   missingComfyClassStatusLine,
-  installedComfyClassCount
+  installedComfyClassCount,
+  offerPullLatestFromHistoryPeek,
+  formatComfyClassInventory,
+  formatFilmProgressInventory
 } from '../services/comfyuiClient';
 import {
   getSeedanceStillModel,
@@ -91,6 +94,7 @@ export default function SwsComfyWorkflowModal({
   const [filmProgress, setFilmProgress] = useState('');
   const [comfyUiVersion, setComfyUiVersion] = useState('');
   const [installedClassCount, setInstalledClassCount] = useState(0);
+  const [missingRequiredClasses, setMissingRequiredClasses] = useState([]);
   const [offerPullLatest, setOfferPullLatest] = useState(null);
   const filmCancelRef = useRef({ cancelled: false });
   const [assetRoots, setAssetRoots] = useState(() => emptyAssetRoots());
@@ -122,6 +126,7 @@ export default function SwsComfyWorkflowModal({
     setComfyProbeNote('');
     setOfferPullLatest(null);
     setInstalledClassCount(0);
+    setMissingRequiredClasses([]);
     setComfyUrl(getComfyUiBaseUrl());
   }, [isOpen, family, shot, shotIndex]);
 
@@ -615,6 +620,7 @@ export default function SwsComfyWorkflowModal({
         ? [...SEEDANCE_MASTER_REQUIRED_NODES]
         : requiredCustomNodes();
       const classReport = missingComfyClassStatusLine(objectInfo, requiredClasses, { host: comfyUrl });
+      setMissingRequiredClasses(classReport.missing || []);
       setStatus(classReport.status);
       setComfyProbeNote([probeNote, classReport.status].filter(Boolean).join(' · '));
       if (!classReport.ok) {
@@ -722,12 +728,18 @@ export default function SwsComfyWorkflowModal({
       setOfferPullLatest(null);
       try {
         const peek = await pullLatestComfyOutput({ baseUrl: comfyUrl });
-        if (peek.ok && peek.filename) {
-          setOfferPullLatest({ filename: peek.filename, outputFile: peek.outputFile || '' });
-          pullOffer = ` History already has a viewable output (${peek.filename}) — Pull latest to attach it.`;
-        }
+        const offer = offerPullLatestFromHistoryPeek(peek, {
+          comfyuiVersion: probe.comfyuiVersion || comfyUiVersion || 'unknown'
+        });
+        setOfferPullLatest(offer);
+        pullOffer = offer.hint ? ` ${offer.hint}` : '';
       } catch {
-        /* offer is optional */
+        const offer = offerPullLatestFromHistoryPeek(
+          { ok: false },
+          { comfyuiVersion: probe.comfyuiVersion || comfyUiVersion || 'unknown' }
+        );
+        setOfferPullLatest(offer);
+        pullOffer = offer.hint ? ` ${offer.hint}` : '';
       }
       setStatus(
         `Loaded “${loaded.name || 'workflow'}” (${frontend.nodes.length} nodes) onto ComfyUI at ${comfyUrl}.${diskNote} ${classReport.status} ComfyUI ${probe.comfyuiVersion || 'unknown'} · ${classCount} installed class${classCount === 1 ? '' : 'es'}.${pullOffer} Tab title should show the shot name — if it still says Unsaved Workflow, restart ComfyUI once so ComfyUI-SWS reloads.`
@@ -761,11 +773,25 @@ export default function SwsComfyWorkflowModal({
         generateAudio: true,
         autoQueue: true,
         cancelToken: filmCancelRef.current,
-        onProgress: ({ index, total, shotId, status: st, error: err, filename, outputFile, composedSource }) => {
+        onProgress: ({
+          index,
+          total,
+          shotId,
+          status: st,
+          error: err,
+          filename,
+          outputFile,
+          composedSource,
+          classInventory,
+          comfyuiVersion: progressVer,
+          inventoryVersion
+        }) => {
           const linked = filename || filenameFromComfyViewUrl(outputFile);
           const src = composedSource ? ` · ${composedSource}` : '';
+          const inv = inventoryVersion || formatFilmProgressInventory(classInventory, progressVer);
+          const invBit = inv ? ` · ${inv}` : '';
           setFilmProgress(
-            `${index + 1}/${total} · ${shotId} · ${st}${src}${err ? ` — ${err}` : ''}${linked ? ` · ${linked}` : ''}`
+            `${index + 1}/${total} · ${shotId} · ${st}${src}${err ? ` — ${err}` : ''}${linked ? ` · ${linked}` : ''}${invBit}`
           );
         }
       });
@@ -845,20 +871,24 @@ export default function SwsComfyWorkflowModal({
         }
       });
       if (result.ok) {
+        const invBit = result.inventoryVersion || result.classInventory || '';
+        const inv = invBit ? ` · ${invBit}` : '';
         setStatus(
           linked
-            ? `Film queue finished — ${result.total} shot(s); ${linked} output(s) linked from Comfy history.`
+            ? `Film queue finished — ${result.total} shot(s); ${linked} output(s) linked from Comfy history.${inv}`
             : pullNotes
-              ? `Film queue finished — ${result.total} shot(s) sent; ${pullNotes} waiting on Comfy history (Pull latest).`
-              : `Film queue finished — ${result.total} shot(s) sent to ComfyUI with auto-queue.`
+              ? `Film queue finished — ${result.total} shot(s) sent; ${pullNotes} waiting on Comfy history (Pull latest).${inv}`
+              : `Film queue finished — ${result.total} shot(s) sent to ComfyUI with auto-queue.${inv}`
         );
         setFilmProgress('');
       } else {
-        setError(result.error || 'Film queue stopped.');
+        const invBit = result.inventoryVersion || result.classInventory || '';
+        const inv = invBit ? ` · ${invBit}` : '';
+        setError(`${result.error || 'Film queue stopped.'}${inv}`);
         setStatus(
           rows.length
-            ? `Stopped after ${rows.length}/${result.total || filmShotCount} shot(s).${pullNotes ? ` ${pullNotes} awaiting history pull.` : ''}`
-            : ''
+            ? `Stopped after ${rows.length}/${result.total || filmShotCount} shot(s).${pullNotes ? ` ${pullNotes} awaiting history pull.` : ''}${inv}`
+            : invBit
         );
       }
     } finally {
@@ -1074,6 +1104,9 @@ export default function SwsComfyWorkflowModal({
     }),
     comfyuiVersion: comfyUiVersion || 'unknown',
     installedClassCount,
+    missingRequiredClasses,
+    classInventory: formatComfyClassInventory(installedClassCount, missingRequiredClasses),
+    pullLatestOffer: offerPullLatest || null,
     awaitingOutputCount: awaitingOutputCount(projectTitle),
     generations: (history || []).slice(0, 6).map((row) => ({
       generationId: row.generationId,
@@ -1323,13 +1356,21 @@ export default function SwsComfyWorkflowModal({
           </div>
           {offerPullLatest?.filename ? (
             <p className="m-0 text-[11px] text-[color:var(--sps-muted)]">
-              After Send: history already has a viewable output ({offerPullLatest.filename}).{' '}
+              {offerPullLatest.hint ||
+                `After Send: history already has a viewable output (${offerPullLatest.filename}).`}{' '}
               <button
                 type="button"
                 className="sps-btn text-xs"
                 onClick={pullComfyOutput}
                 disabled={busy}
               >
+                Pull latest
+              </button>
+            </p>
+          ) : offerPullLatest?.disabled ? (
+            <p className="m-0 text-[11px] text-[color:var(--sps-muted)]">
+              {offerPullLatest.hint}{' '}
+              <button type="button" className="sps-btn text-xs" disabled title={offerPullLatest.hint}>
                 Pull latest
               </button>
             </p>

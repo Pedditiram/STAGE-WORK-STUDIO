@@ -514,7 +514,7 @@ export default function InvestorDeckModal({
                     onClick={() => setTrialOpen(true)}
                     className="sps-btn text-sm"
                   >
-                    <Download className="w-4 h-4" /> Download desktop trial
+                    <Download className="w-4 h-4" /> Download app
                   </button>
                   <button
                     type="button"

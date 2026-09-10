@@ -1,11 +1,12 @@
 {
   "version": 2,
+  "installCommand": "node scripts/vercel-install.mjs",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|cmaps/|standard_fonts/|brand/|pdf\\.worker|favicon|robots\\.txt|sitemap\\.xml|.*\\.(?:js|mjs|css|map|png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|otf|bcmap|pfb)).*)",
+      "source": "/((?!api/|assets/|cmaps/|standard_fonts/|brand/|pdf\\.worker|favicon|robots\\.txt|sitemap\\.xml|privacy\\.html|terms\\.html|sws-build\\.json|.*\\.(?:js|mjs|css|map|json|html|png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|otf|bcmap|pfb)).*)",
       "destination": "/index.html"
     }
   ],
@@ -14,10 +15,13 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, If-None-Match, If-Modified-Since, X-Requested-With, Cache-Control, Pragma" },
-        { "key": "Access-Control-Max-Age", "value": "86400" }
+        { "key": "Vary", "value": "Origin" }
+      ]
+    },
+    {
+      "source": "/sws-build.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" }
       ]
     },
     {

@@ -1,0 +1,22 @@
+---
+description: Stage Work Studio SaaS architecture — continue with "continue SaaS"
+alwaysApply: true
+---
+
+# SaaS (codename)
+
+Stage Work Studio is a thin local OS. Cloud is authority for account, license, device, session, and APIs. Never control the user's computer or delete their files.
+
+Build incrementally. Owner `pedditiram@gmail.com` is always Enterprise.
+
+- Auth: login, device id (`sps_saas_device_id`), heartbeat `/api/saas`
+- Access: plans trial → enterprise, revoke, device deactivate, force logout, feature flags (generate/export/collab)
+- BYOK vs managed credits: Settings → API keys. Keys stay per account; do not send user keys to our backend
+- Managed generate: `/api/generate-image` with `SPS_BYTEPLUS_API_KEY` (never store user keys). Credits + per-plan rate limits block empty/managed generate
+- Credit packs: Settings → SaaS (Stripe checkout if `STRIPE_SECRET_KEY`, else owner grant to ledger)
+- Stripe paid packs: webhook `POST /api/stripe-webhook` + `STRIPE_WEBHOOK_SECRET` grants credits (idempotent on session id)
+- Export gated via `assertCanExport` / `canUseSaasFeature('export')`
+- Code: `src/utils/saasControl.js`, `src/services/saasGenerateClient.js`, `src/components/SaasAdminPanel.jsx`, `src/components/ByokKeysPanel.jsx`, `api/saas.js`, `api/generate-image.js`, `api/_saasLedger.js`, `api/stripe-webhook.js`
+- Consoles still honor per-user switches AND plan entitlements
+- Admin: Settings → SaaS
+- Code: `src/utils/saasControl.js`, `src/components/SaasAdminPanel.jsx`, `src/components/ByokKeysPanel.jsx`, `api/saas.js`

@@ -1,4 +1,4 @@
-/** Editorial cinema marks — square geometry, not generic tech glyphs. */
+/** Cinema marks — distinct silhouettes that read at toolbar size. */
 function Mark({ children, size = 16, className = '', title }) {
   return (
     <svg
@@ -7,9 +7,9 @@ function Mark({ children, size = 16, className = '', title }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.45"
-      strokeLinecap="square"
-      strokeLinejoin="miter"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       className={className}
       aria-hidden={title ? undefined : true}
       role={title ? 'img' : undefined}
@@ -48,25 +48,30 @@ export const IconScript = (p) => (
 
 export const IconMatrix = (p) => (
   <Mark {...p}>
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
+    <rect x="3" y="4" width="18" height="16" rx="1.2" />
+    <path d="M3 8.5h18M9 8.5v11.5M15 8.5v11.5M3 13h18" />
   </Mark>
 );
 
 export const IconForm = (p) => (
   <Mark {...p}>
-    <rect x="5" y="3" width="14" height="18" />
-    <path d="M8 8h8M8 12h8M8 16h5" />
+    <rect x="6" y="3" width="12" height="18" rx="1.2" />
+    <path d="M9 3.2V2h6v1.2" />
+    <circle cx="8.6" cy="9" r="1.1" />
+    <path d="M11.2 9h5.2" />
+    <circle cx="8.6" cy="13" r="1.1" />
+    <path d="M11.2 13h5.2" />
+    <circle cx="8.6" cy="17" r="1.1" />
+    <path d="M11.2 17h3.6" />
   </Mark>
 );
 
 export const IconStage = (p) => (
   <Mark {...p}>
-    <path d="M4 18h16" />
-    <path d="M7 18l2-11h6l2 11" />
-    <path d="M9 11h6" />
+    <path d="M4 19h16" />
+    <path d="M6 19V9l6-4 6 4v10" />
+    <path d="M12 5v14" />
+    <path d="M8 12h8" />
   </Mark>
 );
 
@@ -81,9 +86,9 @@ export const IconCast = (p) => (
 
 export const IconWorld = (p) => (
   <Mark {...p}>
-    <rect x="3" y="5" width="18" height="14" />
-    <path d="M3 14c3-3 6-3 9 0s6 3 9 0" />
-    <path d="M3 9h18" />
+    <circle cx="12" cy="12" r="8" />
+    <path d="M4 12h16" />
+    <ellipse cx="12" cy="12" rx="3.2" ry="8" />
   </Mark>
 );
 
@@ -96,8 +101,9 @@ export const IconLibrary = (p) => (
 
 export const IconCompile = (p) => (
   <Mark {...p}>
-    <rect x="3" y="5" width="18" height="14" />
-    <path d="M10 9l6 3-6 3z" fill="currentColor" stroke="none" />
+    <rect x="3" y="5" width="11" height="14" rx="1" />
+    <path d="M14 8h5v12H9" />
+    <path d="M6.2 10.2l2 2-2 2" />
   </Mark>
 );
 
@@ -110,10 +116,10 @@ export const IconReel = (p) => (
 
 export const IconStoryboard = (p) => (
   <Mark {...p}>
-    <rect x="3" y="4" width="8" height="7" />
-    <rect x="13" y="4" width="8" height="7" />
-    <rect x="3" y="13" width="8" height="7" />
-    <rect x="13" y="13" width="8" height="7" />
+    <rect x="2.5" y="7" width="6" height="10" rx="0.8" />
+    <rect x="9" y="7" width="6" height="10" rx="0.8" />
+    <rect x="15.5" y="7" width="6" height="10" rx="0.8" />
+    <path d="M2.5 5h19M2.5 19h19" />
   </Mark>
 );
 
@@ -127,16 +133,17 @@ export const IconPromo = (p) => (
 
 export const IconCampaign = (p) => (
   <Mark {...p}>
-    <rect x="5" y="3" width="14" height="18" />
-    <path d="M8 16h8M8 7h5" />
-    <path d="M3 9h2v6H3z" />
+    <rect x="5" y="3.5" width="14" height="10" rx="1" />
+    <path d="M12 13.5v5.5M8.5 20h7" />
+    <path d="M8 7h8M8 10h5" />
   </Mark>
 );
 
 export const IconBudget = (p) => (
   <Mark {...p}>
-    <rect x="4" y="3" width="16" height="18" />
-    <path d="M8 8h8M8 12h8M8 16h5" />
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 7.2v9.6" />
+    <path d="M9.4 9.4c.7-1 1.8-1.5 3.1-1.5 1.8 0 3 1 3 2.3s-1.1 2.2-3.1 2.2h-1.4c-2 0-3.2 1-3.2 2.4 0 1.4 1.4 2.4 3.3 2.4 1.4 0 2.5-.5 3.2-1.4" />
   </Mark>
 );
 
@@ -154,9 +161,22 @@ export const IconRedo = (p) => (
   </Mark>
 );
 
+/** Studio cloud sync — cloud plus up/down arrows, not a bare cloud. */
 export const IconCloud = (p) => (
   <Mark {...p}>
-    <path d="M7 18h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.6A4 4 0 0 0 7 18z" />
+    <path d="M7 17.5h9.8a3.4 3.4 0 0 0 .15-6.8 5.1 5.1 0 0 0-9.8-1.35A3.3 3.3 0 0 0 7 17.5z" />
+    <path d="M12 9.6v6.2" />
+    <path d="M10 11.4L12 9.4l2 2" />
+    <path d="M10 13.8l2 2 2-2" />
+  </Mark>
+);
+
+/** Google Drive folder — folder + triangle, never a second cloud. */
+export const IconDrive = (p) => (
+  <Mark {...p}>
+    <path d="M3 7.5h6.2l1.8 2.2H21V20H3z" />
+    <path d="M12 11.4l2.6 4.5H9.4z" fill="currentColor" stroke="none" />
+    <path d="M9.4 15.9L8 18.4h8l-1.4-2.5" />
   </Mark>
 );
 
@@ -185,7 +205,7 @@ export const IconHelp = (p) => (
 
 export const IconChat = (p) => (
   <Mark {...p}>
-    <path d="M5 5h14v10H9l-4 4z" />
+    <path d="M5 6.2c0-1.2 1-2.2 2.2-2.2h9.6c1.2 0 2.2 1 2.2 2.2v6.2c0 1.2-1 2.2-2.2 2.2H10L6 18.5v-3.9H7.2C6 14.6 5 13.6 5 12.4z" />
   </Mark>
 );
 
@@ -230,7 +250,7 @@ export const IconCheck = (p) => (
 
 export const IconSpark = (p) => (
   <Mark {...p}>
-    <path d="M12 3v4M12 17v4M4 12h4M16 12h4M6.5 6.5l2.5 2.5M15 15l2.5 2.5M17.5 6.5L15 9M9 15l-2.5 2.5" />
+    <path d="M12 3l1.4 6.1L20 12l-6.6 2.9L12 21l-1.4-6.1L4 12l6.6-2.9z" />
   </Mark>
 );
 

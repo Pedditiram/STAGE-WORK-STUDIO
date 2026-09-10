@@ -3,6 +3,7 @@
  */
 
 import { getNativeSyncUrl } from '../services/cloudSync';
+import { saasAdminHeaders, withSaasAdminBody } from './saasAdminClient';
 
 const CACHE_KEY = 'sps_cloud_sync_health';
 const FAIL_STREAK_KEY = 'sps_cloud_sync_fail_streak';
@@ -85,19 +86,19 @@ export function readCloudSyncHealth() {
 }
 
 /**
- * Probe /api/sync?type=projects for kvConfigured + durableOk flags.
+ * Probe /api/sync?type=tick (tiny stamps). Never download the project library for a health check.
  */
 export async function fetchCloudSyncHealth() {
   if (typeof window === 'undefined') {
     return readCloudSyncHealth();
   }
   try {
-    const res = await fetch(`${getNativeSyncUrl()}?type=projects`, { cache: 'no-store' });
+    const res = await fetch(`${getNativeSyncUrl()}?type=tick`, { cache: 'no-store' });
     const data = await res.json().catch(() => ({}));
     const kv = Boolean(data.kvConfigured);
     const durableOk = data.durableOk !== false && !data.durableFailed;
     const backend = kv ? 'upstash_kv' : durableOk ? 'jsonblob' : res.ok ? 'memory' : 'offline';
-    const ok = res.ok && durableOk;
+    const ok = res.ok && Boolean(data.success !== false);
     const failStreak = noteProbeResult(ok);
     return writeCache({
       ok,
@@ -144,8 +145,8 @@ export async function runKvMigration({ force = false } = {}) {
   try {
     const res = await fetch(`${getNativeSyncUrl()}?type=kv_migration`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force: Boolean(force) })
+      headers: saasAdminHeaders(),
+      body: JSON.stringify(withSaasAdminBody({ force: Boolean(force) }))
     });
     return res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
   } catch (e) {

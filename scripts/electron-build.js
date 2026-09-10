@@ -21,9 +21,23 @@ const backupPath = path.join(root, '.index.html.electron-bak');
 const args = process.argv.slice(2);
 const archEnv = String(process.env.SWS_ELECTRON_ARCH || 'arm64').toLowerCase();
 const archFlag = archEnv === 'x64' || archEnv === 'intel' ? '--x64' : '--arm64';
+const dirOnly = args.includes('--dir');
 let builderArgs = ['--mac', archFlag];
-if (args.includes('--dir')) builderArgs = ['--mac', '--dir', archFlag];
+if (dirOnly) builderArgs = ['--mac', '--dir', archFlag];
 if (args.includes('--dmg')) builderArgs = ['--mac', 'dmg', archFlag];
+
+function pruneStaleInstallers() {
+  const releaseDir = path.join(root, 'release');
+  if (!fs.existsSync(releaseDir)) return;
+  for (const name of fs.readdirSync(releaseDir)) {
+    if (!/\.(dmg|zip|blockmap|yml)$/i.test(name)) continue;
+    try {
+      fs.rmSync(path.join(releaseDir, name), { force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 function run(cmd, cmdArgs, env = {}) {
   const res = spawnSync(cmd, cmdArgs, {
@@ -86,6 +100,7 @@ process.on('SIGINT', () => {
 });
 
 try {
+  if (dirOnly) pruneStaleInstallers();
   run('npx', ['cross-env', 'ELECTRON_BUILD=true', 'vite', 'build']);
   // Restore immediately so a failed electron-builder never leaves a broken entry
   if (fs.existsSync(backupPath)) {
@@ -106,6 +121,7 @@ try {
 }
 
 safeRestore();
+if (dirOnly) pruneStaleInstallers();
 console.log('Electron build complete.');
 
 // Ad-hoc resign so Finder/LaunchServices can open unsigned local builds

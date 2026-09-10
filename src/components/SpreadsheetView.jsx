@@ -1087,6 +1087,7 @@ function SpreadsheetView({
         pinTitle={matrixBarPinTitle}
         className="z-20"
         barClassName="sps-matrix-toolbar px-3 py-1 border-b flex items-center justify-between gap-2"
+        showProfile={false}
       >
         <div className="flex items-center gap-1 overflow-x-auto sps-header-scroll max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex-1 min-w-0">
           <span

@@ -8,6 +8,8 @@ import {
   fetchComfyObjectInfo,
   loadWorkflowIntoComfyEditor,
   missingComfyClassStatusLine,
+  formatComfyClassInventoryWithVersion,
+  formatFilmProgressInventory,
   openComfyUiWindow,
   probeComfyUi,
   pullLatestComfyOutput,
@@ -17,6 +19,195 @@ import { SEEDANCE_MASTER_REQUIRED_NODES } from './seedanceMasterWorkflow';
 
 function shotLabel(shot, index) {
   return String(shot?.sceneShotId || shot?.shotId || `shot_${index + 1}`);
+}
+
+/** Early film-queue stop (empty / unreachable / object_info) still lists version next to classInventory. */
+export function filmQueueEarlyResult({
+  error = '',
+  code = '',
+  results = [],
+  comfyuiVersion = 'unknown',
+  installedClassCount = 0,
+  missing = []
+} = {}) {
+  const classInventory = formatComfyClassInventoryWithVersion(installedClassCount, missing, comfyuiVersion);
+  return {
+    ok: false,
+    error,
+    code,
+    results,
+    comfyuiVersion,
+    installedClassCount,
+    classInventory,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+/** Missing custom-node stop still lists classInventory next to comfyuiVersion. */
+export function filmQueueMissingNodesResult({
+  error = '',
+  results = [],
+  comfyuiVersion = 'unknown',
+  installedClassCount = 0,
+  classInventory = '',
+  missing = []
+} = {}) {
+  const inventory =
+    String(classInventory || '').trim() ||
+    formatComfyClassInventoryWithVersion(installedClassCount, missing, comfyuiVersion);
+  return {
+    ok: false,
+    error,
+    code: 'missing_nodes',
+    results,
+    comfyuiVersion,
+    installedClassCount,
+    classInventory: inventory,
+    inventoryVersion: formatFilmProgressInventory(inventory, comfyuiVersion)
+  };
+}
+
+/** Finished film-queue payload still lists classInventory next to comfyuiVersion. */
+export function filmQueueFinalResult({
+  results = [],
+  total,
+  comfyuiVersion = 'unknown',
+  installedClassCount = 0,
+  classInventory = ''
+} = {}) {
+  const failed = results.filter((r) => r.status === 'failed').length;
+  const cancelled = results.some((r) => r.status === 'cancelled');
+  return {
+    ok: failed === 0 && !cancelled,
+    error: cancelled ? 'Film queue cancelled.' : failed ? `${failed} shot(s) failed.` : '',
+    code: cancelled ? 'cancelled' : failed ? 'partial' : '',
+    results,
+    total: Number.isFinite(total) ? total : results.length,
+    comfyuiVersion,
+    installedClassCount,
+    classInventory,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueCancelledRow({
+  index = 0,
+  shotId = '',
+  comfyuiVersion = 'unknown',
+  classInventory = ''
+} = {}) {
+  return {
+    index,
+    shotId,
+    status: 'cancelled',
+    comfyuiVersion,
+    classInventory,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueFailedRow({
+  index = 0,
+  shotId = '',
+  error = '',
+  shotIndex,
+  comfyuiVersion = 'unknown',
+  classInventory = ''
+} = {}) {
+  return {
+    index,
+    shotId,
+    ...(Number.isFinite(shotIndex) ? { shotIndex } : {}),
+    status: 'failed',
+    error,
+    comfyuiVersion,
+    classInventory,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueSucceededRow({
+  index = 0,
+  shotId = '',
+  shotIndex,
+  outputFile = '',
+  filename = '',
+  comfyPromptId = '',
+  outputNote = '',
+  comfyuiVersion = 'unknown',
+  classInventory = ''
+} = {}) {
+  return {
+    index,
+    shotId,
+    ...(Number.isFinite(shotIndex) ? { shotIndex } : {}),
+    status: 'succeeded',
+    outputFile,
+    filename,
+    comfyPromptId,
+    outputNote,
+    comfyuiVersion,
+    classInventory,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueAssemblingProgress({
+  index = 0,
+  total = 0,
+  shotId = '',
+  classInventory = '',
+  comfyuiVersion = 'unknown'
+} = {}) {
+  return {
+    index,
+    total,
+    shotId,
+    status: 'assembling',
+    classInventory,
+    comfyuiVersion,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueLoadingProgress({
+  index = 0,
+  total = 0,
+  shotId = '',
+  composedSource = '',
+  classInventory = '',
+  comfyuiVersion = 'unknown'
+} = {}) {
+  return {
+    index,
+    total,
+    shotId,
+    status: 'loading',
+    composedSource,
+    classInventory,
+    comfyuiVersion,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+}
+
+export function filmQueueGeneratingProgress({
+  index = 0,
+  total = 0,
+  shotId = '',
+  composedSource = '',
+  classInventory = '',
+  comfyuiVersion = 'unknown'
+} = {}) {
+  return {
+    index,
+    total,
+    shotId,
+    status: 'generating',
+    composedSource,
+    classInventory,
+    comfyuiVersion,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
 }
 
 function isUuidType(t) {
@@ -69,7 +260,33 @@ export function listFilmQueueShots(shots = []) {
 }
 
 /**
- * Run the film queue. Calls onProgress({ index, total, shotId, status, error, filename, outputFile }).
+ * Keys on every film-queue onProgress payload: classInventory next to comfyuiVersion as inventoryVersion.
+ */
+export const FILM_QUEUE_PROGRESS_KEYS =
+  'index, total, shotId, status, error, filename, outputFile, composedSource, installedClassCount, classInventory, comfyuiVersion, inventoryVersion';
+
+/** Spread onto every onProgress: classInventory next to comfyuiVersion as inventoryVersion. */
+export const FILM_QUEUE_CLASS_FIELDS_KEYS =
+  'installedClassCount, missingRequiredClasses, classInventory, comfyuiVersion, inventoryVersion';
+
+/** reportProgress always spreads classInventory next to comfyuiVersion as inventoryVersion. */
+export const FILM_QUEUE_REPORT_PROGRESS_KEYS =
+  'classInventory, comfyuiVersion, inventoryVersion';
+
+/** Assembling onProgress keeps classInventory next to comfyuiVersion as inventoryVersion. */
+export const FILM_QUEUE_ASSEMBLING_PROGRESS_KEYS =
+  'classInventory, comfyuiVersion, inventoryVersion';
+
+/** Loading onProgress keeps classInventory next to comfyuiVersion as inventoryVersion. */
+export const FILM_QUEUE_LOADING_PROGRESS_KEYS =
+  'classInventory, comfyuiVersion, inventoryVersion';
+
+/** Generating onProgress keeps classInventory next to comfyuiVersion as inventoryVersion. */
+export const FILM_QUEUE_GENERATING_PROGRESS_KEYS =
+  'classInventory, comfyuiVersion, inventoryVersion';
+
+/**
+ * Run the film queue. Calls onProgress({ index, total, shotId, status, error, filename, outputFile, composedSource, installedClassCount, classInventory, comfyuiVersion, inventoryVersion }).
  * Pass a shared `{ cancelled: false }` cancelToken; set cancelled=true to stop after current wait.
  */
 export async function runComfyFilmQueue({
@@ -88,13 +305,17 @@ export async function runComfyFilmQueue({
 } = {}) {
   const list = listFilmQueueShots(shots);
   if (!list.length) {
-    return { ok: false, error: 'No Matrix shots to queue.', code: 'empty', results: [] };
+    return filmQueueEarlyResult({ error: 'No Matrix shots to queue.', code: 'empty' });
   }
 
   openComfyUiWindow(comfyUrl);
   const probe = await probeComfyUi(comfyUrl);
   if (!probe.ok) {
-    return { ok: false, error: probe.message || 'ComfyUI unreachable', code: 'unreachable', results: [] };
+    return filmQueueEarlyResult({
+      error: probe.message || 'ComfyUI unreachable',
+      code: 'unreachable',
+      comfyuiVersion: probe.comfyuiVersion || 'unknown'
+    });
   }
   const comfyuiVersion = probe.comfyuiVersion || 'unknown';
 
@@ -102,32 +323,80 @@ export async function runComfyFilmQueue({
   try {
     objectInfo = await fetchComfyObjectInfo(comfyUrl);
   } catch (err) {
-    return { ok: false, error: err?.message || 'object_info failed', code: 'object_info', results: [] };
+    return filmQueueEarlyResult({
+      error: err?.message || 'object_info failed',
+      code: 'object_info',
+      comfyuiVersion
+    });
   }
 
   const classReport = missingComfyClassStatusLine(objectInfo, [...SEEDANCE_MASTER_REQUIRED_NODES], {
     host: comfyUrl
   });
+  const classInventory = formatComfyClassInventoryWithVersion(
+    classReport.installedClassCount,
+    classReport.missing,
+    comfyuiVersion
+  );
+  /** classInventory next to comfyuiVersion as inventoryVersion */
+  const classFields = {
+    installedClassCount: classReport.installedClassCount,
+    missingRequiredClasses: classReport.missing || [],
+    classInventory,
+    comfyuiVersion,
+    inventoryVersion: formatFilmProgressInventory(classInventory, comfyuiVersion)
+  };
+  /** Spreads classFields (classInventory, comfyuiVersion, inventoryVersion) onto every onProgress payload. */
+  const reportProgress = (partial = {}) => onProgress?.({ ...classFields, ...partial });
   if (!classReport.ok) {
-    onProgress?.({
+    const row = filmQueueFailedRow({
       index: 0,
-      total: list.length,
       shotId: list[0] ? shotLabel(list[0].shot, list[0].index) : '',
-      status: 'failed',
-      error: classReport.status
+      error: classReport.status,
+      comfyuiVersion,
+      classInventory
     });
-    return { ok: false, error: classReport.status, code: 'missing_nodes', results: [], comfyuiVersion };
+    reportProgress({
+      ...row,
+      total: list.length,
+      installedClassCount: classReport.installedClassCount,
+      missingRequiredClasses: classReport.missing
+    });
+    return filmQueueMissingNodesResult({
+      error: classReport.status,
+      results: [],
+      comfyuiVersion,
+      installedClassCount: classReport.installedClassCount,
+      classInventory,
+      missing: classReport.missing
+    });
   }
 
   const results = [];
   for (let i = 0; i < list.length; i += 1) {
     if (cancelToken.cancelled) {
-      results.push({ index: i, status: 'cancelled' });
+      const { shot, index } = list[i] || {};
+      const row = filmQueueCancelledRow({
+        index: i,
+        shotId: shot ? shotLabel(shot, index) : '',
+        comfyuiVersion,
+        classInventory
+      });
+      results.push(row);
+      reportProgress({ ...row, total: list.length });
       break;
     }
     const { shot, index } = list[i];
     const label = shotLabel(shot, index);
-    onProgress?.({ index: i, total: list.length, shotId: label, status: 'assembling' });
+    reportProgress(
+      filmQueueAssemblingProgress({
+        index: i,
+        total: list.length,
+        shotId: label,
+        classInventory,
+        comfyuiVersion
+      })
+    );
 
     const assembled = await assembleMatrixSeedanceWorkflowAsync({
       shot,
@@ -142,29 +411,48 @@ export async function runComfyFilmQueue({
       generateAudio
     });
     const composedSource = assembled.composed?.source || assembled.debug?.composedSource || '';
+    const pushFailed = (error, extra = {}) => {
+      const row = filmQueueFailedRow({
+        index: i,
+        shotId: label,
+        error,
+        comfyuiVersion,
+        classInventory,
+        ...extra
+      });
+      results.push(row);
+      reportProgress({ ...row, total: list.length, composedSource });
+      return row;
+    };
     if (!assembled.ok || !assembled.workflow) {
-      const err = assembled.error || 'Assemble failed';
-      results.push({ index: i, shotId: label, status: 'failed', error: err });
-      onProgress?.({ index: i, total: list.length, shotId: label, status: 'failed', error: err, composedSource });
+      pushFailed(assembled.error || 'Assemble failed');
       continue;
     }
 
     const installed = validateMasterNodesInstalled(assembled.workflow, objectInfo);
     if (!installed.ok) {
-      results.push({ index: i, shotId: label, status: 'failed', error: installed.message });
-      onProgress?.({
+      pushFailed(installed.message);
+      // Missing nodes won't fix mid-run
+      return filmQueueMissingNodesResult({
+        error: installed.message,
+        results,
+        comfyuiVersion,
+        installedClassCount: classReport.installedClassCount,
+        classInventory,
+        missing: installed.missing
+      });
+    }
+
+    reportProgress(
+      filmQueueLoadingProgress({
         index: i,
         total: list.length,
         shotId: label,
-        status: 'failed',
-        error: installed.message,
-        composedSource
-      });
-      // Missing nodes won't fix mid-run
-      return { ok: false, error: installed.message, code: 'missing_nodes', results };
-    }
-
-    onProgress?.({ index: i, total: list.length, shotId: label, status: 'loading', composedSource });
+        composedSource,
+        classInventory,
+        comfyuiVersion
+      })
+    );
     const loaded = await loadWorkflowIntoComfyEditor({
       workflow: assembled.workflow,
       workflowId: `film_${projectTitle}_${label}_${Date.now()}`,
@@ -173,21 +461,23 @@ export async function runComfyFilmQueue({
       autoQueue: Boolean(autoQueue)
     });
     if (!loaded.ok) {
-      results.push({ index: i, shotId: label, status: 'failed', error: loaded.message });
-      onProgress?.({
-        index: i,
-        total: list.length,
-        shotId: label,
-        status: 'failed',
-        error: loaded.message
-      });
+      pushFailed(loaded.message);
       continue;
     }
 
     openComfyUiWindow(comfyUrl);
 
     if (autoQueue) {
-      onProgress?.({ index: i, total: list.length, shotId: label, status: 'generating', composedSource });
+      reportProgress(
+        filmQueueGeneratingProgress({
+          index: i,
+          total: list.length,
+          shotId: label,
+          composedSource,
+          classInventory,
+          comfyuiVersion
+        })
+      );
       const waited = await waitForComfyQueueIdle({
         baseUrl: comfyUrl,
         cancelToken,
@@ -196,62 +486,58 @@ export async function runComfyFilmQueue({
         pollMs: 2500
       });
       if (cancelToken.cancelled) {
-        results.push({ index: i, shotId: label, status: 'cancelled' });
+        const row = filmQueueCancelledRow({
+          index: i,
+          shotId: label,
+          comfyuiVersion,
+          classInventory
+        });
+        results.push(row);
+        reportProgress({ ...row, total: list.length, composedSource });
         break;
       }
       if (!waited.ok) {
-        results.push({
-          index: i,
-          shotId: label,
-          status: 'failed',
-          error: waited.message || 'Queue wait failed'
-        });
-        onProgress?.({
-          index: i,
-          total: list.length,
-          shotId: label,
-          status: 'failed',
-          error: waited.message
-        });
+        pushFailed(waited.message || 'Queue wait failed');
         continue;
       }
       const pulled = await pullLatestComfyOutput({ baseUrl: comfyUrl });
       const filename = pulled.ok ? pulled.filename || '' : '';
-      results.push({
+      const row = filmQueueSucceededRow({
         index: i,
         shotIndex: index,
         shotId: label,
-        status: 'succeeded',
         outputFile: pulled.ok ? pulled.outputFile : '',
         filename,
         comfyPromptId: pulled.ok ? pulled.promptId : '',
+        outputNote: pulled.ok ? '' : pulled.message || '',
         comfyuiVersion,
-        outputNote: pulled.ok ? '' : pulled.message || ''
+        classInventory
       });
-      onProgress?.({
-        index: i,
+      results.push(row);
+      reportProgress({
+        ...row,
         total: list.length,
-        shotId: label,
-        status: 'succeeded',
-        outputFile: pulled.ok ? pulled.outputFile : '',
-        filename,
         composedSource
       });
       continue;
     }
 
-    results.push({ index: i, shotIndex: index, shotId: label, status: 'succeeded', comfyuiVersion });
-    onProgress?.({ index: i, total: list.length, shotId: label, status: 'succeeded', composedSource });
+    const row = filmQueueSucceededRow({
+      index: i,
+      shotIndex: index,
+      shotId: label,
+      comfyuiVersion,
+      classInventory
+    });
+    results.push(row);
+    reportProgress({ ...row, total: list.length, composedSource });
   }
 
-  const failed = results.filter((r) => r.status === 'failed').length;
-  const cancelled = results.some((r) => r.status === 'cancelled');
-  return {
-    ok: failed === 0 && !cancelled,
-    error: cancelled ? 'Film queue cancelled.' : failed ? `${failed} shot(s) failed.` : '',
-    code: cancelled ? 'cancelled' : failed ? 'partial' : '',
+  return filmQueueFinalResult({
     results,
     total: list.length,
-    comfyuiVersion
-  };
+    comfyuiVersion,
+    installedClassCount: classReport.installedClassCount,
+    classInventory
+  });
 }

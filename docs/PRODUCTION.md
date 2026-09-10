@@ -49,7 +49,7 @@ Default durable store: **JSONBlob** (public, ~10KB, rate-limited). The API:
 | `SPS_KV_REST_URL` | `KV_REST_API_URL`, `UPSTASH_REDIS_REST_URL` | REST base URL (e.g. `https://….upstash.io`) — **no** trailing path |
 | `SPS_KV_REST_TOKEN` | `KV_REST_API_TOKEN`, `UPSTASH_REDIS_REST_TOKEN` | REST token |
 
-Keys used: `sps:rooms`, `sps:projects`, `sps:collaborators`, `sps:chat`, `sps:presence`.
+Keys used: `sps:rooms`, `sps:projects`, `sps:collaborators`, `sps:chat`, `sps:presence`, `sps:settings`.
 
 **Dashboard (clearest):** Vercel project → **Settings → Environment Variables** → add both for **Production** (and Preview if you want) → Redeploy.
 
@@ -137,7 +137,7 @@ Vercel **cannot** host the unsigned ~500MB Electron `.app`. Keep binaries on **G
 Upload a new build: create a GitHub Release, attach the `.dmg` / `.zip`, paste the asset URL in **Settings → SaaS → Desktop trial** (or set the env var and redeploy).
 
 ### Visitor flow
-1. Login → **Download desktop trial**, or `/?trial=1`, or Investor Deck / presentation CTA.
+1. Login → **Download app**, or `/?trial=1`, or Investor Deck / presentation CTA.
 2. Form: name, email, optional org/why → `POST /api/desktop-trial` `{ action: "request" }` (idempotent on email).
 3. Owner inbox `pedditiram@gmail.com` (`SPS_ACCESS_TO_EMAIL`) is emailed when Resend is configured.
 4. **Settings → SaaS**: pending list → **Approve** / **Deny**. Approve licenses SaaS **trial** (owner stays Enterprise) and emails the **same requester email** a personal `/api/desktop-trial?action=download&token=…` link.

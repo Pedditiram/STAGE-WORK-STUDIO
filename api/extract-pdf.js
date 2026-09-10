@@ -11,7 +11,16 @@
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const MAX_BYTES = 12 * 1024 * 1024;
+const extractHits = new Map();
+function extractRateOk(req) {
+  const ip = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const now = Date.now();
+  const arr = (extractHits.get(ip) || []).filter((t) => now - t < 60_000);
+  if (arr.length >= 10) return false;
+  arr.push(now);
+  extractHits.set(ip, arr);
+  return true;
+}
 
 /** pdfjs legacy expects browser geometry APIs; text extract only needs a stub. */
 function ensureDomMatrixPolyfill() {
@@ -106,11 +115,20 @@ function ensureDomMatrixPolyfill() {
 
 ensureDomMatrixPolyfill();
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function setCors(req, res) {
+  const origin = String(req.headers?.origin || '').trim();
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
+  const allowed =
+    origin === 'null' ||
+    origin === 'https://www.stageworkstudio.com' ||
+    origin === 'https://stageworkstudio.com' ||
+    /^https:\/\/([a-z0-9-]+\.)?stageworkstudio\.com$/i.test(origin) ||
+    /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin) ||
+    /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  if (origin && allowed) res.setHeader('Access-Control-Allow-Origin', origin);
 }
 
 function resolvePdfJsAssetDir(sub) {
@@ -456,10 +474,13 @@ function looksUsable(text) {
 }
 
 module.exports = async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, code: 'METHOD', error: 'POST only' });
+  }
+  if (!extractRateOk(req)) {
+    return res.status(429).json({ success: false, code: 'RATE', error: 'Too many PDF extracts. Wait a minute.' });
   }
 
   try {

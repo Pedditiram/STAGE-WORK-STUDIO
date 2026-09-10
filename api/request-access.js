@@ -12,6 +12,7 @@ import path from 'path';
 import { sendResend, OFFICIAL_STUDIO_EMAIL } from './_saasMail.js';
 import { validateEmail } from './_emailValidator.js';
 import { generateAccessRequestConfirmationEmail } from './_cinemaEmailTemplates.js';
+import { applyCors, clientIp, rateLimit } from './_httpSecurity.js';
 
 const ADMIN_EMAIL = OFFICIAL_STUDIO_EMAIL;
 
@@ -46,13 +47,17 @@ function persistRequest(record) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  applyCors(req, res, { methods: 'POST, OPTIONS' });
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const ipLimit = rateLimit(`access:${clientIp(req)}`, 8, 60 * 60 * 1000);
+  if (!ipLimit.ok) {
+    return res.status(429).json({ success: false, error: `Too many access requests. Wait ${ipLimit.waitSec}s.` });
+  }
 
   try {
     const body = req.body || {};

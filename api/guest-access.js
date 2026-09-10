@@ -3,6 +3,8 @@
  * Durable when KV is configured; otherwise in-memory (default ON).
  */
 
+import { applyCors, requireStudioAdmin } from './_httpSecurity.js';
+
 function kvRestUrl() {
   return (
     process.env.SPS_KV_REST_URL ||
@@ -23,10 +25,8 @@ function kvRestToken() {
 
 let memoryUrlEnabled = true;
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function cors(req, res) {
+  applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
 }
 
 async function kvGetFlag() {
@@ -70,7 +70,7 @@ async function kvSetFlag(urlEnabled) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(req, res);
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
@@ -85,6 +85,10 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+    const admin = requireStudioAdmin(req, body);
+    if (!admin.ok) {
+      return res.status(admin.status).json({ success: false, error: admin.error });
+    }
     const urlEnabled = Boolean(body.urlEnabled);
     memoryUrlEnabled = urlEnabled;
     await kvSetFlag(urlEnabled);

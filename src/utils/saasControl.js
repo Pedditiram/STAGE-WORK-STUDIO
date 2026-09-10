@@ -171,10 +171,10 @@ function defaultLicense(email) {
   const owner = isOwner(email);
   return {
     email,
-    plan: owner ? 'enterprise' : 'studio',
+    plan: owner ? 'enterprise' : 'trial',
     status: 'ACTIVE',
     apiMode: 'byok',
-    credits: owner ? 999999 : 25000,
+    credits: owner ? 999999 : 50,
     devices: [],
     flags: {
       generate: null,
