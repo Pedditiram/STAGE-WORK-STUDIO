@@ -25,6 +25,8 @@ import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import {
   syncProjectLibraryToCloud,
   peekRemoteLibraryCatalog,
+  fetchFilmFromCloud,
+  publishOneLibraryTitle,
   syncCollaboratorsToCloud,
   reviveProjectTitleForOpen,
   filterOutDeletedProjects,
@@ -257,6 +259,7 @@ export default function ProjectConsoleModal({
   const [shelfSyncError, setShelfSyncError] = useState('');
   const [shelfSyncRemote, setShelfSyncRemote] = useState([]);
   const [shelfSyncDiff, setShelfSyncDiff] = useState(null);
+  const [shelfSyncBusyTitle, setShelfSyncBusyTitle] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1513,6 +1516,101 @@ export default function ProjectConsoleModal({
       setShelfSyncError('Could not publish this device’s shelves.');
     } finally {
       setShelfSyncBusy(false);
+    }
+  };
+
+  const copySharedTitleToThisApp = async (title) => {
+    const clean = String(title || '').trim();
+    if (!clean) return;
+    setShelfSyncBusy(true);
+    setShelfSyncBusyTitle(clean);
+    setShelfSyncError('');
+    try {
+      const remote = shelfSyncRemote.length ? shelfSyncRemote : await peekRemoteLibraryCatalog();
+      const card = (Array.isArray(remote) ? remote : []).find(
+        (p) => String(p?.title || '').trim().toUpperCase() === clean.toUpperCase()
+      );
+      if (!card) {
+        setShelfSyncError(`"${clean}" is not in the shared catalog.`);
+        return;
+      }
+      const localHit = findTitleOnShelves(clean, [projectLibrary]);
+      if (localHit) {
+        setShelfSyncError(
+          `"${localHit.title}" is already on this app’s ${localHit.shelf === STORAGE_CLOUD ? 'Cloud' : 'Local'} shelf.`
+        );
+        return;
+      }
+      reviveProjectTitleForOpen(clean);
+      let film = null;
+      try {
+        film = await fetchFilmFromCloud(clean);
+      } catch {
+        film = null;
+      }
+      const nextCard = {
+        id: card.id || `proj_${Date.now()}`,
+        ...card,
+        ...(film && typeof film === 'object' ? film : {}),
+        title: String(card.title || clean).trim(),
+        storageMode: normalizeStorageMode(card.storageMode),
+        roomId: roomIdForProject(String(card.title || clean).trim()),
+        lastModified: new Date().toLocaleDateString()
+      };
+      const key = String(nextCard.title).trim().toUpperCase();
+      const next = sanitizeLibraryTitles(
+        filterOutDeletedProjects([
+          nextCard,
+          ...(Array.isArray(projectLibrary) ? projectLibrary : []).filter(
+            (p) => String(p?.title || '').trim().toUpperCase() !== key
+          )
+        ])
+      );
+      writeLocalProjectLibrary(next);
+      setProjectLibrary(next);
+      setLibraryShelf(normalizeStorageMode(nextCard.storageMode));
+      try {
+        await saveProjectToVault(nextCard);
+      } catch {
+        /* disk optional on web */
+      }
+      setShelfSyncRemote(remote);
+      setShelfSyncDiff(compareLibraryShelves(next, remote));
+    } catch {
+      setShelfSyncError(`Could not copy "${clean}" onto this app.`);
+    } finally {
+      setShelfSyncBusy(false);
+      setShelfSyncBusyTitle('');
+    }
+  };
+
+  const publishTitleFromThisApp = async (title) => {
+    const clean = String(title || '').trim();
+    if (!clean) return;
+    setShelfSyncBusy(true);
+    setShelfSyncBusyTitle(clean);
+    setShelfSyncError('');
+    try {
+      const card = (Array.isArray(projectLibrary) ? projectLibrary : []).find(
+        (p) => String(p?.title || '').trim().toUpperCase() === clean.toUpperCase()
+      );
+      if (!card) {
+        setShelfSyncError(`"${clean}" is not on this app.`);
+        return;
+      }
+      const ok = await publishOneLibraryTitle(card);
+      if (!ok) {
+        setShelfSyncError(`Could not publish "${clean}".`);
+        return;
+      }
+      const remote = await peekRemoteLibraryCatalog();
+      setShelfSyncRemote(Array.isArray(remote) ? remote : []);
+      setShelfSyncDiff(compareLibraryShelves(projectLibrary, remote));
+    } catch {
+      setShelfSyncError(`Could not publish "${clean}".`);
+    } finally {
+      setShelfSyncBusy(false);
+      setShelfSyncBusyTitle('');
     }
   };
   const libraryProjectsForDisplay = useMemo(() => {
@@ -3654,7 +3752,7 @@ export default function ProjectConsoleModal({
             </div>
             <div className="p-4 overflow-y-auto space-y-3 text-[12px]">
               <p className="m-0 text-slate-600 dark:text-zinc-400">
-                Web and this Mac keep their own Local / Cloud lists until you confirm. Apply copies the shared catalog onto this device. Publish sends this device’s lists to the shared catalog.
+                Copy one title onto this app without replacing the whole list. HEY stays on Cloud if it is Cloud in the shared catalog — a title is never Local and Cloud at once.
               </p>
               {shelfSyncError ? (
                 <p className="m-0 text-red-600 dark:text-red-400">{shelfSyncError}</p>
@@ -3679,12 +3777,44 @@ export default function ProjectConsoleModal({
                   {shelfSyncDiff.inSync ? (
                     <p className="m-0 font-semibold" style={{ color: 'var(--sps-gold)' }}>Shelves match.</p>
                   ) : (
-                    <div className="space-y-1">
-                      {shelfSyncDiff.onlyHere.length > 0 && (
-                        <p className="m-0 text-[11px]">Only here: {shelfSyncDiff.onlyHere.join(', ')}</p>
-                      )}
+                    <div className="space-y-3">
                       {shelfSyncDiff.onlyShared.length > 0 && (
-                        <p className="m-0 text-[11px]">Only shared: {shelfSyncDiff.onlyShared.join(', ')}</p>
+                        <div>
+                          <p className="m-0 mb-1 font-semibold">On shared catalog — not on this app</p>
+                          {shelfSyncDiff.onlyShared.map((title) => (
+                            <div key={`shared-${title}`} className="flex items-center justify-between gap-2 py-1">
+                              <span className="text-[11px] truncate">{title}</span>
+                              <button
+                                type="button"
+                                className="sps-btn sps-btn-primary text-[10px] py-1 shrink-0"
+                                disabled={shelfSyncBusy}
+                                onClick={() => copySharedTitleToThisApp(title)}
+                                title="Copy this film onto this app. Keeps the shared Local or Cloud shelf."
+                              >
+                                {shelfSyncBusyTitle === title ? 'Copying…' : 'Copy to this app'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {shelfSyncDiff.onlyHere.length > 0 && (
+                        <div>
+                          <p className="m-0 mb-1 font-semibold">On this app — not in shared catalog</p>
+                          {shelfSyncDiff.onlyHere.map((title) => (
+                            <div key={`here-${title}`} className="flex items-center justify-between gap-2 py-1">
+                              <span className="text-[11px] truncate">{title}</span>
+                              <button
+                                type="button"
+                                className="sps-btn text-[10px] py-1 shrink-0"
+                                disabled={shelfSyncBusy}
+                                onClick={() => publishTitleFromThisApp(title)}
+                                title="Add only this title to the shared catalog. Does not replace other titles."
+                              >
+                                {shelfSyncBusyTitle === title ? 'Publishing…' : 'Publish this title'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                       {shelfSyncDiff.mismatches.length > 0 && (
                         <p className="m-0 text-[11px]">Shelf mismatch: {shelfSyncDiff.mismatches.join(', ')}</p>

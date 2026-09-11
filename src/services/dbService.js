@@ -529,6 +529,34 @@ export async function fetchFilmFromCloud(title) {
   }
 }
 
+/** Merge one title into the shared catalog without replacing this device’s library. */
+export async function publishOneLibraryTitle(card) {
+  if (typeof window === 'undefined') return false;
+  if (isSelfServeSession()) return false;
+  const slim = slimProjectForLocalMirror(card);
+  if (!slim?.title) return false;
+  const payload = {
+    projects: [slim],
+    releasedTitles: [],
+    deletedTitles: [],
+    exclusiveCloud: false,
+    catalogSync: true,
+    updatedAt: new Date().toISOString(),
+    totalProjects: 1
+  };
+  try {
+    await fetchJsonTimed(`${syncApiUrl()}?type=projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    return false;
+  }
+  await syncFilmToCloud(card);
+  return true;
+}
+
 export async function syncFilmToCloud(project) {
   if (typeof window === 'undefined') return false;
   if (isSelfServeSession()) return false;

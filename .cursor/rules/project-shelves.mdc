@@ -13,6 +13,8 @@ Silent catalog push/pull is **forbidden**. Web and Electron must not overwrite e
 
 - Owner clicks **Sync shelves** in Projects (next to Local / Cloud).
 - Dialog shows This device vs Shared catalog, then diffs (only here / only shared / shelf mismatch).
+- **Copy to this app** (per title) = pull that film onto this device, keep its shared Local or Cloud shelf. Does not replace other titles.
+- **Publish this title** (per title) = merge one card into the shared catalog (`publishOneLibraryTitle`). Does not replace this device’s library.
 - **Apply shared catalog** = pull (`peekRemoteLibraryCatalog` + `adoptSharedLibraryCatalog` + write library).
 - **Publish this device** = push (`syncProjectLibraryToCloud`).
 - Cancel leaves both sides unchanged.
