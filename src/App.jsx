@@ -1419,6 +1419,8 @@ export default function App() {
   const lastSyncedHash = React.useRef('');
   const prevAutoSavedShotsRef = React.useRef('');
   const isReceivingCloudUpdate = React.useRef(false);
+  const syncToCloudTimerRef = React.useRef(null);
+  const syncToCloudPendingRef = React.useRef(null);
   const electronMenuRef = React.useRef({});
   const shotsRef = React.useRef(shots);
   const activeShotIndexRef = React.useRef(activeShotIndex);
@@ -1848,43 +1850,44 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate when leaving the reel or switching local/cloud mode
   }, [appVersionMode, presentationDesk]);
 
-  // Auto-Save Active Project to Physical Hard Drive Folder (/Users/pedditiram/Documents/PROMPT ENGINEERING/projects/)
+  // Auto-save open film to disk — debounce so Matrix mute/unmute does not stall live sync
   useEffect(() => {
-    if (presentationDesk || isPresentationMode()) return;
-    if (isGuestSession()) return;
-    if (!shots || shots.length === 0 || !projectTitle) return;
+    if (presentationDesk || isPresentationMode()) return undefined;
+    if (isGuestSession()) return undefined;
+    if (!shots || shots.length === 0 || !projectTitle) return undefined;
 
     const currentShotsHash = JSON.stringify({ projectTitle, targetModel, aspectRatio, shots });
-    if (currentShotsHash === prevAutoSavedShotsRef.current) return; // Prevent duplicate infinite re-renders!
-    
-    prevAutoSavedShotsRef.current = currentShotsHash;
+    const timer = setTimeout(() => {
+      if (currentShotsHash === prevAutoSavedShotsRef.current) return;
+      prevAutoSavedShotsRef.current = currentShotsHash;
 
-    const safeTitle = (projectTitle == null ? '' : String(projectTitle));
-    // Never stamp THE LAST LETTER teaching Matrix onto a different film title.
-    const persistShots =
-      !isDemoProjectTitle(safeTitle) && shotsLookLikeDemoSeed(shots) ? starterShots() : shots;
-    if (persistShots !== shots) {
-      setShots(persistShots);
-      return;
-    }
-    const roots = normalizeAssetRoots(readAssetRootsFromLibrary(projectTitle));
-    const activeProj = attachWorkspaceToProject({
-      id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-      title: projectTitle,
-      description: `Cinema Production Studio Project with ${persistShots.length} shots`,
-      targetModel: targetModel || 'SPS Direct Cinema 2.0',
-      aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-      roomId: roomIdForProject(projectTitle, effectiveRoomId),
-      lastModified: new Date().toLocaleString(),
-      shots: persistShots,
-      assetRoots: roots,
-      projectVersion: roots.projectVersion
-    });
-    saveProjectToVault(activeProj);
-    saveActiveWorkspaceToDisk({
-      title: projectTitle,
-      roomId: roomIdForProject(projectTitle, effectiveRoomId)
-    }).catch(() => {});
+      const safeTitle = (projectTitle == null ? '' : String(projectTitle));
+      const persistShots =
+        !isDemoProjectTitle(safeTitle) && shotsLookLikeDemoSeed(shots) ? starterShots() : shots;
+      if (persistShots !== shots) {
+        setShots(persistShots);
+        return;
+      }
+      const roots = normalizeAssetRoots(readAssetRootsFromLibrary(projectTitle));
+      const activeProj = attachWorkspaceToProject({
+        id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        title: projectTitle,
+        description: `Cinema Production Studio Project with ${persistShots.length} shots`,
+        targetModel: targetModel || 'SPS Direct Cinema 2.0',
+        aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+        roomId: roomIdForProject(projectTitle, effectiveRoomId),
+        lastModified: new Date().toLocaleString(),
+        shots: persistShots,
+        assetRoots: roots,
+        projectVersion: roots.projectVersion
+      });
+      saveProjectToVault(activeProj);
+      saveActiveWorkspaceToDisk({
+        title: projectTitle,
+        roomId: roomIdForProject(projectTitle, effectiveRoomId)
+      }).catch(() => {});
+    }, 1600);
+    return () => clearTimeout(timer);
   }, [shots, projectTitle, targetModel, aspectRatio, effectiveRoomId, presentationDesk]);
 
   const [cloudRoomMembershipTick, setCloudRoomMembershipTick] = useState(0);
@@ -1941,7 +1944,7 @@ export default function App() {
             window.dispatchEvent(new CustomEvent('sps_cloud_images_updated', { detail: cloudData.projectGeneratedImages }));
           }
           localStorage.setItem('sps_current_shots', JSON.stringify(cloudData.shots));
-          setTimeout(() => { isReceivingCloudUpdate.current = false; }, 500);
+          setTimeout(() => { isReceivingCloudUpdate.current = false; }, 80);
         }
       }
     },
@@ -2338,7 +2341,41 @@ export default function App() {
     return () => window.removeEventListener('sps_cloud_images_updated', onCloudImages);
   }, []);
 
-  const syncToCloud = (updatedState = {}) => {
+  const flushPublishToCloud = (payload) => {
+    const rid = payload?.roomId || effectiveRoomId;
+    if (!rid || !canAccessCloudRoom(getCurrentUserEmail(), rid)) return;
+    setIsCloudSyncing(true);
+    publishToCloudRoom(rid, payload)
+      .then((res) => {
+        if (!res?.skippedStale || !Array.isArray(res.data?.shots)) return;
+        const openTitle = projectTitleRef.current;
+        if (res.data.projectTitle && openTitle && !titlesMatch(res.data.projectTitle, openTitle)) {
+          return;
+        }
+        isReceivingCloudUpdate.current = true;
+        const nextTitle = res.data.projectTitle || openTitle;
+        lastSyncedHash.current = JSON.stringify({
+          shots: res.data.shots,
+          projectTitle: nextTitle,
+          targetModel: res.data.targetModel || targetModel,
+          aspectRatio: res.data.aspectRatio || aspectRatio
+        });
+        setShots(res.data.shots);
+        try {
+          localStorage.setItem('sps_current_shots', JSON.stringify(res.data.shots));
+        } catch {
+          /* ignore */
+        }
+        setTimeout(() => {
+          isReceivingCloudUpdate.current = false;
+        }, 80);
+      })
+      .finally(() => {
+        setTimeout(() => setIsCloudSyncing(false), 200);
+      });
+  };
+
+  const syncToCloud = (updatedState = {}, { flush = false } = {}) => {
     if (isGuestSession()) return;
     if (isReceivingCloudUpdate.current) return;
     if (presentationDesk || isPresentationMode()) return;
@@ -2397,25 +2434,35 @@ export default function App() {
 
           library = filterOutDeletedProjects(library);
           writeLocalProjectLibrary(library);
-          // Shot edits travel via publishToCloudRoom below — do not push a
-          // partial local library into KV on every keystroke.
         }
       } catch (e) {}
     }
 
-    // Always publish room shots to Vercel — Local mode still receives/sends via getNativeSyncUrl
-    if (!canAccessCloudRoom(getCurrentUserEmail(), effectiveRoomId)) return;
-    setIsCloudSyncing(true);
-    publishToCloudRoom(effectiveRoomId, {
+    const payload = {
+      roomId: effectiveRoomId,
       projectTitle: newTitle,
       targetModel: newModel,
       aspectRatio: newRatio,
       shots: newShots,
       projectGeneratedImages: newImages,
       lastUpdated: new Date().toISOString(),
-      ...updatedState
-    });
-    setTimeout(() => setIsCloudSyncing(false), 400);
+      ...updatedState,
+      shots: newShots,
+      projectTitle: newTitle
+    };
+    syncToCloudPendingRef.current = payload;
+    if (syncToCloudTimerRef.current) clearTimeout(syncToCloudTimerRef.current);
+    const send = () => {
+      const p = syncToCloudPendingRef.current;
+      syncToCloudPendingRef.current = null;
+      syncToCloudTimerRef.current = null;
+      if (p) flushPublishToCloud(p);
+    };
+    if (flush) {
+      send();
+      return;
+    }
+    syncToCloudTimerRef.current = setTimeout(send, 280);
     } catch (err) {
       console.warn('syncToCloud skipped:', err);
     }
@@ -2487,7 +2534,7 @@ export default function App() {
       safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
       // 1. UPLOAD LOCAL EDITS TO CLOUD
-      await syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
+      await syncToCloud({ shots, projectGeneratedImages, projectTitle, library }, { flush: true });
 
       const savedUsersStr = localStorage.getItem('sps_authorized_phone_users');
       if (savedUsersStr) {

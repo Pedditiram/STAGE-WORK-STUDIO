@@ -409,19 +409,15 @@ function normalizeStudioSettings(raw) {
 }
 
 function isNewerRevision(incoming, existing) {
-  const ir = typeof incoming?.revision === 'number' ? incoming.revision : 0;
-  const er = typeof existing?.revision === 'number' ? existing.revision : 0;
-  if (!er) return true;
-  if (!ir) {
-    const it = Date.parse(incoming?.lastUpdated || '') || 0;
-    const et = Date.parse(existing?.lastUpdated || '') || 0;
-    return !et || it > et;
-  }
-  if (ir !== er) return ir > er;
-  // Equal revision: prefer newer lastUpdated; reject identical/older echoes
   const it = Date.parse(incoming?.lastUpdated || '') || 0;
   const et = Date.parse(existing?.lastUpdated || '') || 0;
-  return it > et;
+  if (it && et && it !== et) return it > et;
+  const ir = typeof incoming?.revision === 'number' ? incoming.revision : 0;
+  const er = typeof existing?.revision === 'number' ? existing.revision : 0;
+  if (ir && er && ir !== er) return ir > er;
+  if (it && !et) return true;
+  if (!er) return true;
+  return false;
 }
 
 function pickNewerRoom(a, b) {

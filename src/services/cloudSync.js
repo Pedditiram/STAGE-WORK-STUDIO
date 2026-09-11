@@ -16,11 +16,11 @@ export const PRODUCTION_SYNC_ORIGIN = 'https://www.stageworkstudio.com';
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
 const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-43e0-74db-bb8d-6211e85dc74e';
 
-/** Active-tab room poll fallback. Hidden tabs back off. Tick poll is ~2s when KV ticks exist. */
-const POLL_MS_ACTIVE = 12000;
-const POLL_MS_HIDDEN = 60000;
-const TICK_MS_ACTIVE = 2000;
-const TICK_MS_HIDDEN = 15000;
+/** Active-tab room poll fallback. Hidden tabs back off. Tick poll is ~1s when KV ticks exist. */
+const POLL_MS_ACTIVE = 4000;
+const POLL_MS_HIDDEN = 30000;
+const TICK_MS_ACTIVE = 1000;
+const TICK_MS_HIDDEN = 8000;
 
 let db = null;
 let broadcastChannel = null;
@@ -129,29 +129,26 @@ function cacheKey(roomId) {
   return `sps_cloud_${roomId}`;
 }
 
-function isNewer(remoteIso, localIso) {
-  if (!remoteIso) return false;
-  if (!localIso) return true;
-  const r = Date.parse(remoteIso);
-  const l = Date.parse(localIso);
-  if (Number.isNaN(r)) return false;
-  if (Number.isNaN(l)) return true;
-  return r > l;
-}
-
 function isNewerPayload(remote, localUpdatedAt, localRevision = 0) {
+  const remoteTs = Date.parse(remote?.lastUpdated || '') || 0;
+  const localTs = Date.parse(localUpdatedAt || '') || 0;
+  if (remoteTs && localTs && remoteTs !== localTs) return remoteTs > localTs;
   const remoteRev = typeof remote?.revision === 'number' ? remote.revision : 0;
-  if (remoteRev && localRevision) return remoteRev > localRevision;
+  if (remoteRev && localRevision && remoteRev !== localRevision) return remoteRev > localRevision;
+  if (remoteTs && !localTs) return true;
   if (remoteRev && !localRevision) return true;
-  return isNewer(remote?.lastUpdated, localUpdatedAt);
+  return false;
 }
 
 function normalizeRoomPayload(roomId, projectData = {}) {
+  const state = getRoomState(roomId);
+  const prevRev = typeof state.lastAppliedRevision === 'number' ? state.lastAppliedRevision : 0;
+  const incomingRev = typeof projectData.revision === 'number' ? projectData.revision : 0;
   return {
     ...projectData,
     roomId,
-    lastUpdated: projectData.lastUpdated || new Date().toISOString(),
-    revision: typeof projectData.revision === 'number' ? projectData.revision : Date.now()
+    lastUpdated: new Date().toISOString(),
+    revision: Math.max(incomingRev, prevRev + 1, Date.now())
   };
 }
 
@@ -163,13 +160,13 @@ function syncCacheKey(url) {
   return String(url || '').replace(/[?&]t=\d+/g, '').replace(/\?$/, '');
 }
 
-export async function fetchSyncJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+export async function fetchSyncJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS, skipEtag = false } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const method = String(options.method || 'GET').toUpperCase();
   const key = syncCacheKey(url);
   const headers = { ...(options.headers || {}) };
-  if (method === 'GET') {
+  if (method === 'GET' && !skipEtag) {
     const prevTag = syncEtags.get(key);
     if (prevTag) headers['If-None-Match'] = prevTag;
   }
@@ -204,14 +201,18 @@ export async function fetchSyncJson(url, options = {}, { timeoutMs = FETCH_TIMEO
   }
 }
 
-async function fetchJson(url, options = {}, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
-  return fetchSyncJson(url, options, { timeoutMs });
+async function fetchJson(url, options = {}, extra = {}) {
+  return fetchSyncJson(url, options, extra);
 }
 
 /** Read room from native /api/sync */
 async function pullNativeRoom(roomId) {
   const base = getNativeSyncUrl();
-  const resObj = await fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}`);
+  const resObj = await fetchJson(
+    `${base}?type=room&roomId=${encodeURIComponent(roomId)}`,
+    {},
+    { skipEtag: true, timeoutMs: 20000 }
+  );
   return resObj?.data || null;
 }
 
@@ -234,7 +235,9 @@ export function serializeCollabTick(tick) {
 export async function pullCollabTick(roomId, projectTitle = '') {
   const base = getNativeSyncUrl();
   return fetchJson(
-    `${base}?type=tick&roomId=${encodeURIComponent(roomId || 'SPS-CLOUD-8821')}&project=${encodeURIComponent(projectTitle || '')}`
+    `${base}?type=tick&roomId=${encodeURIComponent(roomId || 'SPS-CLOUD-8821')}&project=${encodeURIComponent(projectTitle || '')}`,
+    {},
+    { skipEtag: true, timeoutMs: 8000 }
   );
 }
 
@@ -332,11 +335,15 @@ export function subscribeToCollabTick(roomId, projectTitle, callback) {
 /** Write room to native /api/sync — returns server JSON (may include skipped:'stale'). */
 async function pushNativeRoom(roomId, payload) {
   const base = getNativeSyncUrl();
-  return fetchJson(`${base}?type=room&roomId=${encodeURIComponent(roomId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  return fetchJson(
+    `${base}?type=room&roomId=${encodeURIComponent(roomId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    },
+    { timeoutMs: 20000 }
+  );
 }
 
 /** Hub blob shape: { rooms: { [roomId]: payload }, updatedAt } */
@@ -509,10 +516,13 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
     const sig = `${tick?.room?.revision || 0}|${tick?.room?.lastUpdated || ''}`;
     if (reason === 'init') {
       lastRoomTick = sig;
+      pollCloudDatabase();
       return;
     }
     if (sig && sig !== lastRoomTick) {
       lastRoomTick = sig;
+      pollCloudDatabase();
+    } else if (reason === 'focus') {
       pollCloudDatabase();
     }
   });
@@ -605,7 +615,6 @@ export async function publishToCloudRoom(roomId, projectData) {
     if (res?.skipped === 'stale') {
       skippedStale = true;
       serverData = res?.data || null;
-      // Do not advance local cursor or hub-write a rejected revision
     } else {
       nativeOk = true;
       serverData = res?.data || networkPayload;
@@ -616,17 +625,11 @@ export async function publishToCloudRoom(roomId, projectData) {
     }
   } catch (e) {}
 
-  // Hub backup only when native accepted (or native unreachable — then try carefully)
   if (!skippedStale) {
-    try {
-      await pushHubRoom(roomId, networkPayload);
-    } catch (e) {}
-  }
-
-  if (db && !skippedStale) {
-    try {
-      await setDoc(doc(db, 'production_rooms', roomId), networkPayload, { merge: true });
-    } catch (err) {}
+    pushHubRoom(roomId, networkPayload).catch(() => {});
+    if (db) {
+      setDoc(doc(db, 'production_rooms', roomId), networkPayload, { merge: true }).catch(() => {});
+    }
   }
 
   return {
