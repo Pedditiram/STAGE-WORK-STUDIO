@@ -277,6 +277,11 @@ export const saveProjectToVault = async (project) => {
     }
   } catch (e) {}
 
+  try {
+    const { syncFilmToCloud } = await import('./dbService');
+    syncFilmToCloud(ensured).catch(() => {});
+  } catch (e) {}
+
   return true;
 };
 
@@ -419,7 +424,7 @@ export async function saveActiveWorkspaceToDisk({ title, roomId } = {}) {
 }
 
 // Load all projects from IndexedDB vault and physical disk folder
-export const loadProjectsFromVault = async () => {
+export const loadProjectsFromVault = async ({ includeBlocked = false } = {}) => {
   let projectsMap = new Map();
 
   // 1. Read IndexedDB vault
@@ -471,6 +476,7 @@ export const loadProjectsFromVault = async () => {
   }
 
   const list = Array.from(projectsMap.values());
+  if (includeBlocked) return list;
   try {
     const { filterOutDeletedProjects } = await import('./dbService');
     return filterOutDeletedProjects(list);
@@ -526,6 +532,26 @@ export async function loadProjectFromDiskByTitle(title) {
     if (proj && String(proj.title || '').trim().toLowerCase() === want) {
       return isDemoProjectTitle(proj.title) ? resolveCurrentDemoProject(proj) : proj;
     }
+  }
+  try {
+    const vault = await loadProjectsFromVault({ includeBlocked: true });
+    const fromIdb = (vault || []).find(
+      (p) => String(p?.title || '').trim().toLowerCase() === want
+    );
+    if (fromIdb && Array.isArray(fromIdb.shots) && fromIdb.shots.length) {
+      return isDemoProjectTitle(fromIdb.title) ? resolveCurrentDemoProject(fromIdb) : fromIdb;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { fetchFilmFromCloud } = await import('./dbService');
+    const cloud = await fetchFilmFromCloud(title);
+    if (cloud && Array.isArray(cloud.shots) && cloud.shots.length) {
+      return isDemoProjectTitle(cloud.title) ? resolveCurrentDemoProject(cloud) : cloud;
+    }
+  } catch {
+    /* ignore */
   }
   if (isDemoProjectTitle(title)) return resolveCurrentDemoProject({ title });
   return null;

@@ -1304,59 +1304,6 @@ function SpreadsheetView({
               {lifecycleNote}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={handleExportMatrixCsv}
-            disabled={lookOnly || exportBlocked}
-            className="sps-quiet-link is-muted disabled:opacity-40"
-            title={
-              lookOnly
-                ? matrixLookOnlyTitle
-                : exportBlocked
-                  ? matrixExportBlockedTitle
-                  : matrixExportCsvTitle
-            }
-            aria-label={
-              lookOnly
-                ? matrixLookOnlyTitle
-                : exportBlocked
-                  ? matrixExportBlockedTitle
-                  : matrixExportCsvTitle
-            }
-          >
-            CSV
-          </button>
-          <button
-            type="button"
-            onClick={handleExportMatrixPdf}
-            disabled={lookOnly || exportBlocked}
-            className="sps-quiet-link is-muted disabled:opacity-40"
-            title={
-              lookOnly
-                ? matrixLookOnlyTitle
-                : exportBlocked
-                  ? matrixExportBlockedTitle
-                  : matrixExportPdfTitle
-            }
-            aria-label={
-              lookOnly
-                ? matrixLookOnlyTitle
-                : exportBlocked
-                  ? matrixExportBlockedTitle
-                  : matrixExportPdfTitle
-            }
-          >
-            PDF
-          </button>
-          {exportBlocked ? (
-            <span
-              className="hidden xl:inline text-[9px] text-[var(--sps-gold)] max-w-[9rem] leading-snug truncate"
-              title={matrixExportBlockedTitle}
-              aria-label={matrixExportBlockedTitle}
-            >
-              {exportLife.message}
-            </span>
-          ) : null}
           {lookOnly ? (
             <span
               className="sps-quiet-link is-muted pointer-events-none"

@@ -110,6 +110,9 @@ import {
   fetchProjectLibraryFromCloud,
   fetchCollaboratorsFromCloud,
   fetchStudioSettingsFromCloud,
+  seedCloudLibraryFromDevice,
+  fetchFilmFromCloud,
+  syncFilmToCloud,
   broadcastActiveSlotEditing,
   subscribeToActiveEditingSlots,
   notifyStudioOnlineWhatsApp,
@@ -1815,10 +1818,39 @@ export default function App() {
       }
       writeLocalProjectLibrary(mergedCloud);
       window.dispatchEvent(new Event('sps_projects_updated'));
-      // Pull-only on hydrate — never echo a partial local library back to KV
+
+      const cloudKeys = new Set(
+        updatedProjs.map((p) => String(p?.title || '').trim().toUpperCase()).filter(Boolean)
+      );
+      const missingOnCloud = mergedCloud.filter(
+        (p) => p?.title && !cloudKeys.has(String(p.title).trim().toUpperCase())
+      );
+      if (updatedProjs.length === 0 || missingOnCloud.length) {
+        try {
+          const { loadProjectsFromVault } = await import('./services/projectDiskVault');
+          const vault = await loadProjectsFromVault({ includeBlocked: true });
+          (vault || []).forEach((p) => {
+            if (p?.title) reviveProjectTitleForOpen(p.title);
+          });
+          await seedCloudLibraryFromDevice(mergedCloud, vault);
+        } catch {
+          await syncProjectLibraryToCloud(mergedCloud);
+        }
+      }
 
       const openTitle = projectTitle;
-      const activeProj = mergedCloud.find((p) => titlesMatch(p.title, openTitle));
+      let filmForOpen = mergedCloud.find((p) => titlesMatch(p.title, openTitle));
+      if ((!filmForOpen?.shots || !filmForOpen.shots.length) && openTitle) {
+        try {
+          const cloudFilm = await fetchFilmFromCloud(openTitle);
+          if (cloudFilm && Array.isArray(cloudFilm.shots) && cloudFilm.shots.length) {
+            filmForOpen = cloudFilm;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      const activeProj = filmForOpen;
       if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
         const localN = Array.isArray(shots) ? shots.length : 0;
         const cloudN = activeProj.shots.length;
@@ -2223,6 +2255,7 @@ export default function App() {
       }
 
       await saveProjectToVault(projectPayload);
+      syncFilmToCloud(projectPayload).catch(() => {});
       await saveActiveWorkspaceToDisk({
         title: projectTitle,
         roomId: roomIdForProject(projectTitle, effectiveRoomId)

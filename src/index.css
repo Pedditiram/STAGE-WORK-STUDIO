@@ -2247,11 +2247,19 @@ header:has(.sps-console-profile.is-open) {
   cursor: default;
 }
 
+header:has(.sps-console-profile.is-open),
+header.is-menu-open,
+.sps-project-console-shell.is-menu-open,
+.sps-project-console-toolbar.is-menu-open {
+  z-index: 90;
+  position: relative;
+}
+
 .sps-console-profile-menu {
   position: absolute;
   top: calc(100% + 0.35rem);
   right: 0;
-  z-index: 50;
+  z-index: 95;
   min-width: 16.5rem;
   max-width: min(20rem, calc(100vw - 1.5rem));
 }
@@ -4216,6 +4224,15 @@ body.sps-col-resizing * {
   background: color-mix(in srgb, var(--sps-bg-elevated) 88%, transparent);
 }
 
+.sps-form-desk-chrome.is-min {
+  gap: 0.2rem;
+  padding: 0.35rem 0.75rem 0.4rem;
+}
+
+.sps-form-chrome-toggles {
+  margin-left: auto;
+}
+
 .sps-form-desk-chrome-row {
   display: flex;
   align-items: center;
@@ -4325,6 +4342,10 @@ body.sps-col-resizing * {
   gap: 0.55rem;
   padding: 0.45rem 0.65rem 0.55rem;
   align-items: stretch;
+}
+
+.sps-form-desk-body.is-prompt-off {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sps-form-pane {
@@ -4659,8 +4680,8 @@ body.sps-col-resizing * {
 
 .sps-hover-chrome {
   flex-shrink: 0;
-  z-index: 40;
   position: relative;
+  z-index: 20;
   overflow: visible;
 }
 .sps-hover-chrome-bar {

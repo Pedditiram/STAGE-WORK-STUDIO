@@ -13,6 +13,7 @@ import { studioCollaboratorsForCloud, isSelfServeSession } from '../utils/tenant
 import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary } from '../utils/projectWorkspace';
+import { compactFilmForCloud, filmHasMatrix } from '../utils/filmCloudBody';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -499,6 +500,75 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
       await setDoc(libRef, payload, { merge: true });
     } catch (e) {}
   }
+}
+
+const filmSyncTimers = new Map();
+let cloudLibrarySeededThisSession = false;
+
+export async function fetchFilmFromCloud(title) {
+  if (typeof window === 'undefined') return null;
+  if (isSelfServeSession()) return null;
+  const clean = String(title || '').trim();
+  if (!clean) return null;
+  try {
+    const res = await fetchJsonTimed(
+      `${syncApiUrl()}?type=film&project=${encodeURIComponent(clean)}`,
+      {},
+      20000
+    );
+    if (!res?.ok) return null;
+    const data = await res.json();
+    return data?.project && typeof data.project === 'object' ? data.project : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function syncFilmToCloud(project) {
+  if (typeof window === 'undefined') return false;
+  if (isSelfServeSession()) return false;
+  const body = compactFilmForCloud(project);
+  if (!body || !filmHasMatrix(body)) return false;
+  const title = body.title;
+  if (filmSyncTimers.has(title)) clearTimeout(filmSyncTimers.get(title));
+  return new Promise((resolve) => {
+    const t = setTimeout(async () => {
+      filmSyncTimers.delete(title);
+      try {
+        const res = await fetchJsonTimed(
+          `${syncApiUrl()}?type=film`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project: body })
+          },
+          25000
+        );
+        resolve(Boolean(res?.ok));
+      } catch {
+        resolve(false);
+      }
+    }, 600);
+    filmSyncTimers.set(title, t);
+  });
+}
+
+/** Push this device's library + full films when cloud is empty or missing titles. */
+export async function seedCloudLibraryFromDevice(library, fullFilms = []) {
+  if (typeof window === 'undefined') return;
+  if (isSelfServeSession()) return;
+  const list = filterOutDeletedProjects(Array.isArray(library) ? library : []);
+  if (!list.length) return;
+  await syncProjectLibraryToCloud(list);
+  const films = Array.isArray(fullFilms) && fullFilms.length ? fullFilms : list;
+  await Promise.all(
+    films.filter((p) => filmHasMatrix(p)).map((p) => syncFilmToCloud(p))
+  );
+  cloudLibrarySeededThisSession = true;
+}
+
+export function cloudLibraryNeedsSeed() {
+  return !cloudLibrarySeededThisSession;
 }
 
 // 5. Subscribe to Real-Time Project Library Updates from Cloud

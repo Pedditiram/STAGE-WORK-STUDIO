@@ -345,10 +345,18 @@ export async function enrichLibraryWithDiskVault(library) {
   }
   try {
     const { loadProjectsFromVault } = await import('../services/projectDiskVault');
-    const vault = await loadProjectsFromVault();
+    const vault = await loadProjectsFromVault({ includeBlocked: true });
     if (!Array.isArray(vault) || vault.length === 0) {
       const { filterOutDeletedProjects } = await import('../services/dbService');
       return filterOutDeletedProjects(base);
+    }
+    try {
+      const { reviveProjectTitleForOpen } = await import('../services/dbService');
+      vault.forEach((p) => {
+        if (p?.title) reviveProjectTitleForOpen(p.title);
+      });
+    } catch {
+      /* ignore */
     }
     const merged = mergeLibrarySources({ local: base, vault });
     const { filterOutDeletedProjects } = await import('../services/dbService');

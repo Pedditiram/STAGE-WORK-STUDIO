@@ -25,6 +25,7 @@ let memoryPresence = {};
 let memoryChat = {}; // roomId -> messages[]
 let memoryScreenplay = {}; // `${roomId}::${projectKey}` -> screenplay collab doc
 let memoryDeletedTitles = []; // uppercase title keys tombstoned across instances
+let memoryFilms = {}; // slug -> { project, updatedAt }
 let memoryStudioSettings = { studioModules: {}, guestUrlEnabled: true, updatedAt: '' };
 let projectsHydrated = false;
 let collaboratorsHydrated = false;
@@ -447,6 +448,15 @@ function titleKey(title) {
   return String(title || '').trim().toUpperCase();
 }
 
+function filmSlug(title) {
+  const s = String(title || 'untitled')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  return s || 'untitled';
+}
+
 function normalizeDeletedTitles(list) {
   const set = new Set();
   (Array.isArray(list) ? list : []).forEach((t) => {
@@ -854,10 +864,18 @@ async function loadProjectsStore() {
   if (kvConfigured()) {
     try {
       const data = await kvGet('projects');
-      if (data && Array.isArray(data.projects) && data.projects.length > 0) {
+      if (data && Array.isArray(data.projects)) {
         return {
           projects: data.projects,
           deletedTitles: normalizeDeletedTitles(data.deletedTitles),
+          ok: true
+        };
+      }
+      const ping = await kvCommand(['PING']);
+      if (ping && (ping.result === 'PONG' || ping.result === 'OK' || ping.result === true)) {
+        return {
+          projects: [],
+          deletedTitles: normalizeDeletedTitles(data?.deletedTitles),
           ok: true
         };
       }
@@ -1493,9 +1511,30 @@ export default async function handler(req, res) {
       });
     }
 
+    if (type === 'film') {
+      const title = String(req.query.project || '').trim();
+      const slug = filmSlug(title);
+      if (!title || slug === 'untitled') {
+        return res.status(400).json({ success: false, error: 'Missing project' });
+      }
+      let rec = memoryFilms[slug];
+      if (!rec && kvConfigured()) {
+        try {
+          rec = await kvGet(`film:${slug}`);
+          if (rec?.project) memoryFilms[slug] = rec;
+        } catch (e) {}
+      }
+      return sendJson(req, res, {
+        success: true,
+        project: rec?.project || null,
+        durableOk: Boolean(rec?.project) || kvConfigured(),
+        kvConfigured: kvConfigured()
+      });
+    }
+
     if (type === 'projects') {
       const { ok } = await hydrateProjectsFromDurable();
-      if (!ok && memoryProjects.length === 0) {
+      if (!ok && memoryProjects.length === 0 && !kvConfigured()) {
         return res.status(503).json({
           success: false,
           durableFailed: true,
@@ -1508,7 +1547,7 @@ export default async function handler(req, res) {
         success: true,
         projects: cleanProjs,
         deletedTitles: memoryDeletedTitles,
-        durableOk: ok,
+        durableOk: ok || kvConfigured(),
         kvConfigured: kvConfigured()
       });
     }
@@ -1606,6 +1645,33 @@ export default async function handler(req, res) {
       return sendJson(req, res, { success: result.ok, ...result });
     }
 
+    if (type === 'film') {
+      const project = body.project || body;
+      const title = String(project?.title || '').trim();
+      const slug = filmSlug(title);
+      if (!title || slug === 'untitled') {
+        return res.status(400).json({ success: false, error: 'Missing project' });
+      }
+      const incomingShots = Array.isArray(project.shots) ? project.shots : [];
+      const existing = memoryFilms[slug]?.project;
+      if (!incomingShots.length && existing && Array.isArray(existing.shots) && existing.shots.length) {
+        return sendJson(req, res, { success: true, project: existing, ignoredEmpty: true });
+      }
+      const rec = {
+        project: { ...project, title },
+        updatedAt: new Date().toISOString(),
+        app: 'sps-film'
+      };
+      memoryFilms[slug] = rec;
+      let durableOk = false;
+      if (kvConfigured()) {
+        try {
+          durableOk = await kvSet(`film:${slug}`, rec);
+        } catch (e) {}
+      }
+      return sendJson(req, res, { success: true, project: rec.project, durableOk });
+    }
+
     if (type === 'projects') {
       const incomingProjs = body.projects || body;
       const incomingDeleted = normalizeDeletedTitles(body.deletedTitles);
@@ -1661,7 +1727,16 @@ export default async function handler(req, res) {
         const mergedLive = cleanedIncoming.map((p) => {
           const key = titleKey(p.title);
           const existing = prevByTitle.get(key);
-          return existing ? { ...existing, ...p } : p;
+          if (!existing) return p;
+          const incomingShots = Array.isArray(p.shots) ? p.shots : [];
+          const existingShots = Array.isArray(existing.shots) ? existing.shots : [];
+          return {
+            ...existing,
+            ...p,
+            shots: incomingShots.length ? incomingShots : existingShots,
+            shotCount: p.shotCount || existing.shotCount || incomingShots.length || existingShots.length,
+            screenplayText: p.screenplayText || existing.screenplayText
+          };
         });
         memoryProjects.forEach((p) => {
           const key = titleKey(p?.title);

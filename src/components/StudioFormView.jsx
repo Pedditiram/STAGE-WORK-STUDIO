@@ -5,7 +5,11 @@ import {
   Star,
   Volume2,
   VolumeX,
-  Crosshair
+  Crosshair,
+  ChevronDown,
+  ChevronUp,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
@@ -16,16 +20,12 @@ import IntensityScaleSelector from './IntensityScaleSelector';
 import { enhanceCraftSlotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import {
   assertCanMutateContent,
-  isLifecycleLocked,
-  lifecycleExportReadiness
+  isLifecycleLocked
 } from '../utils/productionLifecycle';
 import LifecycleControls from './LifecycleControls';
 import { resolveShotSpine } from '../utils/productionSpine';
 import { resolveContinuityForShot } from '../utils/continuityState';
 import { CMD_TYPES, proposeAndValidate, approveLlmCommand, applyLlmCommand } from '../utils/llmCommandBus';
-import { exportDownloadText, assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
-import { matrixShotsToCsv, matrixShotsToPrintHtml } from '../utils/matrixExport';
-import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import {
   readActiveAssetRegistry,
   linkShotToAssetRegistry
@@ -306,62 +306,36 @@ export default function StudioFormView({
   const [highlightedFieldKey, setHighlightedFieldKey] = useState('sceneShotId');
   const [activeModalSlotKey, setActiveModalSlotKey] = useState(null);
   const [shotNumberInput, setShotNumberInput] = useState(String(activeShotIndex + 1));
-
-  const exportLife = useMemo(() => lifecycleExportReadiness(shots, projectTitle), [shots, projectTitle]);
-  const {
-    strict: formLifecycleStrict,
-    mode: formLifecycleMode
-  } = useExportLifecyclePref('form');
-  const exportBlocked = formLifecycleStrict && !exportLife.exportReady;
-  const roomId = resolveCollabRoomId();
-  const liveCount = useMemo(
-    () => (Array.isArray(shots) ? shots.filter((s) => s && !s.isArchived) : []).length,
-    [shots]
-  );
-  const formLifeNote = `${liveCount} live shots · form`;
-
-  const handleExportFormCsv = () => {
-    const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
-    exportDownloadText(`${slug}_form_matrix.csv`, matrixShotsToCsv(shots, SEEDANCE_SLOTS), {
-      projectTitle,
-      auditLabel: 'form_matrix_csv',
-      auditFormat: 'csv',
-      mime: 'text/csv;charset=utf-8',
-      lifecycleMode: formLifecycleMode,
-      shots,
-      roomId,
-      note: formLifeNote
-    });
-  };
-
-  const handleExportFormPdf = () => {
-    const gate = assertExportAllowed({
-      projectTitle,
-      label: 'form_matrix_pdf',
-      format: 'pdf',
-      lifecycleMode: formLifecycleMode,
-      shots,
-      roomId
-    });
-    if (!gate.ok) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      window.alert('Please allow popups to export PDF.');
-      return;
+  const [chromeOpen, setChromeOpen] = useState(() => {
+    try {
+      return localStorage.getItem('sps_form_chrome_open') !== 'false';
+    } catch {
+      return true;
     }
-    printWindow.document.write(matrixShotsToPrintHtml(shots, SEEDANCE_SLOTS, projectTitle));
-    printWindow.document.close();
-    const slug = String(projectTitle || 'project').replace(/[^\w\-]+/g, '_').slice(0, 40);
-    logExportSuccess({
-      projectTitle,
-      label: 'form_matrix_pdf',
-      format: 'pdf',
-      filename: `${slug}_form_matrix.pdf`,
-      roomId,
-      note: formLifeNote,
-      lifecycleMode: gate.advisory ? `${formLifecycleMode}+ok` : formLifecycleMode
-    });
-  };
+  });
+  const [livePromptOpen, setLivePromptOpen] = useState(() => {
+    try {
+      return localStorage.getItem('sps_form_live_prompt') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sps_form_chrome_open', chromeOpen ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  }, [chromeOpen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('sps_form_live_prompt', livePromptOpen ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  }, [livePromptOpen]);
 
   // Notify parent App when full editor view is open so top header strip can be hidden
   useEffect(() => {
@@ -738,7 +712,7 @@ export default function StudioFormView({
 
   return (
     <div className="sps-form-desk">
-      <div className="sps-form-desk-chrome">
+      <div className={`sps-form-desk-chrome ${chromeOpen ? '' : 'is-min'}`}>
         <div className="sps-form-desk-chrome-row">
           <span className="sps-form-desk-kicker">Shot lifecycle</span>
           <LifecycleControls entity={currentShot} onChange={handleLifecycleChange} />
@@ -750,7 +724,29 @@ export default function StudioFormView({
               Act {spineNode.act} · Seq {spineNode.sequenceSeq} · {spineNode.sceneTag}
             </span>
           ) : null}
+          <div className="sps-quiet-links sps-form-chrome-toggles">
+            <button
+              type="button"
+              className={`sps-quiet-link ${chromeOpen ? 'is-current' : 'is-muted'}`}
+              title={chromeOpen ? 'Minimize spec & continuity' : 'Show spec & continuity'}
+              onClick={() => setChromeOpen((on) => !on)}
+            >
+              {chromeOpen ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />}
+              {chromeOpen ? 'Minimize' : 'Details'}
+            </button>
+            <button
+              type="button"
+              className={`sps-quiet-link ${livePromptOpen ? 'is-current' : 'is-muted'}`}
+              title={livePromptOpen ? 'Hide live prompt' : 'Show live prompt'}
+              onClick={() => setLivePromptOpen((on) => !on)}
+            >
+              {livePromptOpen ? <PanelRightClose className="w-3 h-3 inline" /> : <PanelRightOpen className="w-3 h-3 inline" />}
+              Prompt
+            </button>
+          </div>
         </div>
+        {chromeOpen ? (
+          <>
         {(() => {
           const registry = readActiveAssetRegistry();
           const chars = registry?.characters || [];
@@ -846,9 +842,11 @@ export default function StudioFormView({
             ))}
           </div>
         ) : null}
+          </>
+        ) : null}
       </div>
 
-      <div className="sps-form-desk-body">
+      <div className={`sps-form-desk-body ${livePromptOpen ? '' : 'is-prompt-off'}`}>
         <div className="sps-form-pane sps-form-pane-work" data-form-pane="work">
           <div className="sps-form-pane-inner">
             {activeModalSlotKey ? (
@@ -957,6 +955,7 @@ export default function StudioFormView({
           </div>
         </div>
 
+        {livePromptOpen ? (
         <aside className="sps-form-pane sps-form-pane-side" data-form-pane="side">
           <div className="sps-form-pane-inner sps-form-side-card">
             <div className="sps-form-side-head">
@@ -983,11 +982,15 @@ export default function StudioFormView({
                   {mutedSlots[highlightedFieldKey] ? <VolumeX className="w-3 h-3 inline" /> : <Volume2 className="w-3 h-3 inline" />}
                   {mutedSlots[highlightedFieldKey] ? 'Unmute' : 'Mute'}
                 </button>
-                {onAddShot ? (
-                  <button type="button" onClick={onAddShot} className="sps-quiet-link is-muted" title="Add shot">
-                    Add shot
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setLivePromptOpen(false)}
+                  className="sps-quiet-link is-muted"
+                  title="Hide live prompt"
+                >
+                  <PanelRightClose className="w-3 h-3 inline" />
+                  Hide
+                </button>
               </div>
             </div>
 
@@ -1048,28 +1051,12 @@ export default function StudioFormView({
               >
                 {copyToast ? 'Copied' : 'Copy'}
               </button>
-              <button
-                type="button"
-                onClick={handleExportFormCsv}
-                disabled={exportBlocked}
-                className="sps-quiet-link is-muted disabled:opacity-40"
-                title={exportBlocked ? exportLife.message : 'Export Form craft CSV'}
-              >
-                CSV
-              </button>
-              <button
-                type="button"
-                onClick={handleExportFormPdf}
-                disabled={exportBlocked}
-                className="sps-quiet-link is-muted disabled:opacity-40"
-                title={exportBlocked ? exportLife.message : 'Print Form craft PDF'}
-              >
-                PDF
-              </button>
+              {onAddShot ? (
+                <button type="button" onClick={onAddShot} className="sps-quiet-link is-muted" title="Add shot">
+                  Add shot
+                </button>
+              ) : null}
             </div>
-            {exportBlocked ? (
-              <p className="sps-form-desk-note">{exportLife.message}</p>
-            ) : null}
 
             <div className="sps-form-side-preview">
               {promptFormat === 'crafts' ? (
@@ -1141,6 +1128,7 @@ export default function StudioFormView({
             </div>
           </div>
         </aside>
+        ) : null}
       </div>
     </div>
   );
