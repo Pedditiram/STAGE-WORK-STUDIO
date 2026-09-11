@@ -8,13 +8,12 @@ import {
   collection, 
   getDocs 
 } from 'firebase/firestore';
-import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, applyStudioSettings, collectStudioSettings } from '../utils/projectPermissions';
+import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, applyStudioSettings, collectStudioSettings, isStudioOwner, getCurrentUserEmail } from '../utils/projectPermissions';
 import { studioCollaboratorsForCloud, isSelfServeSession } from '../utils/tenantScope';
 import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
-import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary, mergeExclusiveLibrary } from '../utils/projectWorkspace';
+import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary, adoptSharedLibraryCatalog } from '../utils/projectWorkspace';
 import { compactFilmForCloud, filmHasMatrix } from '../utils/filmCloudBody';
-import { isStudioOwner } from '../utils/projectPermissions';
 import {
   STORAGE_CLOUD,
   STORAGE_LOCAL,
@@ -459,7 +458,7 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   );
   const payload = {
     projects: catalog,
-    releasedTitles: [],
+    releasedTitles: deletedTitles,
     deletedTitles,
     exclusiveCloud: false,
     catalogSync: true,
@@ -846,8 +845,8 @@ export function restoreProjectFromArchive(archiveId) {
   return restored;
 }
 
-/** Remove from Archive (cannot restore in-app). Disk copy moves to projects/purged/. Title stays tombstoned. */
-export function purgeArchivedProject(archiveId) {
+/** Remove from Archive. Disk film + folders move to PROJECTS PURGED. Stays out of Library until a manual upload. */
+export async function purgeArchivedProject(archiveId) {
   if (typeof window === 'undefined' || !archiveId) return;
   const archive = readProjectArchive();
   const entry = archive.find((p) => p.archiveId === archiveId || p.id === archiveId);
@@ -855,7 +854,12 @@ export function purgeArchivedProject(archiveId) {
   writeProjectArchive(archive.filter((p) => p.archiveId !== archiveId && p.id !== archiveId));
   if (title) {
     markProjectTitlesDeleted([title]);
-    import('./projectDiskVault').then((m) => m.removeProjectFromVault(title, 'purged')).catch(() => {});
+    try {
+      const { removeProjectFromVault } = await import('./projectDiskVault');
+      await removeProjectFromVault(title, 'purged');
+    } catch {
+      /* disk move is best-effort */
+    }
   }
 }
 
@@ -962,14 +966,12 @@ function projectRecency(p) {
  * blockedLibraryTitleKeys — that is how deletes stay gone, not by dropping drafts.
  */
 function mergeProjectArrays(cloudProjs, localProjs) {
-  let remote = (cloudProjs || []).map((p) => ({
-    ...p,
-    storageMode: String(p?.storageMode || '').trim().toLowerCase() === STORAGE_LOCAL ? STORAGE_LOCAL : STORAGE_CLOUD
-  }));
-  if (!isStudioOwner()) {
+  let remote = Array.isArray(cloudProjs) ? cloudProjs : [];
+  const email = getCurrentUserEmail();
+  if (email && !isStudioOwner(email)) {
     remote = remote.filter(isCloudProject);
   }
-  return mergeExclusiveLibrary({ local: localProjs || [], cloud: remote });
+  return adoptSharedLibraryCatalog(remote, localProjs || []);
 }
 
 let healCloudLibraryTimer = null;
@@ -1025,6 +1027,19 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
 }
 
 // 6. Fetch Latest Project Library from Cloud Database (cloud → local)
+/** Read the shared catalog without adopting it — used to block duplicate titles. */
+export async function peekRemoteLibraryCatalog() {
+  if (typeof window === 'undefined' || isSelfServeSession()) return [];
+  try {
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=projects`);
+    if (!res?.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.projects) ? data.projects : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchProjectLibraryFromCloud() {
   if (typeof window !== 'undefined' && isSelfServeSession()) {
     return readLocalProjectLibrary();

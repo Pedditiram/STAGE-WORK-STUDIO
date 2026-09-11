@@ -1,6 +1,7 @@
 /**
  * Move film JSON + poster into projects/local, projects/cloud, archived, or purged.
- * Local and cloud are exclusive live shelves. Archive and Purge must not erase the disk copy.
+ * Purge moves the film JSON, poster, and ASSETS/RENDERS/PROJECT folders into
+ * {studio}/PROJECTS PURGED/{TITLE}/ — it must not come back as a live library card.
  * CommonJS so Vite middleware and Electron can require() it.
  */
 const fs = require('fs');
@@ -12,6 +13,7 @@ const CLOUD = 'cloud';
 const ARCHIVED = 'archived';
 const PURGED = 'purged';
 const ROOT = 'root';
+const PROJECTS_PURGED_FOLDER = 'PROJECTS PURGED';
 
 function projectStem(title) {
   return String(title || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'UNTITLED';
@@ -41,10 +43,100 @@ function ensureShelfDirs(projectsDir) {
     path.join(projectsDir, ARCHIVED),
     path.join(projectsDir, ARCHIVED, 'posters'),
     path.join(projectsDir, PURGED),
-    path.join(projectsDir, PURGED, 'posters')
+    path.join(projectsDir, PURGED, 'posters'),
+    path.join(path.dirname(projectsDir), PROJECTS_PURGED_FOLDER)
   ];
   for (const d of dirs) {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  }
+}
+
+function studioRootFromProjectsDir(projectsDir) {
+  return path.dirname(String(projectsDir || ''));
+}
+
+function purgedBundleDir(projectsDir, stem) {
+  return path.join(studioRootFromProjectsDir(projectsDir), PROJECTS_PURGED_FOLDER, stem);
+}
+
+function isUnderProjectsPurged(dir) {
+  const parts = String(dir || '').split(/[/\\]/).map((p) => p.toLowerCase());
+  return parts.includes(PROJECTS_PURGED_FOLDER.toLowerCase());
+}
+
+function filmLayoutExists(dir) {
+  if (!dir || !fs.existsSync(dir)) return false;
+  return ['ASSETS', 'RENDERS', 'PROJECT'].some((name) => fs.existsSync(path.join(dir, name)));
+}
+
+function filmRootFromProject(parsed, studioRoot, stem) {
+  const roots = parsed?.assetRoots && typeof parsed.assetRoots === 'object' ? parsed.assetRoots : {};
+  const sample = roots.subjects || roots.projectSave || roots.workflows || roots.rendersVideo || '';
+  const norm = String(sample || '').replace(/\\/g, '/');
+  if (norm) {
+    const nested = norm.match(new RegExp(`^(.*)/${stem}/(ASSETS|RENDERS|PROJECT)(/|$)`, 'i'));
+    if (nested?.[1]) return path.join(nested[1], stem);
+    const loose = norm.match(/^(.*)\/(ASSETS|RENDERS|PROJECT)(\/|$)/i);
+    if (loose?.[1]) return loose[1];
+  }
+  const fallback = path.join(studioRoot, stem);
+  if (filmLayoutExists(fallback) || (fs.existsSync(fallback) && fs.statSync(fallback).isDirectory())) {
+    return fallback;
+  }
+  return '';
+}
+
+function isSafeFilmRoot(dir, studioRoot, projectsDir) {
+  if (!dir) return false;
+  const resolved = path.resolve(dir);
+  const studio = path.resolve(studioRoot);
+  const vault = path.resolve(projectsDir);
+  if (resolved === studio || resolved === vault) return false;
+  if (resolved.startsWith(`${vault}${path.sep}`)) return false;
+  if (isUnderProjectsPurged(resolved)) return false;
+  return true;
+}
+
+function copyRecursive(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of fs.readdirSync(src)) {
+    const from = path.join(src, name);
+    const to = path.join(dest, name);
+    const st = fs.statSync(from);
+    if (st.isDirectory()) copyRecursive(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
+
+function safeMoveDir(src, dest) {
+  if (!src || !dest || !fs.existsSync(src)) return false;
+  if (path.resolve(src) === path.resolve(dest)) return true;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (fs.existsSync(dest)) {
+    for (const name of fs.readdirSync(src)) {
+      const from = path.join(src, name);
+      const to = path.join(dest, name);
+      try {
+        if (fs.statSync(from).isDirectory()) safeMoveDir(from, to);
+        else safeMove(from, to);
+      } catch {
+        /* skip locked file */
+      }
+    }
+    try { fs.rmSync(src, { recursive: true, force: true }); } catch { /* leftover */ }
+    return true;
+  }
+  try {
+    fs.renameSync(src, dest);
+    return true;
+  } catch {
+    try {
+      copyRecursive(src, dest);
+      fs.rmSync(src, { recursive: true, force: true });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -276,9 +368,69 @@ function moveProjectStorageOnDisk(projectsDir, title, destMode) {
   return { ok: true, title: clean, storageMode: mode, moved: true };
 }
 
+function collectLiveCopies(projectsDir, stem) {
+  const out = [];
+  for (const shelf of [LOCAL, CLOUD, ROOT, ARCHIVED]) {
+    const loc = pathsFor(projectsDir, stem, shelf);
+    if (fs.existsSync(loc.json)) out.push({ shelf, ...loc });
+  }
+  return out;
+}
+
+function purgeProjectBundle(projectsDir, title) {
+  const clean = String(title || '').trim();
+  const stem = projectStem(clean);
+  const studioRoot = studioRootFromProjectsDir(projectsDir);
+  const bundle = purgedBundleDir(projectsDir, stem);
+  fs.mkdirSync(path.join(bundle, 'posters'), { recursive: true });
+
+  const copies = collectLiveCopies(projectsDir, stem);
+  let parsed = { title: clean };
+  for (const copy of copies) {
+    try {
+      const rec = readJson(copy.json);
+      if (rec && typeof rec === 'object') parsed = rec;
+    } catch {
+      /* keep last good */
+    }
+  }
+
+  const destJson = path.join(bundle, `${stem}.json`);
+  writeJson(destJson, parsed);
+  for (const copy of copies) {
+    if (path.resolve(copy.json) !== path.resolve(destJson)) safeUnlink(copy.json);
+    if (copy.poster && fs.existsSync(copy.poster)) {
+      safeMove(copy.poster, path.join(bundle, 'posters', `${stem}.png`));
+    }
+  }
+  const sharedPoster = path.join(projectsDir, 'posters', `${stem}.png`);
+  if (fs.existsSync(sharedPoster)) {
+    try {
+      fs.copyFileSync(sharedPoster, path.join(bundle, 'posters', `${stem}.png`));
+    } catch {
+      /* optional */
+    }
+  }
+  safeUnlink(pathsFor(projectsDir, stem, PURGED).json);
+
+  const filmRoot = filmRootFromProject(parsed, studioRoot, stem);
+  let movedFolders = false;
+  if (isSafeFilmRoot(filmRoot, studioRoot, projectsDir)) {
+    movedFolders = safeMoveDir(filmRoot, bundle);
+  }
+
+  return {
+    ok: true,
+    title: clean,
+    shelf: PURGED,
+    moved: true,
+    purgedDir: bundle,
+    movedFolders
+  };
+}
+
 /**
- * Move a title's JSON + poster into archived/ or purged/.
- * Purge looks in live then archived so an already-archived film still lands in purged/.
+ * Move a title's JSON + poster into archived/, or the full film into PROJECTS PURGED.
  */
 function shelfProjectOnDisk(projectsDir, title, shelf) {
   const destShelf = normalizeShelf(shelf) === LOCAL || normalizeShelf(shelf) === CLOUD
@@ -288,6 +440,9 @@ function shelfProjectOnDisk(projectsDir, title, shelf) {
   if (!projectsDir || !clean) return { ok: false, error: 'title required' };
   ensureShelfDirs(projectsDir);
   migrateLiveJsonIntoShelves(projectsDir);
+  if (destShelf === PURGED) {
+    return purgeProjectBundle(projectsDir, clean);
+  }
   const stem = projectStem(clean);
   const dest = pathsFor(projectsDir, stem, destShelf);
   const search = [LOCAL, CLOUD, ROOT, ARCHIVED];
@@ -347,5 +502,6 @@ module.exports = {
   moveProjectStorageOnDisk,
   findLiveProjectFile,
   findPosterPath,
-  normalizeStorageMode
+  normalizeStorageMode,
+  PROJECTS_PURGED_FOLDER
 };

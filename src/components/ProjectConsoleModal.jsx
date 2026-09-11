@@ -25,6 +25,7 @@ import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import {
   syncProjectLibraryToCloud,
   fetchProjectLibraryFromCloud,
+  peekRemoteLibraryCatalog,
   syncCollaboratorsToCloud,
   reviveProjectTitleForOpen,
   filterOutDeletedProjects,
@@ -85,8 +86,8 @@ import {
     renameTitleAcrossPackOwned,
     stripTitleFromPackOwned
 } from '../utils/userSettingsPack';
-import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
-import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode, isCloudProject, filterLibraryByShelf } from '../utils/projectStorageMode';
+import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, adoptSharedLibraryCatalog, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
+import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode, isCloudProject, filterLibraryByShelf, findTitleOnShelves, titleShelfConflictMessage } from '../utils/projectStorageMode';
 import { isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from '../utils/demoStudioProject';
 import { starterShots, starterScreenplay } from '../utils/tenantScope';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
@@ -1074,10 +1075,12 @@ export default function ProjectConsoleModal({
       return;
     }
 
-    // Check if another project already has this exact title
-    const isDuplicate = projectLibrary.some(p => p.id !== projId && p.title.trim().toUpperCase() === cleanName);
-    if (isDuplicate) {
-      alert(`⚠️ DUPLICATE PROJECT TITLE:\nA project named "${cleanName}" already exists in the studio library. Projects cannot have identical names. Please enter a unique title.`);
+    const localConflict = findTitleOnShelves(
+      cleanName,
+      [(Array.isArray(projectLibrary) ? projectLibrary : []).filter((p) => p.id !== projId)]
+    );
+    if (localConflict) {
+      alert(titleShelfConflictMessage(cleanName, localConflict, target?.storageMode));
       return;
     }
 
@@ -1270,10 +1273,7 @@ export default function ProjectConsoleModal({
   const mergeLibraryPreservingUnion = useCallback((incoming, prev) => {
     return sanitizeLibraryTitles(
       filterOutDeletedProjects(
-        mergeLibrarySources({
-          local: Array.isArray(prev) ? prev : [],
-          vault: Array.isArray(incoming) ? incoming : []
-        })
+        adoptSharedLibraryCatalog(Array.isArray(prev) ? prev : [], Array.isArray(incoming) ? incoming : [])
       )
     );
   }, []);
@@ -1375,14 +1375,8 @@ export default function ProjectConsoleModal({
         const healedAfter = healActiveProjectFromArchive();
         if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
           setProjectLibrary(prev => {
-            const cloudTagged = filterOutDeletedProjects(cloudProjs).map((p) => ({
-              ...p,
-              storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
-            }));
-            let merged = mergeLibrarySources({
-              local: Array.isArray(prev) ? prev : [],
-              cloud: cloudTagged
-            });
+            const cloudTagged = filterOutDeletedProjects(cloudProjs);
+            let merged = adoptSharedLibraryCatalog(cloudTagged, Array.isArray(prev) ? prev : []);
 
             const activeKey = currentProjectTitle ? String(currentProjectTitle).trim().toUpperCase() : '';
             if (
@@ -1765,7 +1759,7 @@ export default function ProjectConsoleModal({
   };
 
   // 2. CREATE NEW PROJECT (PRIMARY ADMIN AUTHORIZED RULE)
-  const handleCreateProject = (e) => {
+  const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!isPrimaryOwner) {
       alert(`🔒 ACCESS RESTRICTED:\n${packLibraryRestrictedMessage('create new projects')}`);
@@ -1776,10 +1770,15 @@ export default function ProjectConsoleModal({
     const projId = `proj_${Date.now()}`;
     const cleanTitle = newTitle.trim().toUpperCase();
 
-    // Check if a project with this exact title already exists
-    const isDuplicate = projectLibrary.some(p => p.title.trim().toUpperCase() === cleanTitle);
-    if (isDuplicate) {
-      alert(`⚠️ DUPLICATE PROJECT TITLE:\nA project named "${cleanTitle}" already exists. Projects cannot have identical names. Please choose a unique name.`);
+    const localConflict = findTitleOnShelves(cleanTitle, [projectLibrary]);
+    if (localConflict) {
+      alert(titleShelfConflictMessage(cleanTitle, localConflict, libraryShelf));
+      return;
+    }
+    const remote = await peekRemoteLibraryCatalog();
+    const remoteConflict = findTitleOnShelves(cleanTitle, [remote]);
+    if (remoteConflict) {
+      alert(titleShelfConflictMessage(cleanTitle, remoteConflict, libraryShelf));
       return;
     }
 
@@ -1891,6 +1890,7 @@ export default function ProjectConsoleModal({
       ...proj,
       shots: Array.isArray(full.shots) && full.shots.length ? full.shots : proj.shots,
       storageMode: dest,
+      shelfUpdatedAt: new Date().toISOString(),
       lastModified: new Date().toLocaleDateString()
     };
     if (dest === STORAGE_CLOUD) reviveProjectTitleForOpen(moved.title);
@@ -2005,10 +2005,16 @@ export default function ProjectConsoleModal({
     setActiveTab('library');
   };
 
-  const handlePurgeArchivedProject = (archiveId, title) => {
+  const handlePurgeArchivedProject = async (archiveId, title) => {
     if (!isOwnerUser) return;
-    if (!confirm(`Move archived project "${title}" to the purged folder on disk?\nIt leaves Library and Archive. The files stay in projects/purged.`)) return;
-    purgeArchivedProject(archiveId);
+    if (
+      !confirm(
+        `Purge "${title}"?\n\nThe project and its local files/folders move to PROJECTS PURGED.\nIt will not return to Library unless you upload the project again.`
+      )
+    ) {
+      return;
+    }
+    await purgeArchivedProject(archiveId);
     setArchivedProjects(getArchivedProjects());
     setProjectLibrary((prev) => filterOutDeletedProjects(prev));
     try {
@@ -2759,7 +2765,7 @@ export default function ProjectConsoleModal({
                     Project Archive
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 max-w-xl">
-                    Archived projects are removed from the Library but kept here so you can restore them. They will not reappear in the live library until restored.
+                    Archived projects are removed from the Library but kept here so you can restore them. They will not reappear in the live library until restored. Purge moves the film and its folders to PROJECTS PURGED — it will not return unless you upload the project again.
                   </p>
                 </div>
                 <button
@@ -2806,7 +2812,7 @@ export default function ProjectConsoleModal({
                           type="button"
                           onClick={() => handlePurgeArchivedProject(proj.archiveId || proj.id, proj.title)}
                           className="py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="Move to projects/purged on disk"
+                          title="Move the film and its folders to PROJECTS PURGED"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Purge

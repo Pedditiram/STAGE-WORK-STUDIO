@@ -519,6 +519,7 @@ function discoverFilmAssetRoots(projectTitle, { migrate = true } = {}) {
   let foundExisting = false;
   for (const studio of studioCandidates) {
     const candidate = path.join(studio, folder);
+    if (String(candidate).toLowerCase().includes('projects purged')) continue;
     if (filmLayoutExists(candidate) || fs.existsSync(candidate)) {
       filmRoot = candidate;
       foundExisting = true;

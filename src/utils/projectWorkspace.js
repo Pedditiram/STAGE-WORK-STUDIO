@@ -270,6 +270,49 @@ function explicitStorageMode(project) {
   return raw === STORAGE_CLOUD || raw === STORAGE_LOCAL ? raw : '';
 }
 
+function libraryTitleKey(project) {
+  if (isDemoProjectTitle(project?.title)) return '__sws_demo__';
+  return String(project?.title || '').trim().toLowerCase();
+}
+
+/**
+ * Shared web + desktop catalog is SoT for Local vs Cloud.
+ * This device may add titles the catalog does not have yet; it must not flip a title the catalog already placed.
+ */
+export function adoptSharedLibraryCatalog(remote = [], device = []) {
+  const byTitle = new Map();
+  (Array.isArray(remote) ? remote : []).forEach((p) => {
+    if (!p || !String(p.title || '').trim()) return;
+    const mode = explicitStorageMode(p);
+    byTitle.set(libraryTitleKey(p), {
+      ...p,
+      ...(mode ? { storageMode: mode } : {})
+    });
+  });
+  (Array.isArray(device) ? device : []).forEach((p) => {
+    if (!p || !String(p.title || '').trim()) return;
+    const key = libraryTitleKey(p);
+    const prev = byTitle.get(key);
+    const deviceMode = explicitStorageMode(p) || normalizeStorageMode(p.storageMode);
+    if (!prev) {
+      byTitle.set(key, { ...p, storageMode: deviceMode || STORAGE_LOCAL });
+      return;
+    }
+    const catalogMode = explicitStorageMode(prev);
+    byTitle.set(key, {
+      ...mergeOne(p, prev),
+      storageMode: catalogMode || deviceMode || STORAGE_LOCAL
+    });
+  });
+  return migrateLegacyRoomInLibrary(
+    Array.from(byTitle.values()).map((p) => {
+      const rest = { ...p };
+      rest.storageMode = explicitStorageMode(rest) || STORAGE_LOCAL;
+      return ensureProjectRoomId(resolveCurrentDemoProject(rest));
+    })
+  );
+}
+
 /**
  * Exclusive Local vs Cloud membership.
  * Shared catalog (web + desktop) is SoT for which shelf a title is on.
@@ -384,6 +427,7 @@ export function slimProjectForLocalMirror(project) {
     updatedAt: project.updatedAt,
     shotCount,
     storageMode: normalizeStorageMode(project.storageMode),
+    ...(project.shelfUpdatedAt ? { shelfUpdatedAt: project.shelfUpdatedAt } : {}),
     ...(posterUrl ? { posterUrl } : {}),
     // Index only — full shots/bibles/screenplay are restored from disk on open
     shots: []
@@ -416,7 +460,7 @@ export async function enrichLibraryWithDiskVault(library) {
       const { filterOutDeletedProjects } = await import('../services/dbService');
       return filterOutDeletedProjects(base);
     }
-    const merged = mergeLibrarySources({ local: base, vault });
+    const merged = adoptSharedLibraryCatalog(base, vault);
     const { filterOutDeletedProjects } = await import('../services/dbService');
     return filterOutDeletedProjects(merged);
   } catch {
@@ -434,13 +478,9 @@ export async function hydrateProjectLibraryFromStores({ cloud = [] } = {}) {
   const local = readLocalProjectLibrary();
   const cloudTagged = (Array.isArray(cloud) ? cloud : []).map((p) => ({
     ...p,
-    storageMode: explicitStorageMode(p) || STORAGE_CLOUD
+    ...(explicitStorageMode(p) ? { storageMode: explicitStorageMode(p) } : {})
   }));
-  let merged = mergeLibrarySources({
-    local,
-    vault: [],
-    cloud: cloudTagged
-  });
+  let merged = adoptSharedLibraryCatalog(cloudTagged, local);
   merged = await enrichLibraryWithDiskVault(merged);
   try {
     const { filterOutDeletedProjects } = await import('../services/dbService');

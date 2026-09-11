@@ -37,7 +37,7 @@ import {
   attachWorkspaceToProject,
   applyOpenWorkspace,
   collectOpenWorkspace,
-  mergeLibrarySources,
+  adoptSharedLibraryCatalog,
   readLocalProjectLibrary,
   writeLocalProjectLibrary,
   roomIdForProject,
@@ -1489,7 +1489,7 @@ export default function App() {
       if (Array.isArray(vaultProjects) && vaultProjects.length > 0) {
         const currentLib = readLocalProjectLibrary();
         const cleanedMerged = filterOutDeletedProjects(
-          mergeLibrarySources({ local: currentLib, vault: vaultProjects })
+          adoptSharedLibraryCatalog(currentLib, vaultProjects)
         );
         // Always write merged library so Electron + browser stay aligned via disk SoT
         writeLocalProjectLibrary(cleanedMerged);
@@ -1576,7 +1576,7 @@ export default function App() {
         if (!Array.isArray(vaultProjects) || !vaultProjects.length) return;
         const currentLib = readLocalProjectLibrary();
         const cleanedMerged = filterOutDeletedProjects(
-          mergeLibrarySources({ local: currentLib, vault: vaultProjects })
+          adoptSharedLibraryCatalog(currentLib, vaultProjects)
         );
         writeLocalProjectLibrary(cleanedMerged);
         window.dispatchEvent(new Event('sps_projects_updated'));
@@ -1748,10 +1748,7 @@ export default function App() {
       let updatedProjs = Array.isArray(projs)
         ? projs.filter((p) => p && p.title && String(p.title).trim().toUpperCase() !== 'STAGE PRODUCTION STUDIO')
         : [];
-      updatedProjs = filterOutDeletedProjects(updatedProjs).map((p) => ({
-        ...p,
-        storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
-      }));
+      updatedProjs = filterOutDeletedProjects(updatedProjs);
 
       if (healed?.title) {
         const key = String(healed.title).trim().toUpperCase();
@@ -1789,34 +1786,19 @@ export default function App() {
         }
       }
 
-      const localLib = (() => {
-        try {
-          return readLocalProjectLibrary();
-        } catch {
-          return [];
-        }
-      })();
-      let mergedCloud = mergeLibrarySources({ local: localLib, cloud: updatedProjs });
-      try {
-        const { enrichLibraryWithDiskVault } = await import('./utils/projectWorkspace');
-        mergedCloud = filterOutDeletedProjects(await enrichLibraryWithDiskVault(mergedCloud));
-      } catch {
-        mergedCloud = filterOutDeletedProjects(mergedCloud);
-      }
+      let mergedCloud = filterOutDeletedProjects(updatedProjs);
       writeLocalProjectLibrary(mergedCloud);
       window.dispatchEvent(new Event('sps_projects_updated'));
 
-      const remoteByTitle = new Map(
-        updatedProjs.map((p) => [String(p?.title || '').trim().toUpperCase(), p]).filter(([k]) => k)
+      const remoteKeys = new Set(
+        (Array.isArray(projs) ? projs : [])
+          .map((p) => String(p?.title || '').trim().toUpperCase())
+          .filter(Boolean)
       );
-      const catalogDrift = mergedCloud.some((p) => {
-        const key = String(p?.title || '').trim().toUpperCase();
-        if (!key) return false;
-        const remote = remoteByTitle.get(key);
-        if (!remote) return true;
-        return String(remote.storageMode || '').toLowerCase() !== String(p.storageMode || '').toLowerCase();
-      });
-      if (updatedProjs.length === 0 && mergedCloud.length) {
+      const deviceOnly = mergedCloud.filter(
+        (p) => p?.title && !remoteKeys.has(String(p.title).trim().toUpperCase())
+      );
+      if ((Array.isArray(projs) ? projs : []).length === 0 && mergedCloud.length) {
         try {
           const { loadProjectsFromVault } = await import('./services/projectDiskVault');
           const vault = await loadProjectsFromVault({ includeBlocked: true });
@@ -1824,7 +1806,7 @@ export default function App() {
         } catch {
           await syncProjectLibraryToCloud(mergedCloud);
         }
-      } else if (catalogDrift) {
+      } else if (deviceOnly.length) {
         await syncProjectLibraryToCloud(mergedCloud);
       }
 

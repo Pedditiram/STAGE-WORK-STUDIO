@@ -1736,7 +1736,12 @@ export default async function handler(req, res) {
           return {
             ...existing,
             ...p,
-            storageMode: String(p?.storageMode || existing?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud',
+            storageMode: (() => {
+              const incoming = String(p?.storageMode || '').trim().toLowerCase();
+              if (incoming === 'local' || incoming === 'cloud') return incoming;
+              const prev = String(existing?.storageMode || '').trim().toLowerCase();
+              return prev === 'cloud' ? 'cloud' : 'local';
+            })(),
             shots: incomingShots.length ? incomingShots : existingShots,
             shotCount: p.shotCount || existing.shotCount || incomingShots.length || existingShots.length,
             screenplayText: p.screenplayText || existing.screenplayText
@@ -1751,7 +1756,7 @@ export default async function handler(req, res) {
           if (!mergedLive.some((x) => titleKey(x.title) === key)) {
             mergedLive.push({
               ...p,
-              storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
+              storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'cloud' ? 'cloud' : 'local'
             });
           }
         });

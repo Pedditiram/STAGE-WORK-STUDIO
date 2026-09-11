@@ -40,3 +40,30 @@ export function localTitlesFromLibrary(library) {
     .map((p) => String(p?.title || '').trim())
     .filter(Boolean);
 }
+
+export function findTitleOnShelves(title, libraries = []) {
+  const want = String(title || '').trim().toUpperCase();
+  if (!want) return null;
+  for (const list of libraries) {
+    const hit = (Array.isArray(list) ? list : []).find(
+      (p) => String(p?.title || '').trim().toUpperCase() === want
+    );
+    if (hit) {
+      return {
+        title: String(hit.title || title).trim(),
+        shelf: normalizeStorageMode(hit.storageMode)
+      };
+    }
+  }
+  return null;
+}
+
+export function titleShelfConflictMessage(title, conflict, intendedShelf) {
+  const name = String(conflict?.title || title || '').trim() || 'That title';
+  const taken = conflict?.shelf === STORAGE_CLOUD ? 'Cloud' : 'Local';
+  const want = normalizeStorageMode(intendedShelf) === STORAGE_CLOUD ? 'Cloud' : 'Local';
+  if (taken === want) {
+    return `TITLE CONFLICT\n\n"${name}" already exists on the ${taken} shelf.\nChoose a different name.`;
+  }
+  return `TITLE CONFLICT\n\n"${name}" already exists on the ${taken} shelf.\nYou cannot create the same name on ${want}.\n\nUse a different name, or move the existing film instead.`;
+}

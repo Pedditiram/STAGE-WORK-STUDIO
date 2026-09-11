@@ -170,7 +170,8 @@ function ensureStudioVault(roots, { repoProjectsDir, shelfFs } = {}) {
     path.join(projectsDir, 'local'),
     path.join(projectsDir, 'local', 'posters'),
     path.join(projectsDir, 'cloud'),
-    path.join(projectsDir, 'cloud', 'posters')
+    path.join(projectsDir, 'cloud', 'posters'),
+    path.join(roots.studioRoot, 'PROJECTS PURGED')
   ];
   for (const d of dirs) {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
