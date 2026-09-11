@@ -420,7 +420,7 @@ export default function SwsComfyWorkflowModal({
       }
       if (!dir) {
         setError(
-          'Could not find a film folder. Set Project save / ComfyUI workflows in Project Console → Fill under film root → Save & create folders.'
+          'Could not find a film folder. Open Project Console → Folders → Default path (or Custom path).'
         );
         return;
       }

@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { readCloudSyncHealth, syncBackendLabel } from '../utils/cloudSyncHealth';
 import { managedCreditStatus } from '../utils/saasControl';
-import { APP_VERSION_NAME } from '../utils/runtimeEnv';
 import StudioProfileControl from './StudioProfileControl';
 import HeaderDriveMenu from './HeaderDriveMenu';
 import HeaderSaveMenu from './HeaderSaveMenu';
@@ -70,8 +68,6 @@ export default function Header({
   onSwitchAccount,
   onLogout,
   onOpenInvestorDeck,
-  appVersionMode = 'local',
-  onOpenAppVersionModal,
   roomId,
   collaboratorCount,
   activeRemoteUsers = [],
@@ -85,7 +81,6 @@ export default function Header({
   lastVersionFile = '',
   isDurableSaving = false,
   isProjectSavedToast = false,
-  isCloudSyncing = false,
   shotCount = 0,
   colorTheme = 'dark',
   onChangeColorTheme,
@@ -110,16 +105,8 @@ export default function Header({
 }) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isActiveUsersOpen, setIsActiveUsersOpen] = useState(false);
-  const [syncHealth, setSyncHealth] = useState(() => readCloudSyncHealth());
   const [creditStatus, setCreditStatus] = useState(() => managedCreditStatus());
   const [llmBusy, setLlmBusy] = useState('');
-
-  useEffect(() => {
-    const refresh = () => setSyncHealth(readCloudSyncHealth());
-    refresh();
-    window.addEventListener('sps_cloud_sync_health_updated', refresh);
-    return () => window.removeEventListener('sps_cloud_sync_health_updated', refresh);
-  }, []);
 
   useEffect(() => {
     const refreshCredits = () => setCreditStatus(managedCreditStatus());
@@ -597,22 +584,6 @@ export default function Header({
               </div>
             );
           })()}
-          <button
-            type="button"
-            onClick={onSaveProject}
-            disabled={isCloudSyncing || isGuest}
-            className={`sps-quiet-link ${isCloudSyncing ? '' : 'is-muted'}`}
-            title={
-              isCloudSyncing
-                ? 'Cloud syncing…'
-                : `Cloud sync · ${syncBackendLabel(syncHealth?.backend)}${
-                    syncHealth?.kvConfigured ? ' (KV)' : ''
-                  }${syncHealth?.failStreak ? ` · ${syncHealth.failStreak} fail(s)` : ''} — click to push & pull now`
-            }
-            aria-label="Cloud sync"
-          >
-            {isCloudSyncing ? 'Syncing' : 'Sync'}
-          </button>
           {llmBusy ? (
             <span className="sps-quiet-link pointer-events-none" title={`LLM · ${llmBusy}`}>
               LLM
@@ -666,17 +637,6 @@ export default function Header({
           >
             Help
           </button>
-          {typeof onOpenAppVersionModal === 'function' ? (
-            <button
-              type="button"
-              onClick={() => onOpenAppVersionModal()}
-              className="sps-quiet-link is-muted"
-              title={`Build ${APP_VERSION_NAME} · ${appVersionMode === 'cloud' ? 'Cloud' : 'Local'} mode`}
-              aria-label={`App build ${APP_VERSION_NAME}, ${appVersionMode} mode`}
-            >
-              {appVersionMode === 'cloud' ? 'Cloud' : 'Local'}
-            </button>
-          ) : null}
           {typeof onTogglePinHeader === 'function' ? (
             <button
               type="button"

@@ -562,3 +562,33 @@ export async function pickAndOpenProjectFolder() {
     return { ok: false, error: err?.message || String(err) };
   }
 }
+
+/** Documents/Stage Work Studio unless the user set a custom studio root. */
+export async function resolveDefaultFilmStudioRoot() {
+  try {
+    const api = typeof window !== 'undefined' ? window.electronAPI : null;
+    if (api?.getVaultRoots) {
+      const res = await api.getVaultRoots();
+      if (res?.studioRoot) return String(res.studioRoot).trim();
+    }
+  } catch {
+    /* continue */
+  }
+  try {
+    const res = await fetch('/api/studio-disk-root');
+    if (res?.ok) {
+      const data = await res.json();
+      if (data?.studioRoot) return String(data.studioRoot).trim();
+    }
+  } catch {
+    /* web / no disk API */
+  }
+  try {
+    const { getAllottedFolderPath } = await import('../services/projectDiskVault');
+    const allotted = String(getAllottedFolderPath() || '').trim();
+    if (allotted) return allotted;
+  } catch {
+    /* ignore */
+  }
+  return '';
+}

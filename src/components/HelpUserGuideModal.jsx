@@ -131,7 +131,7 @@ function buildGuideSections(isAdmin) {
           </Step>
           <Step n={4} title="Save your work">
             Click <strong>Save</strong> in the studio bar. The small arrow on that same button opens auto-save intervals.
-            Prefer this over only relying on Cloud sync.
+            That writes the film on this computer. Cloud-shelf films also stay in the studio library.
           </Step>
           <Step n={5} title="Need a map?">
             Press <strong>Shift+Space</strong> (or swipe from the left on phone) to open the <strong>Navigator</strong> —
@@ -252,9 +252,9 @@ function buildGuideSections(isAdmin) {
               also writes <code>TITLE_v001.json</code>, <code>v002</code>, … into that folder.
             </p>
             <p>
-              Cloud sync (cloud with up/down arrows, next to Save) shares with teammates. Google Drive (triangle
-              mark) auto-creates <strong>SWS Projects</strong> for your signed-in email — not the same as sync.
-              Use both: Save for safety on disk, Sync for the room.
+              A film’s home is the Projects library: <strong>Local</strong> or <strong>Cloud</strong> — never both.
+              Save writes this machine’s vault. Cloud-shelf films also update the studio library for the team.
+              Google Drive (triangle mark) is a separate file pack, not the library shelf.
             </p>
           </Callout>
 
@@ -405,14 +405,12 @@ function buildGuideSections(isAdmin) {
           </p>
           <ol className="list-decimal pl-4 space-y-1 m-0" style={{ color: 'var(--sps-muted)' }}>
             <li>
-              <strong>Fill under film root</strong> — pick a studio folder like Desktop/<code>SWS PROJECTS</code>.
+              <strong>Default path</strong> — uses Documents/<code>Stage Work Studio</code> (or the folder you set in Settings) and creates the film folders immediately.
             </li>
             <li>
-              SWS creates <code>PROJECT_NAME/ASSETS</code>, <code>RENDERS</code>,{' '}
-              <code>PROJECT/Versions</code> and <code>PROJECT/Workflows</code>.
-            </li>
-            <li>
-              <strong>Save &amp; create folders</strong> — makes missing folders and can write a version snapshot.
+              <strong>Custom path</strong> — pick another studio root. Same layout:{' '}
+              <code>PROJECT_NAME/ASSETS</code>, <code>RENDERS</code>, <code>PROJECT/Versions</code>,{' '}
+              <code>PROJECT/Workflows</code>.
             </li>
             <li>
               ComfyUI <strong>Download</strong> / <strong>Send</strong> also writes workflow JSON into{' '}
@@ -434,8 +432,8 @@ function buildGuideSections(isAdmin) {
       content: (
         <div className="space-y-3 text-[11px]">
           <p style={{ color: 'var(--sps-muted)' }}>
-            Each film has its own room. Presence badges show who is editing. Cloud sync (toolbar) pushes/pulls the room;
-            disk Save keeps a local copy.
+            Each film has its own room. Presence badges show who is editing. Put a film on the Projects
+            <strong> Cloud</strong> shelf to share it; <strong>Local</strong> stays on this computer. Save keeps the disk copy.
           </p>
           <p style={{ color: 'var(--sps-muted)' }}>
             <strong>Browser vs Electron:</strong> same studio, same account. Electron is better for folder pickers and

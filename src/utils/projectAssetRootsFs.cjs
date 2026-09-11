@@ -500,12 +500,15 @@ function normalizeAssetRootsFromDisk(raw) {
 
 /**
  * Find or create …/{PROJECT}/ASSETS · RENDERS · PROJECT layout.
- * Migrates legacy 000-/010-/020- names when present. Prefers Desktop/SWS PROJECTS.
+ * Migrates legacy 000-/010-/020- names when present.
+ * New films default to Documents/Stage Work Studio; existing SWS PROJECTS folders still win.
  */
 function discoverFilmAssetRoots(projectTitle, { migrate = true } = {}) {
   const folder = sanitizeProjectFolderName(projectTitle);
   const home = process.env.HOME || process.env.USERPROFILE || '';
+  const defaultStudio = path.join(home, 'Documents', 'Stage Work Studio');
   const studioCandidates = [
+    defaultStudio,
     path.join(home, 'Desktop', 'SWS PROJECTS'),
     path.join(home, 'Desktop', 'SWS PROJ'),
     path.join(home, 'Documents', 'SWS PROJECTS'),
@@ -523,8 +526,7 @@ function discoverFilmAssetRoots(projectTitle, { migrate = true } = {}) {
     }
   }
   if (!filmRoot) {
-    const studio = studioCandidates[0] || path.join(home, 'Desktop', 'SWS PROJECTS');
-    filmRoot = path.join(studio, folder);
+    filmRoot = path.join(defaultStudio, folder);
   }
 
   let renamed = [];

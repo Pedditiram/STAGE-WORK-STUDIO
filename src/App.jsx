@@ -28,7 +28,6 @@ import StudioUpdateModal from './components/StudioUpdateModal';
 import DesktopTrialModal from './components/DesktopTrialModal';
 import ConflictAlertModal from './components/ConflictAlertModal';
 import ScriptMergePromptModal from './components/ScriptMergePromptModal';
-import AppVersionSelectorModal from './components/AppVersionSelectorModal';
 import { saveStoredCharacterProfiles, getStoredCharacterProfiles } from './components/CharacterBibleModal';
 import { saveStoredWorldEnvironmentAssets } from './components/WorldEnvironmentConsole';
 import { subscribeToCollabChat } from './services/collabChat';
@@ -873,8 +872,6 @@ export default function App() {
     }
     return 'cloud';
   });
-  const [isAppVersionModalOpen, setIsAppVersionModalOpen] = useState(false);
-
   useEffect(() => {
     if (typeof window === 'undefined' || !projectTitle) return;
     try {
@@ -928,20 +925,6 @@ export default function App() {
     if (isGuestSession()) return;
     enableCloudCollaborationMode();
   }, []);
-
-  const handleSelectAppVersionMode = async (mode) => {
-    setAppVersionMode(mode);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sps_app_version_mode', mode);
-      window.dispatchEvent(new CustomEvent('sps_app_version_mode_changed', { detail: mode }));
-      if (mode === 'cloud') {
-        // Auto-upload & sync local vault images to cloud database payload
-        await syncCanvasVaultToCloud(roomId, projectTitle);
-        const vault = getStoredCanvasVaultImages();
-        syncToCloud({ shots, projectGeneratedImages: vault });
-      }
-    }
-  };
 
   const [characterBibleTab, setCharacterBibleTab] = useState('roster'); // 'roster' | 'character_sheet'
   const [writerConsoleTab, setWriterConsoleTab] = useState('screenplay'); // 'screenplay' | 'synopsis' | 'breakdown'
@@ -4049,8 +4032,6 @@ export default function App() {
           onSwitchAccount={handleStudioSwitchAccount}
           onLogout={handleStudioLogout}
           onOpenInvestorDeck={() => setPresentationMode(true)}
-          appVersionMode={appVersionMode}
-          onOpenAppVersionModal={() => setIsAppVersionModalOpen(true)}
           roomId={roomId}
           collaboratorCount={Math.max(collaborators.length, activeRemoteUsers.length + 1)}
           activeRemoteUsers={activeRemoteUsers}
@@ -4064,7 +4045,6 @@ export default function App() {
           lastVersionFile={lastVersionFile}
           isDurableSaving={isDurableSaving}
           isProjectSavedToast={isProjectSavedToast}
-          isCloudSyncing={isCloudSyncing}
           shotCount={shots.length}
           shots={shots}
           colorTheme={colorTheme}
@@ -4692,14 +4672,6 @@ export default function App() {
         }}
       />
 
-      {/* App Version Mode Selection Modal (Local Version vs Cloud Version) */}
-      <AppVersionSelectorModal
-        isOpen={isAppVersionModalOpen}
-        onClose={() => setIsAppVersionModalOpen(false)}
-        currentMode={appVersionMode}
-        onSelectMode={handleSelectAppVersionMode}
-      />
-
       </Suspense>
 
       {/* Project save confirmation toast */}
@@ -4723,9 +4695,7 @@ export default function App() {
 
       {/* Always-visible build stamp (header often hidden behind Projects) */}
       {!showSplash && (
-        <button
-          type="button"
-          onClick={() => setIsAppVersionModalOpen(true)}
+        <span
           className="fixed bottom-3 left-3 z-[80] px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
           style={{
             color: 'var(--sps-gold)',
@@ -4734,11 +4704,11 @@ export default function App() {
             letterSpacing: '0.08em',
             backdropFilter: 'blur(8px)',
           }}
-          title={`Build ${APP_VERSION_NAME} — tap to open Local / Cloud mode`}
+          title={`Build ${APP_VERSION_NAME}`}
           aria-label={`App build ${APP_VERSION_NAME}`}
         >
           {APP_VERSION_NAME}
-        </button>
+        </span>
       )}
 
       {!isNavigatorOpen && (

@@ -55,7 +55,8 @@ import {
 import {
   pickDirectoryPath,
   pickAndOpenProjectFolder,
-  saveProjectAssetRoots
+  saveProjectAssetRoots,
+  resolveDefaultFilmStudioRoot
 } from '../utils/projectAssetRootsClient';
 import { optimizePosterDataUrl } from '../utils/projectPosterImage';
 import ProjectDrivePanel from './ProjectDrivePanel';
@@ -878,33 +879,13 @@ export default function ProjectConsoleModal({
     );
   };
 
-  const handleFillDefaultAssetRoots = async (proj) => {
-    let base = '';
-    const folderHint = sanitizeProjectFolderName(proj.title);
-    const picked = await pickDirectoryPath();
-    if (picked.ok && picked.path) {
-      base = picked.path;
-    } else {
-      const hint = extractStudioRootFromAssetPath(
-        proj.assetRoots?.subjects || proj.assetRoots?.projectSave || '',
-        proj.title
-      );
-      base = window.prompt(
-        `Paste studio root (e.g. Desktop/SWS PROJECTS).\nSWS will create:\n  ${folderHint}/ASSETS\n  ${folderHint}/RENDERS\n  ${folderHint}/PROJECT\nunder that root (not loose at the root).`,
-        hint || ''
-      );
-    }
-    if (!base) return;
-    // If user accidentally picked …/KARA_DUSHAN already, defaultAssetRootsUnder won't double-nest
-    const roots = nestAssetRootsUnderProjectName(defaultAssetRootsUnder(base, proj.title), proj.title);
+  const applyStudioRootAndCreate = async (proj, base) => {
+    const studioRoot = String(base || '').trim();
+    if (!studioRoot || !proj?.id) return;
+    const roots = nestAssetRootsUnderProjectName(defaultAssetRootsUnder(studioRoot, proj.title), proj.title);
     setProjectLibrary((prev) =>
       prev.map((p) => (p.id === proj.id ? { ...p, assetRoots: roots } : p))
     );
-  };
-
-  const handleSaveProjectAssetRoots = async (proj) => {
-    const nested = nestAssetRootsUnderProjectName(proj.assetRoots, proj.title);
-    const roots = normalizeAssetRoots(nested);
     try {
       const result = await saveProjectAssetRoots(proj.title, roots, { shots: proj.shots || [] });
       setProjectLibrary((prev) => {
@@ -920,20 +901,47 @@ export default function ProjectConsoleModal({
       });
       const created = result.ensured?.created?.length || 0;
       const folder = sanitizeProjectFolderName(proj.title);
-      const verNote = result.versioned?.ok
-        ? `\nVersion snapshot: ${result.versioned.filename || result.roots.projectVersion}`
-        : '';
-      const placeholderNote =
-        result.placeholders?.count
-          ? `\nPlaceholder PNGs: ${result.placeholders.count} new file(s) named from REFERENCES (overwrite with your art).`
-          : '';
       window.alert(
-        `${created ? `Folders saved under ${folder}/. Created ${created} missing folder(s).` : `Folders saved under ${folder}/ (existing kept).`}${verNote}${placeholderNote}\n\nLayout:\n  …/${folder}/ASSETS\n  …/${folder}/RENDERS\n  …/${folder}/PROJECT`
+        created
+          ? `Created ${created} folder(s) under ${folder}/.`
+          : `Folders ready under ${folder}/.`
       );
       setAssetFoldersProjId(null);
     } catch (err) {
-      window.alert(err?.message || 'Could not save asset folders.');
+      window.alert(err?.message || 'Could not create film folders.');
     }
+  };
+
+  const handleDefaultFilmPath = async (proj) => {
+    const base = await resolveDefaultFilmStudioRoot();
+    if (!base) {
+      window.alert(
+        'Could not resolve the default studio folder. Use Custom path, or set a storage folder in Settings.'
+      );
+      return;
+    }
+    await applyStudioRootAndCreate(proj, base);
+  };
+
+  const handleCustomFilmPath = async (proj) => {
+    const folderHint = sanitizeProjectFolderName(proj.title);
+    const picked = await pickDirectoryPath({
+      promptTitle: `Paste a custom studio root for ${folderHint}.\nSWS will create ASSETS, RENDERS, and PROJECT under that root.`
+    });
+    if (picked.canceled) return;
+    let base = picked.ok && picked.path ? picked.path : '';
+    if (!base) {
+      const hint = extractStudioRootFromAssetPath(
+        proj.assetRoots?.subjects || proj.assetRoots?.projectSave || '',
+        proj.title
+      );
+      base = window.prompt(
+        `Paste a custom studio root.\nSWS will create:\n  ${folderHint}/ASSETS\n  ${folderHint}/RENDERS\n  ${folderHint}/PROJECT\nunder that root.`,
+        hint || ''
+      );
+    }
+    if (!base) return;
+    await applyStudioRootAndCreate(proj, base);
   };
 
   const registerOpenedProjectFolder = async (importedProj, meta = {}) => {
@@ -3456,28 +3464,28 @@ export default function ProjectConsoleModal({
                 </span>
               </label>
               <p className="m-0 text-[9px] text-slate-500 dark:text-zinc-500 leading-snug">
-                Pick studio root (e.g. Desktop/SWS PROJECTS). Creates{' '}
+                Default is Documents/Stage Work Studio. Custom picks another root. Either one creates{' '}
                 <span className="font-mono">
                   {sanitizeProjectFolderName(assetFoldersProj.title)}/ASSETS · RENDERS · PROJECT
                 </span>{' '}
-                — not loose folders at the studio root. Save rewrites old root-level paths under the project name.
+                under that root — not loose folders at the root.
               </p>
             </div>
 
             <div className="px-4 py-3 border-t border-[var(--sps-border)] flex flex-wrap gap-2 bg-[var(--sps-surface)]">
               <button
                 type="button"
-                className="sps-btn text-[10px]"
-                onClick={() => handleFillDefaultAssetRoots(assetFoldersProj)}
+                className="sps-btn sps-btn-primary text-[10px]"
+                onClick={() => handleDefaultFilmPath(assetFoldersProj)}
               >
-                Fill under film root
+                Default path
               </button>
               <button
                 type="button"
-                className="sps-btn sps-btn-primary text-[10px]"
-                onClick={() => handleSaveProjectAssetRoots(assetFoldersProj)}
+                className="sps-btn text-[10px]"
+                onClick={() => handleCustomFilmPath(assetFoldersProj)}
               >
-                Save & create folders
+                Custom path
               </button>
               <button type="button" className="sps-btn text-[10px] ml-auto" onClick={() => setAssetFoldersProjId(null)}>
                 Close
