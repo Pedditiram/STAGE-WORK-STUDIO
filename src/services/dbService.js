@@ -974,10 +974,13 @@ function mergeProjectArrays(cloudProjs, localProjs) {
   return adoptSharedLibraryCatalog(remote, localProjs || []);
 }
 
-let healCloudLibraryTimer = null;
-
-async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true } = {}) {
+async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = true, applyShelves = false } = {}) {
   if (isSelfServeSession()) return readLocalProjectLibrary();
+  // Poll / boot / console peek must not overwrite this device's Local/Cloud shelves.
+  if (!applyShelves) {
+    if (!Array.isArray(rawCloudProjects)) return readLocalProjectLibrary();
+    return filterOutDeletedProjects(rawCloudProjects);
+  }
   const localProjs = readLocalProjectLibrary();
 
   // Durable failed with no usable list — keep local intact (+ disk vault)
@@ -995,8 +998,6 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
     return kept;
   }
 
-  const deletedKeys = blockedLibraryTitleKeys();
-  const cloudHadGhosts = (rawCloudProjects || []).some((p) => deletedKeys.has(projectKey(p)));
   // When durableOk is false, keep local-only drafts (do not treat cloud as full membership SoT)
   const merged = mergeProjectArrays(rawCloudProjects, localProjs);
   const { enrichLibraryWithDiskVault, writeLocalProjectLibrary } = await import('../utils/projectWorkspace');
@@ -1015,14 +1016,6 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
   }
 
   pruneAndPersistCollaboratorAllotments(finalList);
-
-  if (cloudHadGhosts && cloudAuthoritative) {
-    if (healCloudLibraryTimer) clearTimeout(healCloudLibraryTimer);
-    healCloudLibraryTimer = setTimeout(() => {
-      syncProjectLibraryToCloud(finalList);
-    }, 250);
-  }
-
   return finalList;
 }
 

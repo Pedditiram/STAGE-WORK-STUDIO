@@ -1,0 +1,34 @@
+---
+description: Exclusive Local/Cloud shelves — never silent catalog overwrite; owner Sync shelves confirm
+alwaysApply: true
+---
+
+# Project shelves (Local / Cloud)
+
+A title is **Local or Cloud, never both**. Same account: web and Mac keep their own shelf lists until the owner confirms.
+
+## Manual Sync shelves (required)
+
+Silent catalog push/pull is **forbidden**. Web and Electron must not overwrite each other’s Local/Cloud membership.
+
+- Owner clicks **Sync shelves** in Projects (next to Local / Cloud).
+- Dialog shows This device vs Shared catalog, then diffs (only here / only shared / shelf mismatch).
+- **Apply shared catalog** = pull (`peekRemoteLibraryCatalog` + `adoptSharedLibraryCatalog` + write library).
+- **Publish this device** = push (`syncProjectLibraryToCloud`).
+- Cancel leaves both sides unchanged.
+
+## Do not auto-publish the catalog
+
+Do **not** call `syncProjectLibraryToCloud` from: library persist, boot hydrate, poll / `processAndStoreProjects`, Save, or empty-remote seed.
+
+Keep an explicit push only on Create / Move / Archive / Purge (intentional shelf change) and **Publish this device**.
+
+Do **not** adopt the remote catalog on console open, boot, or `subscribeToProjectLibraryUpdates`. `fetchProjectLibraryFromCloud` / `processAndStoreProjects` must not write shelves unless `applyShelves: true`.
+
+## Still true
+
+- Cloud film body is **text only** (Writer, Matrix, World, Character Bible, Compile, poster design). No generated images/videos/data-URLs.
+- Collaborators: Cloud-shelf text only.
+- Create: same title on the other shelf → TITLE CONFLICT, do not create.
+- Purge → `{studioRoot}/PROJECTS PURGED/{TITLE}/`. Tombstone. No reappear unless manual upload.
+- Preserve: Project Console, Writer, Matrix/Form, Character, World, Compile, Generate, Stage, BYOK, one-active-project isolation.

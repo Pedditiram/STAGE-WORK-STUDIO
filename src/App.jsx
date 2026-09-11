@@ -109,7 +109,6 @@ import {
   fetchProjectLibraryFromCloud,
   fetchCollaboratorsFromCloud,
   fetchStudioSettingsFromCloud,
-  seedCloudLibraryFromDevice,
   fetchFilmFromCloud,
   syncFilmToCloud,
   broadcastActiveSlotEditing,
@@ -1787,28 +1786,6 @@ export default function App() {
       }
 
       let mergedCloud = filterOutDeletedProjects(updatedProjs);
-      writeLocalProjectLibrary(mergedCloud);
-      window.dispatchEvent(new Event('sps_projects_updated'));
-
-      const remoteKeys = new Set(
-        (Array.isArray(projs) ? projs : [])
-          .map((p) => String(p?.title || '').trim().toUpperCase())
-          .filter(Boolean)
-      );
-      const deviceOnly = mergedCloud.filter(
-        (p) => p?.title && !remoteKeys.has(String(p.title).trim().toUpperCase())
-      );
-      if ((Array.isArray(projs) ? projs : []).length === 0 && mergedCloud.length) {
-        try {
-          const { loadProjectsFromVault } = await import('./services/projectDiskVault');
-          const vault = await loadProjectsFromVault({ includeBlocked: true });
-          await seedCloudLibraryFromDevice(mergedCloud, vault || []);
-        } catch {
-          await syncProjectLibraryToCloud(mergedCloud);
-        }
-      } else if (deviceOnly.length) {
-        await syncProjectLibraryToCloud(mergedCloud);
-      }
 
       const openTitle = projectTitle;
       let filmForOpen = mergedCloud.find((p) => titlesMatch(p.title, openTitle));
@@ -2511,7 +2488,6 @@ export default function App() {
       
       // 1. UPLOAD LOCAL EDITS TO CLOUD
       await syncToCloud({ shots, projectGeneratedImages, projectTitle, library });
-      await syncProjectLibraryToCloud(library);
 
       const savedUsersStr = localStorage.getItem('sps_authorized_phone_users');
       if (savedUsersStr) {
@@ -3625,7 +3601,7 @@ export default function App() {
         writeLocalProjectLibrary(library);
         saveProjectToVault(newProj).catch(() => {});
         window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'App' } }));
-        syncProjectLibraryToCloud(library);
+        if (existingIdx === -1) syncProjectLibraryToCloud(library);
         }
       } catch (e) {}
     }

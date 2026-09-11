@@ -24,7 +24,6 @@ import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import {
   syncProjectLibraryToCloud,
-  fetchProjectLibraryFromCloud,
   peekRemoteLibraryCatalog,
   syncCollaboratorsToCloud,
   reviveProjectTitleForOpen,
@@ -86,8 +85,8 @@ import {
     renameTitleAcrossPackOwned,
     stripTitleFromPackOwned
 } from '../utils/userSettingsPack';
-import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, adoptSharedLibraryCatalog, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
-import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode, isCloudProject, filterLibraryByShelf, findTitleOnShelves, titleShelfConflictMessage } from '../utils/projectStorageMode';
+import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, adoptSharedLibraryCatalog, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
+import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode, isCloudProject, filterLibraryByShelf, findTitleOnShelves, titleShelfConflictMessage, compareLibraryShelves } from '../utils/projectStorageMode';
 import { isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from '../utils/demoStudioProject';
 import { starterShots, starterScreenplay } from '../utils/tenantScope';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
@@ -253,6 +252,11 @@ export default function ProjectConsoleModal({
 
   const [archivedProjects, setArchivedProjects] = useState(() => getArchivedProjects());
   const [libraryHydrated, setLibraryHydrated] = useState(false);
+  const [shelfSyncOpen, setShelfSyncOpen] = useState(false);
+  const [shelfSyncBusy, setShelfSyncBusy] = useState(false);
+  const [shelfSyncError, setShelfSyncError] = useState('');
+  const [shelfSyncRemote, setShelfSyncRemote] = useState([]);
+  const [shelfSyncDiff, setShelfSyncDiff] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1371,69 +1375,10 @@ export default function ProjectConsoleModal({
         return sanitizeLibraryTitles(filterOutDeletedProjects(base));
       });
       setArchivedProjects(getArchivedProjects());
-      fetchProjectLibraryFromCloud().then(cloudProjs => {
-        const healedAfter = healActiveProjectFromArchive();
-        if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
-          setProjectLibrary(prev => {
-            const cloudTagged = filterOutDeletedProjects(cloudProjs);
-            let merged = adoptSharedLibraryCatalog(cloudTagged, Array.isArray(prev) ? prev : []);
-
-            const activeKey = currentProjectTitle ? String(currentProjectTitle).trim().toUpperCase() : '';
-            if (
-              activeKey &&
-              activeKey !== 'STAGE PRODUCTION STUDIO' &&
-              !isProjectTitleDeleted(activeKey) &&
-              !merged.some((p) => String(p?.title || '').trim().toUpperCase() === activeKey)
-            ) {
-              const fromHeal =
-                healedAfter && String(healedAfter.title).trim().toUpperCase() === activeKey
-                  ? healedAfter
-                  : null;
-              merged = [
-                fromHeal || {
-                  id: `proj_${Date.now()}`,
-                  title: currentProjectTitle,
-                  description: `Cinema Production Studio Project`,
-                  targetModel: 'SPS Direct Cinema 2.0',
-                  aspectRatio: '2.39:1 Anamorphic',
-                  roomId: roomIdForProject(currentProjectTitle),
-                  lastModified: new Date().toLocaleDateString(),
-                  storageMode: libraryShelf,
-                  shots: []
-                },
-                ...merged
-              ];
-            }
-
-            merged = filterOutDeletedProjects(merged);
-            if (currentProjectTitle) {
-              merged.sort((a, b) => {
-                if (titlesMatch(a.title, currentProjectTitle)) return -1;
-                if (titlesMatch(b.title, currentProjectTitle)) return 1;
-                return 0;
-              });
-            }
-            const sanitized = sanitizeLibraryTitles(merged);
-            try {
-              writeLocalProjectLibrary(sanitized);
-            } catch (e) {}
-            return sanitized;
-          });
-        } else if (healedAfter) {
-          setProjectLibrary((prev) => {
-            const key = String(healedAfter.title).trim().toUpperCase();
-            const without = (prev || []).filter(
-              (p) => String(p?.title || '').trim().toUpperCase() !== key
-            );
-            return sanitizeLibraryTitles([healedAfter, ...without]);
-          });
-        }
-        setArchivedProjects(getArchivedProjects());
-      }).catch(() => {});
     }
   }, [isOpen, initialTab]);
 
-  // Persist library changes locally & push to Cloud Database
+  // Persist library changes on this device only — catalog publish is Sync shelves / Move / Create / Archive
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (isGuestSession()) return;
@@ -1444,20 +1389,8 @@ export default function ProjectConsoleModal({
       return undefined;
     }
     writeLocalProjectLibrary(liveLibrary);
-    // Defer past React commit so AdminSettingsModal listeners don't setState mid-render
     const t = setTimeout(() => {
       window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'ProjectConsoleModal' } }));
-      // Never push huge data: posters to cloud — keep idb/http refs only
-      const forCloud = (Array.isArray(liveLibrary) ? liveLibrary : []).map((p) => {
-        const slim = slimProjectForLocalMirror(p);
-        if (slim?.posterUrl && String(slim.posterUrl).startsWith('idb:')) {
-          const rest = { ...slim };
-          delete rest.posterUrl;
-          return rest;
-        }
-        return slim;
-      });
-      syncProjectLibraryToCloud(forCloud);
     }, 0);
     return () => clearTimeout(t);
   }, [projectLibrary, libraryHydrated]);
@@ -1535,6 +1468,53 @@ export default function ProjectConsoleModal({
   const visibleProjectLibrary = filterAccessibleProjects(projectLibrary, currentUserEmail);
   const localShelfCount = filterLibraryByShelf(visibleProjectLibrary, STORAGE_LOCAL).length;
   const cloudShelfCount = filterLibraryByShelf(visibleProjectLibrary, STORAGE_CLOUD).length;
+
+  const openShelfSync = async () => {
+    setShelfSyncOpen(true);
+    setShelfSyncBusy(true);
+    setShelfSyncError('');
+    setShelfSyncDiff(null);
+    try {
+      const remote = await peekRemoteLibraryCatalog();
+      setShelfSyncRemote(Array.isArray(remote) ? remote : []);
+      setShelfSyncDiff(compareLibraryShelves(projectLibrary, remote));
+    } catch {
+      setShelfSyncError('Could not read the shared catalog. Check the network and try again.');
+    } finally {
+      setShelfSyncBusy(false);
+    }
+  };
+
+  const applySharedCatalog = async () => {
+    setShelfSyncBusy(true);
+    setShelfSyncError('');
+    try {
+      const remote = shelfSyncRemote.length ? shelfSyncRemote : await peekRemoteLibraryCatalog();
+      const next = sanitizeLibraryTitles(
+        filterOutDeletedProjects(adoptSharedLibraryCatalog(remote, projectLibrary))
+      );
+      writeLocalProjectLibrary(next);
+      setProjectLibrary(next);
+      setShelfSyncOpen(false);
+    } catch {
+      setShelfSyncError('Could not apply the shared catalog on this device.');
+    } finally {
+      setShelfSyncBusy(false);
+    }
+  };
+
+  const publishThisDeviceShelves = async () => {
+    setShelfSyncBusy(true);
+    setShelfSyncError('');
+    try {
+      await syncProjectLibraryToCloud(filterOutDeletedProjects(projectLibrary));
+      setShelfSyncOpen(false);
+    } catch {
+      setShelfSyncError('Could not publish this device’s shelves.');
+    } finally {
+      setShelfSyncBusy(false);
+    }
+  };
   const libraryProjectsForDisplay = useMemo(() => {
     const list = filterLibraryByShelf([...visibleProjectLibrary], libraryShelf);
     const activeTitle = String(currentProjectTitle || '').trim();
@@ -2142,6 +2122,17 @@ export default function ProjectConsoleModal({
                 </span>
               )}
             </button>
+            {isOwnerUser && (
+              <button
+                type="button"
+                onClick={openShelfSync}
+                className="sps-btn text-[10px] shrink-0 py-1"
+                title="Compare this device with the shared catalog, then apply or publish. Shelves never overwrite silently."
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${shelfSyncBusy && shelfSyncOpen ? 'animate-spin' : ''}`} />
+                <span className="whitespace-nowrap">Sync shelves</span>
+              </button>
+            )}
             {isOwnerUser && (
               <button
                 type="button"
@@ -3636,6 +3627,101 @@ export default function ProjectConsoleModal({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {shelfSyncOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/70 flex items-center justify-center p-4">
+          <div
+            className="bg-white dark:bg-zinc-900 border border-[var(--sps-border)] rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-labelledby="shelf-sync-title"
+          >
+            <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
+              <h3 id="shelf-sync-title" className="text-sm font-semibold m-0" style={{ fontFamily: 'var(--sps-font-display)' }}>
+                Sync shelves
+              </h3>
+              <button
+                type="button"
+                className="sps-btn text-[10px] py-1"
+                disabled={shelfSyncBusy}
+                onClick={() => setShelfSyncOpen(false)}
+                aria-label="Close sync shelves"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto space-y-3 text-[12px]">
+              <p className="m-0 text-slate-600 dark:text-zinc-400">
+                Web and this Mac keep their own Local / Cloud lists until you confirm. Apply copies the shared catalog onto this device. Publish sends this device’s lists to the shared catalog.
+              </p>
+              {shelfSyncError ? (
+                <p className="m-0 text-red-600 dark:text-red-400">{shelfSyncError}</p>
+              ) : null}
+              {shelfSyncBusy && !shelfSyncDiff ? (
+                <p className="m-0">Reading shared catalog…</p>
+              ) : null}
+              {shelfSyncDiff ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="m-0 mb-1 font-semibold">This device</p>
+                      <p className="m-0 text-[11px] text-slate-500">Local: {shelfSyncDiff.deviceLocal.join(', ') || '—'}</p>
+                      <p className="m-0 text-[11px] text-slate-500">Cloud: {shelfSyncDiff.deviceCloud.join(', ') || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="m-0 mb-1 font-semibold">Shared catalog</p>
+                      <p className="m-0 text-[11px] text-slate-500">Local: {shelfSyncDiff.sharedLocal.join(', ') || '—'}</p>
+                      <p className="m-0 text-[11px] text-slate-500">Cloud: {shelfSyncDiff.sharedCloud.join(', ') || '—'}</p>
+                    </div>
+                  </div>
+                  {shelfSyncDiff.inSync ? (
+                    <p className="m-0 font-semibold" style={{ color: 'var(--sps-gold)' }}>Shelves match.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {shelfSyncDiff.onlyHere.length > 0 && (
+                        <p className="m-0 text-[11px]">Only here: {shelfSyncDiff.onlyHere.join(', ')}</p>
+                      )}
+                      {shelfSyncDiff.onlyShared.length > 0 && (
+                        <p className="m-0 text-[11px]">Only shared: {shelfSyncDiff.onlyShared.join(', ')}</p>
+                      )}
+                      {shelfSyncDiff.mismatches.length > 0 && (
+                        <p className="m-0 text-[11px]">Shelf mismatch: {shelfSyncDiff.mismatches.join(', ')}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="sps-btn text-[10px] py-1"
+                disabled={shelfSyncBusy}
+                onClick={() => setShelfSyncOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sps-btn text-[10px] py-1"
+                disabled={shelfSyncBusy}
+                onClick={applySharedCatalog}
+                title="Replace this device’s Local and Cloud tabs with the shared catalog"
+              >
+                Apply shared catalog
+              </button>
+              <button
+                type="button"
+                className="sps-btn sps-btn-primary text-[10px] py-1"
+                disabled={shelfSyncBusy}
+                onClick={publishThisDeviceShelves}
+                title="Overwrite the shared catalog with this device’s Local and Cloud tabs"
+              >
+                Publish this device
+              </button>
+            </div>
           </div>
         </div>
       )}

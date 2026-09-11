@@ -253,8 +253,10 @@ function buildGuideSections(isAdmin) {
             </p>
             <p>
               A film’s home is the Projects library: <strong>Local</strong> or <strong>Cloud</strong> — never both.
-              Web and the Mac app share the same Local and Cloud tabs. Sync sends Writer, Matrix, World, Character
-              Bible, Compile, and poster design text — not generated images or videos. Those stay on this machine.
+              Web and the Mac app do not overwrite each other’s shelves. Owner clicks <strong>Sync shelves</strong>,
+              compares This device vs Shared catalog, then <strong>Apply shared catalog</strong> or{' '}
+              <strong>Publish this device</strong>. Cloud film sync is Writer, Matrix, World, Character Bible, Compile,
+              and poster design text — not generated images or videos.
             </p>
           </Callout>
 
