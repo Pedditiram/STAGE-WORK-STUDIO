@@ -101,10 +101,9 @@ function localDiskVaultPlugin() {
     if (!fs.existsSync(postersDir)) fs.mkdirSync(postersDir, { recursive: true });
   }
 
-  refreshVaultDirs();
-
-  // Ensure collab storage dirs exist on server start
-  [settingsDir, storageDir, cloudDir, cloudRoomsDir].forEach(d => {
+  // Dev middleware migrates the Documents vault. Do not do that during vite build
+  // (Vercel / Electron) — those loads must not rename the user's live JSON.
+  [storageDir, cloudDir, cloudRoomsDir].forEach(d => {
     if (!fs.existsSync(d)) {
       fs.mkdirSync(d, { recursive: true });
     }

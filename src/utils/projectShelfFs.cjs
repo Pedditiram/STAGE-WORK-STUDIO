@@ -86,8 +86,14 @@ function safeMove(src, dest) {
   if (fs.existsSync(dest)) {
     try { fs.unlinkSync(dest); } catch { /* replace */ }
   }
-  fs.renameSync(src, dest);
-  return true;
+  try {
+    fs.renameSync(src, dest);
+    return true;
+  } catch {
+    fs.copyFileSync(src, dest);
+    try { fs.unlinkSync(src); } catch { /* dest is the live copy */ }
+    return true;
+  }
 }
 
 function safeUnlink(filePath) {
