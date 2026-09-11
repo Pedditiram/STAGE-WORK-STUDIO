@@ -17,33 +17,45 @@ function safeUnlink(filePath) {
   return false;
 }
 
-function clearAppProjectVault(projectsDir) {
-  const removed = [];
-  if (!projectsDir || !fs.existsSync(projectsDir)) {
-    return { removed, postersCleared: 0 };
-  }
-  const entries = fs.readdirSync(projectsDir);
-  for (const name of entries) {
+function clearJsonInDir(dir, removed) {
+  if (!dir || !fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir)) {
     if (!name.endsWith('.json')) continue;
-    const full = path.join(projectsDir, name);
+    const full = path.join(dir, name);
     try {
       if (fs.statSync(full).isFile() && safeUnlink(full)) removed.push(name);
     } catch {
       /* ignore */
     }
   }
-  let postersCleared = 0;
-  const postersDir = path.join(projectsDir, 'posters');
-  if (fs.existsSync(postersDir) && fs.statSync(postersDir).isDirectory()) {
-    for (const name of fs.readdirSync(postersDir)) {
-      const full = path.join(postersDir, name);
-      try {
-        if (fs.statSync(full).isFile() && safeUnlink(full)) postersCleared += 1;
-      } catch {
-        /* ignore */
-      }
+}
+
+function clearPostersInDir(dir) {
+  let n = 0;
+  if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return 0;
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    try {
+      if (fs.statSync(full).isFile() && safeUnlink(full)) n += 1;
+    } catch {
+      /* ignore */
     }
   }
+  return n;
+}
+
+function clearAppProjectVault(projectsDir) {
+  const removed = [];
+  if (!projectsDir || !fs.existsSync(projectsDir)) {
+    return { removed, postersCleared: 0 };
+  }
+  clearJsonInDir(projectsDir, removed);
+  clearJsonInDir(path.join(projectsDir, 'local'), removed);
+  clearJsonInDir(path.join(projectsDir, 'cloud'), removed);
+  let postersCleared = 0;
+  postersCleared += clearPostersInDir(path.join(projectsDir, 'posters'));
+  postersCleared += clearPostersInDir(path.join(projectsDir, 'local', 'posters'));
+  postersCleared += clearPostersInDir(path.join(projectsDir, 'cloud', 'posters'));
   return { removed, postersCleared };
 }
 

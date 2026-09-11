@@ -1675,6 +1675,8 @@ export default async function handler(req, res) {
     if (type === 'projects') {
       const incomingProjs = body.projects || body;
       const incomingDeleted = normalizeDeletedTitles(body.deletedTitles);
+      const incomingReleased = normalizeDeletedTitles(body.releasedTitles);
+      const exclusiveCloud = Boolean(body.exclusiveCloud);
 
       await hydrateProjectsFromDurable();
 
@@ -1682,10 +1684,11 @@ export default async function handler(req, res) {
         const cleanedIncoming = incomingProjs.filter((p) => {
           const title = String(p?.title || '').trim();
           return title && title.toUpperCase() !== 'STAGE PRODUCTION STUDIO';
-        });
+        }).map((p) => ({ ...p, storageMode: 'cloud' }));
 
-        // Empty overwrite guard — never wipe a library (including cold instances)
-        if (cleanedIncoming.length === 0) {
+        // Empty overwrite guard — never wipe a library unless this is an exclusive
+        // cloud-shelf push (local titles released, or an explicit empty cloud shelf).
+        if (cleanedIncoming.length === 0 && !incomingReleased.length && !exclusiveCloud) {
           return res.status(200).json({
             success: true,
             projects: filterDeletedProjects(memoryProjects),
@@ -1696,6 +1699,7 @@ export default async function handler(req, res) {
 
         // Merge tombstones from client — but never tombstone titles that are still live in this push
         const incomingKeys = new Set(cleanedIncoming.map((p) => titleKey(p.title)));
+        const releasedSet = new Set(incomingReleased.map((t) => titleKey(t)));
         if (incomingDeleted.length) {
           memoryDeletedTitles = normalizeDeletedTitles([
             ...memoryDeletedTitles,
@@ -1713,9 +1717,6 @@ export default async function handler(req, res) {
           );
         }
 
-        // Do NOT auto-tombstone titles merely missing from an incomplete client push —
-        // that was silently archiving live projects (e.g. KARA) without user action.
-
         const prevByTitle = new Map();
         memoryProjects.forEach((p) => {
           const title = titleKey(p?.title);
@@ -1723,7 +1724,6 @@ export default async function handler(req, res) {
             prevByTitle.set(title, p);
           }
         });
-        // Prefer incoming live list; keep prior cloud projects that were not explicitly deleted
         const mergedLive = cleanedIncoming.map((p) => {
           const key = titleKey(p.title);
           const existing = prevByTitle.get(key);
@@ -1733,6 +1733,7 @@ export default async function handler(req, res) {
           return {
             ...existing,
             ...p,
+            storageMode: 'cloud',
             shots: incomingShots.length ? incomingShots : existingShots,
             shotCount: p.shotCount || existing.shotCount || incomingShots.length || existingShots.length,
             screenplayText: p.screenplayText || existing.screenplayText
@@ -1742,9 +1743,9 @@ export default async function handler(req, res) {
           const key = titleKey(p?.title);
           if (!key || key === 'STAGE PRODUCTION STUDIO') return;
           if (incomingKeys.has(key)) return;
+          if (releasedSet.has(key)) return;
           if (memoryDeletedTitles.includes(key)) return;
-          // Preserve cloud-only live projects not included in this push
-          if (!mergedLive.some((x) => titleKey(x.title) === key)) mergedLive.push(p);
+          if (!mergedLive.some((x) => titleKey(x.title) === key)) mergedLive.push({ ...p, storageMode: 'cloud' });
         });
         memoryProjects = filterDeletedProjects(mergedLive, memoryDeletedTitles);
         projectsHydrated = true;

@@ -22,6 +22,12 @@ function loadProjectShelfFs() {
   return require('./src/utils/projectShelfFs.cjs')
 }
 
+function loadStudioDiskRoots() {
+  const modPath = require.resolve('./src/utils/studioDiskRoots.cjs')
+  delete require.cache[modPath]
+  return require('./src/utils/studioDiskRoots.cjs')
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -76,21 +82,33 @@ function mergeShots(existingShots, incomingShots) {
 
 function localDiskVaultPlugin() {
   const baseDir = path.resolve(__dirname);
-  const projectsDir = path.join(baseDir, 'projects');
-  const settingsDir = path.join(baseDir, 'settings');
+  const repoProjectsDir = path.join(baseDir, 'projects');
+  let projectsDir = repoProjectsDir;
+  let settingsDir = path.join(baseDir, 'settings');
   const storageDir = path.join(baseDir, 'storage');
   const cloudDir = path.join(storageDir, 'cloud');
   const cloudRoomsDir = path.join(cloudDir, 'rooms');
+  let postersDir = path.join(projectsDir, 'posters');
 
-  // Ensure directories exist on server start
-  [projectsDir, settingsDir, storageDir, cloudDir, cloudRoomsDir].forEach(d => {
+  function refreshVaultDirs() {
+    const disk = loadStudioDiskRoots();
+    const shelf = loadProjectShelfFs();
+    const roots = disk.resolveStudioDiskRoots({ repoProjectsDir });
+    disk.ensureStudioVault(roots, { repoProjectsDir, shelfFs: shelf });
+    projectsDir = roots.projectsDir;
+    settingsDir = roots.settingsDir;
+    postersDir = path.join(projectsDir, 'posters');
+    if (!fs.existsSync(postersDir)) fs.mkdirSync(postersDir, { recursive: true });
+  }
+
+  refreshVaultDirs();
+
+  // Ensure collab storage dirs exist on server start
+  [settingsDir, storageDir, cloudDir, cloudRoomsDir].forEach(d => {
     if (!fs.existsSync(d)) {
       fs.mkdirSync(d, { recursive: true });
     }
   });
-  const postersDir = path.join(projectsDir, 'posters');
-  if (!fs.existsSync(postersDir)) fs.mkdirSync(postersDir, { recursive: true });
-  loadProjectShelfFs().ensureShelfDirs(projectsDir);
 
   function posterSafeName(title) {
     return `${String(title || 'UNTITLED').trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'UNTITLED'}.png`;
@@ -109,7 +127,9 @@ function localDiskVaultPlugin() {
     fs.writeFileSync(filePath, buffer);
 
     const posterUrl = `/api/project-poster?name=${encodeURIComponent(cleanTitle)}&v=${Date.now()}`;
-    const projectFile = path.join(projectsDir, posterSafeName(cleanTitle).replace(/\.png$/i, '.json'));
+    const shelf = loadProjectShelfFs();
+    const live = shelf.findLiveProjectFile(projectsDir, cleanTitle);
+    const projectFile = live?.json || path.join(projectsDir, 'local', posterSafeName(cleanTitle).replace(/\.png$/i, '.json'));
     let existing = {};
     if (fs.existsSync(projectFile)) {
       try {
@@ -190,6 +210,7 @@ function localDiskVaultPlugin() {
     name: 'sps-local-disk-vault',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        refreshVaultDirs();
         // --- Server PDF extract (Node pdfjs-legacy) — same path as Vercel /api/extract-pdf ---
         if (req.url && req.url.startsWith('/api/extract-pdf')) {
           if (req.method === 'OPTIONS') {
@@ -661,9 +682,14 @@ function localDiskVaultPlugin() {
                 const cleanedIncoming = (incoming || []).filter((p) => {
                   const title = String(p?.title || '').trim();
                   return title && title.toUpperCase() !== 'STAGE PRODUCTION STUDIO';
-                });
+                }).map((p) => ({ ...p, storageMode: 'cloud' }));
                 const existing = readJsonFile(cloudProjectsPath, { projects: [] });
-                if (cleanedIncoming.length === 0 && (existing.projects || []).length > 0) {
+                const incomingReleased = (Array.isArray(body.releasedTitles) ? body.releasedTitles : [])
+                  .map((t) => String(t || '').trim().toUpperCase())
+                  .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO');
+                const releasedSet = new Set(incomingReleased);
+                const exclusiveCloud = Boolean(body.exclusiveCloud);
+                if (cleanedIncoming.length === 0 && !releasedSet.size && !exclusiveCloud && (existing.projects || []).length > 0) {
                   return sendJson(res, 200, { success: true, projects: existing.projects || [], ignoredEmpty: true });
                 }
                 const prevByTitle = new Map();
@@ -689,13 +715,13 @@ function localDiskVaultPlugin() {
                   .map((p) => {
                     const key = String(p.title).trim().toUpperCase();
                     const prev = prevByTitle.get(key);
-                    return prev ? { ...prev, ...p } : p;
+                    return prev ? { ...prev, ...p, storageMode: 'cloud' } : p;
                   });
                 (existing.projects || []).forEach((p) => {
                   const key = String(p?.title || '').trim().toUpperCase();
-                  if (!key || incomingKeys.has(key) || deletedSet.has(key)) return;
+                  if (!key || incomingKeys.has(key) || deletedSet.has(key) || releasedSet.has(key)) return;
                   if (!projects.some((x) => String(x.title || '').trim().toUpperCase() === key)) {
-                    projects.push(p);
+                    projects.push({ ...p, storageMode: 'cloud' });
                   }
                 });
                 writeJsonFile(cloudProjectsPath, {
@@ -844,6 +870,7 @@ function localDiskVaultPlugin() {
             const name = String(u.searchParams.get('name') || '').trim();
             if (!name) return sendJson(res, 400, { ok: false, error: 'name required' });
             const filePath =
+              loadProjectShelfFs().findPosterPath?.(projectsDir, name) ||
               loadAssetRootsFs().readProjectPosterFilePath?.(name, postersDir) ||
               path.join(postersDir, posterSafeName(name));
             if (!filePath || !fs.existsSync(filePath)) {
@@ -1059,20 +1086,10 @@ function localDiskVaultPlugin() {
           req.on('end', () => {
             try {
               const project = JSON.parse(body);
-              const title = project.title || 'UNTITLED_PROJECT';
-              const safeFilename = title.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
-              const filePath = path.join(projectsDir, safeFilename);
-              const stamped = {
-                ...project,
-                updatedAt: project.updatedAt || new Date().toISOString(),
-                lastModifiedIso: new Date().toISOString()
-              };
-
-              fs.writeFileSync(filePath, JSON.stringify(stamped, null, 2), 'utf8');
-
+              const result = loadProjectShelfFs().saveProjectToLive(projectsDir, project);
               res.statusCode = 200;
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ success: true, filePath, filename: safeFilename }));
+              res.end(JSON.stringify({ success: true, ...result }));
             } catch (err) {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
@@ -1159,25 +1176,36 @@ function localDiskVaultPlugin() {
           return;
         }
 
+        if (req.url === '/api/studio-disk-root' && req.method === 'GET') {
+          try {
+            const roots = loadStudioDiskRoots().resolveStudioDiskRoots({ repoProjectsDir });
+            return sendJson(res, 200, { ok: true, ...roots });
+          } catch (err) {
+            return sendJson(res, 500, { ok: false, error: err.message });
+          }
+        }
+        if (req.url === '/api/studio-disk-root' && req.method === 'POST') {
+          try {
+            const body = await readJsonBody(req);
+            const studioRoot = String(body?.studioRoot || body?.projectsDir || '').trim();
+            const roots = loadStudioDiskRoots().writeCustomRoot(studioRoot);
+            loadStudioDiskRoots().ensureStudioVault(roots, {
+              repoProjectsDir,
+              shelfFs: loadProjectShelfFs()
+            });
+            projectsDir = roots.projectsDir;
+            settingsDir = roots.settingsDir;
+            postersDir = path.join(projectsDir, 'posters');
+            return sendJson(res, 200, { ok: true, ...roots });
+          } catch (err) {
+            return sendJson(res, 500, { ok: false, error: err.message });
+          }
+        }
+
         // 4. LIST ALL PROJECTS FROM PHYSICAL DISK: GET /api/list-projects-disk
         if (req.url === '/api/list-projects-disk' && req.method === 'GET') {
           try {
-            const files = fs.readdirSync(projectsDir).filter((f) => {
-              if (!f.endsWith('.json')) return false;
-              try {
-                return fs.statSync(path.join(projectsDir, f)).isFile();
-              } catch {
-                return false;
-              }
-            });
-            const projects = [];
-            for (const f of files) {
-              try {
-                const content = fs.readFileSync(path.join(projectsDir, f), 'utf8');
-                const parsed = JSON.parse(content);
-                projects.push(parsed);
-              } catch (e) {}
-            }
+            const projects = loadProjectShelfFs().listLiveProjects(projectsDir);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ projects }));

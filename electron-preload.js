@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getActiveWorkspaceFromDisk: () => ipcRenderer.invoke('vault:getActiveWorkspace'),
   setActiveWorkspaceOnDisk: (workspace) => ipcRenderer.invoke('vault:setActiveWorkspace', workspace),
   getVaultRoots: () => ipcRenderer.invoke('vault:getRoots'),
+  setStudioRoot: (payload) => ipcRenderer.invoke('vault:setStudioRoot', payload || {}),
   factoryReset: (payload) => ipcRenderer.invoke('vault:factoryReset', payload || {}),
   getUiPrefsFromDisk: () => ipcRenderer.invoke('vault:getUiPrefs'),
   setUiPrefsOnDisk: (prefs) => ipcRenderer.invoke('vault:setUiPrefs', prefs),

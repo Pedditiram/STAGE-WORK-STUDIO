@@ -4218,7 +4218,9 @@ export default function AdminSettingsModal({
                       </div>
                     ) : (
                       <p className="text-[11px] text-amber-200/80 font-mono truncate max-w-xl">
-                        {allottedSettingsFolder}
+                        {allottedSettingsFolder && allottedSettingsFolder !== './settings/'
+                          ? allottedSettingsFolder
+                          : '~/Documents/Stage Work Studio/settings (default)'}
                       </p>
                     )}
                   </div>
@@ -4303,7 +4305,7 @@ export default function AdminSettingsModal({
                       </div>
                     ) : (
                       <p className="text-[11px] text-cyan-200/80 font-mono truncate max-w-xl">
-                        {allottedStorageFolder}
+                        {allottedStorageFolder || '~/Documents/Stage Work Studio (default)'}
                       </p>
                     )}
                   </div>

@@ -6,6 +6,7 @@ import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { roomIdForProject, slimProjectForLocalMirror, slugProjectTitle } from '../utils/projectWorkspace';
 import { isDemoProjectTitle, resolveCurrentDemoProject } from '../utils/demoStudioProject';
 import { saveDirectorPsychology } from '../utils/directorPsychologyStorage';
+import { normalizeStorageMode, STORAGE_CLOUD } from '../utils/projectStorageMode';
 
 const DB_NAME = 'sps_local_disk_vault_db';
 const DB_VERSION = 1;
@@ -203,6 +204,7 @@ export const saveProjectToVault = async (project) => {
   const ensured = {
     ...project,
     title,
+    storageMode: normalizeStorageMode(project.storageMode),
     id: project.id || `proj_${title.replace(/[^\w.-]+/g, '_').toLowerCase() || Date.now()}`
   };
 
@@ -279,7 +281,9 @@ export const saveProjectToVault = async (project) => {
 
   try {
     const { syncFilmToCloud } = await import('./dbService');
-    syncFilmToCloud(ensured).catch(() => {});
+    if (normalizeStorageMode(ensured.storageMode) === STORAGE_CLOUD) {
+      syncFilmToCloud(ensured).catch(() => {});
+    }
   } catch (e) {}
 
   return true;
@@ -548,7 +552,8 @@ export async function loadProjectFromDiskByTitle(title) {
     const { fetchFilmFromCloud } = await import('./dbService');
     const cloud = await fetchFilmFromCloud(title);
     if (cloud && Array.isArray(cloud.shots) && cloud.shots.length) {
-      return isDemoProjectTitle(cloud.title) ? resolveCurrentDemoProject(cloud) : cloud;
+      const tagged = { ...cloud, storageMode: STORAGE_CLOUD };
+      return isDemoProjectTitle(cloud.title) ? resolveCurrentDemoProject(tagged) : tagged;
     }
   } catch {
     /* ignore */
@@ -557,18 +562,39 @@ export async function loadProjectFromDiskByTitle(title) {
   return null;
 }
 
+function persistStudioDiskRoot(pathStr) {
+  try {
+    const api = electronVaultApi();
+    if (api?.setStudioRoot) {
+      api.setStudioRoot({ studioRoot: pathStr }).catch(() => {});
+      return;
+    }
+    fetch('/api/studio-disk-root', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studioRoot: pathStr })
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
 // Get Allotted Storage Folder Path
 export const getAllottedFolderPath = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('sps_allotted_storage_folder') || './projects/';
+    const raw = localStorage.getItem('sps_allotted_storage_folder');
+    if (raw && raw !== './projects/' && raw !== './storage/' && raw !== './projects' && raw !== './storage') {
+      return raw;
+    }
   }
-  return './projects/';
+  return '';
 };
 
 // Set Allotted Storage Folder Path
 export const setAllottedFolderPath = (pathStr) => {
-  if (typeof window !== 'undefined' && pathStr) {
-    localStorage.setItem('sps_allotted_storage_folder', pathStr);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sps_allotted_storage_folder', pathStr || '');
+    persistStudioDiskRoot(pathStr || '');
   }
 };
 

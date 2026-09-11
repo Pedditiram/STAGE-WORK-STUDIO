@@ -46,6 +46,7 @@ import { readOpenScreenplayText, writeOpenScreenplayText } from './screenplayInt
 import { safeLocalStorageSetItem } from './safeStorage';
 import { projectLibraryStorageKey, isSelfServeSession, starterShots, starterScreenplay } from './tenantScope';
 import { DEMO_PROJECT_REVISION, isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './demoStudioProject';
+import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode } from './projectStorageMode';
 
 export const LEGACY_SHARED_ROOM = 'SPS-CLOUD-8821';
 const UNTITLED_ROOM_IDS = new Set(['', 'sps_untitled', 'untitled', 'sps_untitled_project']);
@@ -264,15 +265,88 @@ export function mergeProjectLibraries(local = [], incoming = []) {
   return Array.from(byTitle.values()).map((p) => ensureProjectRoomId(resolveCurrentDemoProject(p)));
 }
 
+function explicitStorageMode(project) {
+  const raw = String(project?.storageMode || '').trim().toLowerCase();
+  return raw === STORAGE_CLOUD || raw === STORAGE_LOCAL ? raw : '';
+}
+
 /**
- * P104 — Ordered multi-store merge: local → vault → cloud (later layers enrich, never wipe unique titles).
- * Sources may be sparse; empty arrays are skipped.
+ * Exclusive Local vs Cloud membership. Disk folder (vault) wins.
+ * A title on the local shelf is never listed as cloud, and vice versa.
+ * Untagged records stay unspecified until vault/cloud assigns a shelf.
+ */
+export function mergeExclusiveLibrary({ local = [], vault = [], cloud = [] } = {}) {
+  const byTitle = new Map();
+  const put = (p, source) => {
+    if (!p || !String(p.title || '').trim()) return;
+    const key = isDemoProjectTitle(p.title) ? '__sws_demo__' : String(p.title).trim().toLowerCase();
+    const mode =
+      source === 'vault'
+        ? normalizeStorageMode(p.storageMode)
+        : source === 'cloud'
+          ? STORAGE_CLOUD
+          : explicitStorageMode(p);
+    const tagged = {
+      ...p,
+      ...(mode ? { storageMode: mode } : {}),
+      ...(source === 'vault' ? { _diskShelf: mode } : {})
+    };
+    const prev = byTitle.get(key);
+    if (!prev) {
+      byTitle.set(key, tagged);
+      return;
+    }
+    const prevMode = explicitStorageMode(prev) || prev._diskShelf || '';
+    const prevDisk = prev._diskShelf;
+    const nextDisk = tagged._diskShelf;
+    if (nextDisk && !prevDisk) {
+      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: nextDisk, _diskShelf: nextDisk });
+      return;
+    }
+    if (prevDisk && source === 'cloud' && prevDisk === STORAGE_LOCAL) {
+      return;
+    }
+    if (prevDisk && !nextDisk) {
+      byTitle.set(key, { ...mergeOne(tagged, prev), storageMode: prevDisk, _diskShelf: prevDisk });
+      return;
+    }
+    if (source === 'cloud' && prevMode === STORAGE_LOCAL) {
+      return;
+    }
+    if (source === 'local' && !mode && (prevMode === STORAGE_CLOUD || prevDisk === STORAGE_CLOUD)) {
+      return;
+    }
+    if (source === 'cloud') {
+      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: STORAGE_CLOUD, ...(prevDisk ? { _diskShelf: prevDisk } : {}) });
+      return;
+    }
+    const keepMode = nextDisk || prevDisk || mode || prevMode;
+    byTitle.set(key, {
+      ...mergeOne(prev, tagged),
+      ...(keepMode ? { storageMode: keepMode } : {}),
+      ...(keepMode && (nextDisk || prevDisk) ? { _diskShelf: nextDisk || prevDisk } : {})
+    });
+  };
+
+  (Array.isArray(local) ? local : []).forEach((p) => put(p, 'local'));
+  (Array.isArray(vault) ? vault : []).forEach((p) => put(p, 'vault'));
+  (Array.isArray(cloud) ? cloud : []).forEach((p) => put(p, 'cloud'));
+
+  return migrateLegacyRoomInLibrary(
+    Array.from(byTitle.values()).map((p) => {
+      const rest = { ...p };
+      delete rest._diskShelf;
+      rest.storageMode = explicitStorageMode(rest) || STORAGE_LOCAL;
+      return ensureProjectRoomId(resolveCurrentDemoProject(rest));
+    })
+  );
+}
+
+/**
+ * P104 — Ordered multi-store merge with exclusive Local / Cloud shelves.
  */
 export function mergeLibrarySources({ local = [], vault = [], cloud = [] } = {}) {
-  let merged = mergeProjectLibraries([], Array.isArray(local) ? local : []);
-  if (Array.isArray(vault) && vault.length) merged = mergeProjectLibraries(merged, vault);
-  if (Array.isArray(cloud) && cloud.length) merged = mergeProjectLibraries(merged, cloud);
-  return migrateLegacyRoomInLibrary(merged);
+  return mergeExclusiveLibrary({ local, vault, cloud });
 }
 
 export function readLocalProjectLibrary() {
@@ -318,6 +392,7 @@ export function slimProjectForLocalMirror(project) {
     lastModifiedIso: project.lastModifiedIso || project.updatedAt,
     updatedAt: project.updatedAt,
     shotCount,
+    storageMode: normalizeStorageMode(project.storageMode),
     ...(posterUrl ? { posterUrl } : {}),
     // Index only — full shots/bibles/screenplay are restored from disk on open
     shots: []
@@ -350,14 +425,6 @@ export async function enrichLibraryWithDiskVault(library) {
       const { filterOutDeletedProjects } = await import('../services/dbService');
       return filterOutDeletedProjects(base);
     }
-    try {
-      const { reviveProjectTitleForOpen } = await import('../services/dbService');
-      vault.forEach((p) => {
-        if (p?.title) reviveProjectTitleForOpen(p.title);
-      });
-    } catch {
-      /* ignore */
-    }
     const merged = mergeLibrarySources({ local: base, vault });
     const { filterOutDeletedProjects } = await import('../services/dbService');
     return filterOutDeletedProjects(merged);
@@ -371,13 +438,17 @@ export async function enrichLibraryWithDiskVault(library) {
   }
 }
 
-/** Full hydrate: localStorage index + disk vault (+ optional cloud list). */
+/** Full hydrate: localStorage index + disk vault (+ optional cloud list, exclusive shelves). */
 export async function hydrateProjectLibraryFromStores({ cloud = [] } = {}) {
   const local = readLocalProjectLibrary();
+  const cloudTagged = (Array.isArray(cloud) ? cloud : []).map((p) => ({
+    ...p,
+    storageMode: STORAGE_CLOUD
+  }));
   let merged = mergeLibrarySources({
     local,
     vault: [],
-    cloud: Array.isArray(cloud) ? cloud : []
+    cloud: cloudTagged
   });
   merged = await enrichLibraryWithDiskVault(merged);
   try {

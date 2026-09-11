@@ -14,6 +14,13 @@ import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
 import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary } from '../utils/projectWorkspace';
 import { compactFilmForCloud, filmHasMatrix } from '../utils/filmCloudBody';
+import {
+  STORAGE_CLOUD,
+  isCloudProject,
+  cloudProjectsFromLibrary,
+  localTitlesFromLibrary,
+  normalizeStorageMode
+} from '../utils/projectStorageMode';
 
 // Default Firebase Cloud Database Configuration
 const DEFAULT_FIREBASE_CONFIG = {
@@ -444,29 +451,29 @@ export function subscribeToCollaboratorUpdates(onUsersReceived) {
 export async function syncProjectLibraryToCloud(projectLibrary) {
   if (typeof window === 'undefined') return;
   if (isSelfServeSession()) return;
-  const list = filterOutDeletedProjects(Array.isArray(projectLibrary) ? projectLibrary : []);
-  // Never push empty library to cloud — empty overwrite guard on server is backup only
-  if (list.length === 0) return;
-
-  const slimmedList = list.map(slimProjectForLocalMirror);
-  const liveKeys = new Set(slimmedList.map((p) => projectKey(p)).filter(Boolean));
+  const full = filterOutDeletedProjects(Array.isArray(projectLibrary) ? projectLibrary : []);
+  const cloudList = cloudProjectsFromLibrary(full).map(slimProjectForLocalMirror);
+  const releasedTitles = localTitlesFromLibrary(full);
+  const liveKeys = new Set(cloudList.map((p) => projectKey(p)).filter(Boolean));
   const pinned = readPinnedLiveTitleKeys();
   const deletedTitles = Array.from(readDeletedTitleKeys()).filter(
     (t) => !liveKeys.has(t) && !pinned.has(t)
   );
   const payload = {
-    projects: slimmedList,
+    projects: cloudList,
+    releasedTitles,
     deletedTitles,
+    exclusiveCloud: true,
     updatedAt: new Date().toISOString(),
-    totalProjects: slimmedList.length
+    totalProjects: cloudList.length
   };
 
-  writeLocalProjectLibrary(slimmedList);
-  if (JSON.stringify(slimmedList) !== JSON.stringify(readLocalProjectLibrary())) {
+  writeLocalProjectLibrary(full.map(slimProjectForLocalMirror));
+  if (JSON.stringify(full.map(slimProjectForLocalMirror)) !== JSON.stringify(readLocalProjectLibrary())) {
     window.dispatchEvent(new CustomEvent('sps_projects_updated', { detail: { source: 'dbService' } }));
   }
 
-  pruneAndPersistCollaboratorAllotments(slimmedList);
+  pruneAndPersistCollaboratorAllotments(full);
 
   // Push to Native Vercel Serverless Sync Engine (/api/sync) — authoritative
   try {
@@ -527,6 +534,7 @@ export async function fetchFilmFromCloud(title) {
 export async function syncFilmToCloud(project) {
   if (typeof window === 'undefined') return false;
   if (isSelfServeSession()) return false;
+  if (normalizeStorageMode(project?.storageMode) !== STORAGE_CLOUD) return false;
   const body = compactFilmForCloud(project);
   if (!body || !filmHasMatrix(body)) return false;
   const title = body.title;
@@ -553,14 +561,14 @@ export async function syncFilmToCloud(project) {
   });
 }
 
-/** Push this device's library + full films when cloud is empty or missing titles. */
+/** Push this device's cloud-shelf films when the cloud library is empty. */
 export async function seedCloudLibraryFromDevice(library, fullFilms = []) {
   if (typeof window === 'undefined') return;
   if (isSelfServeSession()) return;
-  const list = filterOutDeletedProjects(Array.isArray(library) ? library : []);
+  const list = cloudProjectsFromLibrary(filterOutDeletedProjects(Array.isArray(library) ? library : []));
   if (!list.length) return;
-  await syncProjectLibraryToCloud(list);
-  const films = Array.isArray(fullFilms) && fullFilms.length ? fullFilms : list;
+  await syncProjectLibraryToCloud(Array.isArray(library) ? library : list);
+  const films = (Array.isArray(fullFilms) && fullFilms.length ? fullFilms : list).filter(isCloudProject);
   await Promise.all(
     films.filter((p) => filmHasMatrix(p)).map((p) => syncFilmToCloud(p))
   );
@@ -955,40 +963,58 @@ function projectRecency(p) {
  * stay in the library. Tombstoned / archived titles are already excluded via
  * blockedLibraryTitleKeys — that is how deletes stay gone, not by dropping drafts.
  */
-function mergeProjectArrays(cloudProjs, localProjs, { cloudAuthoritative = true } = {}) {
+function mergeProjectArrays(cloudProjs, localProjs) {
+  const cloudTagged = (cloudProjs || []).map((p) => ({ ...p, storageMode: STORAGE_CLOUD }));
+  return mergeExclusiveLibrarySync({ local: localProjs || [], cloud: cloudTagged });
+}
+
+function explicitStorageMode(project) {
+  const raw = String(project?.storageMode || '').trim().toLowerCase();
+  return raw === STORAGE_CLOUD || raw === STORAGE_LOCAL ? raw : '';
+}
+
+function mergeExclusiveLibrarySync({ local = [], vault = [], cloud = [] } = {}) {
   const deleted = blockedLibraryTitleKeys();
-  const map = new Map();
-  const localByKey = new Map();
-
-  (localProjs || []).forEach((p) => {
+  const byTitle = new Map();
+  const put = (p, source) => {
     const key = projectKey(p);
     if (!key || key === 'STAGE PRODUCTION STUDIO' || deleted.has(key)) return;
-    localByKey.set(key, p);
-  });
-
-  (cloudProjs || []).forEach((p) => {
-    const key = projectKey(p);
-    if (!key || key === 'STAGE PRODUCTION STUDIO' || deleted.has(key)) return;
-    const local = localByKey.get(key);
-    if (!local) {
-      map.set(key, p);
+    const mode =
+      source === 'vault'
+        ? normalizeStorageMode(p.storageMode)
+        : source === 'cloud'
+          ? STORAGE_CLOUD
+          : explicitStorageMode(p);
+    const tagged = { ...p, ...(mode ? { storageMode: mode } : {}), ...(source === 'vault' ? { _diskShelf: mode } : {}) };
+    const prev = byTitle.get(key);
+    if (!prev) {
+      byTitle.set(key, tagged);
       return;
     }
-    const cloudScore = projectRecency(p);
-    const localScore = projectRecency(local);
-    if (cloudScore >= localScore || (Array.isArray(p.shots) && p.shots.length > 0)) {
-      map.set(key, { ...local, ...p });
-    } else {
-      map.set(key, { ...p, ...local });
+    const prevMode = explicitStorageMode(prev) || prev._diskShelf || '';
+    if (tagged._diskShelf && !prev._diskShelf) {
+      byTitle.set(key, { ...prev, ...tagged, storageMode: tagged._diskShelf, _diskShelf: tagged._diskShelf });
+      return;
     }
+    if (prev._diskShelf && source === 'cloud' && prev._diskShelf !== STORAGE_CLOUD) return;
+    if (source === 'cloud' && prevMode === STORAGE_LOCAL) return;
+    if (source === 'local' && !mode && (prevMode === STORAGE_CLOUD || prev._diskShelf === STORAGE_CLOUD)) return;
+    if (source === 'cloud') {
+      byTitle.set(key, { ...prev, ...tagged, storageMode: STORAGE_CLOUD });
+      return;
+    }
+    const keep = tagged._diskShelf || prev._diskShelf || mode || prevMode;
+    byTitle.set(key, { ...prev, ...tagged, ...(keep ? { storageMode: keep } : {}) });
+  };
+  (local || []).forEach((p) => put(p, 'local'));
+  (vault || []).forEach((p) => put(p, 'vault'));
+  (cloud || []).forEach((p) => put(p, 'cloud'));
+  return Array.from(byTitle.values()).map((p) => {
+    const rest = { ...p };
+    delete rest._diskShelf;
+    rest.storageMode = explicitStorageMode(rest) || STORAGE_LOCAL;
+    return rest;
   });
-
-  localByKey.forEach((p, key) => {
-    if (map.has(key)) return;
-    map.set(key, p);
-  });
-
-  return Array.from(map.values());
 }
 
 let healCloudLibraryTimer = null;
@@ -1015,9 +1041,7 @@ async function processAndStoreProjects(rawCloudProjects, { cloudAuthoritative = 
   const deletedKeys = blockedLibraryTitleKeys();
   const cloudHadGhosts = (rawCloudProjects || []).some((p) => deletedKeys.has(projectKey(p)));
   // When durableOk is false, keep local-only drafts (do not treat cloud as full membership SoT)
-  const merged = mergeProjectArrays(rawCloudProjects, localProjs, {
-    cloudAuthoritative: Boolean(cloudAuthoritative)
-  });
+  const merged = mergeProjectArrays(rawCloudProjects, localProjs);
   const { enrichLibraryWithDiskVault, writeLocalProjectLibrary } = await import('../utils/projectWorkspace');
   let finalList = filterOutDeletedProjects(
     await enrichLibraryWithDiskVault(filterOutDeletedProjects(merged))

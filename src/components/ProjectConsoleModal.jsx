@@ -4,7 +4,7 @@ import {
   RefreshCw, Download, ExternalLink, ShieldAlert, Sparkles, 
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders, Maximize2,
   Brain, Camera, Music2, Ratio, KeyRound, Play, Archive, RotateCcw, ChevronDown,
-  LayoutGrid, PanelLeft, Settings, Lock
+  LayoutGrid, PanelLeft, Settings, Lock, Cloud, HardDrive
 } from 'lucide-react';
 import { 
   composeDirectorPsychologyWithLLM, composeHybridVisionMergeWithLLM,
@@ -85,6 +85,7 @@ import {
     stripTitleFromPackOwned
 } from '../utils/userSettingsPack';
 import { applyOpenWorkspace, roomIdForProject, writeWorkspaceOntoLibrary, migrateLegacyRoomInLibrary, writeLocalProjectLibrary, slimProjectForLocalMirror, mergeLibrarySources, readLocalProjectLibrary, hydrateProjectLibraryFromStores, titlesMatch, scrubDemoBleedFromProject } from '../utils/projectWorkspace';
+import { STORAGE_CLOUD, STORAGE_LOCAL, normalizeStorageMode, isCloudProject, filterLibraryByShelf } from '../utils/projectStorageMode';
 import { isDemoProjectTitle, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from '../utils/demoStudioProject';
 import { starterShots, starterScreenplay } from '../utils/tenantScope';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
@@ -92,7 +93,16 @@ import { putImageDataUrl, resolveImageUrl, isImageRef } from '../utils/imageBlob
 import { APP_VERSION_NAME, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 
 const LIBRARY_VIEW_KEY = 'sps_project_library_view';
+const LIBRARY_SHELF_KEY = 'sps_project_library_shelf';
 const CONSOLE_TOOLBAR_PIN_KEY = 'sps_pin_project_console_toolbar';
+
+function readLibraryShelf() {
+  try {
+    return localStorage.getItem(LIBRARY_SHELF_KEY) === STORAGE_CLOUD ? STORAGE_CLOUD : STORAGE_LOCAL;
+  } catch {
+    return STORAGE_LOCAL;
+  }
+}
 
 function readLibraryViewMode() {
   try {
@@ -262,6 +272,17 @@ export default function ProjectConsoleModal({
   const [targetPosterProjId, setTargetPosterProjId] = useState(null);
   const [assetFoldersProjId, setAssetFoldersProjId] = useState(null);
   const [libraryView, setLibraryView] = useState(readLibraryViewMode);
+  const [libraryShelf, setLibraryShelfState] = useState(readLibraryShelf);
+
+  const setLibraryShelf = (shelf) => {
+    const next = normalizeStorageMode(shelf);
+    setLibraryShelfState(next);
+    try {
+      localStorage.setItem(LIBRARY_SHELF_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const setLibraryViewMode = (mode) => {
     const next = mode === 'gallery' ? 'gallery' : 'detail';
@@ -1239,31 +1260,14 @@ export default function ProjectConsoleModal({
   };
 
   const mergeLibraryPreservingUnion = useCallback((incoming, prev) => {
-    const map = new Map();
-    const put = (p) => {
-      if (!p?.title) return;
-      const key = String(p.title).trim().toUpperCase();
-      if (isProjectTitleDeleted(key) || key === 'STAGE PRODUCTION STUDIO') return;
-      const old = map.get(key);
-      if (!old) {
-        map.set(key, p);
-        return;
-      }
-      map.set(key, {
-        ...old,
-        ...p,
-        posterUrl: p.posterUrl || old.posterUrl,
-        shots:
-          Array.isArray(p.shots) && p.shots.length > 0
-            ? p.shots
-            : Array.isArray(old.shots)
-              ? old.shots
-              : []
-      });
-    };
-    (Array.isArray(prev) ? prev : []).forEach(put);
-    (Array.isArray(incoming) ? incoming : []).forEach(put);
-    return sanitizeLibraryTitles(filterOutDeletedProjects(Array.from(map.values())));
+    return sanitizeLibraryTitles(
+      filterOutDeletedProjects(
+        mergeLibrarySources({
+          local: Array.isArray(prev) ? prev : [],
+          vault: Array.isArray(incoming) ? incoming : []
+        })
+      )
+    );
   }, []);
 
   // Disk vault hydrate — must complete before persisting library (prevents stale overwrite)
@@ -1363,32 +1367,13 @@ export default function ProjectConsoleModal({
         const healedAfter = healActiveProjectFromArchive();
         if (Array.isArray(cloudProjs) && cloudProjs.length > 0) {
           setProjectLibrary(prev => {
-            const map = new Map();
-            const cloudFiltered = filterOutDeletedProjects(cloudProjs);
-            cloudFiltered.forEach((p) => {
-              if (p && p.title) map.set(String(p.title).trim().toUpperCase(), p);
-            });
-            (prev || []).forEach((p) => {
-              if (!p?.title) return;
-              const key = String(p.title).trim().toUpperCase();
-              const cloud = map.get(key);
-              if (!cloud) {
-                // Keep local-only projects (e.g. poster just saved, not yet on cloud)
-                map.set(key, p);
-                return;
-              }
-              map.set(key, {
-                ...p,
-                ...cloud,
-                // Prefer whichever side still has a poster
-                posterUrl: cloud.posterUrl || p.posterUrl,
-                shots:
-                  Array.isArray(cloud.shots) && cloud.shots.length > 0
-                    ? cloud.shots
-                    : Array.isArray(p.shots)
-                      ? p.shots
-                      : []
-              });
+            const cloudTagged = filterOutDeletedProjects(cloudProjs).map((p) => ({
+              ...p,
+              storageMode: STORAGE_CLOUD
+            }));
+            let merged = mergeLibrarySources({
+              local: Array.isArray(prev) ? prev : [],
+              cloud: cloudTagged
             });
 
             const activeKey = currentProjectTitle ? String(currentProjectTitle).trim().toUpperCase() : '';
@@ -1396,14 +1381,13 @@ export default function ProjectConsoleModal({
               activeKey &&
               activeKey !== 'STAGE PRODUCTION STUDIO' &&
               !isProjectTitleDeleted(activeKey) &&
-              !map.has(activeKey)
+              !merged.some((p) => String(p?.title || '').trim().toUpperCase() === activeKey)
             ) {
               const fromHeal =
                 healedAfter && String(healedAfter.title).trim().toUpperCase() === activeKey
                   ? healedAfter
                   : null;
-              map.set(
-                activeKey,
+              merged = [
                 fromHeal || {
                   id: `proj_${Date.now()}`,
                   title: currentProjectTitle,
@@ -1412,12 +1396,14 @@ export default function ProjectConsoleModal({
                   aspectRatio: '2.39:1 Anamorphic',
                   roomId: roomIdForProject(currentProjectTitle),
                   lastModified: new Date().toLocaleDateString(),
+                  storageMode: libraryShelf,
                   shots: []
-                }
-              );
+                },
+                ...merged
+              ];
             }
 
-            let merged = filterOutDeletedProjects(Array.from(map.values()));
+            merged = filterOutDeletedProjects(merged);
             if (currentProjectTitle) {
               merged.sort((a, b) => {
                 if (titlesMatch(a.title, currentProjectTitle)) return -1;
@@ -1545,8 +1531,10 @@ export default function ProjectConsoleModal({
   const isPrimaryOwner = canCreateOrDeleteProjects(currentUserEmail);
   const guestLook = false;
   const visibleProjectLibrary = filterAccessibleProjects(projectLibrary, currentUserEmail);
+  const localShelfCount = filterLibraryByShelf(visibleProjectLibrary, STORAGE_LOCAL).length;
+  const cloudShelfCount = filterLibraryByShelf(visibleProjectLibrary, STORAGE_CLOUD).length;
   const libraryProjectsForDisplay = useMemo(() => {
-    const list = [...visibleProjectLibrary];
+    const list = filterLibraryByShelf([...visibleProjectLibrary], libraryShelf);
     const activeTitle = String(currentProjectTitle || '').trim();
     if (!activeTitle) return list;
     return list.sort((a, b) => {
@@ -1556,7 +1544,7 @@ export default function ProjectConsoleModal({
       if (!aActive && bActive) return 1;
       return 0;
     });
-  }, [visibleProjectLibrary, currentProjectTitle]);
+  }, [visibleProjectLibrary, currentProjectTitle, libraryShelf]);
 
   const assetFoldersProj = useMemo(
     () => (Array.isArray(projectLibrary) ? projectLibrary : []).find((p) => p?.id === assetFoldersProjId) || null,
@@ -1801,6 +1789,7 @@ export default function ProjectConsoleModal({
       presetProfile: newGenreKey || 'mythological',
       roomId: roomIdForProject(cleanTitle),
       lastModified: new Date().toLocaleDateString(),
+      storageMode: libraryShelf,
       shots: initialShots,
       screenplayText: starterScreenplay(),
       extractedMasterStory: '',
@@ -1847,13 +1836,82 @@ export default function ProjectConsoleModal({
       id: dupId,
       title: dupTitle,
       roomId: roomIdForProject(dupTitle),
-      lastModified: new Date().toLocaleDateString()
+      lastModified: new Date().toLocaleDateString(),
+      storageMode: normalizeStorageMode(proj.storageMode)
     };
     reviveProjectTitleForOpen(dupTitle);
     setProjectLibrary(prev => [...prev, dupObj]);
     claimNewLibraryTitleIfPackUser(dupTitle);
     writeLocalProjectLibrary(filterOutDeletedProjects([...(Array.isArray(projectLibrary) ? projectLibrary : []), dupObj]));
     saveProjectToVault(dupObj).catch(() => {});
+  };
+
+  const handleMoveProjectStorage = async (proj, destMode) => {
+    if (!isPrimaryOwner || !proj?.title) return;
+    const dest = normalizeStorageMode(destMode);
+    const from = normalizeStorageMode(proj.storageMode);
+    if (from === dest) return;
+    const destLabel = dest === STORAGE_CLOUD ? 'Cloud' : 'Local';
+    const fromLabel = from === STORAGE_CLOUD ? 'Cloud' : 'Local';
+    if (
+      !confirm(
+        `Move "${proj.title}" to ${destLabel}?\n\nIt will leave the ${fromLabel} library. A backup copy stays in the ${dest} disk folder.`
+      )
+    ) {
+      return;
+    }
+    let full = proj;
+    try {
+      const disk = await loadProjectFromDiskByTitle(proj.title);
+      if (disk && Array.isArray(disk.shots) && disk.shots.length) full = disk;
+    } catch {
+      /* ignore */
+    }
+    if (dest === STORAGE_LOCAL && (!full.shots || !full.shots.length)) {
+      try {
+        const { fetchFilmFromCloud } = await import('../services/dbService');
+        const cloudFilm = await fetchFilmFromCloud(proj.title);
+        if (cloudFilm && Array.isArray(cloudFilm.shots) && cloudFilm.shots.length) {
+          full = cloudFilm;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const moved = {
+      ...full,
+      ...proj,
+      shots: Array.isArray(full.shots) && full.shots.length ? full.shots : proj.shots,
+      storageMode: dest,
+      lastModified: new Date().toLocaleDateString()
+    };
+    if (dest === STORAGE_CLOUD) reviveProjectTitleForOpen(moved.title);
+    setProjectLibrary((prev) => {
+      const key = String(moved.title).trim().toUpperCase();
+      const next = (Array.isArray(prev) ? prev : []).map((p) =>
+        String(p?.title || '').trim().toUpperCase() === key ? { ...p, ...moved } : p
+      );
+      writeLocalProjectLibrary(filterOutDeletedProjects(next));
+      return next;
+    });
+    setLibraryShelf(dest);
+    try {
+      await saveProjectToVault(moved);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const { syncFilmToCloud, syncProjectLibraryToCloud: pushLib } = await import('../services/dbService');
+      if (dest === STORAGE_CLOUD) await syncFilmToCloud(moved);
+      const live = filterOutDeletedProjects(
+        (Array.isArray(projectLibrary) ? projectLibrary : []).map((p) =>
+          titlesMatch(p.title, moved.title) ? moved : p
+        )
+      );
+      await pushLib(live);
+    } catch {
+      /* ignore */
+    }
   };
 
   // 5. ARCHIVE PROJECT (PRIMARY ADMIN) — remove from library, keep in Archive for restore
@@ -1929,7 +1987,7 @@ export default function ProjectConsoleModal({
     setProjectLibrary((prev) => {
       const key = String(restored.title).trim().toUpperCase();
       const without = (prev || []).filter((p) => String(p?.title || '').trim().toUpperCase() !== key);
-      return [restored, ...without];
+      return [{ ...restored, storageMode: STORAGE_LOCAL }, ...without];
     });
     try {
       syncProjectLibraryToCloud(
@@ -2038,11 +2096,37 @@ export default function ProjectConsoleModal({
             </div>
             <button
               type="button"
-              onClick={() => setActiveTab('library')}
-              className={`sps-btn text-[10px] shrink-0 py-1 ${activeTab === 'library' ? 'sps-btn-primary' : ''}`}
+              onClick={() => {
+                setLibraryShelf(STORAGE_LOCAL);
+                setActiveTab('library');
+              }}
+              className={`sps-btn text-[10px] shrink-0 py-1 ${activeTab === 'library' && libraryShelf === STORAGE_LOCAL ? 'sps-btn-primary' : ''}`}
+              title="Films stored on this computer only"
             >
-              <Folder className="w-3.5 h-3.5" />
-              <span className="whitespace-nowrap">Library</span>
+              <HardDrive className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">Local</span>
+              {localShelfCount > 0 && (
+                <span className="ml-0.5 px-1 py-0 text-[9px] font-black" style={{ background: 'color-mix(in srgb, var(--sps-text) 8%, transparent)' }}>
+                  {localShelfCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLibraryShelf(STORAGE_CLOUD);
+                setActiveTab('library');
+              }}
+              className={`sps-btn text-[10px] shrink-0 py-1 ${activeTab === 'library' && libraryShelf === STORAGE_CLOUD ? 'sps-btn-primary' : ''}`}
+              title="Films stored in Stage Work Studio cloud — not listed on Local"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">Cloud</span>
+              {cloudShelfCount > 0 && (
+                <span className="ml-0.5 px-1 py-0 text-[9px] font-black" style={{ background: 'color-mix(in srgb, var(--sps-text) 8%, transparent)' }}>
+                  {cloudShelfCount}
+                </span>
+              )}
             </button>
             {isOwnerUser && (
               <button
@@ -2244,6 +2328,13 @@ export default function ProjectConsoleModal({
                   No projects are allotted to <strong>{currentUserEmail || 'this account'}</strong>. Ask the studio Admin to allot a project in Admin Settings.
                 </div>
               )}
+              {visibleProjectLibrary.length > 0 && libraryProjectsForDisplay.length === 0 && (
+                <div className="w-full p-6 border border-[var(--sps-border)] text-[var(--sps-text)]/70 text-xs font-mono">
+                  {libraryShelf === STORAGE_CLOUD
+                    ? 'No cloud films yet. Open a Local card and choose Move to Cloud — it leaves the Local library.'
+                    : 'No local films on this computer. Cloud films stay on the Cloud shelf until you move one here.'}
+                </div>
+              )}
 
               {/* Project cards — gallery (posters) or detail (full cards) */}
               {libraryView === 'gallery' ? (
@@ -2311,23 +2402,47 @@ export default function ProjectConsoleModal({
                           ) : (
                             <span />
                           )}
-                          {canArchiveProjectTitle(proj.title) && (
-                            <button
-                              type="button"
-                              className="sps-project-gallery-archive-btn"
-                              title={`Archive project "${proj.title}"`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteProject(proj.id);
-                              }}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                              }}
-                            >
-                              <Archive className="w-3 h-3" />
-                              <span>Archive</span>
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1 ml-auto">
+                            {isPrimaryOwner && (
+                              <button
+                                type="button"
+                                className="sps-project-gallery-move-btn"
+                                title={
+                                  isCloudProject(proj)
+                                    ? 'Move to Local library (leaves Cloud)'
+                                    : 'Move to Cloud library (leaves Local)'
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveProjectStorage(
+                                    proj,
+                                    isCloudProject(proj) ? STORAGE_LOCAL : STORAGE_CLOUD
+                                  );
+                                }}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                              >
+                                {isCloudProject(proj) ? <HardDrive className="w-3 h-3" /> : <Cloud className="w-3 h-3" />}
+                                <span>{isCloudProject(proj) ? 'Local' : 'Cloud'}</span>
+                              </button>
+                            )}
+                            {canArchiveProjectTitle(proj.title) && (
+                              <button
+                                type="button"
+                                className="sps-project-gallery-archive-btn"
+                                title={`Archive project "${proj.title}"`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteProject(proj.id);
+                                }}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                              >
+                                <Archive className="w-3 h-3" />
+                                <span>Archive</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <span className="sps-project-gallery-label">{proj.title}</span>
                       </div>
@@ -2580,6 +2695,20 @@ export default function ProjectConsoleModal({
                               <button
                                 type="button"
                                 className="sps-quiet-link is-muted"
+                                onClick={() =>
+                                  handleMoveProjectStorage(
+                                    proj,
+                                    isCloudProject(proj) ? STORAGE_LOCAL : STORAGE_CLOUD
+                                  )
+                                }
+                              >
+                                {isCloudProject(proj) ? 'Move to Local' : 'Move to Cloud'}
+                              </button>
+                            ) : null}
+                            {isPrimaryOwner ? (
+                              <button
+                                type="button"
+                                className="sps-quiet-link is-muted"
                                 onClick={() => handleDuplicateProject(proj)}
                               >
                                 Copy
@@ -2710,7 +2839,7 @@ export default function ProjectConsoleModal({
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
                   {isOwnerUser
-                    ? 'Initialize a new master project with custom framing, model specs, and initial shot template.'
+                    ? `Creates on the ${libraryShelf === STORAGE_CLOUD ? 'Cloud' : 'Local'} shelf. Move later if you want the other library — a title is never listed in both.`
                     : 'Creates a pack title you own. You can archive it later. Allotted studio films stay Admin-owned.'}
                 </p>
               </div>

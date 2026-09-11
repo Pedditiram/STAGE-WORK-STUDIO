@@ -60,15 +60,21 @@ export const setAllottedSettingsFolderPath = (pathStr) => {
 // Default Allotted Image & Asset Storage Directory Path (Local Disk Folder)
 export const getAllottedStorageFolderPath = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('sps_allotted_storage_folder') || './storage/';
+    const raw = String(localStorage.getItem('sps_allotted_storage_folder') || '').trim();
+    if (raw && raw !== './storage/' && raw !== './storage' && raw !== './projects/' && raw !== './projects') {
+      return raw;
+    }
   }
-  return './storage/';
+  return '';
 };
 
 // Set Allotted Image & Asset Storage Directory Path
 export const setAllottedStorageFolderPath = (pathStr) => {
-  if (typeof window !== 'undefined' && pathStr) {
-    localStorage.setItem('sps_allotted_storage_folder', pathStr);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sps_allotted_storage_folder', pathStr || '');
+    import('./projectDiskVault')
+      .then((m) => m.setAllottedFolderPath(pathStr || ''))
+      .catch(() => {});
   }
 };
 

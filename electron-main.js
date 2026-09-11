@@ -16,8 +16,19 @@ if (!electron || typeof electron !== 'object' || !electron.app) {
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog, nativeTheme, nativeImage } = electron;
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const http = require('http');
-const { ensureShelfDirs, shelfProjectOnDisk, restoreProjectOnDisk } = require('./src/utils/projectShelfFs.cjs');
+const projectShelfFs = require('./src/utils/projectShelfFs.cjs');
+const {
+  ensureShelfDirs,
+  shelfProjectOnDisk,
+  restoreProjectOnDisk,
+  listLiveProjects,
+  saveProjectToLive,
+  findLiveProjectFile,
+  findPosterPath
+} = projectShelfFs;
+const studioDiskRoots = require('./src/utils/studioDiskRoots.cjs');
 
 /** Unpackaged = always talk to Vite. Packaged = dist/. */
 const isPackaged = app.isPackaged;
@@ -25,19 +36,16 @@ const DEV_SERVER_URL = String(process.env.VITE_DEV_SERVER_URL || 'http://localho
 const isDev = !isPackaged;
 
 function resolveStudioRoots() {
-  // Dev / unpackaged: same projects/ + settings/ as Vite localhost (repo root)
-  if (!isPackaged) {
-    return {
-      projectsDir: path.join(__dirname, 'projects'),
-      settingsDir: path.join(__dirname, 'settings')
-    };
+  const repoProjectsDir = path.join(__dirname, 'projects');
+  let documentsDir = path.join(os.homedir(), 'Documents');
+  try {
+    if (app.isReady()) documentsDir = app.getPath('documents');
+  } catch {
+    /* use homedir Documents */
   }
-  // Packaged: writable Documents folder (asar is read-only)
-  const root = path.join(app.getPath('documents'), 'Stage Work Studio');
-  return {
-    projectsDir: path.join(root, 'projects'),
-    settingsDir: path.join(root, 'settings')
-  };
+  const roots = studioDiskRoots.resolveStudioDiskRoots({ documentsDir, repoProjectsDir });
+  studioDiskRoots.ensureStudioVault(roots, { repoProjectsDir, shelfFs: projectShelfFs });
+  return roots;
 }
 
 let PROJECTS_DIR = path.join(__dirname, 'projects');
@@ -72,7 +80,8 @@ function writeProjectPosterFile(title, id, imageDataUrl) {
   fs.writeFileSync(filePath, buffer);
 
   const posterUrl = `/api/project-poster?name=${encodeURIComponent(cleanTitle)}&v=${Date.now()}`;
-  const projectFile = path.join(PROJECTS_DIR, posterSafeName(cleanTitle).replace(/\.png$/i, '.json'));
+  const live = findLiveProjectFile(PROJECTS_DIR, cleanTitle);
+  const projectFile = live?.json || path.join(PROJECTS_DIR, 'local', posterSafeName(cleanTitle).replace(/\.png$/i, '.json'));
   let existing = {};
   if (fs.existsSync(projectFile)) {
     try {
@@ -445,22 +454,7 @@ ipcMain.handle('dialog:openFile', async () => {
 ipcMain.handle('vault:listProjects', async () => {
   try {
     ensureStudioDirs();
-    const files = fs.readdirSync(PROJECTS_DIR).filter((f) => {
-      if (!f.endsWith('.json')) return false;
-      try {
-        return fs.statSync(path.join(PROJECTS_DIR, f)).isFile();
-      } catch {
-        return false;
-      }
-    });
-    const projects = [];
-    for (const f of files) {
-      try {
-        projects.push(JSON.parse(fs.readFileSync(path.join(PROJECTS_DIR, f), 'utf8')));
-      } catch {
-        /* skip bad file */
-      }
-    }
+    const projects = listLiveProjects(PROJECTS_DIR);
     return { ok: true, projects };
   } catch (err) {
     return { ok: false, error: err.message, projects: [] };
@@ -525,16 +519,7 @@ ipcMain.handle('comfy:fetch', async (_, payload = {}) => {
 ipcMain.handle('vault:saveProject', async (_, project) => {
   try {
     ensureStudioDirs();
-    const title = project?.title || 'UNTITLED_PROJECT';
-    const safeFilename = String(title).replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
-    const filePath = path.join(PROJECTS_DIR, safeFilename);
-    const stamped = {
-      ...project,
-      updatedAt: new Date().toISOString(),
-      lastModifiedIso: new Date().toISOString()
-    };
-    fs.writeFileSync(filePath, JSON.stringify(stamped, null, 2), 'utf8');
-    return { ok: true, filePath, filename: safeFilename };
+    return saveProjectToLive(PROJECTS_DIR, project);
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -575,6 +560,7 @@ ipcMain.handle('vault:readPosterDataUrl', async (_, title) => {
     ensureStudioDirs();
     const postersDir = path.join(PROJECTS_DIR, 'posters');
     const filePath =
+      findPosterPath(PROJECTS_DIR, title) ||
       assetRootsFs?.readProjectPosterFilePath?.(title, postersDir) ||
       path.join(postersDir, posterSafeName(title));
     if (!filePath || !fs.existsSync(filePath)) return { ok: false, error: 'not found' };
@@ -690,13 +676,36 @@ ipcMain.handle('vault:setUiPrefs', async (_, prefs) => {
   }
 });
 
-ipcMain.handle('vault:getRoots', async () => ({
-  ok: true,
-  projectsDir: PROJECTS_DIR,
-  settingsDir: SETTINGS_DIR,
-  isDev,
-  devServerUrl: isDev ? DEV_SERVER_URL : null
-}));
+ipcMain.handle('vault:getRoots', async () => {
+  ensureStudioDirs();
+  return {
+    ok: true,
+    studioRoot: path.dirname(PROJECTS_DIR),
+    projectsDir: PROJECTS_DIR,
+    settingsDir: SETTINGS_DIR,
+    localDir: path.join(PROJECTS_DIR, 'local'),
+    cloudDir: path.join(PROJECTS_DIR, 'cloud'),
+    isDev,
+    devServerUrl: isDev ? DEV_SERVER_URL : null
+  };
+});
+
+ipcMain.handle('vault:setStudioRoot', async (_, payload = {}) => {
+  try {
+    const studioRoot = String(payload?.studioRoot || payload?.projectsDir || '').trim();
+    const roots = studioDiskRoots.writeCustomRoot(studioRoot, { documentsDir: app.getPath('documents') });
+    studioDiskRoots.ensureStudioVault(roots, {
+      repoProjectsDir: path.join(__dirname, 'projects'),
+      shelfFs: projectShelfFs
+    });
+    PROJECTS_DIR = roots.projectsDir;
+    SETTINGS_DIR = roots.settingsDir;
+    ensureStudioDirs();
+    return { ok: true, ...roots };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
 
 ipcMain.handle('vault:factoryReset', async (_, payload = {}) => {
   ensureStudioDirs();
