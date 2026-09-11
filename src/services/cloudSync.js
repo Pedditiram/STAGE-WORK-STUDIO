@@ -439,15 +439,9 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
     onDataReceived(payload, source);
   };
 
-  // 1. Local cache hydrate (do not advance revision cursor — network may be newer)
+  // 1. Local cache is not applied — a stale 2-shot placeholder must not replace the open film.
   if (isBrowser()) {
-    const cachedStr = localStorage.getItem(cacheKey(roomId));
-    if (cachedStr) {
-      try {
-        const cached = JSON.parse(cachedStr);
-        onDataReceived(cached, 'cache');
-      } catch (e) {}
-    }
+    /* network + ticks hydrate; cache is written after a confirmed deliver */
   }
 
   // 2. Cross-tab storage

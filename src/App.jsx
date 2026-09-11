@@ -67,6 +67,7 @@ import {
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
 import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './utils/demoStudioProject';
+import { matrixLooksLikePlaceholder, shouldRejectIncomingMatrix } from './utils/matrixSyncGuard';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -152,7 +153,7 @@ import {
   hasAdminGrantedWorkspace,
   downloadedAppPresentationOnly
 } from './utils/projectPermissions';
-import { isSelfServeSession, starterShots } from './utils/tenantScope';
+import { isSelfServeSession } from './utils/tenantScope';
 import { activatePackForSession, persistLivePackIfActive, claimNewLibraryTitleIfPackUser, packLibraryRestrictedMessage } from './utils/userSettingsPack';
 import { heartbeat, getDeviceId, canUseSaasFeature, assertCanGenerate, upsertLicense } from './utils/saasControl';
 import { collaboratorHasPassword, findAuthorizedUser } from './utils/collaboratorPassword';
@@ -1519,13 +1520,20 @@ export default function App() {
 
         if (preferred) {
           const localIsSameFilm = titlesMatch(savedTitle, preferred.title);
-          const localEmpty = !localShots || localShots.length === 0;
+          const localEmpty =
+            !localShots ||
+            localShots.length === 0 ||
+            matrixLooksLikePlaceholder(localShots);
           const diskForcesSwitch =
             diskActive?.title && titlesMatch(diskActive.title, preferred.title) && !localIsSameFilm;
           let openProj = preferred;
-          if (!openProj.shots?.length || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))) {
+          if (
+            !openProj.shots?.length ||
+            matrixLooksLikePlaceholder(openProj.shots) ||
+            (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))
+          ) {
             const fullDisk = await loadProjectFromDiskByTitle(preferred.title);
-            if (fullDisk?.shots?.length) openProj = fullDisk;
+            if (fullDisk?.shots?.length && !matrixLooksLikePlaceholder(fullDisk.shots)) openProj = fullDisk;
           }
           if (isDemoProjectTitle(openProj?.title || preferred.title)) {
             openProj = resolveCurrentDemoProject(openProj);
@@ -1585,21 +1593,27 @@ export default function App() {
         const wantTitle = String(diskActive?.title || '').trim();
         if (!wantTitle) return;
         const openTitle = projectTitleRef.current || localStorage.getItem('sps_current_project_title') || '';
-        if (titlesMatch(wantTitle, openTitle)) return;
+        const openIsPlaceholder = matrixLooksLikePlaceholder(shotsRef.current);
+        if (titlesMatch(wantTitle, openTitle) && !openIsPlaceholder) return;
         const localAt = Date.parse(localStorage.getItem('sps_active_workspace_at') || 0) || 0;
         const diskAt = Date.parse(diskActive?.updatedAt || 0) || 0;
-        if (localAt && diskAt && diskAt < localAt) return;
+        if (!openIsPlaceholder && localAt && diskAt && diskAt < localAt) return;
         const preferred = cleanedMerged.find((p) => titlesMatch(p?.title, wantTitle));
         if (!preferred) return;
         let openProj = preferred;
-        if (!openProj.shots?.length || (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))) {
+        if (
+          !openProj.shots?.length ||
+          matrixLooksLikePlaceholder(openProj.shots) ||
+          (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))
+        ) {
           const fullDisk = await loadProjectFromDiskByTitle(wantTitle);
-          if (fullDisk?.shots?.length) openProj = fullDisk;
+          if (fullDisk?.shots?.length && !matrixLooksLikePlaceholder(fullDisk.shots)) openProj = fullDisk;
         }
         if (isDemoProjectTitle(openProj?.title || wantTitle)) {
           openProj = resolveCurrentDemoProject(openProj);
         }
         if (!openProj?.shots?.length) return;
+        if (shouldRejectIncomingMatrix(shotsRef.current, openProj.shots) && !openIsPlaceholder) return;
         openProj = scrubDemoBleedFromProject(openProj);
         setShots(openProj.shots);
         setProjectTitle(openProj.title);
@@ -1805,7 +1819,7 @@ export default function App() {
       if (activeProj && Array.isArray(activeProj.shots) && activeProj.shots.length > 0) {
         const localN = Array.isArray(shots) ? shots.length : 0;
         const cloudN = activeProj.shots.length;
-        if (cloudN >= localN) {
+        if (cloudN >= localN && !shouldRejectIncomingMatrix(shots, activeProj.shots)) {
           const cloudHash = JSON.stringify({
             shots: activeProj.shots,
             projectTitle: activeProj.title,
@@ -1862,10 +1876,8 @@ export default function App() {
       prevAutoSavedShotsRef.current = currentShotsHash;
 
       const safeTitle = (projectTitle == null ? '' : String(projectTitle));
-      const persistShots =
-        !isDemoProjectTitle(safeTitle) && shotsLookLikeDemoSeed(shots) ? starterShots() : shots;
-      if (persistShots !== shots) {
-        setShots(persistShots);
+      const persistShots = shots;
+      if (matrixLooksLikePlaceholder(persistShots) && !isDemoProjectTitle(safeTitle)) {
         return;
       }
       const roots = normalizeAssetRoots(readAssetRootsFromLibrary(projectTitle));
@@ -1917,6 +1929,9 @@ export default function App() {
           !isDemoProjectTitle(openTitle) &&
           shotsLookLikeDemoSeed(cloudData.shots)
         ) {
+          return;
+        }
+        if (shouldRejectIncomingMatrix(shotsRef.current, cloudData.shots)) {
           return;
         }
         const nextTitle = cloudData.projectTitle || openTitle;
@@ -2350,6 +2365,9 @@ export default function App() {
         if (!res?.skippedStale || !Array.isArray(res.data?.shots)) return;
         const openTitle = projectTitleRef.current;
         if (res.data.projectTitle && openTitle && !titlesMatch(res.data.projectTitle, openTitle)) {
+          return;
+        }
+        if (shouldRejectIncomingMatrix(shotsRef.current, res.data.shots)) {
           return;
         }
         isReceivingCloudUpdate.current = true;
