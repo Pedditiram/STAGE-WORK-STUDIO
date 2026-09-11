@@ -193,7 +193,7 @@ function migrateLiveJsonIntoShelves(projectsDir) {
 
 function listLiveProjects(projectsDir) {
   migrateLiveJsonIntoShelves(projectsDir);
-  const projects = [];
+  const byStem = new Map();
   for (const mode of [LOCAL, CLOUD]) {
     const dir = path.join(projectsDir, mode);
     if (!fs.existsSync(dir)) continue;
@@ -201,17 +201,21 @@ function listLiveProjects(projectsDir) {
       if (!name.endsWith('.json')) continue;
       const full = path.join(dir, name);
       try {
-        if (!fs.statSync(full).isFile()) continue;
+        const stat = fs.statSync(full);
+        if (!stat.isFile()) continue;
         const parsed = readJson(full);
-        if (parsed && typeof parsed === 'object') {
-          projects.push(stampStorageMode(parsed, mode));
+        if (!parsed || typeof parsed !== 'object') continue;
+        const stem = name.replace(/\.json$/i, '');
+        const prev = byStem.get(stem);
+        if (!prev || stat.mtimeMs >= prev.mtimeMs) {
+          byStem.set(stem, { project: stampStorageMode(parsed, mode), mtimeMs: stat.mtimeMs });
         }
       } catch {
         /* skip bad file */
       }
     }
   }
-  return projects;
+  return Array.from(byStem.values()).map((row) => row.project);
 }
 
 function saveProjectToLive(projectsDir, project) {
@@ -228,8 +232,6 @@ function saveProjectToLive(projectsDir, project) {
   }, mode);
   const dest = pathsFor(projectsDir, stem, mode);
   writeJson(dest.json, stamped);
-  const other = pathsFor(projectsDir, stem, mode === CLOUD ? LOCAL : CLOUD);
-  safeUnlink(other.json);
   safeUnlink(pathsFor(projectsDir, stem, ROOT).json);
   const sharedPoster = path.join(projectsDir, 'posters', `${stem}.png`);
   if (fs.existsSync(sharedPoster) && !fs.existsSync(dest.poster)) {
@@ -261,17 +263,15 @@ function moveProjectStorageOnDisk(projectsDir, title, destMode) {
     parsed = { title: clean };
   }
   const stamped = stampStorageMode(parsed, mode);
-  if (found.json !== dest.json) {
-    writeJson(dest.json, stamped);
-    safeUnlink(found.json);
-  } else {
-    writeJson(dest.json, stamped);
-  }
+  writeJson(dest.json, stamped);
   if (found.poster && fs.existsSync(found.poster) && found.poster !== dest.poster) {
-    safeMove(found.poster, dest.poster);
+    try {
+      fs.mkdirSync(path.dirname(dest.poster), { recursive: true });
+      fs.copyFileSync(found.poster, dest.poster);
+    } catch {
+      /* poster is optional */
+    }
   }
-  const other = pathsFor(projectsDir, stem, mode === CLOUD ? LOCAL : CLOUD);
-  safeUnlink(other.json);
   safeUnlink(pathsFor(projectsDir, stem, ROOT).json);
   return { ok: true, title: clean, storageMode: mode, moved: true };
 }

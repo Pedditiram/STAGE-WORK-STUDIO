@@ -1863,7 +1863,7 @@ export default function ProjectConsoleModal({
     const fromLabel = from === STORAGE_CLOUD ? 'Cloud' : 'Local';
     if (
       !confirm(
-        `Move "${proj.title}" to ${destLabel}?\n\nIt will leave the ${fromLabel} library. A backup copy stays in the ${dest} disk folder.`
+        `Move "${proj.title}" to ${destLabel}?\n\nIt will leave the ${fromLabel} library. A backup copy stays in the ${fromLabel.toLowerCase()} disk folder.`
       )
     ) {
       return;
