@@ -12,14 +12,13 @@ import { ensurePrimaryAdminUser, sanitizeAuthorizedUsers, applyStudioSettings, c
 import { studioCollaboratorsForCloud, isSelfServeSession } from '../utils/tenantScope';
 import { getNativeSyncUrl, subscribeToCollabTick } from './cloudSync';
 import { safeLocalStorageSetItem } from '../utils/safeStorage';
-import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary } from '../utils/projectWorkspace';
+import { slimProjectForLocalMirror, writeLocalProjectLibrary, readLocalProjectLibrary, mergeExclusiveLibrary } from '../utils/projectWorkspace';
 import { compactFilmForCloud, filmHasMatrix } from '../utils/filmCloudBody';
+import { isStudioOwner } from '../utils/projectPermissions';
 import {
   STORAGE_CLOUD,
-  isCloudProject,
-  cloudProjectsFromLibrary,
-  localTitlesFromLibrary,
-  normalizeStorageMode
+  STORAGE_LOCAL,
+  isCloudProject
 } from '../utils/projectStorageMode';
 
 // Default Firebase Cloud Database Configuration
@@ -452,20 +451,20 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   if (typeof window === 'undefined') return;
   if (isSelfServeSession()) return;
   const full = filterOutDeletedProjects(Array.isArray(projectLibrary) ? projectLibrary : []);
-  const cloudList = cloudProjectsFromLibrary(full).map(slimProjectForLocalMirror);
-  const releasedTitles = localTitlesFromLibrary(full);
-  const liveKeys = new Set(cloudList.map((p) => projectKey(p)).filter(Boolean));
+  const catalog = full.map(slimProjectForLocalMirror);
+  const liveKeys = new Set(catalog.map((p) => projectKey(p)).filter(Boolean));
   const pinned = readPinnedLiveTitleKeys();
   const deletedTitles = Array.from(readDeletedTitleKeys()).filter(
     (t) => !liveKeys.has(t) && !pinned.has(t)
   );
   const payload = {
-    projects: cloudList,
-    releasedTitles,
+    projects: catalog,
+    releasedTitles: [],
     deletedTitles,
-    exclusiveCloud: true,
+    exclusiveCloud: false,
+    catalogSync: true,
     updatedAt: new Date().toISOString(),
-    totalProjects: cloudList.length
+    totalProjects: catalog.length
   };
 
   writeLocalProjectLibrary(full.map(slimProjectForLocalMirror));
@@ -534,7 +533,6 @@ export async function fetchFilmFromCloud(title) {
 export async function syncFilmToCloud(project) {
   if (typeof window === 'undefined') return false;
   if (isSelfServeSession()) return false;
-  if (normalizeStorageMode(project?.storageMode) !== STORAGE_CLOUD) return false;
   const body = compactFilmForCloud(project);
   if (!body || !filmHasMatrix(body)) return false;
   const title = body.title;
@@ -561,14 +559,14 @@ export async function syncFilmToCloud(project) {
   });
 }
 
-/** Push this device's cloud-shelf films when the cloud library is empty. */
+/** Push this device's Local + Cloud catalog (text films) when the remote library is empty. */
 export async function seedCloudLibraryFromDevice(library, fullFilms = []) {
   if (typeof window === 'undefined') return;
   if (isSelfServeSession()) return;
-  const list = cloudProjectsFromLibrary(filterOutDeletedProjects(Array.isArray(library) ? library : []));
+  const list = filterOutDeletedProjects(Array.isArray(library) ? library : []);
   if (!list.length) return;
-  await syncProjectLibraryToCloud(Array.isArray(library) ? library : list);
-  const films = (Array.isArray(fullFilms) && fullFilms.length ? fullFilms : list).filter(isCloudProject);
+  await syncProjectLibraryToCloud(list);
+  const films = Array.isArray(fullFilms) && fullFilms.length ? fullFilms : list;
   await Promise.all(
     films.filter((p) => filmHasMatrix(p)).map((p) => syncFilmToCloud(p))
   );
@@ -964,57 +962,14 @@ function projectRecency(p) {
  * blockedLibraryTitleKeys — that is how deletes stay gone, not by dropping drafts.
  */
 function mergeProjectArrays(cloudProjs, localProjs) {
-  const cloudTagged = (cloudProjs || []).map((p) => ({ ...p, storageMode: STORAGE_CLOUD }));
-  return mergeExclusiveLibrarySync({ local: localProjs || [], cloud: cloudTagged });
-}
-
-function explicitStorageMode(project) {
-  const raw = String(project?.storageMode || '').trim().toLowerCase();
-  return raw === STORAGE_CLOUD || raw === STORAGE_LOCAL ? raw : '';
-}
-
-function mergeExclusiveLibrarySync({ local = [], vault = [], cloud = [] } = {}) {
-  const deleted = blockedLibraryTitleKeys();
-  const byTitle = new Map();
-  const put = (p, source) => {
-    const key = projectKey(p);
-    if (!key || key === 'STAGE PRODUCTION STUDIO' || deleted.has(key)) return;
-    const mode =
-      source === 'vault'
-        ? normalizeStorageMode(p.storageMode)
-        : source === 'cloud'
-          ? STORAGE_CLOUD
-          : explicitStorageMode(p);
-    const tagged = { ...p, ...(mode ? { storageMode: mode } : {}), ...(source === 'vault' ? { _diskShelf: mode } : {}) };
-    const prev = byTitle.get(key);
-    if (!prev) {
-      byTitle.set(key, tagged);
-      return;
-    }
-    const prevMode = explicitStorageMode(prev) || prev._diskShelf || '';
-    if (tagged._diskShelf && !prev._diskShelf) {
-      byTitle.set(key, { ...prev, ...tagged, storageMode: tagged._diskShelf, _diskShelf: tagged._diskShelf });
-      return;
-    }
-    if (prev._diskShelf && source === 'cloud' && prev._diskShelf !== STORAGE_CLOUD) return;
-    if (source === 'cloud' && prevMode === STORAGE_LOCAL) return;
-    if (source === 'local' && !mode && (prevMode === STORAGE_CLOUD || prev._diskShelf === STORAGE_CLOUD)) return;
-    if (source === 'cloud') {
-      byTitle.set(key, { ...prev, ...tagged, storageMode: STORAGE_CLOUD });
-      return;
-    }
-    const keep = tagged._diskShelf || prev._diskShelf || mode || prevMode;
-    byTitle.set(key, { ...prev, ...tagged, ...(keep ? { storageMode: keep } : {}) });
-  };
-  (local || []).forEach((p) => put(p, 'local'));
-  (vault || []).forEach((p) => put(p, 'vault'));
-  (cloud || []).forEach((p) => put(p, 'cloud'));
-  return Array.from(byTitle.values()).map((p) => {
-    const rest = { ...p };
-    delete rest._diskShelf;
-    rest.storageMode = explicitStorageMode(rest) || STORAGE_LOCAL;
-    return rest;
-  });
+  let remote = (cloudProjs || []).map((p) => ({
+    ...p,
+    storageMode: String(p?.storageMode || '').trim().toLowerCase() === STORAGE_LOCAL ? STORAGE_LOCAL : STORAGE_CLOUD
+  }));
+  if (!isStudioOwner()) {
+    remote = remote.filter(isCloudProject);
+  }
+  return mergeExclusiveLibrary({ local: localProjs || [], cloud: remote });
 }
 
 let healCloudLibraryTimer = null;

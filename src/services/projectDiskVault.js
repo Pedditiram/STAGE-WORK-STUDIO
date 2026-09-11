@@ -552,7 +552,10 @@ export async function loadProjectFromDiskByTitle(title) {
     const { fetchFilmFromCloud } = await import('./dbService');
     const cloud = await fetchFilmFromCloud(title);
     if (cloud && Array.isArray(cloud.shots) && cloud.shots.length) {
-      const tagged = { ...cloud, storageMode: STORAGE_CLOUD };
+      const tagged = {
+        ...cloud,
+        storageMode: String(cloud?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
+      };
       return isDemoProjectTitle(cloud.title) ? resolveCurrentDemoProject(tagged) : tagged;
     }
   } catch {

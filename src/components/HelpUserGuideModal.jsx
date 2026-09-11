@@ -253,8 +253,8 @@ function buildGuideSections(isAdmin) {
             </p>
             <p>
               A film’s home is the Projects library: <strong>Local</strong> or <strong>Cloud</strong> — never both.
-              Save writes this machine’s vault. Cloud-shelf films also update the studio library for the team.
-              Google Drive (triangle mark) is a separate file pack, not the library shelf.
+              Web and the Mac app share the same Local and Cloud tabs. Sync sends Writer, Matrix, World, Character
+              Bible, Compile, and poster design text — not generated images or videos. Those stay on this machine.
             </p>
           </Callout>
 

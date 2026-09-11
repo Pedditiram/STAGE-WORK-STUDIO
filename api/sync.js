@@ -1684,7 +1684,10 @@ export default async function handler(req, res) {
         const cleanedIncoming = incomingProjs.filter((p) => {
           const title = String(p?.title || '').trim();
           return title && title.toUpperCase() !== 'STAGE PRODUCTION STUDIO';
-        }).map((p) => ({ ...p, storageMode: 'cloud' }));
+        }).map((p) => ({
+          ...p,
+          storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
+        }));
 
         // Empty overwrite guard — never wipe a library unless this is an exclusive
         // cloud-shelf push (local titles released, or an explicit empty cloud shelf).
@@ -1733,7 +1736,7 @@ export default async function handler(req, res) {
           return {
             ...existing,
             ...p,
-            storageMode: 'cloud',
+            storageMode: String(p?.storageMode || existing?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud',
             shots: incomingShots.length ? incomingShots : existingShots,
             shotCount: p.shotCount || existing.shotCount || incomingShots.length || existingShots.length,
             screenplayText: p.screenplayText || existing.screenplayText
@@ -1745,7 +1748,12 @@ export default async function handler(req, res) {
           if (incomingKeys.has(key)) return;
           if (releasedSet.has(key)) return;
           if (memoryDeletedTitles.includes(key)) return;
-          if (!mergedLive.some((x) => titleKey(x.title) === key)) mergedLive.push({ ...p, storageMode: 'cloud' });
+          if (!mergedLive.some((x) => titleKey(x.title) === key)) {
+            mergedLive.push({
+              ...p,
+              storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
+            });
+          }
         });
         memoryProjects = filterDeletedProjects(mergedLive, memoryDeletedTitles);
         projectsHydrated = true;

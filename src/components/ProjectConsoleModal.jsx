@@ -1377,7 +1377,7 @@ export default function ProjectConsoleModal({
           setProjectLibrary(prev => {
             const cloudTagged = filterOutDeletedProjects(cloudProjs).map((p) => ({
               ...p,
-              storageMode: STORAGE_CLOUD
+              storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
             }));
             let merged = mergeLibrarySources({
               local: Array.isArray(prev) ? prev : [],
@@ -1910,7 +1910,7 @@ export default function ProjectConsoleModal({
     }
     try {
       const { syncFilmToCloud, syncProjectLibraryToCloud: pushLib } = await import('../services/dbService');
-      if (dest === STORAGE_CLOUD) await syncFilmToCloud(moved);
+      await syncFilmToCloud(moved);
       const live = filterOutDeletedProjects(
         (Array.isArray(projectLibrary) ? projectLibrary : []).map((p) =>
           titlesMatch(p.title, moved.title) ? moved : p

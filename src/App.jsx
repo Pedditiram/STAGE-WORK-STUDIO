@@ -48,7 +48,6 @@ import {
   scrubDemoBleedFromProject,
   LEGACY_SHARED_ROOM
 } from './utils/projectWorkspace';
-import { isCloudProject, STORAGE_CLOUD } from './utils/projectStorageMode';
 import { assertProjectWriteGate } from './utils/productionLifecycle';
 import {
   isUsableProjectTitle,
@@ -1751,7 +1750,7 @@ export default function App() {
         : [];
       updatedProjs = filterOutDeletedProjects(updatedProjs).map((p) => ({
         ...p,
-        storageMode: STORAGE_CLOUD
+        storageMode: String(p?.storageMode || '').trim().toLowerCase() === 'local' ? 'local' : 'cloud'
       }));
 
       if (healed?.title) {
@@ -1807,28 +1806,31 @@ export default function App() {
       writeLocalProjectLibrary(mergedCloud);
       window.dispatchEvent(new Event('sps_projects_updated'));
 
-      const cloudKeys = new Set(
-        updatedProjs.map((p) => String(p?.title || '').trim().toUpperCase()).filter(Boolean)
+      const remoteByTitle = new Map(
+        updatedProjs.map((p) => [String(p?.title || '').trim().toUpperCase(), p]).filter(([k]) => k)
       );
-      const cloudShelf = mergedCloud.filter((p) => isCloudProject(p));
-      const missingCloudBodies = cloudShelf.filter(
-        (p) => p?.title && !cloudKeys.has(String(p.title).trim().toUpperCase())
-      );
-      if (updatedProjs.length === 0 && cloudShelf.length) {
+      const catalogDrift = mergedCloud.some((p) => {
+        const key = String(p?.title || '').trim().toUpperCase();
+        if (!key) return false;
+        const remote = remoteByTitle.get(key);
+        if (!remote) return true;
+        return String(remote.storageMode || '').toLowerCase() !== String(p.storageMode || '').toLowerCase();
+      });
+      if (updatedProjs.length === 0 && mergedCloud.length) {
         try {
           const { loadProjectsFromVault } = await import('./services/projectDiskVault');
           const vault = await loadProjectsFromVault({ includeBlocked: true });
-          await seedCloudLibraryFromDevice(mergedCloud, (vault || []).filter(isCloudProject));
+          await seedCloudLibraryFromDevice(mergedCloud, vault || []);
         } catch {
           await syncProjectLibraryToCloud(mergedCloud);
         }
-      } else if (missingCloudBodies.length) {
+      } else if (catalogDrift) {
         await syncProjectLibraryToCloud(mergedCloud);
       }
 
       const openTitle = projectTitle;
       let filmForOpen = mergedCloud.find((p) => titlesMatch(p.title, openTitle));
-      if (isCloudProject(filmForOpen) && (!filmForOpen?.shots || !filmForOpen.shots.length) && openTitle) {
+      if (filmForOpen && (!filmForOpen?.shots || !filmForOpen.shots.length) && openTitle) {
         try {
           const cloudFilm = await fetchFilmFromCloud(openTitle);
           if (cloudFilm && Array.isArray(cloudFilm.shots) && cloudFilm.shots.length) {

@@ -271,25 +271,26 @@ function explicitStorageMode(project) {
 }
 
 /**
- * Exclusive Local vs Cloud membership. Disk folder (vault) wins.
- * A title on the local shelf is never listed as cloud, and vice versa.
- * Untagged records stay unspecified until vault/cloud assigns a shelf.
+ * Exclusive Local vs Cloud membership.
+ * Shared catalog (web + desktop) is SoT for which shelf a title is on.
+ * Disk still supplies the full film body; it does not pin a title to the wrong tab.
  */
 export function mergeExclusiveLibrary({ local = [], vault = [], cloud = [] } = {}) {
   const byTitle = new Map();
   const put = (p, source) => {
     if (!p || !String(p.title || '').trim()) return;
     const key = isDemoProjectTitle(p.title) ? '__sws_demo__' : String(p.title).trim().toLowerCase();
+    const catalogMode = explicitStorageMode(p);
     const mode =
-      source === 'vault'
-        ? normalizeStorageMode(p.storageMode)
-        : source === 'cloud'
-          ? STORAGE_CLOUD
-          : explicitStorageMode(p);
+      source === 'cloud'
+        ? catalogMode || STORAGE_CLOUD
+        : source === 'vault'
+          ? normalizeStorageMode(p.storageMode)
+          : catalogMode;
     const tagged = {
       ...p,
       ...(mode ? { storageMode: mode } : {}),
-      ...(source === 'vault' ? { _diskShelf: mode } : {})
+      ...(source === 'vault' ? { _diskShelf: normalizeStorageMode(p.storageMode) } : {})
     };
     const prev = byTitle.get(key);
     if (!prev) {
@@ -299,32 +300,22 @@ export function mergeExclusiveLibrary({ local = [], vault = [], cloud = [] } = {
     const prevMode = explicitStorageMode(prev) || prev._diskShelf || '';
     const prevDisk = prev._diskShelf;
     const nextDisk = tagged._diskShelf;
-    if (nextDisk && !prevDisk) {
-      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: nextDisk, _diskShelf: nextDisk });
-      return;
-    }
-    if (prevDisk && source === 'cloud' && prevDisk === STORAGE_LOCAL) {
-      return;
-    }
-    if (prevDisk && !nextDisk) {
-      byTitle.set(key, { ...mergeOne(tagged, prev), storageMode: prevDisk, _diskShelf: prevDisk });
-      return;
-    }
-    if (source === 'cloud' && prevMode === STORAGE_LOCAL) {
+    if (source === 'cloud') {
+      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: mode });
       return;
     }
     if (source === 'local' && !mode && (prevMode === STORAGE_CLOUD || prevDisk === STORAGE_CLOUD)) {
       return;
     }
-    if (source === 'cloud') {
-      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: STORAGE_CLOUD, ...(prevDisk ? { _diskShelf: prevDisk } : {}) });
+    if (nextDisk && !prevDisk && !prevMode) {
+      byTitle.set(key, { ...mergeOne(prev, tagged), storageMode: nextDisk, _diskShelf: nextDisk });
       return;
     }
-    const keepMode = nextDisk || prevDisk || mode || prevMode;
+    const keepMode = prevMode || nextDisk || prevDisk || mode;
     byTitle.set(key, {
       ...mergeOne(prev, tagged),
       ...(keepMode ? { storageMode: keepMode } : {}),
-      ...(keepMode && (nextDisk || prevDisk) ? { _diskShelf: nextDisk || prevDisk } : {})
+      ...(nextDisk || prevDisk ? { _diskShelf: nextDisk || prevDisk } : {})
     });
   };
 
@@ -443,7 +434,7 @@ export async function hydrateProjectLibraryFromStores({ cloud = [] } = {}) {
   const local = readLocalProjectLibrary();
   const cloudTagged = (Array.isArray(cloud) ? cloud : []).map((p) => ({
     ...p,
-    storageMode: STORAGE_CLOUD
+    storageMode: explicitStorageMode(p) || STORAGE_CLOUD
   }));
   let merged = mergeLibrarySources({
     local,
