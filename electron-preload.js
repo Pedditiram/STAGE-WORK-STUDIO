@@ -71,6 +71,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Platform info
   platform: process.platform,
 
+  // Main process keeps collab poll alive when Chromium would freeze background timers
+  onCollabWake: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => {
+      try {
+        callback();
+      } catch {
+        /* ignore */
+      }
+    };
+    ipcRenderer.on('sps-collab-wake', listener);
+    return () => ipcRenderer.removeListener('sps-collab-wake', listener);
+  },
+
   // Fullscreen controls
   setFullScreen: (flag) => ipcRenderer.invoke('window:setFullScreen', flag),
   toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),

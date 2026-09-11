@@ -35,6 +35,11 @@ const isPackaged = app.isPackaged;
 const DEV_SERVER_URL = String(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173').replace(/\/$/, '');
 const isDev = !isPackaged;
 
+// Keep Matrix room poll alive when Chrome is focused (Chromium otherwise freezes hidden timers).
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
 function resolveStudioRoots() {
   const repoProjectsDir = path.join(__dirname, 'projects');
   let documentsDir = path.join(os.homedir(), 'Documents');
@@ -156,6 +161,21 @@ function resolveAppIconPath() {
 
 // ─── Window reference ────────────────────────────────────────────────
 let mainWindow = null;
+let collabWakeTimer = null;
+
+function sendCollabWake() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.webContents.send('sps-collab-wake');
+  } catch {
+    /* ignore */
+  }
+}
+
+function startCollabWake() {
+  if (collabWakeTimer) return;
+  collabWakeTimer = setInterval(sendCollabWake, 1000);
+}
 
 function createWindow() {
   // Follow system appearance — do not force paper/dark (must match localhost UI)
@@ -180,6 +200,7 @@ function createWindow() {
       preload: path.join(__dirname, 'electron-preload.js'),
       webSecurity: true,
       allowRunningInsecureContent: false,
+      backgroundThrottling: false,
       // Default session — do not isolate from future shared profiles
       spellcheck: false,
     },
@@ -229,6 +250,10 @@ function createWindow() {
     mainWindow.focus();
   });
 
+  startCollabWake();
+  mainWindow.on('focus', sendCollabWake);
+  mainWindow.on('show', sendCollabWake);
+
   // Do NOT rewrite theme / localStorage — Electron must mirror localhost prefs (synced via disk).
   // Shell ≠ identity: Electron and Chrome localhost are the same user when the same email is signed in.
   // Collab "remote" = other room members, never the browser shell.
@@ -243,6 +268,10 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (collabWakeTimer) {
+      clearInterval(collabWakeTimer);
+      collabWakeTimer = null;
+    }
   });
 }
 

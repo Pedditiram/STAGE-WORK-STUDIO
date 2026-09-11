@@ -16,11 +16,12 @@ export const PRODUCTION_SYNC_ORIGIN = 'https://www.stageworkstudio.com';
 const RESTFUL_HUB_URL = 'https://api.restful-api.dev/objects/ff8081819f7e10ae019f987050d92556';
 const JSONBLOB_HUB_URL = 'https://jsonblob.com/api/jsonBlob/019ff13d-43e0-74db-bb8d-6211e85dc74e';
 
-/** Active-tab room poll fallback. Hidden tabs back off. Tick poll is ~1s when KV ticks exist. */
+/** Active-tab room poll. Hidden browser tabs back off; Electron stays live (main-process wake). */
 const POLL_MS_ACTIVE = 4000;
 const POLL_MS_HIDDEN = 30000;
 const TICK_MS_ACTIVE = 1000;
 const TICK_MS_HIDDEN = 8000;
+const WALL_CLOCK_REV = 1e11;
 
 let db = null;
 let broadcastChannel = null;
@@ -41,6 +42,25 @@ function getRoomState(roomId) {
 
 function isBrowser() {
   return typeof window !== 'undefined';
+}
+
+function isElectronShell() {
+  return isBrowser() && Boolean(window.electronAPI?.isElectron);
+}
+
+function documentIsHidden() {
+  if (isElectronShell()) return false;
+  return typeof document !== 'undefined' && document.hidden;
+}
+
+function counterRevision(rev) {
+  const n = typeof rev === 'number' && Number.isFinite(rev) ? rev : 0;
+  if (n >= WALL_CLOCK_REV) return 0;
+  return Math.max(0, Math.floor(n));
+}
+
+function nextRoomRevision(...revs) {
+  return Math.max(0, ...revs.map(counterRevision)) + 1;
 }
 
 function isProductionHost(hostname = '') {
@@ -133,22 +153,23 @@ function isNewerPayload(remote, localUpdatedAt, localRevision = 0) {
   const remoteTs = Date.parse(remote?.lastUpdated || '') || 0;
   const localTs = Date.parse(localUpdatedAt || '') || 0;
   if (remoteTs && localTs && remoteTs !== localTs) return remoteTs > localTs;
-  const remoteRev = typeof remote?.revision === 'number' ? remote.revision : 0;
-  if (remoteRev && localRevision && remoteRev !== localRevision) return remoteRev > localRevision;
+  const remoteRev = counterRevision(remote?.revision);
+  const localRev = counterRevision(localRevision);
+  if (remoteRev && localRev && remoteRev !== localRev) return remoteRev > localRev;
   if (remoteTs && !localTs) return true;
-  if (remoteRev && !localRevision) return true;
+  if (remoteRev && !localRev) return true;
   return false;
 }
 
 function normalizeRoomPayload(roomId, projectData = {}) {
   const state = getRoomState(roomId);
-  const prevRev = typeof state.lastAppliedRevision === 'number' ? state.lastAppliedRevision : 0;
-  const incomingRev = typeof projectData.revision === 'number' ? projectData.revision : 0;
+  const prevRev = counterRevision(state.lastAppliedRevision);
+  const incomingRev = counterRevision(projectData.revision);
   return {
     ...projectData,
     roomId,
     lastUpdated: new Date().toISOString(),
-    revision: Math.max(incomingRev, prevRev + 1, Date.now())
+    revision: nextRoomRevision(incomingRev, prevRev)
   };
 }
 
@@ -287,16 +308,13 @@ export function subscribeToCollabTick(roomId, projectTitle, callback) {
 
     const schedule = () => {
       if (entry.timer) clearInterval(entry.timer);
-      const ms =
-        isBrowser() && typeof document !== 'undefined' && document.hidden
-          ? TICK_MS_HIDDEN
-          : TICK_MS_ACTIVE;
+      const ms = documentIsHidden() ? TICK_MS_HIDDEN : TICK_MS_ACTIVE;
       entry.timer = setInterval(() => poll('poll'), ms);
     };
 
     const onVis = () => {
       if (entry.cancelled) return;
-      if (typeof document !== 'undefined' && document.hidden) {
+      if (documentIsHidden()) {
         schedule();
         return;
       }
@@ -314,6 +332,9 @@ export function subscribeToCollabTick(roomId, projectTitle, callback) {
       window.addEventListener('focus', onVis);
       window.addEventListener('pageshow', onVis);
     }
+    if (isElectronShell() && window.electronAPI?.onCollabWake) {
+      entry.unsubElectron = window.electronAPI.onCollabWake(() => poll('electron'));
+    }
   } else if (projectTitle && !entry.projectTitle) {
     entry.projectTitle = projectTitle;
   }
@@ -328,6 +349,7 @@ export function subscribeToCollabTick(roomId, projectTitle, callback) {
       window.removeEventListener('focus', entry.onVis);
       window.removeEventListener('pageshow', entry.onVis);
     }
+    if (typeof entry.unsubElectron === 'function') entry.unsubElectron();
     collabTickListeners.delete(bucketKey);
   };
 }
@@ -423,7 +445,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
     if (payloadStr === state.lastSyncedPayloadStr) return;
 
     const remoteUpdated = payload.lastUpdated || '';
-    const remoteRev = typeof payload.revision === 'number' ? payload.revision : 0;
+    const remoteRev = counterRevision(payload.revision);
     // Ignore strictly older remote payloads (prevents echo / ping-pong)
     if ((remoteRev || remoteUpdated) && !isNewerPayload(payload, state.lastAppliedUpdatedAt, state.lastAppliedRevision)) {
       return;
@@ -485,16 +507,13 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
 
   const schedulePoll = () => {
     if (pollTimer) clearInterval(pollTimer);
-    const ms =
-      isBrowser() && typeof document !== 'undefined' && document.hidden
-        ? POLL_MS_HIDDEN
-        : POLL_MS_ACTIVE;
+    const ms = documentIsHidden() ? POLL_MS_HIDDEN : POLL_MS_ACTIVE;
     pollTimer = setInterval(pollCloudDatabase, ms);
   };
 
   const onVisibilityOrFocus = () => {
     if (cancelled) return;
-    if (typeof document !== 'undefined' && document.hidden) {
+    if (documentIsHidden()) {
       schedulePoll();
       return;
     }
@@ -527,6 +546,14 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
     window.addEventListener('pageshow', onVisibilityOrFocus);
   }
 
+  let unsubElectron = () => {};
+  if (isElectronShell() && window.electronAPI?.onCollabWake) {
+    unsubElectron = window.electronAPI.onCollabWake(() => {
+      if (cancelled) return;
+      pollCloudDatabase();
+    });
+  }
+
   // 5. Firestore realtime (optional)
   let unsubscribeFirestore = () => {};
   if (db) {
@@ -553,6 +580,7 @@ export function subscribeToCloudRoom(roomId, onDataReceived, projectTitle = '') 
       window.removeEventListener('pageshow', onVisibilityOrFocus);
     }
     if (broadcastChannel) broadcastChannel.removeEventListener('message', handleBroadcast);
+    if (typeof unsubElectron === 'function') unsubElectron();
     unsubscribeFirestore();
   };
 }
@@ -614,8 +642,9 @@ export async function publishToCloudRoom(roomId, projectData) {
       serverData = res?.data || networkPayload;
       state.lastSyncedPayloadStr = JSON.stringify(serverData);
       state.lastAppliedUpdatedAt = serverData.lastUpdated || payload.lastUpdated;
-      state.lastAppliedRevision =
-        typeof serverData.revision === 'number' ? serverData.revision : payload.revision;
+      state.lastAppliedRevision = counterRevision(
+        typeof serverData.revision === 'number' ? serverData.revision : payload.revision
+      );
     }
   } catch (e) {}
 

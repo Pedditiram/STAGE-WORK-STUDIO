@@ -260,8 +260,21 @@ function compactRoomForGet(room) {
   return { ...room, shots, projectGeneratedImages: undefined };
 }
 
+/** Client used to send Date.now() as revision (~1e12). Those lose to lastUpdated. */
+const WALL_CLOCK_REV = 1e11;
+
+function counterRevision(rev) {
+  const n = typeof rev === 'number' && Number.isFinite(rev) ? rev : 0;
+  if (n >= WALL_CLOCK_REV) return 0;
+  return Math.max(0, Math.floor(n));
+}
+
+function nextRoomRevision(...revs) {
+  return Math.max(0, ...revs.map(counterRevision)) + 1;
+}
+
 function revisionOf(payload) {
-  const r = typeof payload?.revision === 'number' ? payload.revision : 0;
+  const r = counterRevision(payload?.revision);
   if (r) return r;
   return Date.parse(payload?.lastUpdated || '') || 0;
 }
@@ -292,11 +305,7 @@ function mergeTickMaps(base = {}, extra = {}) {
   const out = { ...(base || {}) };
   Object.entries(extra || {}).forEach(([id, stamp]) => {
     const prev = out[id];
-    const prevRev = typeof prev?.revision === 'number' ? prev.revision : 0;
-    const nextRev = typeof stamp?.revision === 'number' ? stamp.revision : 0;
-    const prevAt = Date.parse(prev?.lastUpdated || '') || 0;
-    const nextAt = Date.parse(stamp?.lastUpdated || '') || 0;
-    if (!prev || nextRev > prevRev || (nextRev === prevRev && nextAt >= prevAt)) {
+    if (!prev || isNewerRevision(stamp, prev)) {
       out[id] = stamp;
     }
   });
@@ -412,8 +421,8 @@ function isNewerRevision(incoming, existing) {
   const it = Date.parse(incoming?.lastUpdated || '') || 0;
   const et = Date.parse(existing?.lastUpdated || '') || 0;
   if (it && et && it !== et) return it > et;
-  const ir = typeof incoming?.revision === 'number' ? incoming.revision : 0;
-  const er = typeof existing?.revision === 'number' ? existing.revision : 0;
+  const ir = counterRevision(incoming?.revision);
+  const er = counterRevision(existing?.revision);
   if (ir && er && ir !== er) return ir > er;
   if (it && !et) return true;
   if (!er) return true;
@@ -423,7 +432,7 @@ function isNewerRevision(incoming, existing) {
 function pickNewerRoom(a, b) {
   if (!a) return b || null;
   if (!b) return a;
-  return revisionOf(b) > revisionOf(a) ? b : a;
+  return isNewerRevision(b, a) ? b : a;
 }
 
 function mergeShots(existingShots, incomingShots) {
@@ -1985,14 +1994,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // Room write — last-write-wins by revision; await durable save so peer GETs see it
+    // Room write — last-write-wins by lastUpdated; await durable save so peer GETs see it
     const payload = body.data || body;
     if (payload && typeof payload === 'object') {
       await hydrateRoomsFromDurable();
       const existingRoom = memoryRooms[safeRoomId] || {};
       const stamped = {
         ...payload,
-        revision: typeof payload.revision === 'number' ? payload.revision : Date.now(),
+        revision: nextRoomRevision(existingRoom.revision, payload.revision),
         lastUpdated: new Date().toISOString()
       };
 

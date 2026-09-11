@@ -801,13 +801,19 @@ function localDiskVaultPlugin() {
               const payload = body.data || body;
               const roomPath = path.join(cloudRoomsDir, safeRoomFileName(roomId));
               const existingRoom = readJsonFile(roomPath, {});
+              const wallRev = 1e11;
+              const asCounter = (rev) => {
+                const n = typeof rev === 'number' && Number.isFinite(rev) ? rev : 0;
+                return n >= wallRev ? 0 : Math.max(0, Math.floor(n));
+              };
               const stamped = {
                 ...payload,
-                revision: typeof payload.revision === 'number' ? payload.revision : Date.now(),
+                revision: Math.max(asCounter(existingRoom?.revision), asCounter(payload?.revision)) + 1,
                 lastUpdated: new Date().toISOString()
               };
-              const existingRev = typeof existingRoom?.revision === 'number' ? existingRoom.revision : 0;
-              if (existingRev && stamped.revision < existingRev) {
+              const existingAt = Date.parse(existingRoom?.lastUpdated || '') || 0;
+              const incomingAt = Date.parse(stamped.lastUpdated || '') || 0;
+              if (existingAt && incomingAt && incomingAt < existingAt) {
                 return sendJson(res, 200, { success: true, data: existingRoom, skipped: 'stale' });
               }
 
