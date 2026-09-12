@@ -680,7 +680,7 @@ export default function AiScriptBreakdownPanel({
                 <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs text-[color:var(--sps-muted)]">
-                      Engine: <strong className="text-cyan-800 dark:text-cyan-400 font-bold">AI Cinema Production OS ({CRAFT_COUNT} Crafts)</strong>
+                      Engine: <strong className="text-cyan-800 dark:text-cyan-400 font-bold">Cinema Production OS ({CRAFT_COUNT} Crafts)</strong>
                     </span>
                     <div className="flex items-center gap-1.5">
                       {isLoadingFile ? (

@@ -209,6 +209,30 @@ export const saveProjectToVault = async (project) => {
   };
 
   try {
+    const { isDemoProjectTitle } = await import('../utils/demoStudioProject');
+    const { matrixLooksLikePlaceholder, recoverShotsFromProject } = await import('../utils/matrixSyncGuard');
+    if (matrixLooksLikePlaceholder(ensured.shots) && !isDemoProjectTitle(title)) {
+      const disk = await loadProjectFromDiskByTitle(title);
+      const recovered = recoverShotsFromProject(disk) || recoverShotsFromProject(ensured);
+      if (recovered) {
+        ensured.shots = recovered;
+        if (disk && typeof disk === 'object') {
+          Object.assign(ensured, {
+            ...disk,
+            ...ensured,
+            shots: recovered,
+            title
+          });
+        }
+      } else if (Array.isArray(disk?.shots) && disk.shots.length >= 8) {
+        ensured.shots = disk.shots;
+      }
+    }
+  } catch {
+    /* keep incoming */
+  }
+
+  try {
     const { projectLibraryStorageKey } = await import('../utils/tenantScope');
     const savedLib = localStorage.getItem(projectLibraryStorageKey());
     const lib = savedLib ? JSON.parse(savedLib) : [];

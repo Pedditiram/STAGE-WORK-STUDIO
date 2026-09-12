@@ -67,7 +67,7 @@ import {
 } from './utils/bibleSoTHealth';
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
 import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './utils/demoStudioProject';
-import { matrixLooksLikePlaceholder, shouldRejectIncomingMatrix } from './utils/matrixSyncGuard';
+import { matrixLooksLikePlaceholder, recoverShotsFromProject, shouldRejectIncomingMatrix } from './utils/matrixSyncGuard';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -1533,7 +1533,8 @@ export default function App() {
             (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))
           ) {
             const fullDisk = await loadProjectFromDiskByTitle(preferred.title);
-            if (fullDisk?.shots?.length && !matrixLooksLikePlaceholder(fullDisk.shots)) openProj = fullDisk;
+            const recovered = recoverShotsFromProject(fullDisk) || recoverShotsFromProject(openProj);
+            if (recovered) openProj = { ...(fullDisk || openProj), shots: recovered };
           }
           if (isDemoProjectTitle(openProj?.title || preferred.title)) {
             openProj = resolveCurrentDemoProject(openProj);
@@ -1607,7 +1608,8 @@ export default function App() {
           (isDemoProjectTitle(openProj.title) && !demoShotsLookFilled(openProj.shots))
         ) {
           const fullDisk = await loadProjectFromDiskByTitle(wantTitle);
-          if (fullDisk?.shots?.length && !matrixLooksLikePlaceholder(fullDisk.shots)) openProj = fullDisk;
+          const recovered = recoverShotsFromProject(fullDisk) || recoverShotsFromProject(openProj);
+          if (recovered) openProj = { ...(fullDisk || openProj), shots: recovered };
         }
         if (isDemoProjectTitle(openProj?.title || wantTitle)) {
           openProj = resolveCurrentDemoProject(openProj);
@@ -2498,6 +2500,16 @@ export default function App() {
       const mergedImages = { ...projectGeneratedImages, ...vaultImages };
       setProjectGeneratedImages(mergedImages);
 
+      let persistShots = shots;
+      if (matrixLooksLikePlaceholder(persistShots) && !isDemoProjectTitle(projectTitle)) {
+        const disk = await loadProjectFromDiskByTitle(projectTitle);
+        const recovered = recoverShotsFromProject(disk);
+        if (recovered) {
+          persistShots = recovered;
+          setShots(recovered);
+        }
+      }
+
       let library = [];
       try {
         library = readLocalProjectLibrary();
@@ -2516,12 +2528,12 @@ export default function App() {
       const updatedProjectData = {
         id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
         title: projectTitle,
-        description: `Cinema Production Studio Project with ${shots.length} shots`,
+        description: `Cinema Production Studio Project with ${persistShots.length} shots`,
         targetModel: targetModel,
         aspectRatio: aspectRatio,
         roomId: roomId,
         lastModified: nowStr,
-        shots: shots,
+        shots: persistShots,
         projectGeneratedImages: mergedImages
       };
 
@@ -2540,7 +2552,7 @@ export default function App() {
       saveProjectToVault({
         ...(existingIdx !== -1 ? library.find((p) => titlesMatch(p.title, projectTitle)) : {}),
         title: projectTitle,
-        shots,
+        shots: persistShots,
         projectGeneratedImages: mergedImages,
         targetModel,
         aspectRatio,
@@ -2548,11 +2560,11 @@ export default function App() {
         lastModified: nowStr
       }).catch(() => {});
       safeLocalStorageSetItem('sps_current_project_title', projectTitle);
-      safeLocalStorageSetItem('sps_current_shots', JSON.stringify(shots));
+      safeLocalStorageSetItem('sps_current_shots', JSON.stringify(persistShots));
       safeLocalStorageSetItem('sps_generated_images_map', JSON.stringify(projectGeneratedImages));
       
       // 1. UPLOAD LOCAL EDITS TO CLOUD
-      await syncToCloud({ shots, projectGeneratedImages, projectTitle, library }, { flush: true });
+      await syncToCloud({ shots: persistShots, projectGeneratedImages, projectTitle, library }, { flush: true });
 
       const savedUsersStr = localStorage.getItem('sps_authorized_phone_users');
       if (savedUsersStr) {

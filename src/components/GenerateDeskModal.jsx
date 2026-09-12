@@ -6,7 +6,6 @@ import { compileMasterCinemaCompilerPrompt } from '../utils/compileMasterCinemaP
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import { saveExportBlob } from '../utils/saveExportFile';
 import { createZipArchive } from '../utils/zipUtils';
-import StudioProfileControl from './StudioProfileControl';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { assertExportAllowed, exportDownloadText, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
 import { managedCreditStatus } from '../utils/saasControl';
@@ -1443,10 +1442,9 @@ export default function GenerateDeskModal({
         <div className="sps-modal-head">
           <div>
             <h2>Generate</h2>
-            <p>AI Cinema Production OS · {id} · {dur}s · {takeSummary.stillCount} still · {takeSummary.videoCount} video take{takeSummary.videoCount === 1 ? '' : 's'}</p>
+            <p>Cinema Production OS · {id} · {dur}s · {takeSummary.stillCount} still · {takeSummary.videoCount} video take{takeSummary.videoCount === 1 ? '' : 's'}</p>
           </div>
           <div className="flex items-center gap-1.5">
-            {!asRoom ? <StudioProfileControl /> : null}
             {!asRoom ? (
             <button type="button" className="sps-icon-btn" onClick={onClose} title="Close">
               <X className="w-4 h-4" />

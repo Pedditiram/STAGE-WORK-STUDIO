@@ -94,19 +94,19 @@ export default async function handler(req, res) {
 
     const subject =
       purpose === 'recovery'
-        ? 'Stage Work Studio — AI Cinema Production OS — Admin password recovery OTP'
-        : 'Stage Work Studio — AI Cinema Production OS — Your collaboration OTP';
+        ? 'Stage Work Studio — Cinema Production OS — Admin password recovery OTP'
+        : 'Stage Work Studio — Cinema Production OS — Your collaboration OTP';
 
     const intro =
       purpose === 'recovery'
-        ? 'Use this one-time code to reset your Admin password in Stage Work Studio — AI Cinema Production OS.'
+        ? 'Use this one-time code to reset your Admin password in Stage Work Studio — Cinema Production OS.'
         : `You have been invited to collaborate${collaboratorName ? ` as ${collaboratorName}` : ''}${
             roomId ? ` on room ${roomId}` : ''
           }.`;
 
     const html = `
       <div style="font-family:ui-monospace,Menlo,Consolas,monospace;max-width:480px;margin:0 auto;padding:24px;background:#0a0a0a;color:#e4e4e7;border:1px solid #27272a;border-radius:12px;">
-        <p style="margin:0 0 8px;color:#c9a36a;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Stage Work Studio — AI Cinema Production OS</p>
+        <p style="margin:0 0 8px;color:#c9a36a;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Stage Work Studio — Cinema Production OS</p>
         <h1 style="margin:0 0 16px;font-size:18px;color:#fafafa;">Security OTP</h1>
         <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#a1a1aa;">${intro}</p>
         <p style="margin:0 0 8px;font-size:12px;color:#71717a;">Your 6-digit code</p>
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
       </div>
     `;
 
-    const text = `Stage Work Studio — AI Cinema Production OS\n\n${intro}\n\nOTP: ${otp}\n\nIf you did not request this, ignore this email.`;
+    const text = `Stage Work Studio — Cinema Production OS\n\n${intro}\n\nOTP: ${otp}\n\nIf you did not request this, ignore this email.`;
 
     const mailResult = await sendResend({
       to,

@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('sps-collab-wake', listener);
   },
 
+  revealPath: (folderPath) => ipcRenderer.invoke('vault:revealPath', folderPath),
+
   // Fullscreen controls
   setFullScreen: (flag) => ipcRenderer.invoke('window:setFullScreen', flag),
   toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),

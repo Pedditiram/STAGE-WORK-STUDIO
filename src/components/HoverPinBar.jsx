@@ -36,8 +36,8 @@ export default function HoverPinBar({
   className = '',
   barClassName = '',
   wrap = true,
-  /** Header already has account. Matrix craft bar should not add a second P. */
-  showProfile = true,
+  /** Header already owns account. Bars must not add a second P. */
+  showProfile = false,
   children
 }) {
   const [pinned, setPinned] = useState(() => {

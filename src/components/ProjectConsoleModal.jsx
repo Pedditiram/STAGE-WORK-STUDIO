@@ -4,7 +4,7 @@ import {
   RefreshCw, Download, ExternalLink, ShieldAlert, Sparkles, 
   CheckCircle2, Clock, Globe, ArrowRight, Wand2, Upload, Loader2, FolderKanban, Sliders, Maximize2,
   Brain, Camera, Music2, Ratio, KeyRound, Play, Archive, RotateCcw, ChevronDown,
-  LayoutGrid, PanelLeft, Settings, Lock, Cloud, HardDrive
+  LayoutGrid, PanelLeft, Settings, Lock, Cloud, HardDrive, FolderOpen
 } from 'lucide-react';
 import { 
   composeDirectorPsychologyWithLLM, composeHybridVisionMergeWithLLM,
@@ -48,6 +48,7 @@ import {
   PROJECT_PATH_KEYS,
   PROJECT_PATH_LABELS,
   defaultAssetRootsUnder,
+  emptyAssetRoots,
   extractStudioRootFromAssetPath,
   nestAssetRootsUnderProjectName,
   normalizeAssetRoots,
@@ -65,6 +66,7 @@ import ProjectDrivePanel from './ProjectDrivePanel';
 import AiScriptBreakdownPanel from './AiScriptBreakdownPanel';
 import { PinBarButton } from './HoverPinBar';
 import StudioProfileControl from './StudioProfileControl';
+import StageWorksMark from './StageWorksMark';
 import {
   getCurrentUserEmail,
   getCurrentUserProfile,
@@ -280,6 +282,8 @@ export default function ProjectConsoleModal({
   const posterDblTapRef = React.useRef({ id: null, t: 0 });
   const [targetPosterProjId, setTargetPosterProjId] = useState(null);
   const [assetFoldersProjId, setAssetFoldersProjId] = useState(null);
+  const [studioRootPreview, setStudioRootPreview] = useState('');
+  const [showEachAssetFolder, setShowEachAssetFolder] = useState(false);
   const [libraryView, setLibraryView] = useState(readLibraryViewMode);
   const [libraryShelf, setLibraryShelfState] = useState(readLibraryShelf);
 
@@ -1631,6 +1635,28 @@ export default function ProjectConsoleModal({
     [projectLibrary, assetFoldersProjId]
   );
 
+  const assetFolderPaths = useMemo(() => {
+    if (!assetFoldersProj) return null;
+    const filmFolder = sanitizeProjectFolderName(assetFoldersProj.title);
+    const previewRoots = studioRootPreview
+      ? defaultAssetRootsUnder(studioRootPreview, assetFoldersProj.title)
+      : emptyAssetRoots();
+    const stored = normalizeAssetRoots(assetFoldersProj.assetRoots);
+    const shown = (key) => String(stored[key] || previewRoots[key] || '');
+    const shelf = String(assetFoldersProj.storageMode || 'local').toLowerCase() === 'cloud' ? 'cloud' : 'local';
+    const root = String(studioRootPreview || '').replace(/\/$/, '');
+    return {
+      filmFolder,
+      stored,
+      shown,
+      studioRoot: root || '~/Documents/Stage Work Studio',
+      vaultJson: root
+        ? `${root}/projects/${shelf}/${filmFolder}.json`
+        : `~/Documents/Stage Work Studio/projects/${shelf}/${filmFolder}.json`,
+      filmRoot: root ? `${root}/${filmFolder}` : `~/Documents/Stage Work Studio/${filmFolder}`
+    };
+  }, [assetFoldersProj, studioRootPreview]);
+
   const consoleScrollRef = useRef(null);
   const lastConsoleScrollRef = useRef(0);
   const [consoleToolbarHidden, setConsoleToolbarHidden] = useState(false);
@@ -1691,6 +1717,39 @@ export default function ProjectConsoleModal({
     root.addEventListener('wheel', onWheel, { passive: true });
     return () => root.removeEventListener('wheel', onWheel);
   }, [isOpen, consoleToolbarPinned, profileMenuOpen]);
+
+  useEffect(() => {
+    if (!assetFoldersProjId) {
+      setStudioRootPreview('');
+      setShowEachAssetFolder(false);
+      return undefined;
+    }
+    let cancelled = false;
+    resolveDefaultFilmStudioRoot().then((root) => {
+      if (!cancelled) setStudioRootPreview(String(root || '').trim());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [assetFoldersProjId]);
+
+  const revealOnDisk = async (folderPath) => {
+    const p = String(folderPath || '').trim();
+    if (!p) return;
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI?.revealPath) {
+        const res = await window.electronAPI.revealPath(p);
+        if (res?.ok) return;
+        if (res?.error === 'missing') {
+          window.alert(`That folder is not on disk yet.\nClick Default Path to create it.\n\n${p}`);
+          return;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    window.alert(`On this Mac:\n${p}`);
+  };
 
   useEffect(() => {
     if (!assetFoldersProjId) return undefined;
@@ -3476,115 +3535,207 @@ export default function ProjectConsoleModal({
 
       </div>
 
-      {/* Asset folders — per-project floating panel */}
-      {assetFoldersProj && (
+      {/* Asset folders — login-pattern sheet with full disk paths */}
+      {assetFoldersProj && assetFolderPaths && (
         <div
-          className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`ComfyUI asset folders for ${assetFoldersProj.title}`}
+          className="sps-overlay"
+          style={{ zIndex: 100 }}
+          role="presentation"
           onClick={(e) => {
             if (e.target === e.currentTarget) setAssetFoldersProjId(null);
           }}
         >
           <div
-            className="sps-asset-folders-popup bg-[var(--sps-bg-elevated)] border border-[var(--sps-border)] shadow-2xl max-w-xl w-full max-h-[min(90vh,720px)] flex flex-col overflow-hidden"
+            className="sps-shell sps-login-shell sps-asset-folders-shell"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sps-asset-folders-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-4 py-3 border-b border-[var(--sps-border)] flex items-center justify-between gap-3 bg-[var(--sps-surface)]">
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white m-0 truncate" style={{ fontFamily: 'var(--sps-font-display)' }}>
-                  {assetFoldersProj.title}
-                </h3>
-                <p className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-zinc-500 m-0 mt-0.5">
-                  Asset folders · ASSETS RENDERS PROJECT
-                </p>
+            <div className="sps-modal-head">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="sps-mark shrink-0 overflow-hidden p-0">
+                  <StageWorksMark size={32} className="w-8 h-8 object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <h2 id="sps-asset-folders-title">{assetFoldersProj.title} folders</h2>
+                  <p>On this Mac</p>
+                </div>
               </div>
               <button
                 type="button"
+                className="sps-icon-btn"
                 onClick={() => setAssetFoldersProjId(null)}
-                className="sps-chrome-btn p-1.5 shrink-0"
-                aria-label="Close asset folders"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto flex-1 space-y-3 text-[10px]">
-              <p className="m-0 text-[9px] uppercase tracking-widest text-slate-400">Look sheets (Image_1…9)</p>
-              {ASSET_ROOT_KEYS.map((key) => (
-                <label key={key} className="block text-slate-600 dark:text-zinc-400">
-                  {ASSET_ROOT_LABELS[key]}
-                  <input
-                    type="text"
-                    className="sps-input w-full mt-0.5 font-mono text-[11px]"
-                    value={String(assetFoldersProj.assetRoots?.[key] || '')}
-                    placeholder={`/Volumes/…/ASSETS/${key[0].toUpperCase()}${key.slice(1)}`}
-                    onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
-                  />
-                </label>
-              ))}
-              <p className="m-0 pt-1 text-[9px] uppercase tracking-widest text-slate-400">Renders & project</p>
-              {PROJECT_PATH_KEYS.map((key) => (
-                <label key={key} className="block text-slate-600 dark:text-zinc-400">
-                  {PROJECT_PATH_LABELS[key]}
-                  <input
-                    type="text"
-                    className="sps-input w-full mt-0.5 font-mono text-[11px]"
-                    value={String(assetFoldersProj.assetRoots?.[key] || '')}
-                    placeholder={
-                      key === 'rendersVideo'
-                        ? '/Volumes/…/RENDERS/Video'
-                        : key === 'rendersImage'
-                          ? '/Volumes/…/RENDERS/Image'
-                          : key === 'workflows'
-                            ? '/Volumes/…/PROJECT/Workflows'
-                            : '/Volumes/…/PROJECT/Versions'
-                    }
-                    onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
-                  />
-                </label>
-              ))}
-              <label className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 pt-0.5">
-                <input
-                  type="checkbox"
-                  checked={normalizeAssetRoots(assetFoldersProj.assetRoots).versioning}
-                  onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, 'versioning', e.target.checked)}
-                />
-                Version project saves
-                <span className="opacity-70">
-                  {normalizeAssetRoots(assetFoldersProj.assetRoots).versioning
-                    ? `(next v${String(normalizeAssetRoots(assetFoldersProj.assetRoots).projectVersion).padStart(3, '0')})`
-                    : '(off)'}
+            <div className="sps-modal-body sps-login-body">
+              <div className="sps-login-note">
+                <FolderOpen className="w-4 h-4 shrink-0" style={{ color: 'var(--sps-gold)' }} />
+                <span>
+                  Film file is on disk. ASSETS · RENDERS · PROJECT appear after Default path.
                 </span>
-              </label>
-              <p className="m-0 text-[9px] text-slate-500 dark:text-zinc-500 leading-snug">
-                Default is Documents/Stage Work Studio. Custom picks another root. Either one creates{' '}
-                <span className="font-mono">
-                  {sanitizeProjectFolderName(assetFoldersProj.title)}/ASSETS · RENDERS · PROJECT
-                </span>{' '}
-                under that root — not loose folders at the root.
-              </p>
-            </div>
+              </div>
 
-            <div className="px-4 py-3 border-t border-[var(--sps-border)] flex flex-wrap gap-2 bg-[var(--sps-surface)]">
-              <button
-                type="button"
-                className="sps-btn sps-btn-primary text-[10px]"
-                onClick={() => handleDefaultFilmPath(assetFoldersProj)}
-              >
-                Default path
-              </button>
-              <button
-                type="button"
-                className="sps-btn text-[10px]"
-                onClick={() => handleCustomFilmPath(assetFoldersProj)}
-              >
-                Custom path
-              </button>
-              <button type="button" className="sps-btn text-[10px] ml-auto" onClick={() => setAssetFoldersProjId(null)}>
-                Close
-              </button>
+              <div className="sps-login-form">
+                <label>
+                  Studio folder
+                  <span className="sps-path-row">
+                    <textarea
+                      className="sps-path-input"
+                      rows={2}
+                      readOnly
+                      value={assetFolderPaths.studioRoot}
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className="sps-login-link"
+                      onClick={() => revealOnDisk(assetFolderPaths.studioRoot)}
+                    >
+                      Show
+                    </button>
+                  </span>
+                </label>
+
+                <label>
+                  Film file
+                  <span className="sps-path-row">
+                    <textarea
+                      className="sps-path-input"
+                      rows={2}
+                      readOnly
+                      value={assetFolderPaths.vaultJson}
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className="sps-login-link"
+                      onClick={() => revealOnDisk(assetFolderPaths.vaultJson)}
+                    >
+                      Show
+                    </button>
+                  </span>
+                </label>
+
+                <label>
+                  Film folders
+                  <span className="sps-path-row">
+                    <textarea
+                      className="sps-path-input"
+                      rows={2}
+                      readOnly
+                      value={assetFolderPaths.filmRoot}
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className="sps-login-link"
+                      onClick={() => revealOnDisk(assetFolderPaths.filmRoot)}
+                    >
+                      Show
+                    </button>
+                  </span>
+                </label>
+                <p className="sps-login-hint" style={{ textAlign: 'left' }}>
+                  Under that folder: ASSETS · RENDERS · PROJECT
+                </p>
+
+                {showEachAssetFolder ? (
+                  <>
+                    {ASSET_ROOT_KEYS.map((key) => (
+                      <label key={key}>
+                        {ASSET_ROOT_LABELS[key]}
+                        <span className="sps-path-row">
+                          <textarea
+                            className="sps-path-input"
+                            rows={2}
+                            value={assetFolderPaths.shown(key)}
+                            spellCheck={false}
+                            onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="sps-login-link"
+                            onClick={() => revealOnDisk(assetFolderPaths.shown(key))}
+                          >
+                            Show
+                          </button>
+                        </span>
+                      </label>
+                    ))}
+                    {PROJECT_PATH_KEYS.map((key) => (
+                      <label key={key}>
+                        {PROJECT_PATH_LABELS[key]}
+                        <span className="sps-path-row">
+                          <textarea
+                            className="sps-path-input"
+                            rows={2}
+                            value={assetFolderPaths.shown(key)}
+                            spellCheck={false}
+                            onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, key, e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="sps-login-link"
+                            onClick={() => revealOnDisk(assetFolderPaths.shown(key))}
+                          >
+                            Show
+                          </button>
+                        </span>
+                      </label>
+                    ))}
+                    <label className="sps-login-agree">
+                      <input
+                        type="checkbox"
+                        checked={assetFolderPaths.stored.versioning}
+                        onChange={(e) => patchProjectAssetRoot(assetFoldersProj.id, 'versioning', e.target.checked)}
+                      />
+                      <span>
+                        Version project saves
+                        {assetFolderPaths.stored.versioning
+                          ? ` (next v${String(assetFolderPaths.stored.projectVersion).padStart(3, '0')})`
+                          : ' (off)'}
+                      </span>
+                    </label>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="sps-login-link is-muted"
+                    onClick={() => setShowEachAssetFolder(true)}
+                  >
+                    Show each folder
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="sps-btn sps-btn-primary w-full"
+                  onClick={() => handleDefaultFilmPath(assetFoldersProj)}
+                >
+                  Default path
+                </button>
+                <div className="sps-login-links">
+                  <button
+                    type="button"
+                    className="sps-login-link"
+                    onClick={() => handleCustomFilmPath(assetFoldersProj)}
+                  >
+                    Custom path
+                  </button>
+                  <button
+                    type="button"
+                    className="sps-login-link is-muted"
+                    onClick={() => setAssetFoldersProjId(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

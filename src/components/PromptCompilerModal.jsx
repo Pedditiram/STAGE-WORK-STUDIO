@@ -14,8 +14,6 @@ import { assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../u
 import { lifecycleExportReadiness } from '../utils/productionLifecycle';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { compilerPromptsToPrintHtml } from '../utils/compilerExport';
-import StudioProfileControl from './StudioProfileControl';
-
 export default function PromptCompilerModal({
   isOpen,
   onClose,
@@ -956,7 +954,6 @@ ${mainPrompt}`;
                 <Minimize2 className="w-3.5 h-3.5" />
                 Exit
               </button>
-              <StudioProfileControl />
               <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />
               </button>
@@ -966,7 +963,7 @@ ${mainPrompt}`;
           <div className="sps-modal-head">
             <div>
               <h2>Prompt Compiler</h2>
-              <p>AI Cinema Production OS — one video prompt per shot.</p>
+              <p>Cinema Production OS — one video prompt per shot.</p>
             </div>
             <div className="flex items-center gap-1.5">
               {!asRoom ? (
@@ -979,7 +976,6 @@ ${mainPrompt}`;
                 Full screen
               </button>
               ) : null}
-              {!asRoom ? <StudioProfileControl /> : null}
               {!asRoom ? (
               <button type="button" onClick={onClose} className="sps-icon-btn" title="Close">
                 <X className="w-5 h-5" />

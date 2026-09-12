@@ -17,7 +17,6 @@ import { extractWorldEnvironmentAssetsWithLLM } from '../services/aiScriptParser
 import { readLockedImageFile } from '../utils/continuitySpine';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
-import StudioProfileControl from './StudioProfileControl';
 import { isGuestSession } from '../utils/projectPermissions';
 import {
   getActiveWorldAssets,
@@ -532,7 +531,6 @@ export default function WorldEnvironmentConsole({
               ZIP
             </button>
 
-            {!asRoom ? <StudioProfileControl /> : null}
             {!asRoom ? (
             <button
               type="button"

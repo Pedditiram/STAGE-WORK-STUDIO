@@ -11,7 +11,7 @@ export const PRESENTATION_OPENINGS = [
     title: 'A clip is easy. A picture is not.',
     lede: 'Five seconds to three minutes of AI video is now a parlor trick. A two-hour professional movie is still a production — continuity, performance, light, and a director who can call the same look on shot four hundred as on shot one.',
     punch: 'Even when someone “finishes” a long AI cut, it rarely feels like traditional filmmaking. The director cannot hold the frame the way a slate, a crew, and a locked look allow.',
-    welcome: `That gap is why ${PRODUCT} exists — an AI-powered production OS. Welcome to the creative journey.`,
+    welcome: `That gap is why ${PRODUCT} exists — ${CATEGORY}. Welcome to the creative journey.`,
     points: [
       { n: '5s–3m', label: 'Easy to generate a clip' },
       { n: '2 hrs', label: 'A professional picture is not' },
@@ -47,7 +47,7 @@ export const PRESENTATION_OPENINGS = [
     title: 'Between the viral clip and the movie.',
     lede: 'The industry learned that a five-second to three-minute AI piece can look finished. A two-hour professional movie still collapses without a call sheet, a bible, and a director who can repeat the look.',
     punch: 'If someone forces a long cut anyway, it will not match traditional movie-making. The gap is the production — not the model.',
-    welcome: `${PRODUCT} is the AI-powered production OS that fills that gap. Welcome to the creative journey.`,
+    welcome: `${PRODUCT} is the ${CATEGORY} that fills that gap. Welcome to the creative journey.`,
     points: [
       { n: 'Easy', label: 'Short AI video' },
       { n: 'Hard', label: 'Two-hour cinema' },
@@ -64,7 +64,7 @@ export const PRESENTATION_OPENINGS = [
     kicker: 'Opening slate',
     title: 'Welcome to the creative journey.',
     lede: 'Generating a five-second to three-minute AI video is easy. Generating a two-hour professional movie is not. Even a completed long cut will not give a director the same results as traditional filmmaking — unless the craft is locked first.',
-    punch: `${PRODUCT} comes in as the AI-powered production OS: the set, the matrix, and the take — so the picture can hold.`,
+    punch: `${PRODUCT} comes in as the ${CATEGORY}: the set, the matrix, and the take — so the picture can hold.`,
     welcome: 'From the first page to the last frame. The journey starts on this slate.',
     points: [
       { n: 'Easy', label: '5 seconds to 3 minutes' },

@@ -137,7 +137,7 @@ Typical Pro + Blob + Functions for SPS collab: **~$45–$160 / month** inside th
 
 ---
 
-## 6. Intelligence — LLMs for AI cinema
+## 6. Intelligence — LLMs for cinema
 
 Route by job: flagship for synopsis / psychology / hard breakdown; mid for craft fill; cheap for captions, tags, batch cleanup.
 

@@ -7,7 +7,7 @@ export const LEGAL_UPDATED = '9 September 2026';
 export const PRIVACY_SECTIONS = [
   {
     title: 'What this product is',
-    body: 'Stage Work Studio is an AI cinema production desk that runs in your browser or as a Mac app. Cloud is used for account, license, email codes, and (if you join a studio room) collaboration. We do not remote-control your computer or delete your files.'
+    body: 'Stage Work Studio is a cinema production desk that runs in your browser or as a Mac app. Cloud is used for account, license, email codes, and (if you join a studio room) collaboration. We do not remote-control your computer or delete your files.'
   },
   {
     title: 'Your films',

@@ -185,7 +185,7 @@ export default function FeatureReelModal({
           <div>
             <h2>Feature reel</h2>
             <p>
-              AI Cinema Production OS · {stats.count} shots · ~{stats.minutes} min assembled
+              Cinema Production OS · {stats.count} shots · ~{stats.minutes} min assembled
               {exportLife.locked ? ` · ${exportLife.locked} locked` : ''}
             </p>
           </div>

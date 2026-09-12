@@ -2228,13 +2228,10 @@ header:has(.sps-console-profile.is-open) {
 }
 
 .sps-console-profile-dismiss {
-  /* Sit under the chrome, never dim the cream bar (no bg-black/30, no blur). */
+  /* Full-viewport click-away; never dim chrome. Menu is portaled above everything. */
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 3.4rem;
-  z-index: 15;
+  inset: 0;
+  z-index: 9998;
   margin: 0;
   padding: 0;
   border: 0;
@@ -2262,6 +2259,18 @@ header.is-menu-open,
   z-index: 95;
   min-width: 16.5rem;
   max-width: min(20rem, calc(100vw - 1.5rem));
+  background: var(--sps-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate;
+}
+
+/* Portaled menu — escapes translucent header blur that ghosted Matrix / duplicate chrome */
+.sps-console-profile-menu.is-ported {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 9999;
 }
 
 /* Switch account: keep console chrome undimmed */
@@ -3243,6 +3252,43 @@ header.is-menu-open,
   max-height: min(92dvh, 36rem);
   align-self: center;
   pointer-events: auto;
+}
+
+.sps-asset-folders-shell {
+  width: min(38rem, calc(100vw - 1.5rem));
+  max-height: min(92dvh, 48rem);
+}
+
+.sps-path-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.sps-path-row textarea.sps-path-input {
+  flex: 1 1 auto;
+  min-height: 2.7rem;
+  resize: none;
+  width: 100%;
+  border-radius: 7px;
+  padding: 0.65rem 0.8rem;
+  font-family: var(--sps-font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: var(--sps-text);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sps-path-row .sps-login-link {
+  align-self: center;
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .sps-login-body {

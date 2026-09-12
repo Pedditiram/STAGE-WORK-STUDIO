@@ -13,7 +13,6 @@ import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import GoogleDrivePanel from './GoogleDrivePanel';
 import SaasAdminPanel from './SaasAdminPanel';
 import ByokKeysPanel from './ByokKeysPanel';
-import StudioProfileControl from './StudioProfileControl';
 import { runFactoryReset } from '../utils/factoryReset';
 import { studioApiUrl, PRODUCTION_ORIGIN } from '../utils/runtimeEnv';
 import { clearCollaboratorPassword, collaboratorHasPassword, isOwnerLoginEmail } from '../utils/collaboratorPassword';
@@ -1811,7 +1810,6 @@ export default function AdminSettingsModal({
               )}
             </button>
 
-            <StudioProfileControl />
             <button
               type="button"
               onClick={onClose}
@@ -3542,7 +3540,7 @@ export default function AdminSettingsModal({
                               onClick={() => {
                                 const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId || 'sps_local_dev'}&email=${encodeURIComponent(email)}&otp=${generatedOtp}`;
                                 const subject = `Stage Work Studio — Authorized Access & 1-Time Authorization OTP`;
-                                const body = `Hello ${collaboratorName || 'Collaborator'},\n\nYou have been granted official collaboration access to Stage Work Studio — AI Cinema Production OS.\n\n📌 Collaborator Credentials:\n👤 Name: ${collaboratorName || 'N/A'}\n💼 Designation: ${designation || 'Production Staff'}\n📧 Authorized Email: ${email}\n🔐 Access Role: ${selectedRole}\n🔑 Cloud Room ID: ${roomId || 'sps_local_dev'}\n\n⚡ Your 1-Time Security Authorization OTP: ${generatedOtp}\n\n👉 Click link below to log in & unlock studio access:\n${inviteUrl}`;
+                                const body = `Hello ${collaboratorName || 'Collaborator'},\n\nYou have been granted official collaboration access to Stage Work Studio — Cinema Production OS.\n\n📌 Collaborator Credentials:\n👤 Name: ${collaboratorName || 'N/A'}\n💼 Designation: ${designation || 'Production Staff'}\n📧 Authorized Email: ${email}\n🔐 Access Role: ${selectedRole}\n🔑 Cloud Room ID: ${roomId || 'sps_local_dev'}\n\n⚡ Your 1-Time Security Authorization OTP: ${generatedOtp}\n\n👉 Click link below to log in & unlock studio access:\n${inviteUrl}`;
                                 window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
                               }}
                               className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow"

@@ -13,7 +13,7 @@
 import nodemailer from 'nodemailer';
 
 export const OFFICIAL_STUDIO_EMAIL = 'admin@stageworkstudio.com';
-export const OFFICIAL_STUDIO_NAME = 'Stage Work Studio — AI Cinema Production OS';
+export const OFFICIAL_STUDIO_NAME = 'Stage Work Studio — Cinema Production OS';
 
 export function resendApiKey() {
   return process.env.SPS_RESEND_API_KEY || process.env.RESEND_API_KEY || '';

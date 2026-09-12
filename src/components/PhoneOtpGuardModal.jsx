@@ -156,7 +156,7 @@ export default function PhoneOtpGuardModal({ onUnlock, currentRoomId }) {
   const handleSendAuthorizationRequest = () => {
     const userMail = inputEmail.trim() || invitedEmail.trim() || 'collaborator@studio.com';
     const subject = `🔐 1-Time Studio Access Authorization Request from ${userMail}`;
-    const body = `Hello Studio Admin,\n\nI am requesting 1-Time Access Authorization to open and collaborate on Stage Work Studio — AI Cinema Production OS.\n\n📌 My Credentials:\n📧 Email ID: ${userMail}\n🔑 Production Room ID: ${invitedRoom || 'SPS-CLOUD-8821'}\n\nPlease generate and send me my 6-Digit Authorization OTP code.`;
+    const body = `Hello Studio Admin,\n\nI am requesting 1-Time Access Authorization to open and collaborate on Stage Work Studio — Cinema Production OS.\n\n📌 My Credentials:\n📧 Email ID: ${userMail}\n🔑 Production Room ID: ${invitedRoom || 'SPS-CLOUD-8821'}\n\nPlease generate and send me my 6-Digit Authorization OTP code.`;
     
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
     setRequestSent(true);

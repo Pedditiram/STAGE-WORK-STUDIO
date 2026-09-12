@@ -187,7 +187,7 @@ function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 600,
-    title: 'Stage Work Studio — AI Cinema Production OS',
+    title: 'Stage Work Studio — Cinema Production OS',
     // Standard frame = same header layout as localhost (no traffic-light inset chrome)
     titleBarStyle: 'default',
     backgroundColor: '#0b0a09',
@@ -291,7 +291,7 @@ function buildMenu() {
     ...(isMac ? [{
       label: app.name,
       submenu: [
-        { role: 'about', label: 'About Stage Work Studio — AI Cinema Production OS' },
+        { role: 'about', label: 'About Stage Work Studio — Cinema Production OS' },
         { type: 'separator' },
         {
           label: 'Studio Settings…',
@@ -702,6 +702,23 @@ ipcMain.handle('vault:setUiPrefs', async (_, prefs) => {
     return { ok: true, prefs: merged };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('vault:revealPath', async (_, folderPath) => {
+  const p = String(folderPath || '').trim();
+  if (!p) return { ok: false, error: 'empty' };
+  if (!fs.existsSync(p)) return { ok: false, error: 'missing', path: p };
+  try {
+    const st = fs.statSync(p);
+    if (st.isFile()) {
+      shell.showItemInFolder(p);
+      return { ok: true, path: p };
+    }
+    const err = await shell.openPath(p);
+    return { ok: !err, error: err || '', path: p };
+  } catch (err) {
+    return { ok: false, error: err.message, path: p };
   }
 });
 

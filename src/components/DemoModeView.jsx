@@ -11,6 +11,10 @@ import {
   Clapperboard,
   Film,
   Megaphone,
+  Unlock,
+  Wand2,
+  Wallet,
+  BadgeCheck,
 } from 'lucide-react';
 import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
@@ -23,7 +27,6 @@ import { getCurrentUserEmail, isGuestSession, setPresentationMode } from '../uti
 
 const CRAFT_COUNT = SEEDANCE_SLOTS.length;
 
-const OWNER_EMAIL = 'admin@stageworkstudio.com';
 const SLIDE_MS = 8000;
 const OPEN_SLIDE_MS = 14000;
 
@@ -59,7 +62,7 @@ const REST_SLIDES = [
       { n: 'Lock', label: 'Slot lock & presence' },
     ],
     beats: [
-      'The matrix is the call sheet for AI cinema.',
+      'The matrix is the call sheet for cinema.',
       'Form dives one shot to the bone.',
       'Rooms do not overwrite each other.',
     ],
@@ -124,6 +127,82 @@ const REST_SLIDES = [
     wash: 'from-sky-900/10 via-transparent to-amber-800/8',
   },
   {
+    id: 'freedom',
+    scene: 'CREATIVE FREEDOM',
+    kicker: 'Beyond the traditional set',
+    title: 'Remove the hurdles of traditional movie-making',
+    punch: 'No waiting on a unit, a location permit, or a reshoot window — the director stays on the look.',
+    points: [
+      { n: 'Free', label: 'Call any world, any hour' },
+      { n: 'Hold', label: 'Lock face, light, lens' },
+      { n: 'Again', label: 'Retake without a reset day' },
+    ],
+    beats: [
+      'Traditional production gates ideas behind money, weather, and calendar.',
+      'Here the bible and the matrix carry the intention — so imagination is not postponed.',
+      'Creative freedom means the slate answers when the director asks, not when the truck arrives.',
+    ],
+    Icon: Unlock,
+    wash: 'from-violet-900/14 via-transparent to-amber-800/10',
+  },
+  {
+    id: 'ease',
+    scene: 'EASE OF MAKING',
+    kicker: 'Page → matrix → take',
+    title: 'Movie-making that stays simple to run',
+    punch: 'One desk from page to cut. Craft on the shot. Generate when the look is locked — not before.',
+    points: [
+      { n: 'One', label: 'Desk for the whole film' },
+      { n: 'Clear', label: 'Rooms with one job each' },
+      { n: 'Fast', label: 'From script to stills' },
+    ],
+    beats: [
+      'Writer, Matrix, Compile, Generate, Reel — the path is short and visible.',
+      'Collaborators sit in roles; the OS remembers the shot, not a dozen folders.',
+      'Ease is not dumbing down cinema — it is removing the paperwork between intention and frame.',
+    ],
+    Icon: Wand2,
+    wash: 'from-emerald-900/12 via-transparent to-sky-800/10',
+  },
+  {
+    id: 'savings',
+    scene: 'PRODUCTION COST',
+    kicker: 'Huge savings',
+    title: 'Cut the burn without cutting the picture',
+    punch: 'Pre-viz, pickups, and look tests stop eating the schedule — the heavy spend waits for the locked take.',
+    points: [
+      { n: '80%+', label: 'Pre-viz overhead cut' },
+      { n: 'Less', label: 'Pickup & reset days' },
+      { n: 'Lean', label: 'Crew where it counts' },
+    ],
+    beats: [
+      'Traditional cost hides in waiting, travel, and takes that never make the cut.',
+      'Lock wardrobe, world, and crafts once — then generate instead of rebuilding the set.',
+      'Huge savings land when the desk replaces the burn, not when you starve the craft.',
+    ],
+    Icon: Wallet,
+    wash: 'from-amber-900/16 via-transparent to-stone-700/10',
+  },
+  {
+    id: 'quality',
+    scene: 'QUALITY ON BUDGET',
+    kicker: 'Controlled budget · higher grade',
+    title: 'More quality cinema inside a controlled budget',
+    punch: 'Continuity, craft, and a director who can call the look — so a lean slate still reads as a picture.',
+    points: [
+      { n: 'Grade', label: 'Look that holds for hours' },
+      { n: 'Budget', label: 'Spend where the frame is' },
+      { n: 'More', label: 'Titles per season' },
+    ],
+    beats: [
+      'Quality is continuity and intention — not a bigger line item for every experiment.',
+      'A controlled budget still buys a professional picture when the OS holds the bible.',
+      'More films per year, each one still directed — that is the studio math.',
+    ],
+    Icon: BadgeCheck,
+    wash: 'from-rose-900/12 via-transparent to-amber-800/12',
+  },
+  {
     id: 'board',
     scene: 'THE BOARDROOM',
     kicker: 'Investment & scale',
@@ -135,7 +214,7 @@ const REST_SLIDES = [
       { n: 'License', label: 'Multi-tenant houses' },
     ],
     beats: [
-      'Direct path into 4K AI video. Export lists, schedules, and reels when the look is locked.',
+      'Direct path into 4K video. Export lists, schedules, and reels when the look is locked.',
       'Login or request access. Collaborators unlock the full studio.',
       LINE,
     ],
@@ -151,15 +230,15 @@ const PUBLIC_DOOR = {
   kicker: 'Private studio',
   title: 'Sign in to enter.',
   punch: `${PRODUCT} is for registered collaborators.`,
-  welcome: 'Login or request access. The desk stays behind this door.',
+  welcome: 'Login or request access. Watch the tour, then enter when you have a seat.',
   points: [
-    { n: 'In', label: 'Registered crew' },
-    { n: 'Out', label: 'Public stays here' },
-    { n: 'Ask', label: 'Request access' },
+    { n: 'In', label: 'Registered crew', tag: 'Crew', action: 'login' },
+    { n: 'Out', label: 'Public stays here', tag: 'Tour', action: 'next' },
+    { n: 'Ask', label: 'Request access', tag: 'Invite', action: 'access' },
   ],
   beats: [
-    'This slate is the door, not a tour.',
-    'The studio opens after you are signed in.',
+    'This slate is the door — the next slides are the tour.',
+    'The desk unlocks after you are signed in.',
     'Download the app if you already have a seat.',
   ],
   Icon: Film,
@@ -170,21 +249,36 @@ function presentationAudienceSignedIn() {
   return !isGuestSession() && !!getCurrentUserEmail();
 }
 
+function buildOpeningSlide(opening) {
+  return {
+    id: 'open',
+    scene: 'OPENING TITLE',
+    kind: 'thesis',
+    Icon: Film,
+    wash: 'from-amber-800/18 via-transparent to-stone-600/12',
+    ...opening,
+  };
+}
+
 export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   const [opening] = useState(() => pickPresentationOpening());
-  const [signedIn] = useState(() => presentationAudienceSignedIn());
+  const [signedIn, setSignedIn] = useState(() => presentationAudienceSignedIn());
   const slides = useMemo(() => {
-    if (!signedIn) return [PUBLIC_DOOR];
-    const open = {
-      id: 'open',
-      scene: 'OPENING TITLE',
-      kind: 'thesis',
-      Icon: Film,
-      wash: 'from-amber-800/18 via-transparent to-stone-600/12',
-      ...opening,
-    };
+    const open = buildOpeningSlide(opening);
+    // Public visitors get the full deck (door + thesis + rooms), not a single locked slate.
+    if (!signedIn) return [PUBLIC_DOOR, open, ...REST_SLIDES];
     return [open, ...REST_SLIDES];
   }, [opening, signedIn]);
+
+  useEffect(() => {
+    const syncAuth = () => setSignedIn(presentationAudienceSignedIn());
+    window.addEventListener('sps_collaborators_updated', syncAuth);
+    window.addEventListener('storage', syncAuth);
+    return () => {
+      window.removeEventListener('sps_collaborators_updated', syncAuth);
+      window.removeEventListener('storage', syncAuth);
+    };
+  }, []);
 
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -192,7 +286,12 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
   const [accessOpen, setAccessOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
   const [legalKind, setLegalKind] = useState(null);
-  const slide = slides[i];
+
+  useEffect(() => {
+    setI((n) => Math.min(n, Math.max(0, slides.length - 1)));
+  }, [slides.length]);
+
+  const slide = slides[i] || slides[0];
   const Icon = slide.Icon;
   const dwell = slide.kind === 'thesis' ? OPEN_SLIDE_MS : SLIDE_MS;
 
@@ -313,31 +412,64 @@ export default function DemoModeView({ onOpenLogin, onEnterStudio }) {
               <p className="sps-pres-meta text-[10px] uppercase tracking-[0.2em] m-0">{slide.scene}</p>
               {slide.kind === 'thesis' ? (
                 <div className="grid grid-cols-2 gap-3">
-                  {slide.points.slice(0, 2).map((p, idx) => (
-                    <div
-                      key={p.label}
-                      className="sps-pres-card rounded-2xl px-4 py-5"
-                      style={{ animationDelay: `${80 + idx * 110}ms` }}
-                    >
-                      <p className="sps-pres-kicker text-[9px] uppercase tracking-[0.16em] m-0 mb-2">
-                        {idx === 0 ? 'Clip' : 'Picture'}
-                      </p>
-                      <p className="sps-pres-card-n font-display text-2xl m-0">{p.n}</p>
-                      <p className="sps-pres-card-l text-sm m-0 mt-1">{p.label}</p>
-                    </div>
-                  ))}
+                  {slide.points.slice(0, 2).map((p, idx) => {
+                    const clickable = Boolean(p.action);
+                    const Tag = clickable ? 'button' : 'div';
+                    return (
+                      <Tag
+                        key={p.label}
+                        type={clickable ? 'button' : undefined}
+                        className={`sps-pres-card rounded-2xl px-4 py-5 text-left ${clickable ? 'cursor-pointer border-0 w-full' : ''}`}
+                        style={{ animationDelay: `${80 + idx * 110}ms` }}
+                        onClick={
+                          clickable
+                            ? () => {
+                                if (p.action === 'login') onOpenLogin?.('signin');
+                                else if (p.action === 'access') setAccessOpen(true);
+                                else if (p.action === 'signup') onOpenLogin?.('signup');
+                                else if (p.action === 'next') next();
+                              }
+                            : undefined
+                        }
+                      >
+                        <p className="sps-pres-kicker text-[9px] uppercase tracking-[0.16em] m-0 mb-2">
+                          {p.tag || (idx === 0 ? 'Clip' : 'Picture')}
+                        </p>
+                        <p className="sps-pres-card-n font-display text-2xl m-0">{p.n}</p>
+                        <p className="sps-pres-card-l text-sm m-0 mt-1">{p.label}</p>
+                      </Tag>
+                    );
+                  })}
                 </div>
               ) : null}
-              {(slide.kind === 'thesis' ? slide.points.slice(2) : slide.points).map((p, idx) => (
-                <div
-                  key={p.label}
-                  className="sps-pres-card rounded-2xl px-4 py-4"
-                  style={{ animationDelay: `${80 + (idx + 2) * 110}ms` }}
-                >
-                  <p className="sps-pres-card-n font-display text-2xl m-0">{p.n}</p>
-                  <p className="sps-pres-card-l text-sm m-0 mt-1">{p.label}</p>
-                </div>
-              ))}
+              {(slide.kind === 'thesis' ? slide.points.slice(2) : slide.points).map((p, idx) => {
+                const clickable = Boolean(p.action);
+                const Tag = clickable ? 'button' : 'div';
+                return (
+                  <Tag
+                    key={p.label}
+                    type={clickable ? 'button' : undefined}
+                    className={`sps-pres-card rounded-2xl px-4 py-4 text-left ${clickable ? 'cursor-pointer border-0 w-full' : ''}`}
+                    style={{ animationDelay: `${80 + (idx + 2) * 110}ms` }}
+                    onClick={
+                      clickable
+                        ? () => {
+                            if (p.action === 'login') onOpenLogin?.('signin');
+                            else if (p.action === 'access') setAccessOpen(true);
+                            else if (p.action === 'signup') onOpenLogin?.('signup');
+                            else if (p.action === 'next') next();
+                          }
+                        : undefined
+                    }
+                  >
+                    {p.tag ? (
+                      <p className="sps-pres-kicker text-[9px] uppercase tracking-[0.16em] m-0 mb-2">{p.tag}</p>
+                    ) : null}
+                    <p className="sps-pres-card-n font-display text-2xl m-0">{p.n}</p>
+                    <p className="sps-pres-card-l text-sm m-0 mt-1">{p.label}</p>
+                  </Tag>
+                );
+              })}
             </div>
           </div>
 

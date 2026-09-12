@@ -106,7 +106,7 @@ export default function StudioBrainModal({ isOpen, onClose }) {
               Studio Brain
             </h2>
             <p className="text-[11px] text-zinc-300 truncate">
-              AI Cinema Production OS · learns your pipeline · saved on this device
+              Cinema Production OS · learns your pipeline · saved on this device
             </p>
           </div>
           <button

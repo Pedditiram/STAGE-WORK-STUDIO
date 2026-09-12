@@ -51,7 +51,7 @@ export function generateDesktopTrialReceivedEmail({ name, email }) {
                 </tr>
               </table>
               <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.24em;color:#c9a36a;text-transform:uppercase;">
-                STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+                STAGE WORK STUDIO · CINEMA PRODUCTION OS
               </p>
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#fdfbf7;letter-spacing:-0.01em;">
                 Application Received
@@ -156,7 +156,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
   const recipientEmail = escapeHtml(email);
   const safeDownloadUrl = escapeHtml(downloadUrl);
 
-  const subject = `🎬 Your Stage Work Studio App Download is Approved — Welcome to AI Cinema`;
+  const subject = `🎬 Your Stage Work Studio App Download is Approved — Welcome to Stage Work Studio`;
 
   const html = `
 <!DOCTYPE html>
@@ -189,7 +189,7 @@ export function generateDesktopTrialApprovalEmail({ name, email, downloadUrl, ex
                 </tr>
               </table>
               <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.24em;color:#c9a36a;text-transform:uppercase;">
-                STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+                STAGE WORK STUDIO · CINEMA PRODUCTION OS
               </p>
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#fdfbf7;letter-spacing:-0.01em;">
                 Your App Download is Approved
@@ -362,7 +362,7 @@ export function generateAccessRequestConfirmationEmail({ name, email, role }) {
                 </tr>
               </table>
               <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.24em;color:#c9a36a;text-transform:uppercase;">
-                STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+                STAGE WORK STUDIO · CINEMA PRODUCTION OS
               </p>
               <h1 style="margin:0;font-size:24px;font-weight:700;color:#fdfbf7;letter-spacing:-0.02em;">
                 Access Request Received &amp; In Review
@@ -421,7 +421,7 @@ export function generateAccessRequestConfirmationEmail({ name, email, role }) {
           <tr>
             <td style="padding:0 36px 36px;">
               <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#fdfbf7;">Executive Administration &amp; Operations</p>
-              <p style="margin:0;font-size:12px;color:#8f877a;">Stage Work Studio — AI Cinema Production OS</p>
+              <p style="margin:0;font-size:12px;color:#8f877a;">Stage Work Studio — Cinema Production OS</p>
               <p style="margin:8px 0 0;font-size:12px;color:#c9a36a;">
                 Need urgent production assistance? Contact us at <a href="mailto:admin@stageworkstudio.com" style="color:#e5c158;text-decoration:none;font-weight:600;">admin@stageworkstudio.com</a>.
               </p>
@@ -446,7 +446,7 @@ export function generateAccessRequestConfirmationEmail({ name, email, role }) {
   `.trim();
 
   const text = `
-STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+STAGE WORK STUDIO · CINEMA PRODUCTION OS
 "Where Cinematic Vision Meets Next-Generation AI."
 
 Dear ${name || 'Collaborator'},
@@ -465,7 +465,7 @@ For urgent production assistance, reach out to studio administration at admin@st
 
 Sincerely,
 Executive Administration & Operations
-Stage Work Studio — AI Cinema Production OS
+Stage Work Studio — Cinema Production OS
 www.stageworkstudio.com | admin@stageworkstudio.com
 `.trim();
 
@@ -494,7 +494,7 @@ export function generateColdPromotionalEmail({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stage Work Studio — AI Cinema Production OS</title>
+  <title>Stage Work Studio — Cinema Production OS</title>
 </head>
 <body style="margin:0;padding:0;background-color:#070605;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e8e2d8;">
   <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070605;padding:40px 14px 60px;">
@@ -519,7 +519,7 @@ export function generateColdPromotionalEmail({
                 </tr>
               </table>
               <span style="display:inline-block;background:#1b1713;border:1px solid #3d3428;color:#c9a36a;font-size:10px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:12px;">
-                ✦ VIP STUDIO PREVIEW · AI CINEMA OS ✦
+                ✦ VIP STUDIO PREVIEW · CINEMA PRODUCTION OS ✦
               </span>
               <h1 style="margin:0;font-size:24px;font-weight:700;color:#fdfbf7;letter-spacing:-0.02em;line-height:1.25;">
                 From Script to Screen at the Speed of Thought
@@ -643,7 +643,7 @@ export function generateColdPromotionalEmail({
                   Stage Work Studio Administration
                 </p>
                 <p style="margin:0 0 2px;font-size:12px;color:#9e9587;">
-                  Stage Work Studio — AI Cinema Production OS
+                  Stage Work Studio — Cinema Production OS
                 </p>
                 <p style="margin:0 0 2px;font-size:12px;color:#9e9587;">
                   <a href="mailto:admin@stageworkstudio.com" style="color:#c9a36a;text-decoration:none;">admin@stageworkstudio.com</a>
@@ -677,7 +677,7 @@ export function generateColdPromotionalEmail({
   `.trim();
 
   const text = `
-STAGE WORK STUDIO · AI CINEMA PRODUCTION OS
+STAGE WORK STUDIO · CINEMA PRODUCTION OS
 "From Script to Screen at the Speed of Thought."
 
 Hi ${name || 'there'},
@@ -700,7 +700,7 @@ Would you be open to a 5-minute private walk-through on how SWS can accelerate y
 
 Best regards,
 Stage Work Studio Administration
-Stage Work Studio — AI Cinema Production OS
+Stage Work Studio — Cinema Production OS
 admin@stageworkstudio.com
 ${appUrl}
 `.trim();

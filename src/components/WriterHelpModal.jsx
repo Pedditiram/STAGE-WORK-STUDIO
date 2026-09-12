@@ -162,7 +162,7 @@ export default function WriterHelpModal({ isOpen, onClose }) {
           {tab === 'compare' && (
             <>
               <p className="text-[12px] text-zinc-400 leading-relaxed">
-                Stage Work Studio Writer Console — AI Cinema Production OS — keeps Final Draft / WriterDuet formatting habits — then adds
+                Stage Work Studio Writer Console — Cinema Production OS — keeps Final Draft / WriterDuet formatting habits — then adds
                 production Intel, Matrix sync, scene-locked co-write, and revision compare that those tools don’t ship
                 as one system.
               </p>

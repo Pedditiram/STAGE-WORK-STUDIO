@@ -3,7 +3,7 @@
   "productName": "Stage Work Studio",
   "private": true,
   "version": "1.0.0",
-  "description": "Stage Work Studio — AI Cinema Production OS.",
+  "description": "Stage Work Studio — Cinema Production OS.",
   "author": {
     "name": "Pedditi Ram",
     "email": "pedditiram@gmail.com"
@@ -66,7 +66,7 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "dmg": {
-      "title": "Stage Work Studio — AI Cinema Production OS",
+      "title": "Stage Work Studio — Cinema Production OS",
       "background": null,
       "contents": [
         {

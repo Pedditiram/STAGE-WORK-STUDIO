@@ -53,7 +53,7 @@ export function exportFountain(scriptText, meta = {}) {
     meta.author ? `Author: ${meta.author}` : null,
     meta.draft ? `Draft date: ${meta.draft}` : `Draft date: ${new Date().toISOString().slice(0, 10)}`,
     room ? `Room: ${room}` : null,
-    `Contact: Stage Work Studio — AI Cinema Production OS`,
+    `Contact: Stage Work Studio — Cinema Production OS`,
     '',
     ''
   ]
@@ -88,7 +88,7 @@ ${paragraphs}
   <TitlePage>
     <Content>
       <Paragraph Type="Title"><Text>${title}</Text></Paragraph>
-      <Paragraph Type="Center"><Text>Stage Work Studio — AI Cinema Production OS</Text></Paragraph>
+      <Paragraph Type="Center"><Text>Stage Work Studio — Cinema Production OS</Text></Paragraph>
     </Content>
   </TitlePage>
 </FinalDraft>

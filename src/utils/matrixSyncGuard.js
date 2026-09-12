@@ -20,6 +20,20 @@ export function matrixLooksLikePlaceholder(shots) {
   return PLACEHOLDER_MARKERS.some((m) => blob.includes(m));
 }
 
+/** Prefer a real Matrix (vault shots or Story Package proposed shots) over the 2-shot concert seed. */
+export function recoverShotsFromProject(project) {
+  if (!project || typeof project !== 'object') return null;
+  const shots = project.shots;
+  if (Array.isArray(shots) && shots.length && !matrixLooksLikePlaceholder(shots)) {
+    return shots;
+  }
+  const proposed = project.storyPackage?.proposedShots;
+  if (Array.isArray(proposed) && proposed.length >= 8 && !matrixLooksLikePlaceholder(proposed)) {
+    return proposed;
+  }
+  return null;
+}
+
 function headIds(shots) {
   return (Array.isArray(shots) ? shots : [])
     .slice(0, 6)

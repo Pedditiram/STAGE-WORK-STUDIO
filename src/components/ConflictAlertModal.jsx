@@ -115,7 +115,7 @@ export default function ConflictAlertModal({
           </div>
 
           <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 text-center font-bold">
-            Real-Time Collaboration Guard Active • AI Cinema Production OS
+            Real-Time Collaboration Guard Active • Cinema Production OS
           </div>
 
         </div>

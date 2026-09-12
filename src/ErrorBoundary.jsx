@@ -29,7 +29,7 @@ export default class ErrorBoundary extends React.Component {
           <div className="max-w-md w-full bg-zinc-900 border border-red-500/50 rounded-2xl p-6 shadow-2xl space-y-4">
             <img src="./favicon.svg" alt="" className="w-12 h-12 rounded-xl mx-auto" />
             <h2 className="text-lg font-bold text-white font-mono">Stage Work Studio</h2>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 font-mono">AI Cinema Production OS</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 font-mono">Cinema Production OS</p>
             <p className="text-xs text-zinc-400 leading-relaxed font-mono">
               A runtime initialization error occurred. Click below to reset local state and restore default production studio configuration.
             </p>
