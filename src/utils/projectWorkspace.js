@@ -161,6 +161,22 @@ function isoOf(p) {
   return Date.parse(p?.lastModifiedIso || p?.updatedAt || 0) || 0;
 }
 
+function filmRevOf(p) {
+  const n = Number(p?.filmRevision);
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return 0;
+}
+
+/** Prefer newer film clock; unstamped loses to stamped. */
+function preferByFilmClock(a, b) {
+  const aMs = isoOf(a);
+  const bMs = isoOf(b);
+  if (bMs && !aMs) return true;
+  if (aMs && !bMs) return false;
+  if (aMs !== bMs) return bMs > aMs;
+  return filmRevOf(b) >= filmRevOf(a);
+}
+
 /** Richness score for multi-store merge — never prefer an empty shell over a full film. */
 export function projectContentScore(p) {
   if (!p || typeof p !== 'object') return 0;
@@ -213,6 +229,24 @@ function mergeShotsById(primaryShots, secondaryShots) {
   return ordered;
 }
 
+function matrixOpeningBeat(p) {
+  const s = Array.isArray(p?.shots) ? p.shots[0] : null;
+  return String(s?.sceneSynopsis || s?.actionEnvContext || '')
+    .trim()
+    .slice(0, 56)
+    .toLowerCase();
+}
+
+function looksLikeDifferentFilmBody(a, b) {
+  const ha = matrixOpeningBeat(a);
+  const hb = matrixOpeningBeat(b);
+  if (!ha || !hb || ha === hb) return false;
+  const idA = String(a?.shots?.[0]?.sceneShotId || '').trim();
+  const idB = String(b?.shots?.[0]?.sceneShotId || '').trim();
+  if (idA && idB && idA === idB) return false;
+  return true;
+}
+
 function mergeOne(a, b) {
   if (!a) return b;
   if (!b) return a;
@@ -221,13 +255,35 @@ function mergeOne(a, b) {
     const bFresh = b.demoRevision === DEMO_PROJECT_REVISION;
     if (aFresh !== bFresh) return aFresh ? a : b;
   }
+
+  // Same title, different story (old HEY vs live concert HEY) — never shot-count merge.
+  // Prefer the newer film clock; do not glue alien Matrices together.
+  if (looksLikeDifferentFilmBody(a, b)) {
+    const preferB = preferByFilmClock(a, b);
+    const primary = preferB ? b : a;
+    const secondary = preferB ? a : b;
+    return {
+      ...secondary,
+      ...primary,
+      shots: Array.isArray(primary.shots) ? primary.shots : secondary.shots,
+      characterProfiles: preferBibleArray(primary.characterProfiles, secondary.characterProfiles),
+      worldAssets: preferBibleArray(primary.worldAssets, secondary.worldAssets),
+      screenplayText: primary.screenplayText || secondary.screenplayText || '',
+      roomId: roomIdForProject(primary.title, primary.roomId || secondary.roomId),
+      lastModifiedIso:
+        primary.lastModifiedIso || primary.updatedAt || secondary.lastModifiedIso || secondary.updatedAt,
+      filmRevision: Math.max(filmRevOf(primary), filmRevOf(secondary))
+    };
+  }
+
   const scoreA = projectContentScore(a);
   const scoreB = projectContentScore(b);
+  const clockPrefersB = preferByFilmClock(a, b);
   const useB =
-    scoreB > scoreA ||
-    (scoreB === scoreA &&
-      (shotCount(b) > shotCount(a) ||
-        (shotCount(b) === shotCount(a) && isoOf(b) >= isoOf(a))));
+    (clockPrefersB && (scoreB >= scoreA * 0.85 || isoOf(b) > isoOf(a))) ||
+    (!clockPrefersB && scoreB > scoreA * 1.15) ||
+    (scoreB > scoreA && clockPrefersB) ||
+    (scoreB === scoreA && clockPrefersB);
   const primary = useB ? b : a;
   const secondary = useB ? a : b;
   return {
@@ -250,7 +306,8 @@ function mergeOne(a, b) {
     lastModifiedIso:
       isoOf(primary) >= isoOf(secondary)
         ? primary.lastModifiedIso || primary.updatedAt || secondary.lastModifiedIso
-        : secondary.lastModifiedIso || secondary.updatedAt || primary.lastModifiedIso
+        : secondary.lastModifiedIso || secondary.updatedAt || primary.lastModifiedIso,
+    filmRevision: Math.max(filmRevOf(primary), filmRevOf(secondary), filmRevOf(a), filmRevOf(b))
   };
 }
 

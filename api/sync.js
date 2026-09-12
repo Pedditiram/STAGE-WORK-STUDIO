@@ -1658,13 +1658,128 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Missing project' });
       }
       const incomingShots = Array.isArray(project.shots) ? project.shots : [];
-      const existing = memoryFilms[slug]?.project;
+      let existing = memoryFilms[slug]?.project;
+      if (!existing && kvConfigured()) {
+        try {
+          const prior = await kvGet(`film:${slug}`);
+          if (prior?.project) {
+            existing = prior.project;
+            memoryFilms[slug] = prior;
+          }
+        } catch (e) {}
+      }
       if (!incomingShots.length && existing && Array.isArray(existing.shots) && existing.shots.length) {
         return sendJson(req, res, { success: true, project: existing, ignoredEmpty: true });
       }
+
+      // Anti-washout: film clock is SoT (lastModifiedIso + filmRevision).
+      if (existing && Array.isArray(existing.shots) && existing.shots.length) {
+        const filmClockMs = (p) => {
+          for (const key of ['lastModifiedIso', 'updatedAt', 'lastUpdated']) {
+            const t = Date.parse(String(p?.[key] || ''));
+            if (!Number.isNaN(t) && t > 0) return t;
+          }
+          return 0;
+        };
+        const filmRev = (p) => {
+          const n = Number(p?.filmRevision);
+          return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+        };
+        const existingIso = filmClockMs(existing);
+        const incomingIso = filmClockMs(project);
+        const existingRev = filmRev(existing);
+        const incomingRev = filmRev(project);
+        const existingN = existing.shots.length;
+        const incomingN = incomingShots.length;
+        const headOf = (shots) =>
+          String(shots?.[0]?.sceneSynopsis || shots?.[0]?.actionEnvContext || '')
+            .trim()
+            .slice(0, 56)
+            .toLowerCase();
+        const existingHead = headOf(existing.shots);
+        const incomingHead = headOf(incomingShots);
+        const differentStory =
+          existingHead &&
+          incomingHead &&
+          existingHead !== incomingHead &&
+          String(existing.shots[0]?.sceneShotId || '') !== String(incomingShots[0]?.sceneShotId || '');
+
+        if (existingIso && !incomingIso) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'unstamped_vs_stamped'
+          });
+        }
+        if (incomingIso && existingIso && incomingIso < existingIso) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'older_clock'
+          });
+        }
+        if (incomingIso && existingIso && incomingIso === existingIso && incomingRev < existingRev) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'older_film_revision'
+          });
+        }
+        if (differentStory && incomingIso < existingIso) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'older_different_story'
+          });
+        }
+        if (
+          differentStory &&
+          incomingN >= Math.max(existingN * 2, 8) &&
+          incomingIso <= existingIso + 15000
+        ) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'alien_matrix_same_title'
+          });
+        }
+        if (
+          incomingN > 0 &&
+          incomingN <= Math.max(2, Math.floor(existingN * 0.2)) &&
+          existingN >= 8 &&
+          incomingIso <= existingIso
+        ) {
+          return sendJson(req, res, {
+            success: true,
+            project: existing,
+            skipped: 'stale',
+            reason: 'leaner_older'
+          });
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const prevRev = Number(existing?.filmRevision);
+      const incRev = Number(project.filmRevision);
+      const safePrev = Number.isFinite(prevRev) && prevRev > 0 ? Math.floor(prevRev) : 0;
+      const safeInc = Number.isFinite(incRev) && incRev > 0 ? Math.floor(incRev) : 0;
+      const filmRevision = safeInc > safePrev ? safeInc : safePrev + 1;
+
+      const stamped = {
+        ...project,
+        title,
+        lastModifiedIso: project.lastModifiedIso || project.updatedAt || nowIso,
+        updatedAt: nowIso,
+        filmRevision
+      };
       const rec = {
-        project: { ...project, title },
-        updatedAt: new Date().toISOString(),
+        project: stamped,
+        updatedAt: stamped.updatedAt,
         app: 'sps-film'
       };
       memoryFilms[slug] = rec;

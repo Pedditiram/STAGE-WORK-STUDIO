@@ -560,7 +560,7 @@ export async function publishOneLibraryTitle(card) {
 export async function syncFilmToCloud(project) {
   if (typeof window === 'undefined') return false;
   if (isSelfServeSession()) return false;
-  const body = compactFilmForCloud(project);
+  const body = compactFilmForCloud(project, { bumpClock: true });
   if (!body || !filmHasMatrix(body)) return false;
   const title = body.title;
   if (filmSyncTimers.has(title)) clearTimeout(filmSyncTimers.get(title));
@@ -577,7 +577,21 @@ export async function syncFilmToCloud(project) {
           },
           25000
         );
-        resolve(Boolean(res?.ok));
+        if (!res?.ok) {
+          resolve(false);
+          return;
+        }
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        if (data?.skipped === 'stale' || data?.ignoredEmpty) {
+          resolve(false);
+          return;
+        }
+        resolve(true);
       } catch {
         resolve(false);
       }

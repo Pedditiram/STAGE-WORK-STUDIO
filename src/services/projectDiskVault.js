@@ -211,10 +211,12 @@ export const saveProjectToVault = async (project) => {
   try {
     const { isDemoProjectTitle } = await import('../utils/demoStudioProject');
     const { matrixLooksLikePlaceholder, recoverShotsFromProject } = await import('../utils/matrixSyncGuard');
+    // Only refill truly empty/blank shells. Live films (including rain-slicked HEY)
+    // must save as-is — never swap in an older larger disk copy of the same title.
     if (matrixLooksLikePlaceholder(ensured.shots) && !isDemoProjectTitle(title)) {
       const disk = await loadProjectFromDiskByTitle(title);
-      const recovered = recoverShotsFromProject(disk) || recoverShotsFromProject(ensured);
-      if (recovered) {
+      const recovered = recoverShotsFromProject(disk);
+      if (recovered && !matrixLooksLikePlaceholder(recovered)) {
         ensured.shots = recovered;
         if (disk && typeof disk === 'object') {
           Object.assign(ensured, {
@@ -224,8 +226,6 @@ export const saveProjectToVault = async (project) => {
             title
           });
         }
-      } else if (Array.isArray(disk?.shots) && disk.shots.length >= 8) {
-        ensured.shots = disk.shots;
       }
     }
   } catch {
@@ -250,13 +250,29 @@ export const saveProjectToVault = async (project) => {
   }
 
   try {
+    const { stampFilmClock: stampVaultClock } = await import('../utils/filmClock');
+    const alreadyStamped = Boolean(ensured.lastModifiedIso && Number(ensured.filmRevision) > 0);
+    const stamped = stampVaultClock(ensured, { bump: !alreadyStamped });
+    Object.assign(ensured, {
+      lastModifiedIso: stamped.lastModifiedIso,
+      updatedAt: stamped.updatedAt || stamped.lastModifiedIso,
+      filmRevision: stamped.filmRevision
+    });
+  } catch {
+    ensured.updatedAt = new Date().toISOString();
+    ensured.lastModifiedIso = ensured.lastModifiedIso || ensured.updatedAt;
+  }
+
+  try {
     const db = await initDiskVaultDB();
     if (db) {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const vaultRecord = {
         ...ensured,
-        updatedAt: new Date().toISOString(),
+        updatedAt: ensured.updatedAt || new Date().toISOString(),
+        lastModifiedIso: ensured.lastModifiedIso || ensured.updatedAt,
+        filmRevision: ensured.filmRevision || 1,
         vaultSavedAt: new Date().toLocaleString()
       };
       store.put(vaultRecord);

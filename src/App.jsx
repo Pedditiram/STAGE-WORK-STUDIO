@@ -68,6 +68,7 @@ import {
 import { markStoryPackageApplied, assertStoryPackageApplyAllowed, assertMergeApplyAllowed, isSampleDemoShots, readStoryPackageForTitle } from './utils/storyPackage';
 import { buildDemoStudioProject, isDemoProjectTitle, DEMO_PROJECT_TITLE, demoShotsLookFilled, demoSynopsisLooksFilled, resolveCurrentDemoProject, shotsLookLikeDemoSeed } from './utils/demoStudioProject';
 import { matrixLooksLikePlaceholder, recoverShotsFromProject, shouldRejectIncomingMatrix } from './utils/matrixSyncGuard';
+import { stampFilmClock, isFilmStampStrictlyOlder, filmRevisionOf } from './utils/filmClock';
 import { applyProductionAssetSpec } from './utils/assetRegistry';
 import {
   appendStillTake,
@@ -1887,21 +1888,40 @@ export default function App() {
       const safeTitle = (projectTitle == null ? '' : String(projectTitle));
       const persistShots = shots;
       if (matrixLooksLikePlaceholder(persistShots) && !isDemoProjectTitle(safeTitle)) {
+        // Truly blank shells only — live HEY concert Matrices must autosave.
         return;
       }
       const roots = normalizeAssetRoots(readAssetRootsFromLibrary(projectTitle));
-      const activeProj = attachWorkspaceToProject({
-        id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        title: projectTitle,
-        description: `Cinema Production Studio Project with ${persistShots.length} shots`,
-        targetModel: targetModel || 'SPS Direct Cinema 2.0',
-        aspectRatio: aspectRatio || '2.39:1 Anamorphic',
-        roomId: roomIdForProject(projectTitle, effectiveRoomId),
-        lastModified: new Date().toLocaleString(),
-        shots: persistShots,
-        assetRoots: roots,
-        projectVersion: roots.projectVersion
-      });
+      const prevRev = (() => {
+        try {
+          return Number(localStorage.getItem('sps_open_film_revision') || 0) || 0;
+        } catch {
+          return 0;
+        }
+      })();
+      const stamped = stampFilmClock(
+        {
+          id: `proj_${safeTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+          title: projectTitle,
+          description: `Cinema Production Studio Project with ${persistShots.length} shots`,
+          targetModel: targetModel || 'SPS Direct Cinema 2.0',
+          aspectRatio: aspectRatio || '2.39:1 Anamorphic',
+          roomId: roomIdForProject(projectTitle, effectiveRoomId),
+          lastModified: new Date().toLocaleString(),
+          filmRevision: prevRev,
+          shots: persistShots,
+          assetRoots: roots,
+          projectVersion: roots.projectVersion
+        },
+        { bump: true }
+      );
+      const activeProj = attachWorkspaceToProject(stamped);
+      try {
+        localStorage.setItem('sps_open_film_modified_at', stamped.lastModifiedIso);
+        localStorage.setItem('sps_open_film_revision', String(stamped.filmRevision || 1));
+      } catch {
+        /* ignore */
+      }
       saveProjectToVault(activeProj);
       saveActiveWorkspaceToDisk({
         title: projectTitle,
@@ -1942,6 +1962,28 @@ export default function App() {
         }
         if (shouldRejectIncomingMatrix(shotsRef.current, cloudData.shots)) {
           return;
+        }
+        try {
+          const openStamp = {
+            lastModifiedIso: localStorage.getItem('sps_open_film_modified_at') || '',
+            filmRevision: Number(localStorage.getItem('sps_open_film_revision') || 0) || 0
+          };
+          if (
+            openStamp.lastModifiedIso &&
+            Array.isArray(shotsRef.current) &&
+            shotsRef.current.length > 0 &&
+            isFilmStampStrictlyOlder(
+              {
+                lastModifiedIso: cloudData.lastUpdated || cloudData.lastModifiedIso || '',
+                filmRevision: cloudData.filmRevision
+              },
+              openStamp
+            )
+          ) {
+            return;
+          }
+        } catch {
+          /* ignore */
         }
         const nextTitle = cloudData.projectTitle || openTitle;
         const cloudHash = JSON.stringify({ 
@@ -2473,6 +2515,20 @@ export default function App() {
       shots: newShots,
       projectGeneratedImages: newImages,
       lastUpdated: new Date().toISOString(),
+      lastModifiedIso: (() => {
+        try {
+          return localStorage.getItem('sps_open_film_modified_at') || new Date().toISOString();
+        } catch {
+          return new Date().toISOString();
+        }
+      })(),
+      filmRevision: (() => {
+        try {
+          return Number(localStorage.getItem('sps_open_film_revision') || 0) || 0;
+        } catch {
+          return 0;
+        }
+      })(),
       ...updatedState,
       shots: newShots,
       projectTitle: newTitle
@@ -2532,17 +2588,34 @@ export default function App() {
         reviveProjectTitleForOpen(projectTitle);
       }
       if (!isProjectTitleDeleted(projectTitle)) {
-      const updatedProjectData = {
-        id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
-        title: projectTitle,
-        description: `Cinema Production Studio Project with ${persistShots.length} shots`,
-        targetModel: targetModel,
-        aspectRatio: aspectRatio,
-        roomId: roomId,
-        lastModified: nowStr,
-        shots: persistShots,
-        projectGeneratedImages: mergedImages
-      };
+      const prevRev = (() => {
+        try {
+          return Number(localStorage.getItem('sps_open_film_revision') || 0) || 0;
+        } catch {
+          return 0;
+        }
+      })();
+      const updatedProjectData = stampFilmClock(
+        {
+          id: existingIdx !== -1 ? library[existingIdx].id : `proj_${Date.now()}`,
+          title: projectTitle,
+          description: `Cinema Production Studio Project with ${persistShots.length} shots`,
+          targetModel: targetModel,
+          aspectRatio: aspectRatio,
+          roomId: roomId,
+          lastModified: nowStr,
+          filmRevision: existingIdx !== -1 ? filmRevisionOf(library[existingIdx]) || prevRev : prevRev,
+          shots: persistShots,
+          projectGeneratedImages: mergedImages
+        },
+        { bump: true }
+      );
+      try {
+        localStorage.setItem('sps_open_film_modified_at', updatedProjectData.lastModifiedIso);
+        localStorage.setItem('sps_open_film_revision', String(updatedProjectData.filmRevision || 1));
+      } catch {
+        /* ignore */
+      }
 
       if (existingIdx !== -1) {
         library[existingIdx] = {

@@ -5,6 +5,7 @@
  */
 import { roomIdForProject, slugProjectTitle } from './projectWorkspace';
 import { normalizeStorageMode } from './projectStorageMode';
+import { stampFilmClock, filmRevisionOf } from './filmClock';
 
 const FILM_BYTE_BUDGET = 900000;
 
@@ -51,7 +52,7 @@ export function stripHeavyMedia(value) {
   return out;
 }
 
-export function compactFilmForCloud(project) {
+export function compactFilmForCloud(project, { bumpClock = true } = {}) {
   if (!project || typeof project !== 'object') return null;
   const title = String(project.title || '').trim();
   if (!title) return null;
@@ -68,7 +69,8 @@ export function compactFilmForCloud(project) {
     roomId: roomIdForProject(title, project.roomId),
     lastModified: project.lastModified,
     lastModifiedIso: project.lastModifiedIso || project.updatedAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    updatedAt: project.updatedAt || project.lastModifiedIso || new Date().toISOString(),
+    filmRevision: filmRevisionOf(project),
     shotCount: shots.length,
     storageMode: normalizeStorageMode(project.storageMode),
     shots,
@@ -86,17 +88,18 @@ export function compactFilmForCloud(project) {
     assetRegistry: project.assetRegistry || undefined,
     ...(slimPoster ? { posterUrl: slimPoster } : {})
   });
-  let text = JSON.stringify(body);
-  if (text.length > FILM_BYTE_BUDGET && body.storyPackage) {
-    delete body.storyPackage;
-    text = JSON.stringify(body);
+  const stamped = bumpClock ? stampFilmClock(body, { bump: true }) : body;
+  let text = JSON.stringify(stamped);
+  if (text.length > FILM_BYTE_BUDGET && stamped.storyPackage) {
+    delete stamped.storyPackage;
+    text = JSON.stringify(stamped);
   }
   if (text.length > FILM_BYTE_BUDGET) {
-    delete body.productionSpine;
-    delete body.projectLifecycle;
-    delete body.assetRegistry;
+    delete stamped.productionSpine;
+    delete stamped.projectLifecycle;
+    delete stamped.assetRegistry;
   }
-  return body;
+  return stamped;
 }
 
 export function filmHasMatrix(project) {

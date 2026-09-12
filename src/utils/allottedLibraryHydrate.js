@@ -24,6 +24,7 @@ function allottedTitleList(email) {
  * Ensure each allotted title exists as a library card on this device (Cloud shelf)
  * and hydrate Matrix text from cloud when the local card has no shots.
  * Does not rewrite Local/Cloud membership for titles already on this device.
+ * NEVER overwrites a local Matrix that already has shots (anti-washout).
  */
 export async function ensureAllottedTitlesOnThisDevice() {
   if (typeof window === 'undefined') return { pulled: 0, hydrated: 0 };
@@ -66,11 +67,15 @@ export async function ensureAllottedTitlesOnThisDevice() {
 
     const idx = next.findIndex((p) => projectTitlesMatch(p?.title, title));
     if (idx < 0) continue;
-    const hasShots = Array.isArray(next[idx].shots) && next[idx].shots.length > 0;
+    const localShots = next[idx].shots;
+    const hasShots = Array.isArray(localShots) && localShots.length > 0;
+    // Strict: allotted pull must never replace an existing Matrix on this device.
     if (hasShots) continue;
     try {
       const film = await fetchFilmFromCloud(title);
       if (film && Array.isArray(film.shots) && film.shots.length) {
+        const { shouldRejectIncomingMatrix } = await import('./matrixSyncGuard');
+        if (shouldRejectIncomingMatrix(localShots || [], film.shots)) continue;
         next[idx] = withStorageMode(
           {
             ...next[idx],

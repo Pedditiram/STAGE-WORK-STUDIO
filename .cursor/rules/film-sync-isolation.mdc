@@ -1,0 +1,47 @@
+---
+description: Prevent same-title film washout — film clock (lastModifiedIso + filmRevision) is SoT
+alwaysApply: true
+---
+
+# Film sync isolation (anti-washout)
+
+**Why:** Live titles (e.g. HEY) were treated as disposable “placeholders” (rain-slicked seed). Autosave skipped, vault restored an older larger same-title body, and allotted/cloud pulls could overwrite the open Matrix.
+
+## Film clock (strongest rule)
+
+Every durable film body must carry:
+
+- `lastModifiedIso` — wall clock of last intentional Save / autosave / publish
+- `filmRevision` — monotonic integer, bumps on every stamp (`src/utils/filmClock.js`)
+
+**Authority order**
+
+1. Newer `lastModifiedIso` always wins.
+2. Unstamped body **never** overwrites a stamped body.
+3. Equal clocks → higher `filmRevision` wins.
+4. Shape guards still apply (different opening beat / alien archive) even if clocks are close.
+
+## Hard rules
+
+1. **Rain-slicked concert language is production Matrix**, not a wipeable boot shell. Only true blank markers or empty shots are placeholders (`matrixSyncGuard.js`).
+2. **Never skip autosave / Save** for a titled film because it still looks like the concert seed.
+3. **Same title ≠ same film.** Different opening beats → no shot-count merge; prefer newer film clock (`projectWorkspace.mergeOne`).
+4. **Allotted hydrate** may create a missing Cloud card or fill an **empty** Matrix only — never replace shots on this device.
+5. **Film cloud POST** (`api/sync` `type=film`) must refuse older / unstamped / alien bodies (`skipped: 'stale'`).
+6. **Room sync** ignores older room revisions; also reject room payloads whose film clock is strictly older than the open film stamp (`sps_open_film_modified_at` / `sps_open_film_revision`).
+7. **Collaborator machines** must Save (bump clock) before their body can win. An old vault without a fresh stamp cannot overwrite live work.
+8. **Do not** reintroduce `Rain-slicked futuristic concert stage` into placeholder detection.
+
+## Data flow
+
+```
+Edit → stampFilmClock (iso + filmRevision++) → vault + library
+     → room publish (lastUpdated + filmRevision)
+     → film POST (server rejects older clock)
+Collaborator apply only if newer clock AND matrixSyncGuard allows
+Allotted hydrate: empty local only
+```
+
+## Preserve
+
+Project Console, Writer, Matrix/Form, Character, World, Compile, Generate, Stage, BYOK, one-active-project isolation, Manual Sync shelves.
