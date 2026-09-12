@@ -6,7 +6,7 @@ import {
   getCurrentUserEmail,
   getCurrentUserProfile,
   isStudioOwner,
-  titlesMatch
+  projectTitlesMatch
 } from './projectPermissions';
 import { peekRemoteLibraryCatalog, fetchFilmFromCloud } from '../services/dbService';
 import { readLocalProjectLibrary, writeLocalProjectLibrary } from './projectWorkspace';
@@ -47,10 +47,10 @@ export async function ensureAllottedTitlesOnThisDevice() {
   let hydrated = 0;
 
   for (const title of titles) {
-    const remoteCard = remote.find((p) => titlesMatch(p?.title, title));
+    const remoteCard = remote.find((p) => projectTitlesMatch(p?.title, title));
     if (!remoteCard) continue;
 
-    const localIdx = next.findIndex((p) => titlesMatch(p?.title, title));
+    const localIdx = next.findIndex((p) => projectTitlesMatch(p?.title, title));
     if (localIdx < 0) {
       next.push(
         withStorageMode(
@@ -64,7 +64,7 @@ export async function ensureAllottedTitlesOnThisDevice() {
       pulled += 1;
     }
 
-    const idx = next.findIndex((p) => titlesMatch(p?.title, title));
+    const idx = next.findIndex((p) => projectTitlesMatch(p?.title, title));
     if (idx < 0) continue;
     const hasShots = Array.isArray(next[idx].shots) && next[idx].shots.length > 0;
     if (hasShots) continue;
