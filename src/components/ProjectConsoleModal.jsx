@@ -35,6 +35,7 @@ import {
   getArchivedProjects,
   restoreProjectFromArchive,
   purgeArchivedProject,
+  destroyArchivedProject,
   healActiveProjectFromArchive,
 } from '../services/dbService';
 import { 
@@ -2176,6 +2177,31 @@ export default function ProjectConsoleModal({
     }
   };
 
+  const handleDestroyArchivedProject = async (archiveId, title) => {
+    if (!isOwnerUser) return;
+    const clean = String(title || '').trim();
+    if (
+      !confirm(
+        `DESTROY "${clean}" forever?\n\nThis permanently deletes:\n• Cloud film body for every user\n• Library / Archive cards\n• Allotted access for collaborators\n• Local JSON, posters, and ASSETS/RENDERS/PROJECT folders on this device\n• Other devices wipe their local copies on next sync\n\nThis cannot be undone. Purge only moves to PROJECTS PURGED — Destroy erases.`
+      )
+    ) {
+      return;
+    }
+    const typed = window.prompt(`Type the project title exactly to confirm Destroy:\n\n${clean}`);
+    if (String(typed || '').trim() !== clean) {
+      alert('Destroy cancelled — title did not match.');
+      return;
+    }
+    const result = await destroyArchivedProject(archiveId);
+    setArchivedProjects(getArchivedProjects());
+    setProjectLibrary((prev) => filterOutDeletedProjects(prev));
+    if (!result?.ok) {
+      alert('Destroy failed or incomplete. Check cloud sync and try again.');
+      return;
+    }
+    alert(`Destroyed "${clean}" on this device and broadcast to cloud. Other machines will wipe local copies on sync.`);
+  };
+
   // 6. CREATE VERSION SNAPSHOT
   const handleCreateSnapshot = () => {
     if (!newVersionName.trim()) return;
@@ -2925,7 +2951,7 @@ export default function ProjectConsoleModal({
                     Project Archive
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 max-w-xl">
-                    Archived projects are removed from the Library but kept here so you can restore them. They will not reappear in the live library until restored. Purge moves the film and its folders to PROJECTS PURGED — it will not return unless you upload the project again.
+                    Archived projects are removed from the Library but kept here so you can restore them. They will not reappear in the live library until restored. Purge moves the film and its folders to PROJECTS PURGED. Destroy permanently erases the film on this device, cloud, and other synced machines.
                   </p>
                 </div>
                 <button
@@ -2976,6 +3002,14 @@ export default function ProjectConsoleModal({
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Purge
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDestroyArchivedProject(proj.archiveId || proj.id, proj.title)}
+                          className="py-2 px-3 rounded-xl bg-red-700 hover:bg-red-600 text-white border border-red-900/40 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Permanently erase this film everywhere — cloud + all devices"
+                        >
+                          Destroy
                         </button>
                       </div>
                     </div>

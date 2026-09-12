@@ -33,4 +33,5 @@ Do **not** adopt the remote catalog on console open, boot, or `subscribeToProjec
 - Collaborators: Cloud-shelf text only.
 - Create: same title on the other shelf → TITLE CONFLICT, do not create.
 - Purge → `{studioRoot}/PROJECTS PURGED/{TITLE}/`. Tombstone. No reappear unless manual upload.
+- Destroy (Archive, next to Purge) → irreversible wipe: local JSON/posters/ASSETS·RENDERS·PROJECT folders + purged bundle, cloud film KV, catalog tombstone + `destroyedTitles` fan-out so other devices hard-delete on sync, allotments cleared. Owner only; confirm by typing the title.
 - Preserve: Project Console, Writer, Matrix/Form, Character, World, Compile, Generate, Stage, BYOK, one-active-project isolation.

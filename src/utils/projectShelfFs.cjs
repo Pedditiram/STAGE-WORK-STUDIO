@@ -429,10 +429,89 @@ function purgeProjectBundle(projectsDir, title) {
   };
 }
 
+function collectAllCopies(projectsDir, stem) {
+  const out = [];
+  for (const shelf of [LOCAL, CLOUD, ROOT, ARCHIVED, PURGED]) {
+    const loc = pathsFor(projectsDir, stem, shelf);
+    if (fs.existsSync(loc.json)) out.push({ shelf, ...loc });
+  }
+  return out;
+}
+
+/**
+ * Irreversible wipe: JSON + posters + film folders + PROJECTS PURGED bundle.
+ * Used by Destroy (not Purge).
+ */
+function destroyProjectOnDisk(projectsDir, title) {
+  const clean = String(title || '').trim();
+  if (!projectsDir || !clean) return { ok: false, error: 'title required' };
+  ensureShelfDirs(projectsDir);
+  migrateLiveJsonIntoShelves(projectsDir);
+  const stem = projectStem(clean);
+  const studioRoot = studioRootFromProjectsDir(projectsDir);
+  const copies = collectAllCopies(projectsDir, stem);
+  let parsed = { title: clean };
+  for (const copy of copies) {
+    try {
+      const rec = readJson(copy.json);
+      if (rec && typeof rec === 'object') parsed = rec;
+    } catch {
+      /* keep last */
+    }
+  }
+
+  const removed = [];
+  for (const copy of copies) {
+    if (safeUnlink(copy.json)) removed.push(copy.json);
+    if (copy.poster && safeUnlink(copy.poster)) removed.push(copy.poster);
+  }
+  const sharedPoster = path.join(projectsDir, 'posters', `${stem}.png`);
+  if (safeUnlink(sharedPoster)) removed.push(sharedPoster);
+
+  const filmRoot = filmRootFromProject(parsed, studioRoot, stem);
+  let removedFolders = false;
+  if (isSafeFilmRoot(filmRoot, studioRoot, projectsDir)) {
+    try {
+      fs.rmSync(filmRoot, { recursive: true, force: true });
+      removedFolders = true;
+      removed.push(filmRoot);
+    } catch {
+      /* locked */
+    }
+  }
+
+  const purgedBundle = purgedBundleDir(projectsDir, stem);
+  let removedPurgedBundle = false;
+  if (fs.existsSync(purgedBundle)) {
+    try {
+      fs.rmSync(purgedBundle, { recursive: true, force: true });
+      removedPurgedBundle = true;
+      removed.push(purgedBundle);
+    } catch {
+      /* locked */
+    }
+  }
+
+  return {
+    ok: true,
+    title: clean,
+    shelf: 'destroyed',
+    destroyed: true,
+    removedFolders,
+    removedPurgedBundle,
+    removed
+  };
+}
+
 /**
  * Move a title's JSON + poster into archived/, or the full film into PROJECTS PURGED.
+ * Pass shelf "destroyed" for irreversible wipe (Destroy).
  */
 function shelfProjectOnDisk(projectsDir, title, shelf) {
+  const raw = String(shelf || '').trim().toLowerCase();
+  if (raw === 'destroyed' || raw === 'destroy') {
+    return destroyProjectOnDisk(projectsDir, title);
+  }
   const destShelf = normalizeShelf(shelf) === LOCAL || normalizeShelf(shelf) === CLOUD
     ? ARCHIVED
     : normalizeShelf(shelf);
@@ -495,6 +574,7 @@ module.exports = {
   PURGED,
   ensureShelfDirs,
   shelfProjectOnDisk,
+  destroyProjectOnDisk,
   restoreProjectOnDisk,
   migrateLiveJsonIntoShelves,
   listLiveProjects,

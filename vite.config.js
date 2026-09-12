@@ -1058,7 +1058,7 @@ function localDiskVaultPlugin() {
           return;
         }
 
-        // 1b. SHELVE PROJECT ON DISK: POST /api/delete-project-disk  { title, shelf: archived|purged }
+  // 1b. SHELVE / DESTROY PROJECT ON DISK: POST /api/delete-project-disk  { title, shelf: archived|purged|destroyed }
         if (req.url === '/api/delete-project-disk' && req.method === 'POST') {
           try {
             const body = await readJsonBody(req);

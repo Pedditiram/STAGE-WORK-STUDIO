@@ -25,6 +25,7 @@ let memoryPresence = {};
 let memoryChat = {}; // roomId -> messages[]
 let memoryScreenplay = {}; // `${roomId}::${projectKey}` -> screenplay collab doc
 let memoryDeletedTitles = []; // uppercase title keys tombstoned across instances
+let memoryDestroyedTitles = []; // uppercase titles hard-destroyed (fan-out wipe)
 let memoryFilms = {}; // slug -> { project, updatedAt }
 let memoryStudioSettings = { studioModules: {}, guestUrlEnabled: true, updatedAt: '' };
 let projectsHydrated = false;
@@ -156,13 +157,13 @@ async function kvGet(kind) {
   return null;
 }
 
-async function kvSet(kind, body) {
+async function kvDel(kind) {
   if (!kvConfigured()) return false;
   try {
-    const data = await kvCommand(['SET', kvKey(kind), JSON.stringify(body)]);
+    const data = await kvCommand(['DEL', kvKey(kind)]);
     if (!data) return false;
-    // Upstash returns { result: "OK" } on success
-    return data.result === 'OK' || data.result === true || typeof data.result === 'string';
+    const n = Number(data.result);
+    return data.result === 'OK' || data.result === true || (Number.isFinite(n) && n > 0);
   } catch (e) {
     return false;
   }
@@ -605,6 +606,7 @@ function fitRoomsHubPayload(body) {
 /** Metadata-only project stubs — keep ALL titles; drop shot bodies if needed. */
 function fitProjectsPayload(body) {
   const deletedTitles = normalizeDeletedTitles(body?.deletedTitles || memoryDeletedTitles);
+  const destroyedTitles = normalizeDeletedTitles(body?.destroyedTitles || memoryDestroyedTitles);
   let projects = (Array.isArray(body?.projects) ? body.projects : []).map((p) => ({
     id: p.id,
     title: p.title,
@@ -621,6 +623,7 @@ function fitProjectsPayload(body) {
   let payload = {
     projects,
     deletedTitles,
+    destroyedTitles,
     updatedAt: body?.updatedAt || new Date().toISOString(),
     app: 'stage-production-studio'
   };
@@ -873,6 +876,7 @@ async function loadProjectsStore() {
         return {
           projects: data.projects,
           deletedTitles: normalizeDeletedTitles(data.deletedTitles),
+          destroyedTitles: normalizeDeletedTitles(data.destroyedTitles),
           ok: true
         };
       }
@@ -881,6 +885,7 @@ async function loadProjectsStore() {
         return {
           projects: [],
           deletedTitles: normalizeDeletedTitles(data?.deletedTitles),
+          destroyedTitles: normalizeDeletedTitles(data?.destroyedTitles),
           ok: true
         };
       }
@@ -898,6 +903,7 @@ async function loadProjectsStore() {
       return {
         projects,
         deletedTitles: normalizeDeletedTitles(data?.deletedTitles || data?.data?.deletedTitles),
+        destroyedTitles: normalizeDeletedTitles(data?.destroyedTitles || data?.data?.destroyedTitles),
         ok: true
       };
     }
@@ -912,19 +918,27 @@ async function loadProjectsStore() {
         return {
           projects,
           deletedTitles: normalizeDeletedTitles(data?.data?.deletedTitles || data?.deletedTitles),
+          destroyedTitles: normalizeDeletedTitles(
+            data?.data?.destroyedTitles || data?.destroyedTitles
+          ),
           ok: true
         };
       }
     }
   } catch (e) {}
 
-  return { projects: null, deletedTitles: [], ok: false };
+  return { projects: null, deletedTitles: [], destroyedTitles: [], ok: false };
 }
 
-async function saveProjectsStore(projects, deletedTitles = memoryDeletedTitles) {
+async function saveProjectsStore(
+  projects,
+  deletedTitles = memoryDeletedTitles,
+  destroyedTitles = memoryDestroyedTitles
+) {
   const payload = fitProjectsPayload({
     projects: Array.isArray(projects) ? projects : [],
     deletedTitles: normalizeDeletedTitles(deletedTitles),
+    destroyedTitles: normalizeDeletedTitles(destroyedTitles),
     updatedAt: new Date().toISOString(),
     app: 'stage-production-studio'
   });
@@ -1277,6 +1291,14 @@ async function hydrateProjectsFromDurable({ force = false } = {}) {
       ...memoryDeletedTitles,
       ...(result.deletedTitles || [])
     ]);
+    memoryDestroyedTitles = normalizeDeletedTitles([
+      ...memoryDestroyedTitles,
+      ...(result.destroyedTitles || [])
+    ]);
+    memoryDeletedTitles = normalizeDeletedTitles([
+      ...memoryDeletedTitles,
+      ...memoryDestroyedTitles
+    ]);
     memoryProjects = filterDeletedProjects(result.projects, memoryDeletedTitles);
     projectsHydrated = true;
   }
@@ -1552,6 +1574,7 @@ export default async function handler(req, res) {
         success: true,
         projects: cleanProjs,
         deletedTitles: memoryDeletedTitles,
+        destroyedTitles: memoryDestroyedTitles,
         durableOk: ok || kvConfigured(),
         kvConfigured: kvConfigured()
       });
@@ -1792,10 +1815,71 @@ export default async function handler(req, res) {
       return sendJson(req, res, { success: true, project: rec.project, durableOk });
     }
 
+    if (type === 'film-destroy') {
+      const title = String(body.title || body.project?.title || '').trim();
+      const slug = filmSlug(title);
+      if (!title || slug === 'untitled') {
+        return res.status(400).json({ success: false, error: 'Missing project' });
+      }
+      await hydrateProjectsFromDurable();
+      const key = titleKey(title);
+      memoryDestroyedTitles = normalizeDeletedTitles([...memoryDestroyedTitles, key]);
+      memoryDeletedTitles = normalizeDeletedTitles([...memoryDeletedTitles, key]);
+      memoryProjects = filterDeletedProjects(memoryProjects, memoryDeletedTitles);
+      delete memoryFilms[slug];
+      let filmGone = true;
+      if (kvConfigured()) {
+        try {
+          filmGone = (await kvDel(`film:${slug}`)) || filmGone;
+        } catch (e) {
+          filmGone = false;
+        }
+      }
+      // Drop allotments for this title on every collaborator row
+      try {
+        await hydrateCollaboratorsFromDurable({ force: true });
+        memoryCollaborators = (Array.isArray(memoryCollaborators) ? memoryCollaborators : []).map(
+          (u) => {
+            if (!u || typeof u !== 'object') return u;
+            const allotted = Array.isArray(u.allottedProjects) ? u.allottedProjects : [];
+            const next = allotted.filter((t) => titleKey(t) !== key);
+            if (next.length === allotted.length) return u;
+            return { ...u, allottedProjects: next };
+          }
+        );
+        // persist collaborators best-effort via existing save path
+        try {
+          const payload = {
+            users: memoryCollaborators,
+            studioSettings: memoryStudioSettings,
+            updatedAt: new Date().toISOString(),
+            app: 'stage-production-studio'
+          };
+          if (kvConfigured()) await kvSet('collaborators', payload);
+        } catch (e) {}
+      } catch (e) {}
+
+      const durableOk = await saveProjectsStore(
+        memoryProjects,
+        memoryDeletedTitles,
+        memoryDestroyedTitles
+      );
+      return sendJson(req, res, {
+        success: true,
+        title,
+        destroyed: true,
+        filmGone,
+        deletedTitles: memoryDeletedTitles,
+        destroyedTitles: memoryDestroyedTitles,
+        durableOk
+      });
+    }
+
     if (type === 'projects') {
       const incomingProjs = body.projects || body;
       const incomingDeleted = normalizeDeletedTitles(body.deletedTitles);
       const incomingReleased = normalizeDeletedTitles(body.releasedTitles);
+      const incomingDestroyed = normalizeDeletedTitles(body.destroyedTitles);
       const exclusiveCloud = Boolean(body.exclusiveCloud);
 
       await hydrateProjectsFromDurable();
@@ -1816,6 +1900,7 @@ export default async function handler(req, res) {
             success: true,
             projects: filterDeletedProjects(memoryProjects),
             deletedTitles: memoryDeletedTitles,
+            destroyedTitles: memoryDestroyedTitles,
             ignoredEmpty: true
           });
         }
@@ -1823,6 +1908,16 @@ export default async function handler(req, res) {
         // Merge tombstones from client — but never tombstone titles that are still live in this push
         const incomingKeys = new Set(cleanedIncoming.map((p) => titleKey(p.title)));
         const releasedSet = new Set(incomingReleased.map((t) => titleKey(t)));
+        if (incomingDestroyed.length) {
+          memoryDestroyedTitles = normalizeDeletedTitles([
+            ...memoryDestroyedTitles,
+            ...incomingDestroyed
+          ]);
+          memoryDeletedTitles = normalizeDeletedTitles([
+            ...memoryDeletedTitles,
+            ...incomingDestroyed
+          ]);
+        }
         if (incomingDeleted.length) {
           memoryDeletedTitles = normalizeDeletedTitles([
             ...memoryDeletedTitles,
@@ -1831,11 +1926,15 @@ export default async function handler(req, res) {
         }
         const incomingDeletedSet = new Set(incomingDeleted.map((t) => titleKey(t)));
         // Live push un-tombstones only when the client did not also mark the title deleted.
-        // Stale vault echoes must not revive Archive/Purge.
+        // Destroyed titles never revive. Stale vault echoes must not revive Archive/Purge.
         if (incomingKeys.size) {
+          const destroyedSet = new Set(memoryDestroyedTitles.map((t) => titleKey(t)));
           memoryDeletedTitles = normalizeDeletedTitles(
             memoryDeletedTitles.filter(
-              (t) => incomingDeletedSet.has(titleKey(t)) || !incomingKeys.has(titleKey(t))
+              (t) =>
+                destroyedSet.has(titleKey(t)) ||
+                incomingDeletedSet.has(titleKey(t)) ||
+                !incomingKeys.has(titleKey(t))
             )
           );
         }
@@ -1883,7 +1982,11 @@ export default async function handler(req, res) {
         memoryProjects = filterDeletedProjects(mergedLive, memoryDeletedTitles);
         projectsHydrated = true;
 
-        const durableOk = await saveProjectsStore(memoryProjects, memoryDeletedTitles);
+        const durableOk = await saveProjectsStore(
+          memoryProjects,
+          memoryDeletedTitles,
+          memoryDestroyedTitles
+        );
         lastProjectsDurableOk = durableOk;
         await loadTicks();
         stampProjectsTick(memoryProjects);
@@ -1892,13 +1995,15 @@ export default async function handler(req, res) {
           success: true,
           projects: memoryProjects,
           deletedTitles: memoryDeletedTitles,
+          destroyedTitles: memoryDestroyedTitles,
           durableOk
         });
       }
       return res.status(200).json({
         success: true,
         projects: filterDeletedProjects(memoryProjects),
-        deletedTitles: memoryDeletedTitles
+        deletedTitles: memoryDeletedTitles,
+        destroyedTitles: memoryDestroyedTitles
       });
     }
 

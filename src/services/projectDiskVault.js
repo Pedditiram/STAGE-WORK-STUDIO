@@ -329,11 +329,17 @@ export const saveProjectToVault = async (project) => {
   return true;
 };
 
-/** Remove a title from the live vault (IndexedDB + projects/*.json) without erasing the film. */
+/** Remove a title from the live vault. shelf: archived|purged|destroyed */
 export async function removeProjectFromVault(title, shelf = 'archived') {
   const clean = String(title || '').trim();
   if (!clean) return false;
-  const dest = String(shelf || '').toLowerCase() === 'purged' ? 'purged' : 'archived';
+  const raw = String(shelf || '').trim().toLowerCase();
+  const dest =
+    raw === 'destroyed' || raw === 'destroy'
+      ? 'destroyed'
+      : raw === 'purged'
+        ? 'purged'
+        : 'archived';
   const want = clean.toLowerCase();
 
   try {
@@ -369,7 +375,7 @@ export async function removeProjectFromVault(title, shelf = 'archived') {
       }).catch(() => null);
     }
   } catch (e) {
-    console.warn('Error shelving project on disk:', e);
+    console.warn('Error shelving/destroying project on disk:', e);
   }
 
   return true;

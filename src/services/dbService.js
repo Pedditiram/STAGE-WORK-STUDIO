@@ -456,10 +456,14 @@ export async function syncProjectLibraryToCloud(projectLibrary) {
   const deletedTitles = Array.from(readDeletedTitleKeys()).filter(
     (t) => !liveKeys.has(t) && !pinned.has(t)
   );
+  const destroyedTitles = Array.from(readDestroyedTitleKeys()).filter(
+    (t) => !liveKeys.has(t) && !pinned.has(t)
+  );
   const payload = {
     projects: catalog,
     releasedTitles: deletedTitles,
     deletedTitles,
+    destroyedTitles,
     exclusiveCloud: false,
     catalogSync: true,
     updatedAt: new Date().toISOString(),
@@ -905,6 +909,151 @@ export async function purgeArchivedProject(archiveId) {
   }
 }
 
+const DESTROYED_TITLES_KEY = 'sps_destroyed_project_titles';
+
+function readDestroyedTitleKeys() {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = JSON.parse(localStorage.getItem(DESTROYED_TITLES_KEY) || '[]');
+    return new Set(
+      (Array.isArray(raw) ? raw : [])
+        .map((t) => String(t || '').trim().toUpperCase())
+        .filter((t) => t && t !== 'STAGE PRODUCTION STUDIO')
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+export function markProjectTitlesDestroyed(titles) {
+  if (typeof window === 'undefined') return;
+  const list = Array.isArray(titles) ? titles : [titles];
+  const set = readDestroyedTitleKeys();
+  list.forEach((t) => {
+    const key = String(t || '').trim().toUpperCase();
+    if (key && key !== 'STAGE PRODUCTION STUDIO') set.add(key);
+  });
+  localStorage.setItem(DESTROYED_TITLES_KEY, JSON.stringify(Array.from(set)));
+  markProjectTitlesDeleted(list);
+}
+
+/**
+ * Destroy = irreversible wipe for every device + cloud.
+ * Removes archive card, tombstones title, hard-deletes local folders,
+ * deletes cloud film body, and broadcasts destroyedTitles so other machines wipe locally.
+ */
+export async function destroyArchivedProject(archiveId) {
+  if (typeof window === 'undefined' || !archiveId) return { ok: false };
+  const archive = readProjectArchive();
+  const entry = archive.find((p) => p.archiveId === archiveId || p.id === archiveId);
+  const title = String(entry?.title || '').trim();
+  if (!title) return { ok: false };
+  writeProjectArchive(archive.filter((p) => p.archiveId !== archiveId && p.id !== archiveId));
+  markProjectTitlesDestroyed([title]);
+
+  try {
+    const { removeProjectFromVault } = await import('./projectDiskVault');
+    await removeProjectFromVault(title, 'destroyed');
+  } catch {
+    /* best-effort */
+  }
+
+  try {
+    await destroyFilmEverywhereOnCloud(title);
+  } catch {
+    /* best-effort */
+  }
+
+  try {
+    const live = filterOutDeletedProjects(readLocalProjectLibrary()).filter(
+      (p) => String(p?.title || '').trim().toUpperCase() !== title.toUpperCase()
+    );
+    writeLocalProjectLibrary(live);
+    await syncProjectLibraryToCloud(live);
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent('sps_projects_updated', { detail: { source: 'destroy', title } })
+    );
+  } catch {
+    /* ignore */
+  }
+  return { ok: true, title };
+}
+
+/** Cloud: delete film KV + catalog row + allotments; fan-out destroyedTitles. */
+export async function destroyFilmEverywhereOnCloud(title) {
+  if (typeof window === 'undefined') return false;
+  if (isSelfServeSession()) return false;
+  const clean = String(title || '').trim();
+  if (!clean) return false;
+  markProjectTitlesDestroyed([clean]);
+  try {
+    const res = await fetchJsonTimed(`${syncApiUrl()}?type=film-destroy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: clean,
+        destroyedTitles: [clean],
+        deletedTitles: [clean]
+      })
+    });
+    return Boolean(res?.ok);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When cloud lists a destroyed title, wipe it on this device (folders + vault + archive).
+ */
+export async function applyCloudDestroyedTitles(destroyedTitles) {
+  if (typeof window === 'undefined') return;
+  const incoming = (Array.isArray(destroyedTitles) ? destroyedTitles : [])
+    .map((t) => String(t || '').trim())
+    .filter((t) => t && t.toUpperCase() !== 'STAGE PRODUCTION STUDIO');
+  if (!incoming.length) return;
+
+  markProjectTitlesDestroyed(incoming);
+  const archive = readProjectArchive().filter((p) => {
+    const key = String(p?.title || '').trim().toUpperCase();
+    return !incoming.some((t) => t.toUpperCase() === key);
+  });
+  writeProjectArchive(archive);
+
+  try {
+    const { removeProjectFromVault } = await import('./projectDiskVault');
+    for (const title of incoming) {
+      await removeProjectFromVault(title, 'destroyed');
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const open = String(localStorage.getItem('sps_current_project_title') || '').trim().toUpperCase();
+    if (open && incoming.some((t) => t.toUpperCase() === open)) {
+      localStorage.removeItem('sps_current_shots');
+      localStorage.setItem('sps_current_project_title', '');
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const live = filterOutDeletedProjects(readLocalProjectLibrary());
+    writeLocalProjectLibrary(live);
+    window.dispatchEvent(
+      new CustomEvent('sps_projects_updated', { detail: { source: 'cloud_destroy' } })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Record deleted titles so cloud hydrates cannot resurrect them. */
 export function markProjectTitlesDeleted(titles) {
   if (typeof window === 'undefined') return;
@@ -1104,6 +1253,9 @@ export async function fetchProjectLibraryFromCloud() {
         Array.isArray(data.deletedTitles) ? data.deletedTitles : [],
         Array.isArray(data.projects) ? data.projects : []
       );
+      if (Array.isArray(data.destroyedTitles) && data.destroyedTitles.length) {
+        applyCloudDestroyedTitles(data.destroyedTitles).catch(() => {});
+      }
       if (Array.isArray(data.projects)) {
         if (data.projects.length === 0) {
           return processAndStoreProjects([], { cloudAuthoritative: false });
@@ -1125,6 +1277,9 @@ export async function fetchProjectLibraryFromCloud() {
         Array.isArray(data.deletedTitles) ? data.deletedTitles : [],
         Array.isArray(data.projects) ? data.projects : []
       );
+      if (Array.isArray(data.destroyedTitles) && data.destroyedTitles.length) {
+        applyCloudDestroyedTitles(data.destroyedTitles).catch(() => {});
+      }
       if (Array.isArray(data.projects)) {
         return processAndStoreProjects(data.projects);
       }
