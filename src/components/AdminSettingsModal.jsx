@@ -32,6 +32,21 @@ function persistAuthorizedUsersAndNotify(users, { notify = true } = {}) {
   return secured;
 }
 
+/** Allotment requires Cloud shared-catalog + film body so other devices can sync. */
+async function publishAllottedTitleToSharedCloud(title) {
+  const clean = String(title || '').trim();
+  if (!clean || clean.toLowerCase().startsWith('all studio projects')) return;
+  try {
+    const { ensureTitlePublishedForAllotment } = await import('../utils/allottedLibraryHydrate');
+    const result = await ensureTitlePublishedForAllotment(clean);
+    if (!result?.ok) {
+      console.warn('[allot] shared catalog publish incomplete:', clean, result?.reason || '');
+    }
+  } catch (err) {
+    console.warn('[allot] shared catalog publish failed:', clean, err);
+  }
+}
+
 function ConsoleSwitchThumb({ on, label, onToggle }) {
   return (
     <button
@@ -1044,6 +1059,9 @@ export default function AdminSettingsModal({
       }, roomId || 'sps_local_dev', { pinIfUnset: pinNewToRoom });
       return persistAuthorizedUsersAndNotify([updatedUser, ...filtered]);
     });
+    if (!normalizeAccessLevel(selectedRole) || normalizeAccessLevel(selectedRole) !== 'Owner') {
+      publishAllottedTitleToSharedCloud(selectedProjectToAllot);
+    }
 
     const newActivity = {
       id: `act_${Date.now()}`,
@@ -1092,6 +1110,9 @@ export default function AdminSettingsModal({
         verifiedAt: `${todayFormatted}, ${nowStr}`
       }, roomId || 'sps_local_dev', { pinIfUnset: true });
       setAuthorizedUsers(prev => persistAuthorizedUsersAndNotify([newUser, ...prev]));
+      if (!isOwnerInvite) {
+        publishAllottedTitleToSharedCloud(selectedProjectToAllot);
+      }
 
       const newActivity = {
         id: `act_${Date.now()}`,
@@ -3863,6 +3884,9 @@ export default function AdminSettingsModal({
                                   <span className="text-[10.5px] font-bold text-amber-400 font-sans flex items-center gap-1 shrink-0">
                                     📁 Allot Project:
                                   </span>
+                                  <span className="text-[9px] text-zinc-500 font-mono shrink-0 max-w-[12rem] sm:max-w-none">
+                                    Publishes title to shared Cloud catalog + film
+                                  </span>
 
                                   {/* Project Allotment Dropdown */}
                                   <select
@@ -3882,6 +3906,7 @@ export default function AdminSettingsModal({
                                           })
                                         )
                                       );
+                                      publishAllottedTitleToSharedCloud(selectedProj);
                                     }}
                                     className="text-[10.5px] font-mono px-2 py-1.5 sm:py-0.5 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700/80 font-bold cursor-pointer hover:border-amber-400 focus:outline-none shadow-sm min-w-0 max-w-full"
                                     title="Select project to allot to this collaborator"

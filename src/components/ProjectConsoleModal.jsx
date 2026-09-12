@@ -1495,6 +1495,14 @@ export default function ProjectConsoleModal({
     setShelfSyncError('');
     setShelfSyncDiff(null);
     try {
+      if (!isOwnerUser) {
+        try {
+          const { ensureAllottedTitlesOnThisDevice } = await import('../utils/allottedLibraryHydrate');
+          await ensureAllottedTitlesOnThisDevice();
+        } catch {
+          /* continue peek */
+        }
+      }
       const remote = await peekRemoteLibraryCatalog();
       setShelfSyncRemote(Array.isArray(remote) ? remote : []);
       setShelfSyncDiff(compareLibraryShelves(projectLibrary, remote));
@@ -1608,21 +1616,21 @@ export default function ProjectConsoleModal({
     setShelfSyncBusyTitle(clean);
     setShelfSyncError('');
     try {
-      const card = (Array.isArray(projectLibrary) ? projectLibrary : []).find(
-        (p) => String(p?.title || '').trim().toUpperCase() === clean.toUpperCase()
-      );
-      if (!card) {
-        setShelfSyncError(`"${clean}" is not on this app.`);
-        return;
-      }
-      const ok = await publishOneLibraryTitle(card);
-      if (!ok) {
-        setShelfSyncError(`Could not publish "${clean}".`);
+      const { ensureTitlePublishedForAllotment } = await import('../utils/allottedLibraryHydrate');
+      const result = await ensureTitlePublishedForAllotment(clean);
+      if (!result?.ok) {
+        setShelfSyncError(
+          result?.reason === 'missing_title'
+            ? `"${clean}" is not on this app.`
+            : `Could not publish "${clean}" to the shared Cloud catalog.`
+        );
         return;
       }
       const remote = await peekRemoteLibraryCatalog();
       setShelfSyncRemote(Array.isArray(remote) ? remote : []);
-      setShelfSyncDiff(compareLibraryShelves(projectLibrary, remote));
+      const live = readLocalProjectLibrary();
+      setProjectLibrary(sanitizeLibraryTitles(filterOutDeletedProjects(live)));
+      setShelfSyncDiff(compareLibraryShelves(live, remote));
     } catch {
       setShelfSyncError(`Could not publish "${clean}".`);
     } finally {
@@ -3949,8 +3957,18 @@ export default function ProjectConsoleModal({
             </div>
             <div className="p-4 overflow-y-auto space-y-3 text-[12px]">
               <p className="m-0 text-slate-600 dark:text-zinc-400">
-                Copy one title onto this app without replacing the whole list. HEY stays on Cloud if it is Cloud in the shared catalog — a title is never Local and Cloud at once.
+                Allotted films must be on the <strong>shared Cloud catalog</strong> with a published film body.
+                If Shared catalog is empty, click <strong>Publish this title</strong> (or Publish this device) on the owner machine —
+                then the other user opens Projects to pull allotted titles. A title is never Local and Cloud at once.
               </p>
+              {shelfSyncDiff &&
+              !shelfSyncDiff.sharedLocal.length &&
+              !shelfSyncDiff.sharedCloud.length &&
+              (shelfSyncDiff.deviceLocal.length > 0 || shelfSyncDiff.deviceCloud.length > 0) ? (
+                <p className="m-0 text-amber-800 dark:text-amber-300 text-[11px] font-semibold">
+                  Shared catalog is empty — allotted users cannot sync until you publish Cloud titles from this device.
+                </p>
+              ) : null}
               {shelfSyncError ? (
                 <p className="m-0 text-red-600 dark:text-red-400">{shelfSyncError}</p>
               ) : null}

@@ -1,5 +1,5 @@
 ---
-description: Exclusive Local/Cloud shelves — never silent catalog overwrite; owner Sync shelves confirm
+description: Exclusive Local/Cloud shelves — allotted titles must publish to shared Cloud; never silent catalog overwrite
 alwaysApply: true
 ---
 
@@ -7,7 +7,16 @@ alwaysApply: true
 
 A title is **Local or Cloud, never both**. Same account: web and Mac keep their own shelf lists until the owner confirms.
 
-## Manual Sync shelves (required)
+## Allotment sync (strict)
+
+Admin allotment is **not** enough by itself. Allotted titles must be on the **shared Cloud catalog** with a **film body** in cloud KV.
+
+1. On allot (Settings → Allot Project), call `ensureTitlePublishedForAllotment` — promote title to Cloud shelf on this device, `publishOneLibraryTitle`, `syncFilmToCloud`.
+2. Collaborator devices call `ensureAllottedTitlesOnThisDevice` on Projects open / boot — pull catalog card **or** film KV even if the shared catalog peek was empty. Never overwrite a local Matrix that already has shots.
+3. If Sync shelves shows **Shared catalog empty**, owner must **Publish this title** / **Publish this device** once; then collaborators reopen Projects.
+4. Do **not** allot a title without publishing it to the shared Cloud catalog.
+
+## Manual Sync shelves (required for shelf membership)
 
 Silent catalog push/pull is **forbidden**. Web and Electron must not overwrite each other’s Local/Cloud membership.
 
@@ -23,7 +32,7 @@ Silent catalog push/pull is **forbidden**. Web and Electron must not overwrite e
 
 Do **not** call `syncProjectLibraryToCloud` from: library persist, boot hydrate, poll / `processAndStoreProjects`, Save, or empty-remote seed.
 
-Keep an explicit push only on Create / Move / Archive / Purge (intentional shelf change) and **Publish this device**.
+Keep an explicit push only on Create / Move / Archive / Purge / Destroy (intentional shelf change), **Publish this device**, and **allot publish** (`publishOneLibraryTitle` for that title only).
 
 Do **not** adopt the remote catalog on console open, boot, or `subscribeToProjectLibraryUpdates`. `fetchProjectLibraryFromCloud` / `processAndStoreProjects` must not write shelves unless `applyShelves: true`.
 
