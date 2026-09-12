@@ -1109,32 +1109,34 @@ function SlotEditor({
                 <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                 ⭐ Favorite Presets ({favoriteItems.length}):
               </label>
-              <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
+              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1 [scrollbar-width:thin]">
                 {favoriteItems.map((preset, idx) => (
                   <div
                     key={`fav_${idx}`}
                     onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md shrink-0 whitespace-nowrap ${
+                    className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md w-full ${
                       value === preset
-                        ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg scale-105'
+                        ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg'
                         : 'bg-[#2A1810] text-[#FFD700] border-[#5A321E] hover:border-[#FFD700] hover:bg-[#3D2314] shadow-sm'
                     }`}
                   >
                     <button
                       type="button"
                       onClick={(e) => handleToggleFavorite(preset, e)}
-                      className="text-[#FFD700] hover:scale-125 transition-transform shrink-0"
+                      className="text-[#FFD700] hover:scale-125 transition-transform shrink-0 mt-0.5"
                       title="Remove from favorites"
                     >
                       <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                     </button>
 
-                    <span className="text-[#FFD700] font-extrabold">{preset}</span>
+                    <span className="text-[#FFD700] font-extrabold flex-1 min-w-0 whitespace-normal break-words leading-snug">
+                      {preset}
+                    </span>
 
                     <button
                       type="button"
                       onClick={(e) => handleDeletePreset(preset, e)}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-[#FFD700]/70 hover:text-red-400 transition-colors shrink-0"
+                      className="p-0.5 rounded hover:bg-red-500/20 text-[#FFD700]/70 hover:text-red-400 transition-colors shrink-0 mt-0.5"
                       title="Delete preset"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -1154,7 +1156,7 @@ function SlotEditor({
               </span>
             </div>
 
-            <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
+            <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1 [scrollbar-width:thin]">
               {nonFavoriteItems.map((preset, idx) => {
                 const isCustom = userPresets.includes(preset);
                 const isSelected = value === preset;
@@ -1162,29 +1164,29 @@ function SlotEditor({
                   <div
                     key={`std_${idx}`}
                     onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono font-bold shrink-0 whitespace-nowrap ${
+                    className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-mono font-bold w-full ${
                       isSelected 
-                        ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md scale-105'
+                        ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md'
                         : 'bg-zinc-900 text-zinc-100 border-zinc-700 hover:border-cyan-400 font-bold'
                     }`}
                   >
                     <button
                       type="button"
                       onClick={(e) => handleToggleFavorite(preset, e)}
-                      className="text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0"
+                      className="text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0 mt-0.5"
                       title="Add to favorites"
                     >
                       <Star className="w-3.5 h-3.5" />
                     </button>
 
-                    <span className="font-bold">
+                    <span className="font-bold flex-1 min-w-0 whitespace-normal break-words leading-snug">
                       {isCustom ? `➕ ${preset}` : preset}
                     </span>
 
                     <button
                       type="button"
                       onClick={(e) => handleDeletePreset(preset, e)}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0"
+                      className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0 mt-0.5"
                       title="Delete preset"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
