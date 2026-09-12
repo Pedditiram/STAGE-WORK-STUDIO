@@ -1843,8 +1843,15 @@ export default function App() {
     }).catch(() => {});
 
     fetchCollaboratorsFromCloud()
-      .then(() => {
-        if (!cancelled) window.dispatchEvent(new Event('sps_collaborators_updated'));
+      .then(async () => {
+        if (cancelled) return;
+        window.dispatchEvent(new Event('sps_collaborators_updated'));
+        try {
+          const { ensureAllottedTitlesOnThisDevice } = await import('./utils/allottedLibraryHydrate');
+          await ensureAllottedTitlesOnThisDevice();
+        } catch {
+          /* ignore */
+        }
       })
       .catch(() => {});
 

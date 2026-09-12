@@ -1,16 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { Sparkles, Maximize2, Minimize2, X, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown, Volume2, VolumeX } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Sparkles, Maximize2, Minimize2, X, Trash2, Star, Plus, Sliders, ChevronLeft, ChevronRight, ChevronDown, Volume2, VolumeX, Copy, Check } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 
 import { enhanceCraftSlotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
-import { assertCanMutateContent } from '../utils/productionLifecycle';
+import { assertCanMutateContent, isLifecycleLocked } from '../utils/productionLifecycle';
 import { CMD_TYPES, proposeAndValidate, approveLlmCommand, applyLlmCommand } from '../utils/llmCommandBus';
 import SaveCloseConfirmModal from './SaveCloseConfirmModal';
+import DialogueVoicePanel from './DialogueVoicePanel';
+import LifecycleControls from './LifecycleControls';
 import { parseSceneAndShotID } from '../utils/sceneShotUtils';
 import { compileNarrativeProse } from '../utils/narrativeCompiler';
 import IntensityScaleSelector from './IntensityScaleSelector';
 import CinematicReferencesPanel from './CinematicReferencesPanel';
 import { projectScopedStorageKey } from '../utils/projectWorkspace';
+import { resolveSceneSynopsis } from '../utils/matrixVersioning';
+import { resolveContinuityForShot } from '../utils/continuityState';
+import { readActiveAssetRegistry, linkShotToAssetRegistry } from '../utils/assetRegistry';
+import { shotSpecSummary, toggleShotCharAssetId, toggleShotWorldAssetId } from '../utils/shotSpec';
+import {
+  applyBrowserFullscreen,
+  CRAFT_WINDOW_EVENT,
+  readCraftFullscreen,
+  writeCraftFullscreen
+} from '../utils/craftWindowChrome';
 
 const GENERIC_PALETTE_PRESETS = [
   { name: 'Warm Earth & Gold', colors: ['#2b2118', '#8b5a2b', '#d4af37', '#f3e6c8'], label: 'Umber, Clay, Gold, Cream' },
@@ -90,6 +102,7 @@ function SlotEditor({
   const [promptViewFormat, setPromptViewFormat] = useState('crafts'); // 'crafts' | 'prose'
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const [promptCopyToast, setPromptCopyToast] = useState(false);
+  const [craftDeskOpen, setCraftDeskOpen] = useState(true);
 
   const renderLiveMasterPromptWithHighlight = (activeKey, currentVal, shotData = {}) => {
     const activeShotData = { ...(shotData || {}), [activeKey]: currentVal };
@@ -165,46 +178,44 @@ function SlotEditor({
       </div>
     );
   };
-  const [isFullscreen, setIsFullscreen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const isNative = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-      const isStored = localStorage.getItem('sps_slot_editor_fullscreen') === 'true';
-      return isNative || isStored;
-    }
-    return false;
-  });
+  const [isFullscreen, setIsFullscreen] = useState(() => readCraftFullscreen());
 
-  // Native Browser Fullscreen Bypass to hide Safari URL bar & tabs completely
+  // Shared craft window size — any craft open/fullscreen toggle updates every editor
+  useEffect(() => {
+    const sync = (e) => {
+      if (typeof e?.detail?.fullscreen === 'boolean') setIsFullscreen(e.detail.fullscreen);
+      else setIsFullscreen(readCraftFullscreen());
+    };
+    window.addEventListener(CRAFT_WINDOW_EVENT, sync);
+    const onFs = () => setIsFullscreen(readCraftFullscreen());
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    return () => {
+      window.removeEventListener(CRAFT_WINDOW_EVENT, sync);
+      document.removeEventListener('fullscreenchange', onFs);
+      document.removeEventListener('webkitfullscreenchange', onFs);
+    };
+  }, []);
+
   const toggleFullscreenMode = async (enable) => {
     const targetState = typeof enable === 'boolean' ? enable : !isFullscreen;
     setIsFullscreen(targetState);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sps_slot_editor_fullscreen', targetState ? 'true' : 'false');
-    }
-
-    try {
-      if (targetState) {
-        const elem = document.documentElement;
-        if (elem.requestFullscreen) {
-          await elem.requestFullscreen();
-        } else if (elem.webkitRequestFullscreen) {
-          await elem.webkitRequestFullscreen();
-        }
-      } else {
-        if (document.fullscreenElement || document.webkitFullscreenElement) {
-          if (document.exitFullscreen) {
-            await document.exitFullscreen();
-          } else if (document.webkitExitFullscreen) {
-            await document.webkitExitFullscreen();
-          }
-        }
-      }
-    } catch (e) {}
+    writeCraftFullscreen(targetState);
+    await applyBrowserFullscreen(targetState);
   };
 
   useEffect(() => {
     setActiveConfig(slotConfig);
   }, [slotConfig]);
+
+  // Matrix open → fullscreen for every craft (shared preference)
+  useEffect(() => {
+    if (!isForcePopupOpen) return undefined;
+    writeCraftFullscreen(true);
+    setIsFullscreen(true);
+    applyBrowserFullscreen(true);
+    return undefined;
+  }, [isForcePopupOpen]);
 
   const availableSlotsList = (allSlots && allSlots.length > 0) ? allSlots : SEEDANCE_SLOTS;
 
@@ -241,6 +252,9 @@ function SlotEditor({
 
   const handleOpenModal = () => {
     setIsPopupOpen(true);
+    writeCraftFullscreen(true);
+    setIsFullscreen(true);
+    applyBrowserFullscreen(true);
     if (onOpenPopup) onOpenPopup();
   };
 
@@ -496,6 +510,53 @@ function SlotEditor({
     }
   };
 
+  const continuityBundle = useMemo(
+    () =>
+      resolveContinuityForShot({
+        shot,
+        shots,
+        shotIndex: currentShotIndex,
+        projectTitle
+      }),
+    [shot, shots, currentShotIndex, projectTitle]
+  );
+
+  const shotSpec = useMemo(() => shotSpecSummary(shot), [shot]);
+
+  const patchContinuityField = (charKey, field, nextVal) => {
+    if (!assertCanMutateContent(shot).ok || typeof onUpdateShot !== 'function') return;
+    const prev = shot.continuityPatch && typeof shot.continuityPatch === 'object' ? shot.continuityPatch : {};
+    const charPatch = { ...(prev[charKey] || {}), [field]: nextVal };
+    onUpdateShot(currentShotIndex, {
+      ...(shot || {}),
+      continuityPatch: { ...prev, [charKey]: charPatch }
+    });
+  };
+
+  const handleLifecycleChange = (nextEntity) => {
+    if (!nextEntity || typeof onUpdateShot !== 'function') return;
+    onUpdateShot(currentShotIndex, nextEntity);
+  };
+
+  const copyLivePrompt = () => {
+    let payload = '';
+    if (promptViewFormat === 'prose') {
+      payload = compileNarrativeProse({ ...(shot || {}), [activeConfig.key]: value }) || '';
+    } else {
+      const merged = { ...(shot || {}), [activeConfig.key]: value };
+      payload = SEEDANCE_SLOTS.map((s) => {
+        const v = String(merged[s.key] || '').trim();
+        return v ? `${s.label}: ${v}` : null;
+      })
+        .filter(Boolean)
+        .join('. ');
+    }
+    if (!payload || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard.writeText(payload);
+    setPromptCopyToast(true);
+    setTimeout(() => setPromptCopyToast(false), 1600);
+  };
+
   // Render Shared Popup Modal Window
   const renderPopupModal = () => {
     if (!isModalActive && !embedded) return null;
@@ -512,6 +573,190 @@ function SlotEditor({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="overflow-y-auto space-y-3 flex-1 pr-1">
+
+          {(() => {
+            const synopsisText = resolveSceneSynopsis(shot, shots);
+            if (!synopsisText && activeConfig.key === 'sceneSynopsis') return null;
+            return (
+              <div
+                className="w-full p-2.5 rounded-[10px] border border-[var(--sps-border)]"
+                style={{ background: 'color-mix(in srgb, var(--sps-gold) 8%, var(--sps-bg))' }}
+                title="Scene synopsis — shared across every craft on this scene"
+              >
+                <div className="text-[9px] font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: 'var(--sps-muted)' }}>
+                  Scene synopsis
+                </div>
+                <p className="text-[11px] leading-snug m-0 whitespace-pre-wrap" style={{ color: 'var(--sps-text)' }}>
+                  {synopsisText || 'No scene synopsis yet — open Scene Synopsis craft to lock the beat.'}
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* Form desk chrome — lifecycle always; details (spec / continuity / prose) toggle */}
+          {typeof onUpdateShot === 'function' ? (
+            <div className="w-full space-y-2 p-2.5 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-bg)]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--sps-muted)' }}>
+                  Shot lifecycle
+                </span>
+                <LifecycleControls
+                  entity={shot}
+                  onChange={handleLifecycleChange}
+                  disabled={readOnly}
+                  compact
+                />
+                {isLifecycleLocked(shot) ? (
+                  <span className="text-[10px]" style={{ color: 'var(--sps-muted)' }}>
+                    Craft frozen — unlock to revise
+                  </span>
+                ) : null}
+                <span className="text-[10px] tabular-nums" style={{ color: 'var(--sps-muted)' }}>
+                  Crafts {shotSpec?.craftPct ?? 0}%
+                </span>
+                <button
+                  type="button"
+                  className={`sps-quiet-link text-[10px] ml-auto ${craftDeskOpen ? '' : 'is-muted'}`}
+                  onClick={() => setCraftDeskOpen((v) => !v)}
+                  title={craftDeskOpen ? 'Hide spec, continuity, prompt' : 'Show spec, continuity, prompt'}
+                >
+                  {craftDeskOpen ? 'Minimize' : 'Details'}
+                </button>
+              </div>
+
+              {craftDeskOpen ? (
+                <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] tabular-nums" style={{ color: 'var(--sps-muted)' }}>
+                  Shot Spec · crafts {shotSpec?.craftPct ?? 0}%
+                </span>
+                <button
+                  type="button"
+                  className="sps-quiet-link is-muted text-[10px] disabled:opacity-40"
+                  disabled={readOnly || inputLocked}
+                  title="Infer CHAR_/WORLD_ from @tags on this shot"
+                  onClick={() => {
+                    const reg = readActiveAssetRegistry();
+                    if (!reg) return;
+                    onUpdateShot(currentShotIndex, linkShotToAssetRegistry(shot, reg));
+                  }}
+                >
+                  Relink tags
+                </button>
+              </div>
+
+              {(() => {
+                const registry = readActiveAssetRegistry();
+                const chars = registry?.characters || [];
+                const worlds = registry?.world || [];
+                const boundChars = new Set(shotSpec?.charAssetIds || []);
+                const boundWorld = new Set(shotSpec?.worldAssetIds || []);
+                if (!chars.length && !worlds.length) return null;
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {chars.map((c) => (
+                      <button
+                        key={c.assetId}
+                        type="button"
+                        disabled={readOnly || inputLocked}
+                        title={c.name || c.tag || c.assetId}
+                        className={`sps-chip text-[9px] py-0 px-1.5 ${boundChars.has(c.assetId) ? 'is-on' : ''}`}
+                        onClick={() =>
+                          onUpdateShot(currentShotIndex, toggleShotCharAssetId(shot, c.assetId))
+                        }
+                      >
+                        {c.assetId}
+                      </button>
+                    ))}
+                    {worlds.map((w) => (
+                      <button
+                        key={w.assetId}
+                        type="button"
+                        disabled={readOnly || inputLocked}
+                        title={w.name || w.tag || w.assetId}
+                        className={`sps-chip text-[9px] py-0 px-1.5 ${boundWorld.has(w.assetId) ? 'is-on' : ''}`}
+                        onClick={() =>
+                          onUpdateShot(currentShotIndex, toggleShotWorldAssetId(shot, w.assetId))
+                        }
+                      >
+                        {w.assetId}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {continuityBundle.entries?.length > 0 ? (
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--sps-muted)' }}>
+                    Continuity
+                  </span>
+                  {continuityBundle.entries.map((entry) => (
+                    <div key={entry.key} className="flex flex-wrap items-end gap-2">
+                      <span className="text-[10px] font-mono shrink-0 min-w-[3.5rem]" style={{ color: 'var(--sps-text)' }}>
+                        {entry.tag || entry.name}
+                      </span>
+                      {['costume', 'injury', 'prop'].map((field) => (
+                        <label key={field} className="flex flex-col gap-0.5 min-w-[6rem] flex-1">
+                          <span className="text-[8px] uppercase tracking-wider" style={{ color: 'var(--sps-muted)' }}>
+                            {field}
+                          </span>
+                          <input
+                            type="text"
+                            className="sps-input text-[11px] py-1 px-2"
+                            value={entry.patch?.[field] ?? entry.state[field] ?? ''}
+                            disabled={readOnly || inputLocked || isLifecycleLocked(shot)}
+                            onChange={(e) => patchContinuityField(entry.key, field, e.target.value)}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[var(--sps-border)]">
+                <button
+                  type="button"
+                  className={`sps-btn sps-btn-compact ${promptViewFormat === 'crafts' ? 'sps-btn-primary' : ''}`}
+                  onClick={() => {
+                    setPromptViewFormat('crafts');
+                    setIsPromptExpanded(true);
+                  }}
+                >
+                  Craft
+                </button>
+                <button
+                  type="button"
+                  className={`sps-btn sps-btn-compact ${promptViewFormat === 'prose' ? 'sps-btn-primary' : ''}`}
+                  onClick={() => {
+                    setPromptViewFormat('prose');
+                    setIsPromptExpanded(true);
+                  }}
+                >
+                  Prose
+                </button>
+                <button type="button" className="sps-btn sps-btn-compact" onClick={copyLivePrompt}>
+                  {promptCopyToast ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {promptCopyToast ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  className="sps-quiet-link is-muted text-[10px] ml-auto"
+                  onClick={() => setIsPromptExpanded((v) => !v)}
+                >
+                  {isPromptExpanded ? 'Hide prompt' : 'Show prompt'}
+                </button>
+              </div>
+              {isPromptExpanded ? (
+                <div className="max-h-36 overflow-y-auto rounded-lg border border-[var(--sps-border)] p-2 bg-[var(--sps-surface)]">
+                  {renderLiveMasterPromptWithHighlight(activeConfig.key, value, shot)}
+                </div>
+              ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="w-full space-y-2.5 p-3 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-bg)] font-mono text-[var(--sps-text)]">
             <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-2 gap-2">
@@ -588,6 +833,19 @@ function SlotEditor({
               placeholder={`Enter ${(activeConfig.label || '').toLowerCase()}…`}
               className="w-full rounded-[7px] p-2.5 text-sm font-mono leading-relaxed resize-y font-medium border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] focus:outline-none focus:border-[var(--sps-gold)]"
             />
+
+            {activeConfig.key === 'characterDialogue' ? (
+              <DialogueVoicePanel
+                value={value || ''}
+                onChange={(next) => onChange?.(next)}
+                voiceProfile={shot?.dialogueVoice || null}
+                readOnly={inputLocked}
+                onVoiceProfileChange={(profile) => {
+                  if (typeof onUpdateShot !== 'function' || inputLocked) return;
+                  onUpdateShot(currentShotIndex, { ...(shot || {}), dialogueVoice: profile });
+                }}
+              />
+            ) : null}
           </div>
 
           {/* CRAFT #25: FIXED MULTI-MODAL ASSET SLOTS (image_1..9, video_1..3, audio_1..3) */}
@@ -851,12 +1109,12 @@ function SlotEditor({
                 <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                 ⭐ Favorite Presets ({favoriteItems.length}):
               </label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
                 {favoriteItems.map((preset, idx) => (
                   <div
                     key={`fav_${idx}`}
                     onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md ${
+                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md shrink-0 whitespace-nowrap ${
                       value === preset
                         ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg scale-105'
                         : 'bg-[#2A1810] text-[#FFD700] border-[#5A321E] hover:border-[#FFD700] hover:bg-[#3D2314] shadow-sm'
@@ -871,7 +1129,7 @@ function SlotEditor({
                       <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
                     </button>
 
-                    <span className="truncate max-w-[240px] text-[#FFD700] font-extrabold">{preset}</span>
+                    <span className="text-[#FFD700] font-extrabold">{preset}</span>
 
                     <button
                       type="button"
@@ -896,7 +1154,7 @@ function SlotEditor({
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
+            <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
               {nonFavoriteItems.map((preset, idx) => {
                 const isCustom = userPresets.includes(preset);
                 const isSelected = value === preset;
@@ -904,7 +1162,7 @@ function SlotEditor({
                   <div
                     key={`std_${idx}`}
                     onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono font-bold ${
+                    className={`text-[10.5px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all font-mono font-bold shrink-0 whitespace-nowrap ${
                       isSelected 
                         ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md scale-105'
                         : 'bg-zinc-900 text-zinc-100 border-zinc-700 hover:border-cyan-400 font-bold'
@@ -919,7 +1177,7 @@ function SlotEditor({
                       <Star className="w-3.5 h-3.5" />
                     </button>
 
-                    <span className="truncate max-w-[220px] font-bold">
+                    <span className="font-bold">
                       {isCustom ? `➕ ${preset}` : preset}
                     </span>
 

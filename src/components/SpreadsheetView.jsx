@@ -5,7 +5,7 @@ import SlotEditor from './SlotEditor';
 import HoverPinBar from './HoverPinBar';
 import {
   Plus, Copy, VolumeX, Volume2, Sparkles,
-  Check
+  Check, History
 } from 'lucide-react';
 import { enhanceEntireShotWithLLM, notifyLlmFailure } from '../services/aiScriptParser';
 import { parseSceneAndShotID, deriveSceneGroupHeading } from '../utils/sceneShotUtils';
@@ -36,6 +36,15 @@ import { applyContinuityPatch } from '../utils/continuityState';
 import { exportDownloadText, assertExportAllowed, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
 import { matrixShotsToCsv, matrixShotsToPrintHtml } from '../utils/matrixExport';
 import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
+import {
+  listSceneVersions,
+  listShotVersions,
+  pushSceneVersion,
+  pushShotVersion,
+  restoreSceneVersion,
+  restoreShotVersion
+} from '../utils/matrixVersioning';
+import { writeCraftFullscreen, applyBrowserFullscreen } from '../utils/craftWindowChrome';
 
 const COL_WIDTH_KEY = 'sps_matrix_col_widths';
 const COL_DEFAULTS = { index: 44, actions: 120, look: 128 };
@@ -103,6 +112,65 @@ function SpreadsheetView({
   const [pitchLifePulse, setPitchLifePulse] = useState('');
   const [focusCatPulse, setFocusCatPulse] = useState('');
   const [activeModalCell, setActiveModalCell] = useState(null); // { shotIdx, slotKey }
+  const [versionMenu, setVersionMenu] = useState(null); // 'shot' | 'scene' | null
+  const [versionNote, setVersionNote] = useState('');
+
+  const openCraftFromMatrix = useCallback((shotIdx, slotKey) => {
+    writeCraftFullscreen(true);
+    applyBrowserFullscreen(true);
+    setActiveModalCell({ shotIdx, slotKey });
+  }, []);
+
+  const activeShot = Array.isArray(shots) ? shots[activeShotIndex] : null;
+  const activeSceneNum = parseSceneAndShotID(activeShot?.sceneShotId || '', activeShotIndex)?.sceneNum;
+  const sceneShotIndices = useMemo(() => {
+    if (!activeSceneNum || !Array.isArray(shots)) return [];
+    const idxs = [];
+    shots.forEach((s, i) => {
+      if (parseSceneAndShotID(s?.sceneShotId || '', i)?.sceneNum === activeSceneNum) idxs.push(i);
+    });
+    return idxs;
+  }, [shots, activeSceneNum]);
+
+  const shotVersions = listShotVersions(activeShot);
+  const sceneCarrierIdx = sceneShotIndices[0] ?? activeShotIndex;
+  const sceneCarrier = Array.isArray(shots) ? shots[sceneCarrierIdx] : null;
+  const sceneVersions = listSceneVersions(sceneCarrier);
+
+  const saveShotVersion = () => {
+    if (lookOnly || !activeShot || typeof onUpdateShot !== 'function') return;
+    const label = window.prompt('Shot version label (optional)', '') ?? '';
+    onUpdateShot(activeShotIndex, pushShotVersion(activeShot, label));
+    setVersionNote('Shot version saved');
+    window.setTimeout(() => setVersionNote(''), 1600);
+  };
+
+  const saveSceneVersion = () => {
+    if (lookOnly || !sceneCarrier || typeof onUpdateShot !== 'function') return;
+    const sceneShots = sceneShotIndices.map((i) => shots[i]);
+    const label = window.prompt('Scene version label (optional)', '') ?? '';
+    onUpdateShot(sceneCarrierIdx, pushSceneVersion(sceneCarrier, sceneShots, label));
+    setVersionNote('Scene version saved');
+    window.setTimeout(() => setVersionNote(''), 1600);
+  };
+
+  const restoreShotVer = (versionId) => {
+    if (lookOnly || !activeShot || typeof onUpdateShot !== 'function') return;
+    if (!window.confirm('Restore this shot version? Current shot crafts will be replaced.')) return;
+    onUpdateShot(activeShotIndex, restoreShotVersion(activeShot, versionId));
+    setVersionMenu(null);
+    setVersionNote('Shot restored');
+    window.setTimeout(() => setVersionNote(''), 1600);
+  };
+
+  const restoreSceneVer = (versionId) => {
+    if (lookOnly || typeof onUpdateShots !== 'function') return;
+    if (!window.confirm('Restore this scene version? All shots in the scene will be replaced.')) return;
+    onUpdateShots(restoreSceneVersion(shots, sceneCarrierIdx, versionId));
+    setVersionMenu(null);
+    setVersionNote('Scene restored');
+    window.setTimeout(() => setVersionNote(''), 1600);
+  };
 
   const [draggedShotIdx, setDraggedShotIdx] = useState(null);
   const [dragOverShotIdx, setDragOverShotIdx] = useState(null);
@@ -442,23 +510,23 @@ function SpreadsheetView({
     const slotKeys = filteredSlots.map(s => s.key);
     const currIdx = slotKeys.indexOf(currentSlotKey);
     if (currIdx !== -1 && currIdx < slotKeys.length - 1) {
-      setActiveModalCell({ shotIdx: currentShotIdx, slotKey: slotKeys[currIdx + 1] });
+      openCraftFromMatrix(currentShotIdx, slotKeys[currIdx + 1]);
     } else if (currentShotIdx < (shots || []).length - 1) {
       if (setActiveShotIndex) setActiveShotIndex(currentShotIdx + 1);
-      setActiveModalCell({ shotIdx: currentShotIdx + 1, slotKey: slotKeys[0] });
+      openCraftFromMatrix(currentShotIdx + 1, slotKeys[0]);
     }
-  }, [filteredSlots, shots, setActiveShotIndex]);
+  }, [filteredSlots, shots, setActiveShotIndex, openCraftFromMatrix]);
 
   const handleNavigatePrevSlot = React.useCallback((currentShotIdx, currentSlotKey) => {
     const slotKeys = filteredSlots.map(s => s.key);
     const currIdx = slotKeys.indexOf(currentSlotKey);
     if (currIdx > 0) {
-      setActiveModalCell({ shotIdx: currentShotIdx, slotKey: slotKeys[currIdx - 1] });
+      openCraftFromMatrix(currentShotIdx, slotKeys[currIdx - 1]);
     } else if (currentShotIdx > 0) {
       if (setActiveShotIndex) setActiveShotIndex(currentShotIdx - 1);
-      setActiveModalCell({ shotIdx: currentShotIdx - 1, slotKey: slotKeys[slotKeys.length - 1] });
+      openCraftFromMatrix(currentShotIdx - 1, slotKeys[slotKeys.length - 1]);
     }
-  }, [filteredSlots, shots, setActiveShotIndex]);
+  }, [filteredSlots, shots, setActiveShotIndex, openCraftFromMatrix]);
 
   const handleCellChange = (shotIndex, slotKey, value) => {
     const currentShot = shots[shotIndex];
@@ -1313,6 +1381,91 @@ function SpreadsheetView({
               Look only
             </span>
           ) : (
+          <>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              className="sps-btn text-[10px] py-1"
+              title="Shot and scene versions"
+              onClick={() => setVersionMenu((m) => (m ? null : 'shot'))}
+            >
+              <History className="w-3.5 h-3.5" />
+              Versions
+            </button>
+            {versionMenu ? (
+              <div className="absolute right-0 top-full mt-1 z-50 min-w-[14rem] max-w-[18rem] rounded-lg border border-[var(--sps-border)] bg-[var(--sps-surface)] shadow-lg p-2 space-y-2">
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className={`sps-btn sps-btn-compact flex-1 ${versionMenu === 'shot' ? 'sps-btn-primary' : ''}`}
+                    onClick={() => setVersionMenu('shot')}
+                  >
+                    Shot
+                  </button>
+                  <button
+                    type="button"
+                    className={`sps-btn sps-btn-compact flex-1 ${versionMenu === 'scene' ? 'sps-btn-primary' : ''}`}
+                    onClick={() => setVersionMenu('scene')}
+                  >
+                    Scene
+                  </button>
+                </div>
+                {versionMenu === 'shot' ? (
+                  <>
+                    <button type="button" className="sps-btn sps-btn-compact w-full justify-start" onClick={saveShotVersion}>
+                      Save shot version
+                    </button>
+                    <div className="max-h-36 overflow-y-auto space-y-1">
+                      {shotVersions.length === 0 ? (
+                        <p className="text-[10px] m-0 px-1" style={{ color: 'var(--sps-muted)' }}>No shot versions yet</p>
+                      ) : (
+                        shotVersions.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="sps-quiet-link w-full justify-start text-left text-[10px]"
+                            title={v.at}
+                            onClick={() => restoreShotVer(v.id)}
+                          >
+                            {v.label}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="sps-btn sps-btn-compact w-full justify-start" onClick={saveSceneVersion}>
+                      Save scene version
+                    </button>
+                    <div className="max-h-36 overflow-y-auto space-y-1">
+                      {sceneVersions.length === 0 ? (
+                        <p className="text-[10px] m-0 px-1" style={{ color: 'var(--sps-muted)' }}>No scene versions yet</p>
+                      ) : (
+                        sceneVersions.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="sps-quiet-link w-full justify-start text-left text-[10px]"
+                            title={v.at}
+                            onClick={() => restoreSceneVer(v.id)}
+                          >
+                            {v.label} · {Array.isArray(v.shots) ? v.shots.length : 0} shots
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+                <button type="button" className="sps-quiet-link is-muted text-[10px] w-full" onClick={() => setVersionMenu(null)}>
+                  Close
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {versionNote ? (
+            <span className="text-[9px] text-[var(--sps-gold)] truncate max-w-[8rem]">{versionNote}</span>
+          ) : null}
           <button
             type="button"
             onClick={onAddScene}
@@ -1323,6 +1476,7 @@ function SpreadsheetView({
           >
             Scene
           </button>
+          </>
           )}
         </div>
       </HoverPinBar>
@@ -1717,24 +1871,24 @@ function SpreadsheetView({
                                 onUpdateShot={onUpdateShot}
                                 allSlots={filteredSlots}
                                 isForcePopupOpen={activeModalCell?.shotIdx === shotIdx && activeModalCell?.slotKey === slot.key}
-                                onOpenPopup={() => setActiveModalCell({ shotIdx, slotKey: slot.key })}
+                                onOpenPopup={() => openCraftFromMatrix(shotIdx, slot.key)}
                                 onCloseForcePopup={() => setActiveModalCell(null)}
                                 onNavigateNextSlot={(slotKey) => handleNavigateNextSlot(shotIdx, slotKey)}
                                 onNavigatePrevSlot={(slotKey) => handleNavigatePrevSlot(shotIdx, slotKey)}
-                                onJumpToSlot={(targetSlotKey) => setActiveModalCell({ shotIdx, slotKey: targetSlotKey })}
+                                onJumpToSlot={(targetSlotKey) => openCraftFromMatrix(shotIdx, targetSlotKey)}
                                 totalShotsCount={(shots || []).length}
                                 currentShotIndex={shotIdx}
                                 onNavigateNextShot={() => {
                                   const total = (shots || []).length;
                                   const nextShotIdx = (shotIdx + 1) % total;
                                   if (setActiveShotIndex) setActiveShotIndex(nextShotIdx);
-                                  setActiveModalCell({ shotIdx: nextShotIdx, slotKey: slot.key });
+                                  openCraftFromMatrix(nextShotIdx, slot.key);
                                 }}
                                 onNavigatePrevShot={() => {
                                   const total = (shots || []).length;
                                   const prevShotIdx = (shotIdx - 1 + total) % total;
                                   if (setActiveShotIndex) setActiveShotIndex(prevShotIdx);
-                                  setActiveModalCell({ shotIdx: prevShotIdx, slotKey: slot.key });
+                                  openCraftFromMatrix(prevShotIdx, slot.key);
                                 }}
                                 scenesList={scenesList}
                                 currentSceneId={currentSceneId}
@@ -1743,20 +1897,20 @@ function SpreadsheetView({
                                     ? scenesList[currSceneIdx + 1].firstShotIndex
                                     : (scenesList[0]?.firstShotIndex || 0);
                                   if (setActiveShotIndex) setActiveShotIndex(targetIdx);
-                                  setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
+                                  openCraftFromMatrix(targetIdx, slot.key);
                                 }}
                                 onNavigatePrevScene={() => {
                                   const targetIdx = currSceneIdx > 0
                                     ? scenesList[currSceneIdx - 1].firstShotIndex
                                     : (scenesList[scenesList.length - 1]?.firstShotIndex || 0);
                                   if (setActiveShotIndex) setActiveShotIndex(targetIdx);
-                                  setActiveModalCell({ shotIdx: targetIdx, slotKey: slot.key });
+                                  openCraftFromMatrix(targetIdx, slot.key);
                                 }}
                                 onJumpToScene={(targetScId) => {
                                   const sc = scenesList.find(s => s.sceneId === targetScId);
                                   if (sc && setActiveShotIndex) {
                                     setActiveShotIndex(sc.firstShotIndex);
-                                    setActiveModalCell({ shotIdx: sc.firstShotIndex, slotKey: slot.key });
+                                    openCraftFromMatrix(sc.firstShotIndex, slot.key);
                                   }
                                 }}
                               />

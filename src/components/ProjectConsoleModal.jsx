@@ -1306,6 +1306,18 @@ export default function ProjectConsoleModal({
           writeLocalProjectLibrary(next);
           return next;
         });
+        try {
+          const { ensureAllottedTitlesOnThisDevice } = await import('../utils/allottedLibraryHydrate');
+          await ensureAllottedTitlesOnThisDevice();
+          if (!cancelled) {
+            const after = readLocalProjectLibrary();
+            if (Array.isArray(after) && after.length) {
+              setProjectLibrary((prev) => mergeLibraryPreservingUnion(after, prev));
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       } catch (err) {
         console.warn('Project library disk hydrate failed', err);
       } finally {

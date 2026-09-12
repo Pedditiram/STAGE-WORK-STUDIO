@@ -236,7 +236,7 @@ export default function SaasAdminPanel() {
           placeholder="SPS_ADMIN_SECRET from Vercel (this device only)"
         />
         <span className="block text-[10px] text-zinc-500">
-          Required on production to grant credits, toggle guest URL, or email OTPs. Never stored in the film library.
+          Required on production to grant credits, toggle guest URL, or email OTPs. Stays on this browser/app only — it does not bind films to one computer. Allotted users need Cloud-shelf titles; web and Mac are separate devices.
         </span>
       </label>
 

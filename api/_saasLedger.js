@@ -72,19 +72,36 @@ export function getOrCreateRow(email) {
   return { list: found.list, idx: -1, row, clean: found.clean };
 }
 
-/** First device may register; later unknown device ids are ignored. */
+const PLAN_DEVICE_CAPS = {
+  trial: 1,
+  creator: 1,
+  pro: 2,
+  production: 3,
+  studio: 8,
+  enterprise: 99
+};
+
+/** Register / refresh this device up to the plan device cap (owners: enterprise). */
 export function rememberDevice(row, deviceId) {
   if (!row) return row;
   const id = String(deviceId || '').trim();
   if (!id) return row;
-  const devices = Array.isArray(row.devices) ? row.devices : [];
+  const devices = Array.isArray(row.devices) ? [...row.devices] : [];
   const now = new Date().toISOString();
   const existing = devices.find((x) => x.id === id);
   if (existing) {
     existing.lastSeen = now;
-  } else if (devices.length === 0) {
-    devices.push({ id, lastSeen: now, status: 'ACTIVE' });
+    row.devices = devices;
+    return row;
   }
+  const planKey = isOwner(row.email) ? 'enterprise' : String(row.plan || 'trial').toLowerCase();
+  const cap = PLAN_DEVICE_CAPS[planKey] ?? PLAN_DEVICE_CAPS.trial;
+  const active = devices.filter((d) => d.status !== 'DISABLED').length;
+  if (active >= cap) {
+    row.devices = devices;
+    return row;
+  }
+  devices.push({ id, lastSeen: now, status: 'ACTIVE' });
   row.devices = devices;
   return row;
 }

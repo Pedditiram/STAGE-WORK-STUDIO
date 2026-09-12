@@ -1,6 +1,8 @@
 /**
  * Studio admin key for server mutations (grant credits, guest URL, OTP email).
- * Stored only on this device. Never synced to the cloud library.
+ * Stored only on this browser/app — never synced to the cloud library.
+ * It does NOT map films to one computer. Allotted titles still need Cloud shelf
+ * + film body sync; web and Mac each have their own device id.
  */
 
 const KEY = 'sps_admin_secret';
