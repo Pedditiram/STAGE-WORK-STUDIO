@@ -15,12 +15,15 @@ import {
   Wand2,
   Wallet,
   BadgeCheck,
+  Globe2,
+  Users,
+  Layers,
 } from 'lucide-react';
 import StageWorksMark from './StageWorksMark';
 import RequestAccessModal from './RequestAccessModal';
 import DesktopTrialModal from './DesktopTrialModal';
 import LegalDocModal from './LegalDocModal';
-import { LINE, PRODUCT } from '../constants/brand';
+import { CATEGORY, LINE, PRODUCT } from '../constants/brand';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { pickPresentationOpening } from '../utils/presentationOpening';
 import { getCurrentUserEmail, isGuestSession, setPresentationMode } from '../utils/projectPermissions';
@@ -31,6 +34,63 @@ const SLIDE_MS = 8000;
 const OPEN_SLIDE_MS = 14000;
 
 const REST_SLIDES = [
+  {
+    id: 'remote',
+    scene: 'REMOTE SET',
+    kicker: 'Collaborative workflow',
+    title: 'Minute control from anywhere in the world',
+    punch: 'Call the lens, the light, and the take in real time — the director stays on the shot even when the crew is remote.',
+    points: [
+      { n: 'Live', label: 'Presence on every shot' },
+      { n: 'Call', label: 'Minute craft control' },
+      { n: 'World', label: 'Same slate, any city' },
+    ],
+    beats: [
+      'Traditional sets freeze when the key chair is not in the room.',
+      'Here the matrix travels — remote does not mean less control.',
+      'Approve, lock, and retake from across the world without losing the look.',
+    ],
+    Icon: Globe2,
+    wash: 'from-sky-900/14 via-transparent to-amber-800/10',
+  },
+  {
+    id: 'crewdesk',
+    scene: 'ONE PLATFORM',
+    kicker: 'Full crew · one desk',
+    title: 'Every technician on a single platform',
+    punch: 'Writer, DoP, editor, VFX, sound, and producers share one film room — not a pile of chats and folders.',
+    points: [
+      { n: 'Crew', label: 'All chairs on one slate' },
+      { n: 'Roles', label: 'Owner · Editor · Viewer' },
+      { n: 'Sync', label: 'Live merge, no overwrite chaos' },
+    ],
+    beats: [
+      'Departments stop shipping the picture through email and hard drives.',
+      'Slot lock and presence show who holds the craft right now.',
+      'One platform means one bible, one matrix, one cut of truth.',
+    ],
+    Icon: Users,
+    wash: 'from-violet-900/12 via-transparent to-teal-800/10',
+  },
+  {
+    id: 'crafts',
+    scene: 'THE MATRIX',
+    kicker: `${CRAFT_COUNT} crafts · one platform`,
+    title: `${CRAFT_COUNT} crafts. One platform.`,
+    punch: 'Composition, lens, light, performance, wardrobe, world — every craft on the shot, on the same row.',
+    points: [
+      { n: String(CRAFT_COUNT), label: 'Crafts on the matrix' },
+      { n: '1', label: 'Platform for the picture' },
+      { n: 'Lock', label: 'Slot lock per craft' },
+    ],
+    beats: [
+      'A picture holds when every craft answers on the same slate.',
+      'Form dives one shot deep; the matrix keeps the whole film honest.',
+      `${PRODUCT} is ${CATEGORY} — ${CRAFT_COUNT} crafts, not ${CRAFT_COUNT} apps.`,
+    ],
+    Icon: Layers,
+    wash: 'from-teal-900/14 via-transparent to-amber-800/10',
+  },
   {
     id: 'page',
     scene: 'STORY DESK',
@@ -44,7 +104,7 @@ const REST_SLIDES = [
     ],
     beats: [
       'Writer Console holds the pages.',
-      'AI breakdown turns the script into a shot list.',
+      'Script breakdown turns the page into a shot list.',
       'Character bible locks face, walk, and costume. World keeps geography honest.',
     ],
     Icon: ScrollText,
@@ -72,17 +132,17 @@ const REST_SLIDES = [
   {
     id: 'take',
     scene: 'THE TAKE',
-    kicker: 'Compile · Generate · Reel',
+    kicker: 'Compile · Desk · Reel',
     title: 'From craft to the cut',
     punch: 'Frame 0 and Frame 120. Stills that hold the look. A reel you can play.',
     points: [
-      { n: '0 / 120', label: 'Keyframe prompts' },
+      { n: '0 / 120', label: 'Keyframe cards' },
       { n: 'Still', label: 'Look continuity' },
       { n: 'Reel', label: 'Play the takes' },
     ],
     beats: [
-      'Compiler writes Seedance-ready prompts.',
-      'Generate desk paints the stills.',
+      'Compiler writes production-ready shot direction.',
+      'The take desk paints the stills once the look is locked.',
       'Promo cuts the trailer. Campaign prints the street. Pitch and Budget walk the boardroom.',
     ],
     Icon: Sparkles,
@@ -150,14 +210,14 @@ const REST_SLIDES = [
     scene: 'EASE OF MAKING',
     kicker: 'Page → matrix → take',
     title: 'Movie-making that stays simple to run',
-    punch: 'One desk from page to cut. Craft on the shot. Generate when the look is locked — not before.',
+    punch: 'One desk from page to cut. Craft on the shot. Call the take when the look is locked — not before.',
     points: [
       { n: 'One', label: 'Desk for the whole film' },
       { n: 'Clear', label: 'Rooms with one job each' },
       { n: 'Fast', label: 'From script to stills' },
     ],
     beats: [
-      'Writer, Matrix, Compile, Generate, Reel — the path is short and visible.',
+      'Writer, Matrix, Compile, Take, Reel — the path is short and visible.',
       'Collaborators sit in roles; the OS remembers the shot, not a dozen folders.',
       'Ease is not dumbing down cinema — it is removing the paperwork between intention and frame.',
     ],
@@ -177,7 +237,7 @@ const REST_SLIDES = [
     ],
     beats: [
       'Traditional cost hides in waiting, travel, and takes that never make the cut.',
-      'Lock wardrobe, world, and crafts once — then generate instead of rebuilding the set.',
+      'Lock wardrobe, world, and crafts once — then run the take instead of rebuilding the set.',
       'Huge savings land when the desk replaces the burn, not when you starve the craft.',
     ],
     Icon: Wallet,
@@ -210,11 +270,11 @@ const REST_SLIDES = [
     punch: 'Cut pre-viz cost, accelerate turnaround, license the pipeline. This reel is the raise.',
     points: [
       { n: '80%+', label: 'Pre-viz overhead cut' },
-      { n: '10×', label: 'Text to camera params' },
+      { n: '10×', label: 'Text to camera craft' },
       { n: 'License', label: 'Multi-tenant houses' },
     ],
     beats: [
-      'Direct path into 4K video. Export lists, schedules, and reels when the look is locked.',
+      'Direct path into theatrical-grade frames. Export lists, schedules, and reels when the look is locked.',
       'Login or request access. Collaborators unlock the full studio.',
       LINE,
     ],
