@@ -563,30 +563,32 @@ function SlotEditor({
 
     const cardContent = (
       <div 
-        className={`sps-matrix-craft space-y-3.5 flex flex-col font-mono transition-all bg-[var(--sps-surface)] text-[var(--sps-text)] border border-[var(--sps-border)] ${
+        className={`sps-matrix-craft flex flex-col min-h-0 font-mono transition-all bg-[var(--sps-surface)] text-[var(--sps-text)] border border-[var(--sps-border)] ${
           embedded 
-            ? 'h-full max-h-full overflow-y-auto p-3 rounded-[10px]' 
+            ? 'h-full max-h-full overflow-hidden p-2 rounded-[10px]' 
             : isFullscreen
-              ? 'h-full w-full max-w-none max-h-none rounded-none border-0 p-6 overflow-hidden'
-              : 'w-full max-w-5xl max-h-[92vh] rounded-[10px] p-5 overflow-hidden'
+              ? 'h-full w-full max-w-none max-h-none rounded-none border-0 p-3 overflow-hidden'
+              : 'w-full max-w-5xl h-[92vh] max-h-[92vh] rounded-[10px] p-3 overflow-hidden'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="overflow-y-auto space-y-3 flex-1 pr-1">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
+          {/* Static top — window itself does not scroll */}
+          <div className="shrink-0 space-y-1.5">
 
           {(() => {
             const synopsisText = resolveSceneSynopsis(shot, shots);
             if (!synopsisText && activeConfig.key === 'sceneSynopsis') return null;
             return (
               <div
-                className="w-full p-2.5 rounded-[10px] border border-[var(--sps-border)]"
+                className="w-full px-2.5 py-1.5 rounded-[8px] border border-[var(--sps-border)]"
                 style={{ background: 'color-mix(in srgb, var(--sps-gold) 8%, var(--sps-bg))' }}
                 title="Scene synopsis — shared across every craft on this scene"
               >
-                <div className="text-[9px] font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: 'var(--sps-muted)' }}>
+                <div className="text-[8px] font-semibold uppercase tracking-[0.14em] mb-0.5" style={{ color: 'var(--sps-muted)' }}>
                   Scene synopsis
                 </div>
-                <p className="text-[11px] leading-snug m-0 whitespace-pre-wrap" style={{ color: 'var(--sps-text)' }}>
+                <p className="text-[11px] leading-snug m-0 whitespace-pre-wrap line-clamp-2" style={{ color: 'var(--sps-text)' }}>
                   {synopsisText || 'No scene synopsis yet — open Scene Synopsis craft to lock the beat.'}
                 </p>
               </div>
@@ -595,8 +597,8 @@ function SlotEditor({
 
           {/* Form desk chrome — lifecycle always; details (spec / continuity / prose) toggle */}
           {typeof onUpdateShot === 'function' ? (
-            <div className="w-full space-y-2 p-2.5 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-bg)]">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="w-full space-y-1.5 p-2 rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg)]">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--sps-muted)' }}>
                   Shot lifecycle
                 </span>
@@ -687,23 +689,23 @@ function SlotEditor({
               })()}
 
               {continuityBundle.entries?.length > 0 ? (
-                <div className="space-y-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--sps-muted)' }}>
+                <div className="space-y-1">
+                  <span className="text-[8px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--sps-muted)' }}>
                     Continuity
                   </span>
                   {continuityBundle.entries.map((entry) => (
-                    <div key={entry.key} className="flex flex-wrap items-end gap-2">
-                      <span className="text-[10px] font-mono shrink-0 min-w-[3.5rem]" style={{ color: 'var(--sps-text)' }}>
+                    <div key={entry.key} className="grid grid-cols-[auto_1fr_1fr_1fr] gap-1.5 items-end">
+                      <span className="text-[10px] font-mono shrink-0 pb-1" style={{ color: 'var(--sps-text)' }}>
                         {entry.tag || entry.name}
                       </span>
                       {['costume', 'injury', 'prop'].map((field) => (
-                        <label key={field} className="flex flex-col gap-0.5 min-w-[6rem] flex-1">
+                        <label key={field} className="flex flex-col gap-0 min-w-0">
                           <span className="text-[8px] uppercase tracking-wider" style={{ color: 'var(--sps-muted)' }}>
                             {field}
                           </span>
                           <input
                             type="text"
-                            className="sps-input text-[11px] py-1 px-2"
+                            className="sps-input text-[11px] !py-0.5 !px-1.5"
                             value={entry.patch?.[field] ?? entry.state[field] ?? ''}
                             disabled={readOnly || inputLocked || isLifecycleLocked(shot)}
                             onChange={(e) => patchContinuityField(entry.key, field, e.target.value)}
@@ -749,7 +751,7 @@ function SlotEditor({
                 </button>
               </div>
               {isPromptExpanded ? (
-                <div className="max-h-36 overflow-y-auto rounded-lg border border-[var(--sps-border)] p-2 bg-[var(--sps-surface)]">
+                <div className="max-h-[22vh] overflow-y-auto overscroll-contain rounded-lg border border-[var(--sps-border)] p-2 bg-[var(--sps-surface)] [scrollbar-width:thin]">
                   {renderLiveMasterPromptWithHighlight(activeConfig.key, value, shot)}
                 </div>
               ) : null}
@@ -758,8 +760,8 @@ function SlotEditor({
             </div>
           ) : null}
 
-          <div className="w-full space-y-2.5 p-3 rounded-[10px] border border-[var(--sps-border)] bg-[var(--sps-bg)] font-mono text-[var(--sps-text)]">
-            <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-2 gap-2">
+          <div className="w-full space-y-1.5 p-2 rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg)] font-mono text-[var(--sps-text)]">
+            <div className="flex items-center justify-between border-b border-[var(--sps-border)] pb-1.5 gap-2">
               <span className="font-semibold text-[11px] font-sans uppercase tracking-wider text-[var(--sps-text)] min-w-0 truncate">
                 Active · {activeConfig.label || activeConfig.key}
               </span>
@@ -813,25 +815,21 @@ function SlotEditor({
               </div>
             </div>
 
-            {/* 🔥 INTERACTIVE INTENSITY SCALE SELECTOR */}
-            <div className="pb-1">
-              <IntensityScaleSelector 
-                value={value || ''} 
-                onChange={(newVal) => onChange && onChange(newVal)} 
-                craftKey={activeConfig.key} 
-                isPaperTheme={colorTheme === 'paper'} 
-              />
-            </div>
+            <IntensityScaleSelector 
+              value={value || ''} 
+              onChange={(newVal) => onChange && onChange(newVal)} 
+              craftKey={activeConfig.key} 
+              isPaperTheme={colorTheme === 'paper'} 
+            />
 
-            {/* Full-width 100% Expanded Chrome Yellow Textarea */}
             <textarea
-              rows={4}
+              rows={3}
               value={value || ''}
               onChange={handleCustomInput}
               onFocus={handleFocus}
               autoFocus
               placeholder={`Enter ${(activeConfig.label || '').toLowerCase()}…`}
-              className="w-full rounded-[7px] p-2.5 text-sm font-mono leading-relaxed resize-y font-medium border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] focus:outline-none focus:border-[var(--sps-gold)]"
+              className="w-full rounded-[7px] p-2 text-sm font-mono leading-snug resize-y min-h-[4.5rem] max-h-[18vh] font-medium border border-[var(--sps-border)] bg-[var(--sps-surface)] text-[var(--sps-text)] focus:outline-none focus:border-[var(--sps-gold)]"
             />
 
             {activeConfig.key === 'characterDialogue' ? (
@@ -1077,129 +1075,133 @@ function SlotEditor({
             );
           })()}
 
-          {/* Add New Custom Preset Input Box */}
-          <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-1.5">
-            <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">
-              <Plus className="w-3.5 h-3.5 text-amber-400" />
-              Add Custom Preset:
-            </label>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                value={newPresetInput}
-                onChange={(e) => setNewPresetInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddNewPreset()}
-                placeholder="Type custom preset name & press Enter..."
-                className="flex-1 bg-zinc-950 text-white border border-zinc-700 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none focus:border-amber-500 font-mono placeholder:text-zinc-500"
-              />
-              <button
-                type="button"
-                onClick={() => handleAddNewPreset()}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] shrink-0 shadow-sm"
-              >
-                {savedToast || '+ Add'}
-              </button>
-            </div>
-          </div>
+          </div>{/* end static top */}
 
-          {/* FAVORITES PRESETS SECTION */}
-          {favoriteItems.length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-[#FFD700] font-bold flex items-center gap-1 font-mono">
-                <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
-                ⭐ Favorite Presets ({favoriteItems.length}):
+          {/* Presets — only this region scrolls (fills remaining height) */}
+          <div className="flex-1 min-h-[7rem] flex flex-col overflow-hidden rounded-[8px] border border-zinc-800 bg-zinc-900/80">
+            <div className="shrink-0 p-2 pb-1.5 space-y-1.5 border-b border-zinc-800">
+              <label className="text-[11px] text-amber-400 font-bold flex items-center gap-1 font-mono">
+                <Plus className="w-3.5 h-3.5 text-amber-400" />
+                Add Custom Preset:
               </label>
-              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1 [scrollbar-width:thin]">
-                {favoriteItems.map((preset, idx) => (
-                  <div
-                    key={`fav_${idx}`}
-                    onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md w-full ${
-                      value === preset
-                        ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg'
-                        : 'bg-[#2A1810] text-[#FFD700] border-[#5A321E] hover:border-[#FFD700] hover:bg-[#3D2314] shadow-sm'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => handleToggleFavorite(preset, e)}
-                      className="text-[#FFD700] hover:scale-125 transition-transform shrink-0 mt-0.5"
-                      title="Remove from favorites"
-                    >
-                      <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
-                    </button>
-
-                    <span className="text-[#FFD700] font-extrabold flex-1 min-w-0 whitespace-normal break-words leading-snug">
-                      {preset}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeletePreset(preset, e)}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-[#FFD700]/70 hover:text-red-400 transition-colors shrink-0 mt-0.5"
-                      title="Delete preset"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={newPresetInput}
+                  onChange={(e) => setNewPresetInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddNewPreset()}
+                  placeholder="Type custom preset name & press Enter..."
+                  className="flex-1 bg-zinc-950 text-white border border-zinc-700 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none focus:border-amber-500 font-mono placeholder:text-zinc-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddNewPreset()}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] shrink-0 shadow-sm"
+                >
+                  {savedToast || '+ Add'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between pt-0.5">
+                <label className="text-[11px] text-zinc-300 font-bold font-mono">Presets:</label>
+                <span className="text-[9.5px] text-zinc-400 font-mono">
+                  Click ⭐ to favorite | Click 🗑️ to delete
+                </span>
               </div>
             </div>
-          )}
 
-          {/* ALL PRESETS LIST SECTION */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] text-zinc-300 font-bold font-mono">All Presets:</label>
-              <span className="text-[9.5px] text-zinc-400 font-mono">
-                Click ⭐ to favorite | Click 🗑️ to delete
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1 [scrollbar-width:thin]">
-              {nonFavoriteItems.map((preset, idx) => {
-                const isCustom = userPresets.includes(preset);
-                const isSelected = value === preset;
-                return (
-                  <div
-                    key={`std_${idx}`}
-                    onClick={() => onChange(preset)}
-                    className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-mono font-bold w-full ${
-                      isSelected 
-                        ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md'
-                        : 'bg-zinc-900 text-zinc-100 border-zinc-700 hover:border-cyan-400 font-bold'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => handleToggleFavorite(preset, e)}
-                      className="text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0 mt-0.5"
-                      title="Add to favorites"
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 pt-1.5 space-y-1.5 [scrollbar-width:thin]">
+              {favoriteItems.length > 0 ? (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-[#FFD700] font-bold flex items-center gap-1 font-mono sticky top-0 z-[1] bg-zinc-900/95 py-0.5">
+                    <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
+                    Favorite Presets ({favoriteItems.length}):
+                  </label>
+                  {favoriteItems.map((preset, idx) => (
+                    <div
+                      key={`fav_${idx}`}
+                      onClick={() => onChange(preset)}
+                      className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-bold font-mono shadow-md w-full ${
+                        value === preset
+                          ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 font-black border-yellow-300 shadow-lg'
+                          : 'bg-[#2A1810] text-[#FFD700] border-[#5A321E] hover:border-[#FFD700] hover:bg-[#3D2314] shadow-sm'
+                      }`}
                     >
-                      <Star className="w-3.5 h-3.5" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleFavorite(preset, e)}
+                        className="text-[#FFD700] hover:scale-125 transition-transform shrink-0 mt-0.5"
+                        title="Remove from favorites"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-[#FFD700] text-[#FFD700]" />
+                      </button>
 
-                    <span className="font-bold flex-1 min-w-0 whitespace-normal break-words leading-snug">
-                      {isCustom ? `➕ ${preset}` : preset}
-                    </span>
+                      <span className="text-[#FFD700] font-extrabold flex-1 min-w-0 whitespace-normal break-words leading-snug">
+                        {preset}
+                      </span>
 
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeletePreset(preset, e)}
-                      className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0 mt-0.5"
-                      title="Delete preset"
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeletePreset(preset, e)}
+                        className="p-0.5 rounded hover:bg-red-500/20 text-[#FFD700]/70 hover:text-red-400 transition-colors shrink-0 mt-0.5"
+                        title="Delete preset"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="space-y-1.5">
+                {favoriteItems.length > 0 ? (
+                  <label className="text-[11px] text-zinc-300 font-bold font-mono sticky top-0 z-[1] bg-zinc-900/95 py-0.5">
+                    All Presets:
+                  </label>
+                ) : null}
+                {nonFavoriteItems.map((preset, idx) => {
+                  const isCustom = userPresets.includes(preset);
+                  const isSelected = value === preset;
+                  return (
+                    <div
+                      key={`std_${idx}`}
+                      onClick={() => onChange(preset)}
+                      className={`text-[10.5px] px-2.5 py-1.5 rounded-lg border flex items-start gap-1.5 cursor-pointer transition-all font-mono font-bold w-full ${
+                        isSelected 
+                          ? 'bg-cyan-500 text-zinc-950 font-black border-cyan-300 shadow-md'
+                          : 'bg-zinc-900 text-zinc-100 border-zinc-700 hover:border-cyan-400 font-bold'
+                      }`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleFavorite(preset, e)}
+                        className="text-zinc-400 hover:text-amber-400 hover:scale-125 transition-transform shrink-0 mt-0.5"
+                        title="Add to favorites"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+
+                      <span className="font-bold flex-1 min-w-0 whitespace-normal break-words leading-snug">
+                        {isCustom ? `➕ ${preset}` : preset}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeletePreset(preset, e)}
+                        className="p-0.5 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors shrink-0 mt-0.5"
+                        title="Delete preset"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Modal Footer Bar with Compact Single-Line Navigation */}
-        <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800 shrink-0 font-mono gap-1.5 overflow-x-auto text-xs">
+        <div className="flex items-center justify-between pt-2 border-t border-zinc-800 shrink-0 font-mono gap-1.5 overflow-x-auto text-xs">
           {/* Left: Combined Single-Line Navigation Controls */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
             {/* SCENE NAV (Compact Purple Pill - BEFORE SHOT NAV) */}
