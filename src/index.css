@@ -5580,7 +5580,8 @@ button.sps-btn.sps-btn-primary *,
   height: 3px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-sizing: content-box;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: default;
   background: color-mix(in srgb, var(--sps-border) 80%, transparent);
 }
 .sps-project-progress-rail__seg {
