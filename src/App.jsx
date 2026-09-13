@@ -173,6 +173,7 @@ const WorldEnvironmentConsole = lazy(() => import('./components/WorldEnvironment
 const StudioBrainModal = lazy(() => import('./components/StudioBrainModal'));
 const ProductionDashboardModal = lazy(() => import('./components/ProductionDashboardModal'));
 const FilmIntelConsole = lazy(() => import('./components/FilmIntelConsole'));
+const ProjectProgressRail = lazy(() => import('./components/ProjectProgressRail'));
 const LlmCommandReviewModal = lazy(() => import('./components/LlmCommandReviewModal'));
 const PromoPackModal = lazy(() => import('./components/PromoPackModal'));
 const CampaignKitModal = lazy(() => import('./components/CampaignKitModal'));
@@ -4924,16 +4925,17 @@ export default function App() {
         </div>
       ) : null}
 
-      {/* Build stamp — below studio overlays (z-50) so it never covers craft footer / modals */}
+      {/* Build stamp — sits above the progress rail */}
       {!showSplash && (
         <span
-          className="fixed bottom-3 left-3 z-[30] pointer-events-none px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
+          className="fixed left-3 z-[30] pointer-events-none px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
           style={{
             color: 'var(--sps-gold)',
             background: 'color-mix(in srgb, var(--sps-bg) 92%, transparent)',
             borderColor: 'color-mix(in srgb, var(--sps-gold) 50%, transparent)',
             letterSpacing: '0.08em',
             backdropFilter: 'blur(8px)',
+            bottom: 'calc(0.75rem + 3px + env(safe-area-inset-bottom, 0px))',
           }}
           title={`Build ${APP_VERSION_NAME}`}
           aria-label={`App build ${APP_VERSION_NAME}`}
@@ -4941,6 +4943,16 @@ export default function App() {
           {APP_VERSION_NAME}
         </span>
       )}
+
+      {!showSplash ? (
+        <Suspense fallback={null}>
+          <ProjectProgressRail
+            shots={shots}
+            projectTitle={projectTitle}
+            hidden={false}
+          />
+        </Suspense>
+      ) : null}
 
       {!isNavigatorOpen && (
         <button

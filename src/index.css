@@ -5567,3 +5567,33 @@ button.sps-btn.sps-btn-primary *,
   color: #f4f4f5 !important;
   -webkit-text-fill-color: #f4f4f5 !important;
 }
+
+/* Project progress rail — thin lifecycle line at app bottom */
+.sps-project-progress-rail {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: row;
+  height: 3px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: content-box;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--sps-border) 80%, transparent);
+}
+.sps-project-progress-rail__seg {
+  display: block;
+  min-width: 0;
+  height: 3px;
+  flex-shrink: 1;
+  flex-basis: 0;
+  transition: flex-grow 280ms var(--sps-ease-out, ease);
+}
+.sps-project-progress-rail__empty {
+  display: block;
+  flex: 1;
+  height: 3px;
+  background: color-mix(in srgb, var(--sps-muted) 28%, transparent);
+}
