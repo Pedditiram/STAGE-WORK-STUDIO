@@ -53,13 +53,40 @@ export function worldPlateUrl(asset) {
 export function matchCharactersForShot(shot, list = profiles()) {
   const hay = shotHaystack(shot);
   if (!hay.trim()) return [];
-  return (list || []).filter((char) => {
-    const tag = String(char.tag || '').toLowerCase().replace(/@/g, '').trim();
-    const name = String(char.name || '').toLowerCase().trim();
-    if (tag && hay.includes(tag)) return true;
-    if (name && name.length > 2 && hay.includes(name)) return true;
-    return false;
+  const matched = [];
+  (list || []).forEach((char) => {
+    if (!char) return;
+    const tag = String(char.tag || '')
+      .toLowerCase()
+      .replace(/@/g, '')
+      .trim();
+    const name = String(char.name || '')
+      .toLowerCase()
+      .trim();
+    const id = String(char.id || char.assetId || '')
+      .toLowerCase()
+      .trim();
+    if (id && (hay.includes(id) || hay.includes(`char_${id}`) || hay.includes(`@${id}`))) {
+      matched.push(char);
+      return;
+    }
+    if (tag && (hay.includes(tag) || hay.includes(`@${tag}`))) {
+      matched.push(char);
+      return;
+    }
+    if (name && name.length >= 2) {
+      if (hay.includes(name)) {
+        matched.push(char);
+        return;
+      }
+      // First / last token (e.g. "Aaraadhya" from "Aaraadhya Devi")
+      const tokens = name.split(/[^a-z0-9\u0c00-\u0c7f]+/).filter((t) => t.length >= 3);
+      if (tokens.some((t) => hay.includes(t))) {
+        matched.push(char);
+      }
+    }
   });
+  return matched;
 }
 
 export function matchWorldForShot(shot, assets = worlds()) {

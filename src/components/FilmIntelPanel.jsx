@@ -38,7 +38,8 @@ export default function FilmIntelPanel({
   onJumpToShot,
   onRefresh,
   onUpdateShot,
-  onHealBibleSoT
+  onHealBibleSoT,
+  compact = false
 }) {
   const [deskTab, setDeskTab] = useState('overview');
   const [subTab, setSubTab] = useState('radar');
@@ -273,6 +274,7 @@ export default function FilmIntelPanel({
 
   const deskTabs = [
     { id: 'overview', label: 'Overview' },
+    { id: 'ready', label: 'Ready' },
     { id: 'search', label: 'Search' },
     { id: 'quality', label: 'Quality' },
     { id: 'suggest', label: `Suggest (${allSuggestions.length})` },
@@ -287,56 +289,56 @@ export default function FilmIntelPanel({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={compact ? 'space-y-2' : 'space-y-3'}>
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
         <div className="min-w-0">
           <h3
-            className="text-sm font-semibold m-0 flex items-center gap-2"
+            className={`font-semibold m-0 flex items-center gap-1.5 ${compact ? 'text-[13px]' : 'text-sm'}`}
             style={{ fontFamily: 'var(--sps-font-display)' }}
           >
-            <Radar className="w-4 h-4 text-[var(--sps-gold)]" />
+            <Radar className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
             Film Intel
+            <span className="text-[10px] font-normal text-[var(--sps-muted)] truncate">
+              · {projectTitle || 'Untitled'}
+            </span>
           </h3>
-          <p className="text-[11px] text-[var(--sps-muted)] m-0 truncate">
-            Search · quality · suggest · reel map · costume/prop · export · Writer
-          </p>
         </div>
-        <div className="flex items-center gap-1 flex-wrap justify-end">
+        <div className="flex items-center gap-0.5 flex-wrap justify-end">
           <button
             type="button"
-            className="sps-btn text-[10px] flex items-center gap-1"
+            className="sps-btn sps-btn-compact text-[10px] flex items-center gap-1"
             title="Save Film Health rating to creative audit"
             onClick={handleRate}
           >
-            <Star className="w-3.5 h-3.5" />
+            <Star className="w-3 h-3" />
             Rate
           </button>
           <button
             type="button"
-            className="sps-btn text-[10px] flex items-center gap-1"
+            className="sps-btn sps-btn-compact text-[10px] flex items-center gap-1"
             title="Export Film Intel markdown"
             onClick={handleExportMd}
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3 h-3" />
             MD
           </button>
           <button
             type="button"
-            className="sps-btn text-[10px] flex items-center gap-1"
+            className="sps-btn sps-btn-compact text-[10px] flex items-center gap-1"
             title="Print Film Intel (Save as PDF)"
             onClick={handleExportPrint}
           >
-            <Printer className="w-3.5 h-3.5" />
+            <Printer className="w-3 h-3" />
             Print
           </button>
           <button
             type="button"
-            className="sps-btn sps-btn-primary text-[10px] flex items-center gap-1"
+            className="sps-btn sps-btn-primary sps-btn-compact text-[10px] flex items-center gap-1"
             disabled={llmBusy}
             title="LLM Advise — suggestions only, never silent rewrite"
             onClick={handleAskLlm}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-3 h-3" />
             {llmBusy ? 'Advising…' : 'Ask LLM'}
           </button>
           <button
@@ -348,85 +350,149 @@ export default function FilmIntelPanel({
               onRefresh?.();
             }}
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--sps-muted)] pointer-events-none" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            if (e.target.value.trim()) setDeskTab('search');
-          }}
-          onFocus={() => setDeskTab('search')}
-          placeholder="Search shots, cast, world, marks, beats, quality, suggestions…"
-          className="w-full pl-8 pr-3 py-2 text-[12px] rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)]"
-          aria-label="Film Intel search"
-        />
+      <div className="flex flex-col sm:flex-row gap-1.5 sm:items-center">
+        <div className="relative flex-1 min-w-0">
+          <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--sps-muted)] pointer-events-none" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (e.target.value.trim()) setDeskTab('search');
+            }}
+            onFocus={() => setDeskTab('search')}
+            placeholder="Search shots, cast, world, marks, beats…"
+            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)]"
+            aria-label="Film Intel search"
+          />
+        </div>
+        <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0" role="tablist" aria-label="Film Intel desks">
+          {deskTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={deskTab === t.id}
+              onClick={() => setDeskTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="sps-tabs sps-tabs-compact flex flex-wrap" role="tablist" aria-label="Film Intel desks">
-        {deskTabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={deskTab === t.id}
-            onClick={() => setDeskTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div className="rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">Film Health</p>
-          <p className="text-lg font-bold m-0 text-[var(--sps-gold)]">
+      <div className="grid grid-cols-4 gap-1.5">
+        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
+          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Health</p>
+          <p className="text-[13px] font-bold m-0 text-[var(--sps-gold)] leading-tight truncate">
             {intel.filmHealth?.score ?? 0}
-            <span className="text-[11px] font-semibold text-[var(--sps-muted)] ml-1">
-              · {intel.filmHealth?.grade || 'Draft'}
+            <span className="text-[9px] font-semibold text-[var(--sps-muted)] ml-0.5">
+              {intel.filmHealth?.grade || 'Draft'}
             </span>
           </p>
         </div>
-        <div className="rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">Craft fill</p>
-          <p className="text-lg font-bold m-0">{intel.quality?.craftFill?.pct ?? 0}%</p>
-          <p className="text-[10px] text-[var(--sps-muted)] m-0">
-            {(intel.quality?.craftFill?.weakShots || []).length} weak shots
+        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
+          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Craft</p>
+          <p className="text-[13px] font-bold m-0 leading-tight truncate">
+            {intel.quality?.craftFill?.pct ?? 0}%
+            <span className="text-[9px] font-normal text-[var(--sps-muted)] ml-0.5">
+              {(intel.quality?.craftFill?.weakShots || []).length} weak
+            </span>
           </p>
         </div>
-        <div className="rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">Marks</p>
-          <p className="text-lg font-bold m-0">
+        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
+          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Marks</p>
+          <p className="text-[13px] font-bold m-0 leading-tight truncate">
             <span className="text-[var(--sps-danger)]">{intel.stats?.blockMarks || 0}</span>
-            <span className="text-[var(--sps-muted)] text-[12px]"> block</span>
-            {' · '}
+            <span className="text-[9px] text-[var(--sps-muted)]">b</span>
+            {' '}
             <span className="text-[var(--sps-gold)]">{intel.stats?.warnMarks || 0}</span>
-            <span className="text-[var(--sps-muted)] text-[12px]"> warn</span>
+            <span className="text-[9px] text-[var(--sps-muted)]">w</span>
           </p>
         </div>
-        <div className="rounded-[8px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--sps-muted)] m-0">Suggestions</p>
-          <p className="text-lg font-bold m-0">{allSuggestions.length}</p>
-          <p className="text-[10px] text-[var(--sps-muted)] m-0">
-            {llmSuggestions.length ? `${llmSuggestions.length} from LLM` : 'rules engine'}
+        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
+          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Gates</p>
+          <p className="text-[11px] font-bold m-0 leading-tight truncate">
+            <span className={intel.readiness?.lock?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-danger)]'}>
+              L{intel.readiness?.lock?.ready ? '✓' : '✗'}
+            </span>
+            {' '}
+            <span className={intel.readiness?.generate?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-danger)]'}>
+              G{intel.readiness?.generate?.ready ? '✓' : '✗'}
+            </span>
+            {' '}
+            <span className={intel.readiness?.shoot?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-gold)]'}>
+              S{intel.readiness?.shoot?.ready ? '✓' : '·'}
+            </span>
           </p>
         </div>
       </div>
 
-      {deskTab === 'search' && (
+      {deskTab === 'ready' && (
         <section className="space-y-2">
-          <h4 className="text-[11px] uppercase tracking-widest text-[var(--sps-muted)] m-0 flex items-center gap-1.5">
-            <Search className="w-3.5 h-3.5" />
-            Search results · {search.total}
-            {query ? ` for “${query.trim()}”` : ' · type to filter index'}
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--sps-muted)] m-0 flex items-center gap-1">
+            <Gauge className="w-3 h-3" />
+            Before lock · generate · shoot
           </h4>
-          <div className="space-y-1.5 max-h-[28rem] overflow-y-auto pr-1">
+          <p className="text-[10px] text-[var(--sps-muted)] m-0 leading-snug">
+            Clarity gate — clear blockers before spending money, time, or AI credits. Advise only; never silent rewrite.
+          </p>
+          {[
+            { key: 'lock', title: 'Ready to lock', hint: 'Structure + continuity before locking shots' },
+            { key: 'generate', title: 'Ready to generate', hint: 'Safe to spend AI still / video credits' },
+            { key: 'shoot', title: 'Ready to shoot / spend', hint: 'Pre-production confidence checklist' }
+          ].map((gate) => {
+            const g = intel.readiness?.[gate.key] || { ready: false, items: [] };
+            return (
+              <div
+                key={gate.key}
+                className={`rounded-[6px] border px-2.5 py-2 space-y-1.5 ${
+                  g.ready
+                    ? 'border-[var(--sps-success)]/40'
+                    : 'border-[var(--sps-danger)]/35'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] font-bold m-0">
+                    {g.ready ? '✓' : '✗'} {gate.title}
+                  </p>
+                  <span className="text-[9px] text-[var(--sps-muted)]">
+                    {(g.blockers || []).length} block · {(g.warnings || []).length} warn
+                  </span>
+                </div>
+                <p className="text-[9px] text-[var(--sps-muted)] m-0">{gate.hint}</p>
+                <div className="space-y-0.5">
+                  {(g.items || []).map((it) => (
+                    <p
+                      key={it.id}
+                      className={`text-[10px] m-0 ${it.ok ? 'text-[var(--sps-success)]' : it.severity === 'block' ? 'text-[var(--sps-danger)]' : 'text-[var(--sps-gold)]'}`}
+                    >
+                      {it.ok ? '✓' : '○'} {it.label}
+                      {it.detail && !it.ok ? (
+                        <span className="text-[var(--sps-muted)]"> — {it.detail}</span>
+                      ) : null}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {deskTab === 'search' && (
+        <section className="space-y-1.5">
+          <h4 className="text-[10px] uppercase tracking-wide text-[var(--sps-muted)] m-0 flex items-center gap-1">
+            <Search className="w-3 h-3" />
+            Results · {search.total}
+            {query ? ` · “${query.trim()}”` : ''}
+          </h4>
+          <div className="space-y-0.5 max-h-[min(28rem,55vh)] overflow-y-auto pr-0.5">
             {(search.hits || []).length === 0 && (
               <p className="text-[11px] text-[var(--sps-muted)]">No hits. Try a character name, SC01, mark, or craft word.</p>
             )}
@@ -435,16 +501,18 @@ export default function FilmIntelPanel({
                 key={hit.id}
                 type="button"
                 onClick={() => runHit(hit)}
-                className="w-full text-left rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2.5 py-2 hover:border-[var(--sps-gold)]/50 cursor-pointer"
+                className="w-full text-left rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 hover:border-[var(--sps-gold)]/50 cursor-pointer"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase text-[var(--sps-gold)]">{hit.kind}</span>
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span className="text-[9px] font-bold uppercase text-[var(--sps-gold)] shrink-0">{hit.kind}</span>
+                  <p className="text-[11px] font-semibold m-0 truncate flex-1">{hit.title}</p>
                   {hit.severity ? (
-                    <span className="text-[9px] text-[var(--sps-muted)]">{hit.severity}</span>
+                    <span className="text-[9px] text-[var(--sps-muted)] shrink-0">{hit.severity}</span>
                   ) : null}
                 </div>
-                <p className="text-[11px] font-bold m-0 mt-0.5 truncate">{hit.title}</p>
-                <p className="text-[10px] text-[var(--sps-muted)] m-0 truncate">{hit.subtitle}</p>
+                {hit.subtitle ? (
+                  <p className="text-[10px] text-[var(--sps-muted)] m-0 truncate pl-[3.25rem]">{hit.subtitle}</p>
+                ) : null}
               </button>
             ))}
           </div>

@@ -190,6 +190,15 @@ export function learnFromProject({
   targetModel = ''
 } = {}) {
   if (!Array.isArray(shots) || shots.length === 0) return getStudioBrain();
+  const titleCheck = String(projectTitle || '').trim().toUpperCase();
+  // Never harvest demo / teaching Matrix into shared craft banks
+  if (
+    titleCheck === 'THE LAST LETTER' ||
+    titleCheck.includes('DEMO') ||
+    titleCheck === 'STAGE PRODUCTION STUDIO'
+  ) {
+    return getStudioBrain();
+  }
 
   const brain = readLocal();
   const title = String(projectTitle || 'Untitled').trim() || 'Untitled';

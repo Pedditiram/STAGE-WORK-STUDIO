@@ -760,7 +760,9 @@ ipcMain.handle('vault:factoryReset', async (_, payload = {}) => {
     return runDiskFactoryReset({
       projectsDir: PROJECTS_DIR,
       settingsDir: SETTINGS_DIR,
-      flushSettings: Boolean(payload?.flushSettings)
+      studioRoot: path.dirname(PROJECTS_DIR),
+      flushSettings: Boolean(payload?.flushSettings),
+      wipeFilmFolders: Boolean(payload?.wipeFilmFolders)
     });
   } catch (err) {
     return { ok: false, error: err.message };

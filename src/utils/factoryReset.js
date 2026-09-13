@@ -1,6 +1,6 @@
 /**
- * Factory reset — flush app library / session (and optional settings)
- * without deleting film project folders on disk (SWS PROJECTS/{TITLE}/…).
+ * Factory reset — flush app library / session (and optional settings / film folders)
+ * so this device feels like first launch.
  */
 
 const ALWAYS_KEEP = new Set([
@@ -129,7 +129,11 @@ const PROJECT_KEY_PREFIXES = [
   'sps_active_lifecycle',
   'sps_film_',
   'sps_comfy_film',
-  'sps_sws_'
+  'sps_sws_',
+  'sps_custom_presets',
+  'sps_favorite_presets',
+  'sps_hidden_presets',
+  'sps_favorite_craft'
 ];
 
 function isSettingsKey(key) {
@@ -140,6 +144,8 @@ function isSettingsKey(key) {
 function isProjectKey(key) {
   if (PROJECT_KEY_EXACT.has(key)) return true;
   if (isSettingsKey(key)) return false;
+  if (/^sps_(custom|favorite|hidden)_presets::/.test(key)) return true;
+  if (key.includes('::') && key.startsWith('sps_')) return true;
   return PROJECT_KEY_PREFIXES.some((p) => key.startsWith(p));
 }
 
@@ -174,8 +180,6 @@ function clearMatchingLocalStorage({ flushSettings }) {
       kept.push(key);
       continue;
     }
-    // flushSettings: clear almost all sps_* except device id.
-    // projects-only: clear project/session keys; leave settings & API keys.
     const shouldDrop = flushSettings
       ? key.startsWith('sps_')
       : isProjectKey(key);
@@ -197,7 +201,8 @@ async function callFactoryResetApi(options) {
   const body = {
     flushProjects: true,
     flushSettings: Boolean(options.flushSettings),
-    preserveFilmFolders: true
+    wipeFilmFolders: Boolean(options.wipeFilmFolders),
+    preserveFilmFolders: !options.wipeFilmFolders
   };
   try {
     if (typeof window !== 'undefined' && window.electronAPI?.factoryReset) {
@@ -223,14 +228,15 @@ async function callFactoryResetApi(options) {
 }
 
 /**
- * @param {{ flushSettings?: boolean }} options
+ * @param {{ flushSettings?: boolean, wipeFilmFolders?: boolean }} options
  * @returns {Promise<{ ok: boolean, message: string, details?: object }>}
  */
 export async function runFactoryReset(options = {}) {
   const flushSettings = Boolean(options.flushSettings);
-  const ls = clearMatchingLocalStorage({ flushSettings });
+  const wipeFilmFolders = Boolean(options.wipeFilmFolders);
+  const effectiveFlushSettings = flushSettings || wipeFilmFolders;
+  const ls = clearMatchingLocalStorage({ flushSettings: effectiveFlushSettings });
 
-  // Empty library mirror explicitly
   try {
     localStorage.setItem('sps_project_library', '[]');
   } catch {
@@ -241,15 +247,22 @@ export async function runFactoryReset(options = {}) {
     deleteIndexedDb('sps_local_disk_vault_db'),
     deleteIndexedDb('sps_image_blobs_db'),
     deleteIndexedDb('sps_studio_brain_db'),
-    flushSettings ? deleteIndexedDb('sps_app_settings_vault_db') : Promise.resolve(false)
+    effectiveFlushSettings ? deleteIndexedDb('sps_app_settings_vault_db') : Promise.resolve(false)
   ]);
 
-  const disk = await callFactoryResetApi({ flushSettings });
+  const disk = await callFactoryResetApi({
+    flushSettings: effectiveFlushSettings,
+    wipeFilmFolders
+  });
 
   try {
     window.dispatchEvent(
       new CustomEvent('sps_factory_reset', {
-        detail: { flushSettings, at: new Date().toISOString() }
+        detail: {
+          flushSettings: effectiveFlushSettings,
+          wipeFilmFolders,
+          at: new Date().toISOString()
+        }
       })
     );
     window.dispatchEvent(new Event('sps_projects_updated'));
@@ -257,11 +270,18 @@ export async function runFactoryReset(options = {}) {
     /* ignore */
   }
 
+  let message = 'App library flushed. Settings kept. Film folders on disk were not deleted.';
+  if (wipeFilmFolders) {
+    message =
+      'Full factory reset: app vault, settings, craft presets, and SWS PROJECTS film folders wiped on this device.';
+  } else if (effectiveFlushSettings) {
+    message =
+      'App library flushed. Settings & preferences cleared. Film project folders on disk were not deleted.';
+  }
+
   return {
     ok: disk.ok !== false,
-    message: flushSettings
-      ? 'App library flushed. Settings & preferences cleared. Film project folders on disk were not deleted.'
-      : 'App library flushed. Film project folders on disk were not deleted. Settings kept.',
+    message,
     details: {
       localStorageRemoved: ls.removed,
       idbCleared: {

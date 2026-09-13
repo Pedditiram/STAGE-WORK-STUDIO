@@ -128,9 +128,21 @@ export function buildFilmIntel({
     const sec = shotDurationSec(shot);
     const parsed = parseSceneAndShotID(shot, index);
     const shotId = parsed.shortId || shot.sceneShotId || `SH_${index + 1}`;
-    const matched = matchCharactersForShot(shot, profiles);
-    matched.forEach((c) => {
+    const matchedMap = new Map();
+    matchCharactersForShot(shot, profiles).forEach((c) => {
       const key = charKey(c);
+      if (key) matchedMap.set(key, c);
+    });
+    // Continuity / asset-id keys also count as presence (bible id vs craft tag mismatch)
+    resolveCharacterKeysForShot(shot, null).forEach((entry) => {
+      const c = entry?.char;
+      if (!c) return;
+      const key = charKey(c) || String(entry.key || '')
+        .trim()
+        .toLowerCase();
+      if (key && !matchedMap.has(key)) matchedMap.set(key, c);
+    });
+    matchedMap.forEach((c, key) => {
       if (!presenceByChar.has(key)) {
         presenceByChar.set(key, {
           key,
@@ -539,6 +551,20 @@ export function buildFilmIntel({
     suggestions
   });
 
+  const readiness = buildFilmReadiness({
+    liveCount: live.length,
+    blockCount,
+    warnCount,
+    craftFillPct,
+    weakCraftShots,
+    charPresence,
+    profiles,
+    bibleDrift: Boolean(bibleDrift?.drift),
+    screenplay,
+    lightingUnset: lightingCounts.unset || 0,
+    qualityIssues
+  });
+
   return {
     projectTitle,
     generatedAt: new Date().toISOString(),
@@ -566,6 +592,7 @@ export function buildFilmIntel({
         label: f.label
       }))
     },
+    readiness,
     suggestions,
     searchIndex,
     reelMap,
@@ -590,6 +617,77 @@ export function buildFilmIntel({
       propsTracked: propPresence.length,
       bibleDrift: Boolean(bibleDrift?.drift)
     }
+  };
+}
+
+function buildFilmReadiness({
+  liveCount = 0,
+  blockCount = 0,
+  warnCount = 0,
+  craftFillPct = 0,
+  weakCraftShots = [],
+  charPresence = [],
+  profiles = [],
+  bibleDrift = false,
+  screenplay = {},
+  lightingUnset = 0,
+  qualityIssues = []
+} = {}) {
+  const castOnReel = charPresence.filter((c) => c.shotCount > 0).length;
+  const bibleEmpty = (profiles || []).length === 0;
+  const castOrphans = charPresence.filter((c) => c.shotCount === 0).length;
+  const writerWarns = (screenplay.flags || []).some((f) => f.severity === 'warn');
+  const writerScore = screenplay.readiness?.score ?? 0;
+
+  const item = (id, ok, label, severity = 'warn', detail = '') => ({
+    id,
+    ok: Boolean(ok),
+    label,
+    severity,
+    detail
+  });
+
+  const lockItems = [
+    item('shots', liveCount > 0, 'Live Matrix shots exist', 'block', liveCount ? `${liveCount} shots` : 'Add shots before lock'),
+    item('blocks', blockCount === 0, 'No blocking continuity marks', 'block', blockCount ? `${blockCount} block(s)` : 'Clean'),
+    item('craft', craftFillPct >= 70, `Craft fill ≥ 70% (now ${craftFillPct}%)`, 'block', `${weakCraftShots.length} weak shot(s)`),
+    item('cast', castOnReel > 0 || bibleEmpty, 'Cast tagged on reel (or bible empty)', 'warn', bibleEmpty ? 'Bible empty' : `${castOnReel} present · ${castOrphans} untagged`),
+    item('bible', !bibleDrift, 'Cast/World bible SoT aligned', 'warn', bibleDrift ? 'Heal bible SoT' : 'Aligned'),
+    item('writer', !writerWarns, 'Writer has no warn flags', 'warn', writerWarns ? 'Open Writer flags' : 'Clear')
+  ];
+
+  const generateItems = [
+    item('shots', liveCount > 0, 'Shots ready for generate', 'block'),
+    item('blocks', blockCount === 0, 'No generate blockers', 'block', blockCount ? `${blockCount} block mark(s)` : 'Clear'),
+    item('craft', craftFillPct >= 55, `Craft fill ≥ 55% (now ${craftFillPct}%)`, 'warn'),
+    item('cast_tags', castOnReel > 0 || liveCount === 0, 'At least one cast match on reel', 'warn', castOnReel ? `${castOnReel} matched` : 'Tag CharID / bible names on shots'),
+    item('light', liveCount < 3 || lightingUnset / liveCount < 0.6, 'Lighting set on most shots', 'info')
+  ];
+
+  const shootItems = [
+    item('lock_ready', lockItems.filter((i) => i.severity === 'block').every((i) => i.ok), 'Lock blockers cleared', 'block'),
+    item('craft80', craftFillPct >= 80, `Craft fill ≥ 80% (now ${craftFillPct}%)`, 'warn'),
+    item('warns', warnCount <= 2, `Warn marks ≤ 2 (now ${warnCount})`, 'warn'),
+    item('writer_score', writerScore >= 55 || !(screenplay.scenes || []).length, 'Writer readiness ≥ 55 or no scenes', 'warn', `Writer ${writerScore}`),
+    item('cast_coverage', bibleEmpty || castOrphans === 0 || castOnReel >= Math.max(1, Math.floor((profiles || []).length * 0.5)), 'Most bible cast appears on reel', 'info', `${castOnReel}/${(profiles || []).length || 0} on reel`),
+    item('quality_blocks', !(qualityIssues || []).some((q) => q.severity === 'block'), 'No block quality issues', 'block')
+  ];
+
+  const gate = (items) => {
+    const blockers = items.filter((i) => !i.ok && i.severity === 'block');
+    const warnings = items.filter((i) => !i.ok && i.severity !== 'block');
+    return {
+      ready: blockers.length === 0,
+      blockers,
+      warnings,
+      items
+    };
+  };
+
+  return {
+    lock: gate(lockItems),
+    generate: gate(generateItems),
+    shoot: gate(shootItems)
   };
 }
 

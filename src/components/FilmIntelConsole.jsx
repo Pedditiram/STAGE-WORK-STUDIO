@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Radar, X, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Maximize2, Minimize2 } from 'lucide-react';
 import FilmIntelPanel from './FilmIntelPanel';
-import HoverPinBar from './HoverPinBar';
 
 /**
  * Film Intel as a full studio room (same pattern as Budget / Compile asRoom).
+ * Room mode: one chrome row inside the panel — no duplicate title bar.
  */
 export default function FilmIntelConsole({
   isOpen = true,
@@ -39,7 +39,7 @@ export default function FilmIntelConsole({
 
   if (!isOpen) return null;
 
-  const body = (
+  return (
     <div
       className={`flex flex-col min-h-0 bg-[var(--sps-bg)] text-[var(--sps-text)] ${
         asRoom
@@ -57,46 +57,23 @@ export default function FilmIntelConsole({
             : 'sps-shell sps-shell-lg max-h-[92vh] w-full'
         }`}
       >
-        <HoverPinBar
-          storageKey="sps_pin_film_intel_bar"
-          defaultPinned
-          pinLabel="Film Intel bar"
-          ariaLabel="Show Film Intel toolbar"
-          className="shrink-0 z-20"
-          barClassName="px-4 py-2.5 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] flex items-center justify-between gap-2"
-        >
-          <div className="min-w-0 flex-1">
-            <h2
-              className="text-sm font-semibold m-0 flex items-center gap-2"
-              style={{ fontFamily: 'var(--sps-font-display)' }}
+        {!asRoom ? (
+          <div className="shrink-0 px-3 py-1.5 border-b border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] flex items-center justify-end gap-1">
+            <button
+              type="button"
+              className="sps-icon-btn"
+              title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              onClick={() => setFullscreen((v) => !v)}
             >
-              <Radar className="w-4 h-4 text-[var(--sps-gold)]" />
-              Film Intel
-            </h2>
-            <p className="text-[11px] text-[var(--sps-muted)] m-0 truncate">
-              {projectTitle || 'Untitled'} · search · quality · suggest · presence · Writer analysis
-            </p>
+              {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+            <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {!asRoom ? (
-              <button
-                type="button"
-                className="sps-icon-btn"
-                title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                onClick={() => setFullscreen((v) => !v)}
-              >
-                {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
-            ) : null}
-            {!asRoom ? (
-              <button type="button" className="sps-icon-btn" onClick={onClose} aria-label="Close">
-                <X className="w-4 h-4" />
-              </button>
-            ) : null}
-          </div>
-        </HoverPinBar>
+        ) : null}
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
+        <div className={`flex-1 min-h-0 overflow-y-auto ${asRoom ? 'p-2.5' : 'p-3'}`}>
           <FilmIntelPanel
             key={`film-intel-${tick}`}
             projectTitle={projectTitle}
@@ -106,11 +83,10 @@ export default function FilmIntelConsole({
             onRefresh={() => setTick((n) => n + 1)}
             onUpdateShot={onUpdateShot}
             onHealBibleSoT={onHealBibleSoT}
+            compact
           />
         </div>
       </div>
     </div>
   );
-
-  return body;
 }

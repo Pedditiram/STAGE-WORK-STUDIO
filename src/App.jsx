@@ -125,7 +125,6 @@ import {
 } from './services/dbService';
 import {
   learnFromProject,
-  boostSlotsWithStudioBrain,
   hydrateStudioBrainFromDisk
 } from './services/studioBrain';
 import { getSlotsForGenre, detectScriptGenre, GENRE_PRESET_PROFILES, getMergedGenreProfiles } from './constants/seedancePresets';
@@ -154,7 +153,7 @@ import {
   hasAdminGrantedWorkspace,
   downloadedAppPresentationOnly
 } from './utils/projectPermissions';
-import { isSelfServeSession } from './utils/tenantScope';
+import { isSelfServeSession, starterShots } from './utils/tenantScope';
 import { activatePackForSession, persistLivePackIfActive, claimNewLibraryTitleIfPackUser, packLibraryRestrictedMessage } from './utils/userSettingsPack';
 import { heartbeat, getDeviceId, canUseSaasFeature, assertCanGenerate, upsertLicense } from './utils/saasControl';
 import { collaboratorHasPassword, findAuthorizedUser } from './utils/collaboratorPassword';
@@ -375,7 +374,7 @@ export default function App() {
   const [shots, setShots] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        // Presentation reel must not JSON.parse a vault-sized shot list on first paint.
+        // Presentation reel keeps the showcase seed; empty sessions start blank — not rain-slicked.
         if (isPresentationMode()) return INITIAL_SHOTS;
         const saved = localStorage.getItem('sps_current_shots');
         if (saved) {
@@ -388,7 +387,7 @@ export default function App() {
         }
       } catch (e) {}
     }
-    return INITIAL_SHOTS;
+    return starterShots();
   });
 
   useEffect(() => {
@@ -503,7 +502,7 @@ export default function App() {
   };
 
   const activeSlots = useMemo(
-    () => boostSlotsWithStudioBrain(getSlotsForGenre(presetProfile)),
+    () => getSlotsForGenre(presetProfile),
     [presetProfile]
   );
 
@@ -3917,13 +3916,37 @@ export default function App() {
       alert('🔒 ACCESS RESTRICTED:\nOnly the studio admin can create projects. Collaborators can open allotted projects only.');
       return;
     }
-    setShots(template.shots);
+    const openHasWork =
+      Array.isArray(shots) &&
+      shots.length > 0 &&
+      !matrixLooksLikePlaceholder(shots) &&
+      !isSampleDemoShots(shots);
+    if (openHasWork) {
+      const ok = window.confirm(
+        `Replace the open Matrix with template “${nextTitle || 'kit'}”?\n\n` +
+          'This loads a deep copy of the kit only — it does not merge into your current film, ' +
+          'and edits will not write back into app templates or genre presets.'
+      );
+      if (!ok) return;
+    }
+    let clonedShots = [];
+    try {
+      clonedShots = structuredClone(template?.shots || []);
+    } catch {
+      clonedShots = JSON.parse(JSON.stringify(template?.shots || []));
+    }
+    const isolated = scrubDemoBleedFromProject({
+      title: nextTitle,
+      shots: clonedShots
+    });
+    const nextShots = Array.isArray(isolated?.shots) ? isolated.shots : clonedShots;
+    setShots(nextShots);
     setProjectTitle(nextTitle);
     setAspectRatio(template.aspectRatio);
     setActiveShotIndex(0);
-    setActiveView("spreadsheet");
+    setActiveView('spreadsheet');
     syncToCloud({
-      shots: template.shots,
+      shots: nextShots,
       projectTitle: nextTitle,
       aspectRatio: template.aspectRatio
     });

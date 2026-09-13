@@ -67,6 +67,14 @@ export function filmIntelToMarkdown(intel = {}) {
       (f) => `- ${f.ok ? '✓' : '○'} ${f.label}`
     )),
     '',
+    '### Ready gates',
+    `- **Lock**: ${intel.readiness?.lock?.ready ? 'READY' : 'NOT READY'}`,
+    ...((intel.readiness?.lock?.items || []).map((i) => `  - ${i.ok ? '✓' : '○'} ${i.label}`)),
+    `- **Generate**: ${intel.readiness?.generate?.ready ? 'READY' : 'NOT READY'}`,
+    ...((intel.readiness?.generate?.items || []).map((i) => `  - ${i.ok ? '✓' : '○'} ${i.label}`)),
+    `- **Shoot**: ${intel.readiness?.shoot?.ready ? 'READY' : 'NOT READY'}`,
+    ...((intel.readiness?.shoot?.items || []).map((i) => `  - ${i.ok ? '✓' : '○'} ${i.label}`)),
+    '',
     '_Film Intel gauges craft health — not artistic taste._',
     ''
   ];

@@ -232,6 +232,8 @@ export default function AdminSettingsModal({
   const [resetSuccessMsg, setResetSuccessMsg] = useState('');
   const [factoryResetOpen, setFactoryResetOpen] = useState(false);
   const [factoryFlushSettings, setFactoryFlushSettings] = useState(false);
+  const [factoryWipeFilms, setFactoryWipeFilms] = useState(false);
+  const [factoryConfirmText, setFactoryConfirmText] = useState('');
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetError, setFactoryResetError] = useState('');
 
@@ -1768,16 +1770,24 @@ export default function AdminSettingsModal({
   };
 
   const handleConfirmFactoryReset = async () => {
+    const needPhrase = factoryWipeFilms ? 'DELETE EVERYTHING' : 'FACTORY RESET';
+    if (String(factoryConfirmText || '').trim().toUpperCase() !== needPhrase) {
+      setFactoryResetError(`Type ${needPhrase} to confirm.`);
+      return;
+    }
     setFactoryResetBusy(true);
     setFactoryResetError('');
     try {
-      const result = await runFactoryReset({ flushSettings: factoryFlushSettings });
+      const result = await runFactoryReset({
+        flushSettings: factoryFlushSettings || factoryWipeFilms,
+        wipeFilmFolders: factoryWipeFilms
+      });
       if (!result.ok) {
         setFactoryResetError(result.details?.disk?.error || result.message || 'Factory reset failed.');
         return;
       }
       setFactoryResetOpen(false);
-      // Hard reload so gallery / session / prefs rehydrate clean
+      setFactoryConfirmText('');
       window.setTimeout(() => {
         window.location.reload();
       }, 250);
@@ -4371,14 +4381,16 @@ export default function AdminSettingsModal({
                     </h4>
                   </div>
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Clears the in-app project gallery and session so the studio starts empty.
-                    Local film folders on disk (<span className="text-zinc-300">SWS PROJECTS / ASSETS · PROJECT · RENDERS</span>) are
-                    never deleted — re-import anytime with <span className="text-cyan-300">Open folder</span>.
+                    Clears the in-app project gallery, session, and mixed craft presets so this device feels like first launch.
+                    Default mode keeps Desktop <span className="text-zinc-300">SWS PROJECTS</span> film folders —
+                    use nuclear wipe only when the machine is contaminated.
                   </p>
                   <button
                     type="button"
                     onClick={() => {
-                      setFactoryFlushSettings(false);
+                      setFactoryFlushSettings(true);
+                      setFactoryWipeFilms(false);
+                      setFactoryConfirmText('');
                       setFactoryResetError('');
                       setFactoryResetOpen(true);
                     }}
@@ -4411,7 +4423,7 @@ export default function AdminSettingsModal({
                   Factory reset
                 </h3>
                 <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">
-                  Flush projects from this app. Film project folders on disk stay intact.
+                  Owner escape hatch — this device only. Does not wipe cloud catalog for other machines.
                 </p>
               </div>
               <button
@@ -4426,27 +4438,67 @@ export default function AdminSettingsModal({
             </div>
 
             <ul className="text-[11px] text-zinc-300 space-y-1.5 list-disc pl-4">
-              <li>Empty the project gallery &amp; active session</li>
-              <li>Clear app vault mirrors (not film folders)</li>
-              <li className="text-emerald-400/90">Keep SWS PROJECTS folders &amp; saved files on disk</li>
+              <li>Empty project gallery &amp; active session</li>
+              <li>Clear vault mirrors, studio brain, craft presets</li>
+              <li className={factoryWipeFilms ? 'text-red-300' : 'text-emerald-400/90'}>
+                {factoryWipeFilms
+                  ? 'Also permanently delete Desktop/Documents SWS PROJECTS film folders'
+                  : 'Keep SWS PROJECTS folders on disk (re-import with Open folder)'}
+              </li>
             </ul>
 
             <label className="flex items-start gap-2.5 p-3 rounded-lg bg-zinc-900 border border-zinc-800 cursor-pointer">
               <input
                 type="checkbox"
                 className="mt-0.5 accent-amber-500"
-                checked={factoryFlushSettings}
+                checked={factoryFlushSettings || factoryWipeFilms}
                 onChange={(e) => setFactoryFlushSettings(e.target.checked)}
-                disabled={factoryResetBusy}
+                disabled={factoryResetBusy || factoryWipeFilms}
               />
               <span className="text-[11px] text-zinc-200 leading-snug">
-                <strong className="text-amber-300">Also flush settings &amp; preferences</strong>
+                <strong className="text-amber-300">Flush settings &amp; preferences</strong>
                 <span className="block text-zinc-500 mt-0.5">
-                  UI prefs, admin console switches, allotted paths, collaborators, and stored API keys.
-                  Device id is kept for SaaS.
+                  UI prefs, console switches, collaborators, stored API keys. Device id kept for SaaS.
                 </span>
               </span>
             </label>
+
+            <label className="flex items-start gap-2.5 p-3 rounded-lg bg-red-950/40 border border-red-500/40 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-red-500"
+                checked={factoryWipeFilms}
+                onChange={(e) => {
+                  setFactoryWipeFilms(e.target.checked);
+                  if (e.target.checked) setFactoryFlushSettings(true);
+                  setFactoryConfirmText('');
+                }}
+                disabled={factoryResetBusy}
+              />
+              <span className="text-[11px] text-zinc-200 leading-snug">
+                <strong className="text-red-300">Nuclear — delete film folders permanently</strong>
+                <span className="block text-zinc-500 mt-0.5">
+                  Irreversible. Wipes title folders under Desktop/Documents <span className="text-zinc-300">SWS PROJECTS</span>.
+                </span>
+              </span>
+            </label>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-zinc-500" htmlFor="sps-factory-confirm">
+                Type {factoryWipeFilms ? 'DELETE EVERYTHING' : 'FACTORY RESET'} to confirm
+              </label>
+              <input
+                id="sps-factory-confirm"
+                type="text"
+                value={factoryConfirmText}
+                onChange={(e) => setFactoryConfirmText(e.target.value)}
+                disabled={factoryResetBusy}
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-white outline-none focus:border-red-400"
+                placeholder={factoryWipeFilms ? 'DELETE EVERYTHING' : 'FACTORY RESET'}
+              />
+            </div>
 
             {factoryResetError && (
               <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
@@ -4471,7 +4523,7 @@ export default function AdminSettingsModal({
                 className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
               >
                 {factoryResetBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                {factoryResetBusy ? 'Resetting…' : 'Reset app'}
+                {factoryResetBusy ? 'Resetting…' : factoryWipeFilms ? 'Wipe device' : 'Reset app'}
               </button>
             </div>
           </div>

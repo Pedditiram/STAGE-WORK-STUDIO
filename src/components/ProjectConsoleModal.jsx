@@ -1205,24 +1205,34 @@ export default function ProjectConsoleModal({
     }
 
     const key = editingGenreKey || `custom_genre_${Date.now()}`;
-    const parseLines = (text) => (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const clipLines = (text) =>
+      (text || '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .filter((l) => !/^FADE IN/i.test(l) && !/^INT\.|^EXT\./i.test(l))
+        .map((l) => l.slice(0, 220))
+        .slice(0, 40);
 
     const updatedProfile = {
       label: genreForm.label.trim(),
       name: genreForm.label.trim(),
-      description: genreForm.description.trim() || 'Custom user production genre profile',
+      description: String(genreForm.description || '')
+        .trim()
+        .slice(0, 400) || 'Custom user production genre profile',
+      // Craft phrase banks only — never film body (shots / screenplay / bible).
       presets: {
-        characterIdAssetRef: parseLines(genreForm.characterIdAssetRef),
-        coArtistInteraction: parseLines(genreForm.coArtistInteraction),
-        actionEnvContext: parseLines(genreForm.actionEnvContext),
-        characterExpression: parseLines(genreForm.characterExpression),
-        characterMovement: parseLines(genreForm.characterMovement),
-        characterDialogue: parseLines(genreForm.characterDialogue),
-        timeAndLightingEnv: parseLines(genreForm.timeAndLightingEnv),
-        subjectLightingTag: parseLines(genreForm.subjectLightingTag),
-        subjectColorTag: parseLines(genreForm.subjectColorTag),
-        backgroundLightingTag: parseLines(genreForm.backgroundLightingTag),
-        backgroundColorTag: parseLines(genreForm.backgroundColorTag)
+        characterIdAssetRef: clipLines(genreForm.characterIdAssetRef),
+        coArtistInteraction: clipLines(genreForm.coArtistInteraction),
+        actionEnvContext: clipLines(genreForm.actionEnvContext),
+        characterExpression: clipLines(genreForm.characterExpression),
+        characterMovement: clipLines(genreForm.characterMovement),
+        characterDialogue: clipLines(genreForm.characterDialogue),
+        timeAndLightingEnv: clipLines(genreForm.timeAndLightingEnv),
+        subjectLightingTag: clipLines(genreForm.subjectLightingTag),
+        subjectColorTag: clipLines(genreForm.subjectColorTag),
+        backgroundLightingTag: clipLines(genreForm.backgroundLightingTag),
+        backgroundColorTag: clipLines(genreForm.backgroundColorTag)
       }
     };
 
