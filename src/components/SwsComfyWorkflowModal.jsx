@@ -48,9 +48,9 @@ import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { runSwsComfySelfTests } from '../utils/swsComfySelfTest';
 import {
   buildClapboard,
-  buildResolvePackFiles,
   clapboardSidecarJson
 } from '../utils/shotClapboard';
+import { exportProjectResolvePack } from '../utils/resolvePackExport';
 
 function validateFrontendNodesInstalled(workflow, objectInfo) {
   return validateMasterNodesInstalled(workflow, objectInfo);
@@ -1020,71 +1020,33 @@ export default function SwsComfyWorkflowModal({
   const downloadResolvePack = async () => {
     setError('');
     setStatus('');
-    const list = listFilmQueueShots(shots);
-    const targets = list.length ? list : [{ shot: shotForContract, index: shotIndex }];
-    const gate = assertExportAllowed({
-      projectTitle,
-      label: 'resolve_pack',
-      format: 'zip',
-      lifecycleMode,
-      shots,
-      roomId: resolveCollabRoomId()
-    });
-    if (!gate.ok) {
-      setError(gate.message || 'Export blocked.');
-      return;
-    }
-    const { files, slug } = buildResolvePackFiles({
-      projectTitle,
-      shots: targets.map((t) => t.shot),
-      getDurationSec: (s, i) => {
-        if (s === shotForContract || (s?.sceneShotId && s.sceneShotId === shotForContract?.sceneShotId)) {
-          return duration;
-        }
-        return Number(s?.durationSec || s?.duration || duration) || duration;
-      },
-      getSourcePath: (s, i, c) => {
-        const gens = generationsForShot(projectTitle, s?.sceneShotId || c.shotId);
-        const hit = (gens || []).find((g) => g.outputFile);
-        return hit?.outputFile || c.videoFilename;
-      },
-      fps
-    });
-    // Include current shot workflow JSON for Continuity
+    let extraFiles = [];
     try {
       const { files: wfFiles } = buildWorkflowExportFiles();
-      wfFiles.forEach((f) => {
-        files.push({ name: `workflows/${f.name.replace(/^sidecars\//, 'sidecars/')}`, content: f.content });
-      });
+      extraFiles = wfFiles.map((f) => ({
+        name: `workflows/${f.name.replace(/^sidecars\//, 'sidecars/')}`,
+        content: f.content
+      }));
     } catch {
       /* ignore */
     }
-    const blob = createZipArchive(files);
-    const filename = `${slug}_RESOLVE_PACK.zip`;
-    const saved = await saveExportBlob(blob, filename, {
-      skipLifecycleCheck: true,
-      advisoryAlready: Boolean(gate.advisory),
+    const result = await exportProjectResolvePack({
       projectTitle,
-      auditLabel: 'resolve_pack',
-      auditFormat: 'zip',
       shots,
+      fallbackShot: shotForContract,
+      fallbackIndex: shotIndex,
+      durationFallback: duration,
+      fps,
+      lifecycleMode,
       roomId: resolveCollabRoomId(),
-      lifecycleMode
+      extraFiles
     });
-    if (saved?.blocked) {
-      setError(saved.error || 'Could not save Resolve pack.');
+    if (!result.ok) {
+      setError(result.error || 'Could not save Resolve pack.');
       return;
     }
-    logExportSuccess({
-      projectTitle,
-      label: 'resolve_pack',
-      format: 'zip',
-      filename,
-      roomId: resolveCollabRoomId(),
-      lifecycleMode
-    });
     setStatus(
-      `Resolve pack saved (${targets.length} clip${targets.length === 1 ? '' : 's'}). Import CSV/EDL in DaVinci; name MP4s like ${clap.videoFilename}.`
+      `Resolve pack saved (${result.clipCount} clip${result.clipCount === 1 ? '' : 's'}). Import CSV/EDL in DaVinci; name MP4s like ${result.sampleVideoFilename || clap.videoFilename}.`
     );
   };
 

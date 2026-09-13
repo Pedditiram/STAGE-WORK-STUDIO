@@ -17,7 +17,8 @@ import {
   Wand2,
   HardDrive,
   Upload,
-  Keyboard
+  Keyboard,
+  Clapperboard
 } from 'lucide-react';
 import { SEEDANCE_SLOTS } from '../constants/seedancePresets';
 import { isStudioAdmin, getCurrentUserEmail } from '../utils/projectPermissions';
@@ -391,6 +392,37 @@ function buildGuideSections(isAdmin) {
             Advanced: send a Seedance master workflow to local ComfyUI. Set asset folders and video render path first so
             Save Video Clean Name lands in your film’s <code>RENDERS/Video</code> folder.
           </Step>
+          <Step n={4} title="DaVinci Resolve timeline">
+            On Generate, click <strong>Resolve pack</strong> (also ComfyUI workflow → Export Resolve pack). ZIP includes
+            CSV + EDL + clapboards. In Resolve, import the EDL/CSV and match MP4 names to the clapboard filenames.
+          </Step>
+        </div>
+      )
+    },
+    {
+      id: 'resolve',
+      icon: Clapperboard,
+      title: '7b. DaVinci Resolve pack',
+      badge: 'EDIT',
+      keywords: 'davinci resolve timeline edl csv clapboard export pack edit suite',
+      content: (
+        <div className="space-y-3 text-[11px]">
+          <Callout title="Where to export">
+            Open the film → <strong>Generate</strong> → <strong>Resolve pack</strong>. Same pack is available from{' '}
+            <strong>ComfyUI workflow → Export Resolve pack</strong>.
+          </Callout>
+          <ol className="list-decimal pl-4 space-y-1 m-0" style={{ color: 'var(--sps-muted)' }}>
+            <li>Export the ZIP for the open project (all live shots).</li>
+            <li>Render or copy shot MP4s using the clapboard video names in the pack.</li>
+            <li>
+              In DaVinci Resolve: <strong>Media Pool → Import</strong> the CSV, or{' '}
+              <strong>File → Import → Timeline from EDL</strong>.
+            </li>
+            <li>Sort / conform clips by Scene · Shot, then edit.</li>
+          </ol>
+          <p style={{ color: 'var(--sps-muted)' }} className="m-0">
+            Lifecycle export gates still apply in Strict mode — unlock or use Advisory if export is blocked.
+          </p>
         </div>
       )
     },

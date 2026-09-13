@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Copy, Check, ChevronLeft, ChevronRight, Download, Package, GitBranch } from 'lucide-react';
+import { X, Copy, Check, ChevronLeft, ChevronRight, Download, Package, GitBranch, Clapperboard } from 'lucide-react';
 import SwsComfyWorkflowModal from './SwsComfyWorkflowModal';
 import { probeComfyUi, getComfyUiBaseUrl } from '../services/comfyuiClient';
 import { compileMasterCinemaCompilerPrompt } from '../utils/compileMasterCinemaPrompt';
@@ -10,6 +10,7 @@ import { useExportLifecyclePref } from '../hooks/useExportLifecyclePref';
 import { assertExportAllowed, exportDownloadText, logExportSuccess, resolveCollabRoomId } from '../utils/exportGate';
 import { managedCreditStatus } from '../utils/saasControl';
 import { generateDeskToPrintHtml } from '../utils/generateDeskExport';
+import { exportProjectResolvePack } from '../utils/resolvePackExport';
 import {
   enqueueGenerationJob,
   getPendingJobs,
@@ -670,6 +671,27 @@ export default function GenerateDeskModal({
       return;
     }
     setStatus(`Job pack saved · ${slots.length} image slot${slots.length === 1 ? '' : 's'}`);
+  };
+
+  const saveResolvePack = async () => {
+    if (refuseIfDirty()) return;
+    setStatus('Building Resolve pack…');
+    const result = await exportProjectResolvePack({
+      projectTitle,
+      shots,
+      fallbackShot: shot,
+      fallbackIndex: index,
+      durationFallback: dur,
+      lifecycleMode: generateLifecycleMode,
+      roomId
+    });
+    if (!result.ok) {
+      setStatus(result.error || exportLife.message || 'Resolve pack blocked');
+      return;
+    }
+    setStatus(
+      `Resolve pack saved (${result.clipCount} clips). Import CSV/EDL in DaVinci Resolve; name MP4s like ${result.sampleVideoFilename || 'SC##_SH##_…mp4'}.`
+    );
   };
 
   const savePrintPdf = () => {
@@ -2193,6 +2215,20 @@ export default function GenerateDeskModal({
             <button type="button" className="sps-btn text-xs disabled:opacity-40" disabled={dirty || exportBlocked} title={exportBlocked ? exportLife.message : 'Save job pack ZIP'} onClick={saveJobPack}>
               <Package className="w-3.5 h-3.5" />
               Job pack
+            </button>
+            <button
+              type="button"
+              className="sps-btn text-xs disabled:opacity-40"
+              disabled={dirty || exportBlocked}
+              title={
+                exportBlocked
+                  ? exportLife.message
+                  : 'CSV + EDL + clapboards for DaVinci Resolve timeline (all live Matrix shots)'
+              }
+              onClick={saveResolvePack}
+            >
+              <Clapperboard className="w-3.5 h-3.5" />
+              Resolve pack
             </button>
             <button
               type="button"
