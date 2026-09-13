@@ -16,7 +16,7 @@ export const SAAS_PLANS = {
       collab: false,
       compile: false,
     },
-    consoles: ['writer', 'matrix', 'form'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel'],
     rateGeneratePerMin: 2,
   },
   creator: {
@@ -30,7 +30,7 @@ export const SAAS_PLANS = {
       collab: false,
       compile: true,
     },
-    consoles: ['writer', 'matrix', 'form', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign'],
     rateGeneratePerMin: 6,
   },
   pro: {
@@ -44,7 +44,7 @@ export const SAAS_PLANS = {
       collab: true,
       compile: true,
     },
-    consoles: ['writer', 'matrix', 'form', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch'],
     rateGeneratePerMin: 12,
   },
   production: {
@@ -58,7 +58,7 @@ export const SAAS_PLANS = {
       collab: true,
       compile: true,
     },
-    consoles: ['writer', 'matrix', 'form', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
     rateGeneratePerMin: 20,
   },
   studio: {
@@ -72,7 +72,7 @@ export const SAAS_PLANS = {
       collab: true,
       compile: true,
     },
-    consoles: ['writer', 'matrix', 'form', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
     rateGeneratePerMin: 30,
   },
   enterprise: {
@@ -86,7 +86,7 @@ export const SAAS_PLANS = {
       collab: true,
       compile: true,
     },
-    consoles: ['writer', 'matrix', 'form', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
+    consoles: ['writer', 'matrix', 'form', 'film_intel', 'stage', 'cast', 'world', 'compile', 'generate', 'reel', 'storyboard', 'promo', 'campaign', 'pitch', 'budget'],
     rateGeneratePerMin: 60,
   },
 };

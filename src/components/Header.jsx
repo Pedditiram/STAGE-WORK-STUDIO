@@ -51,10 +51,12 @@ export default function Header({
   onOpenStoryboard,
   onOpenPitchDeck,
   onOpenBudgetConsole,
+  onOpenFilmIntel,
   showBudgetConsole = false,
   showPromoConsole = true,
   showPitchConsole = true,
   showReelConsole = true,
+  showFilmIntelConsole = true,
   onOpenFeatureReel,
   onOpenAdminModal,
   onOpenProjectConsole,
@@ -236,7 +238,11 @@ export default function Header({
     fn?.();
   };
 
-  const consoleOn = (id) => (id === 'budget' ? showBudgetConsole : isStudioModuleEnabled(id));
+  const consoleOn = (id) => {
+    if (id === 'budget') return showBudgetConsole;
+    if (id === 'film_intel') return showFilmIntelConsole && isStudioModuleEnabled(id);
+    return isStudioModuleEnabled(id);
+  };
   const demoMode = areAllConsolesOff();
 
   // Real-time automatic synchronization when collaborator projects or profiles change
@@ -423,6 +429,14 @@ export default function Header({
             ) : null}
             {consoleOn('world') ? (
               <MastTab selected={activeView === 'world'} title="World" label="World" onClick={withGuestGuard('World & Environment', onOpenWorldEnvironment)} />
+            ) : null}
+            {consoleOn('film_intel') ? (
+              <MastTab
+                selected={activeView === 'film_intel'}
+                title="Film Intel"
+                label="Intel"
+                onClick={withGuestGuard('Film Intel', onOpenFilmIntel)}
+              />
             ) : null}
               {consoleOn('storyboard') ? (
                 <MastTab selected={activeView === 'storyboard'} title="Storyboard" label="Storyboard" onClick={withGuestGuard('Storyboard', onOpenStoryboard)} />

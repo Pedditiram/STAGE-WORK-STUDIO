@@ -173,6 +173,7 @@ const CharacterBibleModal = lazy(() => import('./components/CharacterBibleModal'
 const WorldEnvironmentConsole = lazy(() => import('./components/WorldEnvironmentConsole'));
 const StudioBrainModal = lazy(() => import('./components/StudioBrainModal'));
 const ProductionDashboardModal = lazy(() => import('./components/ProductionDashboardModal'));
+const FilmIntelConsole = lazy(() => import('./components/FilmIntelConsole'));
 const LlmCommandReviewModal = lazy(() => import('./components/LlmCommandReviewModal'));
 const PromoPackModal = lazy(() => import('./components/PromoPackModal'));
 const CampaignKitModal = lazy(() => import('./components/CampaignKitModal'));
@@ -513,7 +514,7 @@ export default function App() {
       const savedCanvas = localStorage.getItem('sps_enable_canvas_tab');
       const canShowCanvas = savedCanvas === 'true';
       const saved = localStorage.getItem('sps_active_view');
-      if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || saved === 'promo' || saved === 'campaign' || saved === 'storyboard' || saved === 'pitch' || saved === 'budget' || (saved === 'canvas' && canShowCanvas))) {
+      if (saved && (saved === 'spreadsheet' || saved === 'form' || saved === 'screenplay' || saved === 'templates' || saved === 'promo' || saved === 'campaign' || saved === 'storyboard' || saved === 'pitch' || saved === 'budget' || saved === 'film_intel' || (saved === 'canvas' && canShowCanvas))) {
         if (saved === 'budget' && typeof window !== 'undefined') {
           try {
             if (localStorage.getItem('sps_budget_console_enabled') === 'false') return 'spreadsheet';
@@ -591,6 +592,7 @@ export default function App() {
       canvas: 'stage',
       cast: 'cast',
       world: 'world',
+      film_intel: 'film_intel',
       promo: 'promo',
       campaign: 'campaign',
       storyboard: 'storyboard',
@@ -949,12 +951,11 @@ export default function App() {
   };
 
   const openFilmIntel = () => {
-    setDashboardDesk('intel');
-    setIsProductionDashboardOpen(true);
+    setHeaderMinimized(false);
+    setActiveView('film_intel');
   };
 
   const openProductionOps = () => {
-    setDashboardDesk('ops');
     setIsProductionDashboardOpen(true);
   };
 
@@ -997,7 +998,6 @@ export default function App() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isStudioBrainOpen, setIsStudioBrainOpen] = useState(false);
   const [isProductionDashboardOpen, setIsProductionDashboardOpen] = useState(false);
-  const [dashboardDesk, setDashboardDesk] = useState('ops');
   const [writerSeekOffset, setWriterSeekOffset] = useState(null);
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -3101,6 +3101,19 @@ export default function App() {
       ],
     },
     {
+      id: 'film_intel',
+      group: 'Rooms',
+      label: 'Film Intel',
+      hint: 'Analysis',
+      keywords: ['intel', 'quality', 'search', 'suggest', 'continuity', 'screen time', 'radar'],
+      icon: NAV_ICONS.dashboard,
+      enabled: isStudioModuleEnabled('film_intel'),
+      run: () => { if (!guestMayLook('Film Intel')) return; openFilmIntel(); },
+      children: [
+        { id: 'film-intel-open', label: 'Open Film Intel', run: () => { if (!guestMayLook('Film Intel')) return; openFilmIntel(); } },
+      ],
+    },
+    {
       id: 'stage',
       group: 'Rooms',
       label: '3D Stage',
@@ -3288,12 +3301,11 @@ export default function App() {
       group: 'Studio',
       label: 'Production',
       hint: 'Dashboard',
-      keywords: ['runtime', 'takes', 'jobs', 'audit', 'approvals', 'control', 'film intel', 'intel'],
+      keywords: ['runtime', 'takes', 'jobs', 'audit', 'approvals', 'control'],
       icon: NAV_ICONS.dashboard,
       run: () => openProductionOps(),
       children: [
         { id: 'dashboard-open', label: 'Open dashboard', run: () => openProductionOps() },
-        { id: 'film-intel', label: 'Film Intel', run: () => openFilmIntel() },
         { id: 'llm-commands', label: 'LLM command review', run: () => setIsLlmCommandReviewOpen(true) },
       ],
     },
@@ -4131,10 +4143,12 @@ export default function App() {
           onOpenStoryboard={() => { if (!guestMayLook('Storyboard')) return; goStudioRoom('storyboard'); }}
           onOpenPitchDeck={() => { if (!guestMayLook('Pitch')) return; goStudioRoom('pitch'); }}
           onOpenBudgetConsole={openBudgetConsole}
+          onOpenFilmIntel={openFilmIntel}
           showBudgetConsole={canAccessBudgetConsole()}
           showPromoConsole={isStudioModuleEnabled('promo')}
           showPitchConsole={isStudioModuleEnabled('pitch')}
           showReelConsole={isStudioModuleEnabled('reel')}
+          showFilmIntelConsole={isStudioModuleEnabled('film_intel')}
           onOpenFeatureReel={() => {
             if (!isStudioModuleEnabled('reel')) return;
             if (!guestMayLook('Reel')) return;
@@ -4450,6 +4464,63 @@ export default function App() {
             </div>
           )}
 
+          {activeView === 'film_intel' && (
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <Suspense fallback={null}>
+              <FilmIntelConsole
+                asRoom
+                isOpen
+                onClose={() => setActiveView('spreadsheet')}
+                projectTitle={projectTitle}
+                shots={shots}
+                onUpdateShot={handleUpdateShot}
+                onOpenWriter={(opts) => {
+                  if (opts && typeof opts.offset === 'number') {
+                    setWriterSeekOffset(opts.offset);
+                  }
+                  openWriterConsole('screenplay');
+                }}
+                onJumpToShot={(index) => {
+                  if (typeof index === 'number') {
+                    setActiveShotIndex(index);
+                    setActiveView('form');
+                  }
+                }}
+                onHealBibleSoT={() => {
+                  try {
+                    const library = readLocalProjectLibrary();
+                    const projectRecord =
+                      library.find((p) => titlesMatch(p?.title, projectTitle)) || {
+                        title: projectTitle,
+                        shots
+                      };
+                    const drift = detectBibleSoTDrift({ projectTitle, project: projectRecord });
+                    if (!drift.drift) {
+                      window.alert('Cast/World/Director stores are already aligned.');
+                      return;
+                    }
+                    const healed = healBibleSoTDrift({ projectTitle, project: projectRecord });
+                    if (!healed.ok || !healed.project) return;
+                    writeLocalProjectLibrary(
+                      patchLibraryProjectBibleFields(library, projectTitle, {
+                        characterProfiles: healed.project.characterProfiles,
+                        worldAssets: healed.project.worldAssets,
+                        directorPsychology: healed.project.directorPsychology
+                      })
+                    );
+                    saveActiveCharacterProfiles(healed.project.characterProfiles || [], {
+                      title: projectTitle,
+                      silent: true
+                    });
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              />
+              </Suspense>
+            </div>
+          )}
+
           {activeView === 'world' && (
             <div className="flex-1 w-full h-full overflow-hidden">
               <Suspense fallback={null}>
@@ -4633,11 +4704,7 @@ export default function App() {
       {isProductionDashboardOpen && (
       <ProductionDashboardModal
         isOpen={isProductionDashboardOpen}
-        onClose={() => {
-          setIsProductionDashboardOpen(false);
-          setDashboardDesk('ops');
-        }}
-        initialDesk={dashboardDesk}
+        onClose={() => setIsProductionDashboardOpen(false)}
         projectTitle={projectTitle}
         shots={shots}
         onOpenLlmCommands={() => setIsLlmCommandReviewOpen(true)}
@@ -4648,21 +4715,9 @@ export default function App() {
         onUpdateShot={handleUpdateShot}
         onOpenCharacterBible={handleOpenCharactersModal}
         onOpenWorld={handleOpenWorldEnvironment}
-        onOpenWriter={(opts) => {
+        onOpenFilmIntel={() => {
           setIsProductionDashboardOpen(false);
-          setDashboardDesk('ops');
-          if (opts && typeof opts.offset === 'number') {
-            setWriterSeekOffset(opts.offset);
-          }
-          openWriterConsole('screenplay');
-        }}
-        onJumpToShot={(index) => {
-          setIsProductionDashboardOpen(false);
-          setDashboardDesk('ops');
-          if (typeof index === 'number') {
-            setActiveShotIndex(index);
-            setActiveView('form');
-          }
+          openFilmIntel();
         }}
         onOpenDirectorVault={() => {
           setProjectConsoleInitialVault('director');
