@@ -61,6 +61,8 @@ import {
   saveActiveWorldAssets
 } from '../utils/projectBibleVault';
 import { applyProductionAssetSpec } from '../utils/assetRegistry';
+import { buildProductionDashboard } from '../utils/productionDashboard';
+import FilmIntelPanel from './FilmIntelPanel';
 
 function SpineTree({ spine, projectTitle = '', onChanged }) {
   const acts = spine?.actNodes || [];
@@ -363,9 +365,17 @@ export default function ProductionDashboardModal({
   onOpenWorld,
   onOpenDirectorVault,
   onOpenDopVault,
-  onOpenSoundVault
+  onOpenSoundVault,
+  onOpenWriter,
+  onJumpToShot,
+  initialDesk = 'ops'
 }) {
+  const [desk, setDesk] = useState(() => (initialDesk === 'intel' ? 'intel' : 'ops'));
   const [snap, setSnap] = useState(null);
+
+  useEffect(() => {
+    setDesk(initialDesk === 'intel' ? 'intel' : 'ops');
+  }, [initialDesk, isOpen]);
   const [auditFilter, setAuditFilter] = useState('all');
   const [exportAuditFilter, setExportAuditFilter] = useState('all');
   const [jobFilter, setJobFilter] = useState('all');
@@ -815,10 +825,29 @@ export default function ProductionDashboardModal({
               Production dashboard
             </h2>
             <p className="text-[11px] text-[var(--sps-muted)] truncate">
-              {snap.projectTitle || 'Untitled'} · runtime · takes · jobs · approvals · audit
+              {snap.projectTitle || 'Untitled'} ·{' '}
+              {desk === 'intel' ? 'Film Intel · writer + matrix analysis' : 'runtime · takes · jobs · approvals · audit'}
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <div className="sps-tabs sps-tabs-compact mr-1" role="tablist" aria-label="Dashboard desk">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={desk === 'ops'}
+                onClick={() => setDesk('ops')}
+              >
+                Ops
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={desk === 'intel'}
+                onClick={() => setDesk('intel')}
+              >
+                Film Intel
+              </button>
+            </div>
             {pendingLlm > 0 ? (
               <button
                 type="button"
@@ -848,6 +877,18 @@ export default function ProductionDashboardModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {desk === 'intel' ? (
+            <FilmIntelPanel
+              projectTitle={projectTitle}
+              shots={shots}
+              onOpenWriter={onOpenWriter}
+              onJumpToShot={onJumpToShot}
+              onRefresh={refresh}
+              onUpdateShot={onUpdateShot}
+              onHealBibleSoT={handleHealBibleSoT}
+            />
+          ) : (
+          <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <StatCard
               label="Runtime (est.)"
@@ -1618,6 +1659,8 @@ export default function ProductionDashboardModal({
               </div>
             )}
           </section>
+          </>
+          )}
         </div>
       </div>
     </div>

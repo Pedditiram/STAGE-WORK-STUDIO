@@ -15,6 +15,7 @@ export const AUDIT_CATEGORIES = Object.freeze([
   'apply',
   'export',
   'collab',
+  'film_intel',
   'system'
 ]);
 
@@ -26,7 +27,8 @@ export const AUDIT_FILTER_OPTIONS = Object.freeze([
   { id: 'generate', label: 'Generate' },
   { id: 'apply', label: 'Write / apply' },
   { id: 'export', label: 'Export' },
-  { id: 'collab', label: 'Collab' }
+  { id: 'collab', label: 'Collab' },
+  { id: 'film_intel', label: 'Film Intel' }
 ]);
 
 /** Filter audit rows by category chip (apply chip also matches shot/asset lifecycle rows). */

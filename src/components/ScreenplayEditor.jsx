@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   FileText, Sparkles, RefreshCw, Download, Copy, Check, Save, Edit3, Cpu,
   Layers, Scroll, BookOpen, Search, Upload, History, ChevronDown, PanelRightOpen,
-  PanelRightClose, StickyNote, Radar, Activity, Gauge, AlertTriangle, Zap,
+  PanelRightClose, StickyNote, Zap,
   Users, Lock, Unlock, Archive, Palette, CircleHelp, Focus, ListTree, LayoutTemplate, MoreHorizontal, Maximize2, Minimize2, Mic, MicOff, Wand2
 } from 'lucide-react';
 import { PinBarButton } from './HoverPinBar';
@@ -55,7 +55,7 @@ import { readOpenScreenplayText, writeOpenScreenplayText,
   SCRIPT_UPLOAD_ACCEPT,
   SCRIPT_UPLOAD_HINT
 } from '../utils/screenplayInterop';
-import { analyzeScreenplay, intensityColor } from '../utils/screenplayIntelligence';
+import { analyzeScreenplay } from '../utils/screenplayIntelligence';
 import ScreenplayDiffModal from './ScreenplayDiffModal';
 import WriterHelpModal from './WriterHelpModal';
 import ActiveProjectConfirmModal from './ActiveProjectConfirmModal';
@@ -281,7 +281,10 @@ export default function ScreenplayEditor({
   setPresetProfile,
   projectTitle = 'STAGE PRODUCTION STUDIO',
   initialConsoleTab = 'screenplay',
-  roomId = ''
+  roomId = '',
+  onOpenFilmIntel,
+  seekOffset = null,
+  onSeekConsumed
 }) {
   const [activeConsoleTab, setActiveConsoleTab] = useState(() => {
     if (initialConsoleTab === 'synopsis') return 'synopsis';
@@ -335,9 +338,8 @@ export default function ScreenplayEditor({
     try { writerSynopsisAbortRef.current?.abort(); } catch { /* ignore */ }
   }, []);
   const [caretPos, setCaretPos] = useState(0);
-  const [rightDrawer, setRightDrawer] = useState(null); // 'find' | 'versions' | 'intel' | null
+  const [rightDrawer, setRightDrawer] = useState(null); // 'find' | 'versions' | null
   const [versionsSubTab, setVersionsSubTab] = useState('drafts'); // 'drafts' | 'archive'
-  const [intelSubTab, setIntelSubTab] = useState('radar'); // 'radar' | 'pacing' | 'beats' | 'flags'
   const [exportOpen, setExportOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
@@ -1039,6 +1041,15 @@ export default function ScreenplayEditor({
   };
 
   useEffect(() => {
+    if (typeof seekOffset !== 'number') return undefined;
+    const t = window.setTimeout(() => {
+      jumpToOffset(seekOffset);
+      onSeekConsumed?.();
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [seekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     const t = window.setTimeout(() => {
       localStorage.setItem('sps_script_synopsis_source', scriptSynopsisSource);
       localStorage.setItem('sps_writer_custom_script_synopsis', writerCustomSynopsis);
@@ -1350,8 +1361,7 @@ export default function ScreenplayEditor({
 
     if (mod && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
       e.preventDefault();
-      setIntelSubTab('radar');
-      setRightDrawer('intel');
+      onOpenFilmIntel?.();
       return;
     }
 
@@ -2138,14 +2148,11 @@ export default function ScreenplayEditor({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setIntelSubTab('radar');
-                    toggleDrawer('intel');
-                  }}
-                  className={`sps-quiet-link ${rightDrawer === 'intel' ? 'is-current' : 'is-muted'}`}
-                  title="Writer Intel"
+                  onClick={() => onOpenFilmIntel?.()}
+                  className="sps-quiet-link is-muted"
+                  title="Open Film Intel (⌘⇧I) — analysis moved to Production dashboard"
                 >
-                  Intel {intel.readiness?.score ?? 0}
+                  Film Intel {intel.readiness?.score ?? 0}
                 </button>
                 <button
                   type="button"
@@ -2226,13 +2233,12 @@ export default function ScreenplayEditor({
                     <button
                       type="button"
                       onClick={() => {
-                        setIntelSubTab('radar');
-                        setRightDrawer('intel');
                         setStudioMoreOpen(false);
+                        onOpenFilmIntel?.();
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 cursor-pointer"
                     >
-                      Writer Intel
+                      Film Intel
                     </button>
                     <button
                       type="button"
@@ -2333,7 +2339,7 @@ export default function ScreenplayEditor({
                   <button type="button" className="text-cyan-300 font-bold underline cursor-pointer" onClick={() => applyViewMode('studio')}>
                     Studio
                   </button>{' '}
-                  when you want Intel, Co-Write, Colors, and Matrix Sync.
+                  when you want Film Intel, Co-Write, Colors, and Matrix Sync.
                 </p>
                 <div className="mt-2 flex justify-end gap-2">
                   <button
@@ -2880,13 +2886,9 @@ export default function ScreenplayEditor({
             </div>
           </div>
 
-          {/* Right drawer: Find / Versions / Intel */}
+          {/* Right drawer: Find / Versions */}
           {rightDrawer && (
-            <aside
-              className={`shrink-0 border-l border-zinc-800 bg-zinc-900/95 flex flex-col overflow-hidden ${
-                rightDrawer === 'intel' ? 'w-80' : 'w-64'
-              }`}
-            >
+            <aside className="shrink-0 border-l border-zinc-800 bg-zinc-900/95 flex flex-col overflow-hidden w-64">
               {rightDrawer === 'find' && (
                 <>
                   <div className="px-3 py-2 border-b border-zinc-800 text-xs font-black uppercase text-zinc-400 flex items-center gap-2">
@@ -3179,254 +3181,6 @@ export default function ScreenplayEditor({
                 </>
               )}
 
-              {rightDrawer === 'intel' && (
-                <>
-                  <div className="px-3 py-2 border-b border-fuchsia-900/50 bg-gradient-to-r from-fuchsia-950/40 to-zinc-950 text-xs font-black uppercase text-fuchsia-200 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <Radar className="w-3.5 h-3.5" />
-                      Writer Intel
-                    </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-950 border border-fuchsia-700/50 text-fuchsia-300 font-black normal-case tracking-normal">
-                      {intel.readiness?.score ?? 0} · {intel.readiness?.grade || 'Draft'}
-                    </span>
-                  </div>
-
-                  <div className="flex border-b border-zinc-800 shrink-0">
-                    {[
-                      { id: 'radar', label: 'Radar', icon: Radar },
-                      { id: 'pacing', label: 'Pace', icon: Activity },
-                      { id: 'beats', label: 'Beats', icon: Layers },
-                      { id: 'flags', label: 'Flags', icon: AlertTriangle }
-                    ].map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setIntelSubTab(t.id)}
-                        className={`flex-1 py-1.5 text-[10px] font-black flex items-center justify-center gap-1 cursor-pointer ${
-                          intelSubTab === t.id
-                            ? 'text-fuchsia-300 border-b-2 border-fuchsia-500 bg-fuchsia-950/30'
-                            : 'text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        <t.icon className="w-3 h-3" />
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-2.5 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Gauge className="w-3.5 h-3.5 text-amber-400" />
-                        <span className="text-[10px] font-black uppercase text-zinc-400">Matrix Readiness</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${intel.readiness?.score || 0}%`,
-                            background:
-                              (intel.readiness?.score || 0) >= 70
-                                ? 'linear-gradient(90deg,#22d3ee,#a855f7)'
-                                : 'linear-gradient(90deg,#f59e0b,#f43f5e)'
-                          }}
-                        />
-                      </div>
-                      <ul className="space-y-1">
-                        {(intel.readiness?.factors || []).slice(0, 5).map((f) => (
-                          <li
-                            key={f.label}
-                            className={`text-[10px] flex items-start gap-1.5 ${
-                              f.ok ? 'text-emerald-400' : 'text-zinc-500'
-                            }`}
-                          >
-                            <span className="shrink-0">{f.ok ? '✓' : '○'}</span>
-                            <span>{f.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {intelSubTab === 'radar' && (
-                      <>
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-2.5">
-                          <p className="text-[10px] font-black uppercase text-zinc-500 mb-2">Cinema DNA</p>
-                          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                            <div className="rounded-lg bg-zinc-900 px-2 py-1.5 border border-zinc-800">
-                              <span className="text-zinc-500">INT</span>{' '}
-                              <span className="font-black text-cyan-300">{intel.cinemaDNA?.intPct ?? 0}%</span>
-                            </div>
-                            <div className="rounded-lg bg-zinc-900 px-2 py-1.5 border border-zinc-800">
-                              <span className="text-zinc-500">EXT</span>{' '}
-                              <span className="font-black text-amber-300">{intel.cinemaDNA?.extPct ?? 0}%</span>
-                            </div>
-                            <div className="rounded-lg bg-zinc-900 px-2 py-1.5 border border-zinc-800">
-                              <span className="text-zinc-500">Day</span>{' '}
-                              <span className="font-black text-zinc-200">{intel.cinemaDNA?.dayPct ?? 0}%</span>
-                            </div>
-                            <div className="rounded-lg bg-zinc-900 px-2 py-1.5 border border-zinc-800">
-                              <span className="text-zinc-500">Night</span>{' '}
-                              <span className="font-black text-indigo-300">{intel.cinemaDNA?.nightPct ?? 0}%</span>
-                            </div>
-                            <div className="rounded-lg bg-zinc-900 px-2 py-1.5 border border-zinc-800 col-span-2">
-                              Dialogue {intel.cinemaDNA?.dialoguePct ?? 0}% · Action {intel.cinemaDNA?.actionPct ?? 0}% · Shots{' '}
-                              {intel.cinemaDNA?.shotTags ?? 0}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-black uppercase text-zinc-500 mb-2">Character Continuity Radar</p>
-                          <div className="space-y-1.5">
-                            {(intel.characters || []).length === 0 && (
-                              <p className="text-[11px] text-zinc-500">Add ALL-CAPS character cues to track voice share.</p>
-                            )}
-                            {(intel.characters || []).slice(0, 12).map((c) => (
-                              <div
-                                key={c.name}
-                                className="w-full text-left rounded-lg border border-zinc-800 bg-zinc-950/70 px-2 py-1.5"
-                              >
-                                <div className="flex items-center justify-between gap-2 mb-1">
-                                  <span className="text-[11px] font-black text-zinc-100 truncate">{c.name}</span>
-                                  <span className="text-[10px] text-fuchsia-300 font-bold shrink-0">{c.sharePct}%</span>
-                                </div>
-                                <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-gradient-to-r from-fuchsia-600 to-cyan-400"
-                                    style={{ width: `${Math.min(100, Math.max(4, c.sharePct))}%` }}
-                                  />
-                                </div>
-                                <p className="text-[9px] text-zinc-500 mt-1">
-                                  {c.dialogueLines} lines · {c.sceneCount} scenes
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {intelSubTab === 'pacing' && (
-                      <div>
-                        <p className="text-[10px] font-black uppercase text-zinc-500 mb-2">Emotional / Action Heatmap</p>
-                        <div className="flex items-end gap-1 h-28 px-1">
-                          {(intel.scenes || []).filter((s) => !/^ACT\s+/i.test(s.title)).map((s) => (
-                            <button
-                              key={`heat-${s.index}`}
-                              type="button"
-                              onClick={() => jumpToOffset(s.offset)}
-                              className="flex-1 min-w-0 h-full flex flex-col justify-end items-center gap-1 group cursor-pointer"
-                              title={`${s.title}\n${s.emotion} · ${s.intensity}`}
-                            >
-                              <div
-                                className="w-full rounded-t-md transition-all group-hover:brightness-125"
-                                style={{
-                                  height: `${Math.max(8, s.intensity)}%`,
-                                  background: intensityColor(s.intensity),
-                                  boxShadow: `0 0 12px ${intensityColor(s.intensity)}55`
-                                }}
-                              />
-                              <span className="text-[8px] text-zinc-600 truncate w-full text-center">
-                                {s.index + 1}
-                              </span>
-                            </button>
-                          ))}
-                          {(intel.scenes || []).filter((s) => !/^ACT\s+/i.test(s.title)).length === 0 && (
-                            <p className="text-[11px] text-zinc-500 p-2">Add scene headings to see pacing arc.</p>
-                          )}
-                        </div>
-                        <ul className="mt-3 space-y-1.5">
-                          {(intel.scenes || [])
-                            .filter((s) => !/^ACT\s+/i.test(s.title))
-                            .map((s) => (
-                              <button
-                                key={`pace-row-${s.index}`}
-                                type="button"
-                                onClick={() => jumpToOffset(s.offset)}
-                                className="w-full text-left rounded-lg border border-zinc-800 px-2 py-1.5 hover:bg-zinc-950 cursor-pointer"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] text-zinc-300 truncate font-bold">{s.title}</span>
-                                  <span
-                                    className="text-[9px] font-black shrink-0 px-1.5 py-0.5 rounded"
-                                    style={{ color: intensityColor(s.intensity), background: '#18181b' }}
-                                  >
-                                    {s.intensity}
-                                  </span>
-                                </div>
-                                <p className="text-[9px] text-zinc-500">{s.emotion} · {s.dialogueRatio}% dialogue</p>
-                              </button>
-                            ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {intelSubTab === 'beats' && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-black uppercase text-zinc-500">Live Beat Board</p>
-                        <p className="text-[10px] text-zinc-500 leading-snug">
-                          Auto-generated scene cards — click to jump. No corkboard app required.
-                        </p>
-                        {(intel.beats || []).filter((b) => !/^ACT\s+/i.test(b.title)).map((b, i) => (
-                          <button
-                            key={`beat-${i}-${b.offset}`}
-                            type="button"
-                            onClick={() => jumpToOffset(b.offset)}
-                            className="w-full text-left rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-950 to-zinc-900 p-2.5 hover:border-fuchsia-600/50 cursor-pointer"
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span
-                                className="text-[9px] font-black uppercase tracking-wide"
-                                style={{ color: intensityColor(b.intensity) }}
-                              >
-                                {b.emotion}
-                              </span>
-                              <span className="text-[9px] text-zinc-600">SC {i + 1}</span>
-                            </div>
-                            <p className="text-[11px] font-bold text-zinc-100 leading-snug">{b.summary}</p>
-                            {b.characters?.length > 0 && (
-                              <p className="text-[9px] text-zinc-500 mt-1 truncate">{b.characters.join(' · ')}</p>
-                            )}
-                          </button>
-                        ))}
-                        {(intel.beats || []).filter((b) => !/^ACT\s+/i.test(b.title)).length === 0 && (
-                          <p className="text-[11px] text-zinc-500">Write scene headings to populate the beat board.</p>
-                        )}
-                      </div>
-                    )}
-
-                    {intelSubTab === 'flags' && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-black uppercase text-zinc-500">Live Continuity Flags</p>
-                        {(intel.flags || []).length === 0 && (
-                          <p className="text-[11px] text-emerald-400">Clean — no continuity flags right now.</p>
-                        )}
-                        {(intel.flags || []).map((f) => (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => typeof f.offset === 'number' && jumpToOffset(f.offset)}
-                            className={`w-full text-left rounded-lg border px-2.5 py-2 cursor-pointer ${
-                              f.severity === 'warn'
-                                ? 'border-amber-600/40 bg-amber-950/30 text-amber-100'
-                                : 'border-zinc-800 bg-zinc-950/80 text-zinc-300'
-                            }`}
-                          >
-                            <div className="flex items-start gap-1.5">
-                              <AlertTriangle
-                                className={`w-3 h-3 shrink-0 mt-0.5 ${
-                                  f.severity === 'warn' ? 'text-amber-400' : 'text-zinc-500'
-                                }`}
-                              />
-                              <span className="text-[10px] leading-snug">{f.message}</span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
             </aside>
           )}
         </div>
@@ -3585,21 +3339,18 @@ export default function ScreenplayEditor({
           </span>
           <button
             type="button"
-            onClick={() => {
-              setIntelSubTab('radar');
-              setRightDrawer('intel');
-            }}
+            onClick={() => onOpenFilmIntel?.()}
             className="sps-btn text-[10px]"
-            title="Open Writer Intel"
+            title="Open Film Intel (⌘⇧I)"
           >
-            Intel {intel.readiness?.score ?? 0} · {intel.readiness?.grade || 'Draft'}
+            Film Intel {intel.readiness?.score ?? 0} · {intel.readiness?.grade || 'Draft'}
           </button>
           <span className="text-[var(--sps-muted)]">
             {sceneOutline.filter((s) => s.type === 'scene').length} scenes · {shotCount} shots · {wordCount} words
             {(intel.flags || []).length > 0 ? ` · ${intel.flags.length} flags` : ''}
           </span>
           <span className="text-[10px] text-zinc-600 hidden lg:inline" title="Tab = cycle element · Enter = smart next">
-            Tab = cycle · Enter = smart next · Intel = beyond FD
+            Tab = cycle · Enter = smart next · ⌘⇧I = Film Intel
           </span>
         </div>
         {onNavigateToView && (

@@ -948,6 +948,16 @@ export default function App() {
     setActiveView('screenplay');
   };
 
+  const openFilmIntel = () => {
+    setDashboardDesk('intel');
+    setIsProductionDashboardOpen(true);
+  };
+
+  const openProductionOps = () => {
+    setDashboardDesk('ops');
+    setIsProductionDashboardOpen(true);
+  };
+
   useEffect(() => {
     const applyHome = (home) => {
       if (!home || typeof home !== 'object') return;
@@ -987,6 +997,8 @@ export default function App() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isStudioBrainOpen, setIsStudioBrainOpen] = useState(false);
   const [isProductionDashboardOpen, setIsProductionDashboardOpen] = useState(false);
+  const [dashboardDesk, setDashboardDesk] = useState('ops');
+  const [writerSeekOffset, setWriterSeekOffset] = useState(null);
   const [isLlmCommandReviewOpen, setIsLlmCommandReviewOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isUserPackModalOpen, setIsUserPackModalOpen] = useState(false);
@@ -3276,11 +3288,12 @@ export default function App() {
       group: 'Studio',
       label: 'Production',
       hint: 'Dashboard',
-      keywords: ['runtime', 'takes', 'jobs', 'audit', 'approvals', 'control'],
+      keywords: ['runtime', 'takes', 'jobs', 'audit', 'approvals', 'control', 'film intel', 'intel'],
       icon: NAV_ICONS.dashboard,
-      run: () => setIsProductionDashboardOpen(true),
+      run: () => openProductionOps(),
       children: [
-        { id: 'dashboard-open', label: 'Open dashboard', run: () => setIsProductionDashboardOpen(true) },
+        { id: 'dashboard-open', label: 'Open dashboard', run: () => openProductionOps() },
+        { id: 'film-intel', label: 'Film Intel', run: () => openFilmIntel() },
         { id: 'llm-commands', label: 'LLM command review', run: () => setIsLlmCommandReviewOpen(true) },
       ],
     },
@@ -4281,6 +4294,9 @@ export default function App() {
                 projectTitle={projectTitle}
                 initialConsoleTab={writerConsoleTab}
                 roomId={effectiveRoomId}
+                onOpenFilmIntel={openFilmIntel}
+                seekOffset={writerSeekOffset}
+                onSeekConsumed={() => setWriterSeekOffset(null)}
               />
             </div>
           )}
@@ -4617,7 +4633,11 @@ export default function App() {
       {isProductionDashboardOpen && (
       <ProductionDashboardModal
         isOpen={isProductionDashboardOpen}
-        onClose={() => setIsProductionDashboardOpen(false)}
+        onClose={() => {
+          setIsProductionDashboardOpen(false);
+          setDashboardDesk('ops');
+        }}
+        initialDesk={dashboardDesk}
         projectTitle={projectTitle}
         shots={shots}
         onOpenLlmCommands={() => setIsLlmCommandReviewOpen(true)}
@@ -4628,6 +4648,22 @@ export default function App() {
         onUpdateShot={handleUpdateShot}
         onOpenCharacterBible={handleOpenCharactersModal}
         onOpenWorld={handleOpenWorldEnvironment}
+        onOpenWriter={(opts) => {
+          setIsProductionDashboardOpen(false);
+          setDashboardDesk('ops');
+          if (opts && typeof opts.offset === 'number') {
+            setWriterSeekOffset(opts.offset);
+          }
+          openWriterConsole('screenplay');
+        }}
+        onJumpToShot={(index) => {
+          setIsProductionDashboardOpen(false);
+          setDashboardDesk('ops');
+          if (typeof index === 'number') {
+            setActiveShotIndex(index);
+            setActiveView('form');
+          }
+        }}
         onOpenDirectorVault={() => {
           setProjectConsoleInitialVault('director');
           setProjectConsoleInitialTab('director_psychology');
@@ -4810,10 +4846,10 @@ export default function App() {
         </div>
       ) : null}
 
-      {/* Always-visible build stamp (header often hidden behind Projects) */}
+      {/* Build stamp — below studio overlays (z-50) so it never covers craft footer / modals */}
       {!showSplash && (
         <span
-          className="fixed bottom-3 left-3 z-[80] px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
+          className="fixed bottom-3 left-3 z-[30] pointer-events-none px-2.5 py-1 text-[10px] font-mono tabular-nums border shadow-lg"
           style={{
             color: 'var(--sps-gold)',
             background: 'color-mix(in srgb, var(--sps-bg) 92%, transparent)',

@@ -1201,12 +1201,12 @@ function SlotEditor({
         </div>
 
         {/* Modal Footer Bar with Compact Single-Line Navigation */}
-        <div className="flex items-center justify-between pt-2 border-t border-zinc-800 shrink-0 font-mono gap-1.5 overflow-x-auto text-xs">
+        <div className="relative z-10 flex items-center justify-between pt-2 pb-0.5 border-t border-[var(--sps-border)] shrink-0 font-mono gap-1.5 overflow-x-auto text-xs bg-[var(--sps-surface)]">
           {/* Left: Combined Single-Line Navigation Controls */}
-          <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap min-w-0">
             {/* SCENE NAV (Compact Purple Pill - BEFORE SHOT NAV) */}
             {((scenesList && scenesList.length > 0) || onJumpToScene || onNavigatePrevScene || onNavigateNextScene) && (
-              <div className="flex items-center gap-0.5 bg-zinc-950 p-0.5 px-1 rounded-lg border border-purple-500/40 shrink-0">
+              <div className="flex items-center gap-0.5 bg-zinc-950 p-0.5 px-1 rounded-lg border border-purple-500/40 shrink-0 min-w-[7.5rem]">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1219,20 +1219,26 @@ function SlotEditor({
                   <ChevronLeft className="w-3.5 h-3.5 text-purple-400" />
                 </button>
 
-                <div className="relative flex items-center">
+                <div className="relative flex items-center min-w-0">
                   <select
                     value={currentSceneId || (scenesList[0]?.sceneId || '')}
                     onChange={(e) => {
                       if (onJumpToScene) onJumpToScene(e.target.value);
                     }}
-                    className="bg-transparent text-purple-300 text-[11px] font-bold font-mono py-0.5 pl-1 pr-4 appearance-none cursor-pointer focus:outline-none"
+                    className="bg-transparent text-purple-300 text-[11px] font-bold font-mono py-0.5 pl-1 pr-4 appearance-none cursor-pointer focus:outline-none max-w-[9rem] truncate"
                     title="Jump to Scene (Cmd + Shift + Up / Down)"
+                    aria-label={`Scene ${currentSceneId || scenesList[0]?.sceneId || ''}`}
                   >
-                    {(scenesList || []).map((sc, idx) => (
-                      <option key={sc.sceneId || idx} value={sc.sceneId} className="bg-zinc-950 text-white font-mono">
-                        {sc.label || sc.sceneId}
-                      </option>
-                    ))}
+                    {(scenesList || []).map((sc, idx) => {
+                      const num = String(idx + 1).padStart(2, '0');
+                      const id = sc.sceneId || `SC${num}`;
+                      const label = sc.label && sc.label !== id ? `${id} · ${sc.label}` : id;
+                      return (
+                        <option key={sc.sceneId || idx} value={sc.sceneId} className="bg-zinc-950 text-white font-mono">
+                          {label}
+                        </option>
+                      );
+                    })}
                   </select>
                   <ChevronDown className="w-3 h-3 text-purple-400 absolute right-0 pointer-events-none" />
                 </div>
