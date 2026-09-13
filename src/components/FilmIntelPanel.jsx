@@ -357,31 +357,65 @@ export default function FilmIntelPanel({
         <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0 items-center" role="tablist" aria-label="Film Intel desks">
           {deskTabs.map((t) =>
             t.id === 'search' ? (
-              <select
-                key={t.id}
-                className="appearance-none max-w-[11rem] text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-[5px] border-0 outline-none cursor-pointer bg-[var(--sps-gold)] text-[var(--sps-bg)]"
-                value=""
-                aria-label={`Search ${projectTitle || 'film'} elements`}
-                title={`Elements in ${projectTitle || 'this film'}`}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  e.target.value = '';
-                  pickFilmElement(id);
-                }}
-                onFocus={() => setDeskTab('search')}
-              >
-                <option value="">Search</option>
-                <option value="__all__">All elements…</option>
-                {filmElements.map((g) => (
-                  <optgroup key={g.kind} label={`${g.label} (${g.items.length})`}>
-                    {g.items.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.title}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <span key={t.id} className="inline-flex items-center gap-1 shrink-0">
+                <select
+                  className="appearance-none max-w-[11rem] text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-[5px] border-0 outline-none cursor-pointer bg-[var(--sps-gold)] text-[var(--sps-bg)]"
+                  value=""
+                  aria-label={`Search ${projectTitle || 'film'} elements`}
+                  title={`Elements in ${projectTitle || 'this film'}`}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    e.target.value = '';
+                    pickFilmElement(id);
+                  }}
+                  onFocus={() => setDeskTab('search')}
+                >
+                  <option value="">Search</option>
+                  <option value="__all__">All elements…</option>
+                  {(query.trim()
+                    ? filmElements
+                        .map((g) => ({
+                          ...g,
+                          items: g.items.filter((row) => {
+                            const q = query.trim().toLowerCase();
+                            return (
+                              String(row.title || '')
+                                .toLowerCase()
+                                .includes(q) ||
+                              String(row.subtitle || '')
+                                .toLowerCase()
+                                .includes(q)
+                            );
+                          })
+                        }))
+                        .filter((g) => g.items.length > 0)
+                    : filmElements
+                  ).map((g) => (
+                    <optgroup key={g.kind} label={`${g.label} (${g.items.length})`}>
+                      {g.items.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <span className="relative inline-flex items-center">
+                  <Search className="w-3 h-3 absolute left-1.5 text-[var(--sps-muted)] pointer-events-none" />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setDeskTab('search');
+                    }}
+                    onFocus={() => setDeskTab('search')}
+                    placeholder="Type to search…"
+                    className="w-[8.5rem] pl-6 pr-1.5 py-1 text-[10px] rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)]"
+                    aria-label="Type to search film elements"
+                  />
+                </span>
+              </span>
             ) : (
               <button
                 key={t.id}
