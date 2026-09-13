@@ -6,6 +6,7 @@ export function filmIntelToMarkdown(intel = {}) {
   const title = intel.projectTitle || 'Untitled';
   const h = intel.filmHealth || {};
   const q = intel.quality || {};
+  const life = intel.progressLife || null;
   const lines = [
     `# Film Intel — ${title}`,
     '',
@@ -75,6 +76,14 @@ export function filmIntelToMarkdown(intel = {}) {
     `- **Shoot**: ${intel.readiness?.shoot?.ready ? 'READY' : 'NOT READY'}`,
     ...((intel.readiness?.shoot?.items || []).map((i) => `  - ${i.ok ? '✓' : '○'} ${i.label}`)),
     '',
+    ...(life
+      ? [
+          '### Progress lifecycle',
+          `- Live shots: ${life.total || 0}`,
+          `- Draft ${life.draft || 0} · Review ${life.review || 0} · Approved ${life.approved || 0} · Locked ${life.locked || 0}`,
+          ''
+        ]
+      : []),
     '_Film Intel gauges craft health — not artistic taste._',
     ''
   ];
@@ -98,11 +107,7 @@ export function filmIntelToPrintHtml(intel = {}) {
       return `<p>${line}</p>`;
     })
     .join('\n');
-  const title = String(intel.projectTitle || 'Film Intel').replace(/</g, '');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Film Intel — ${title}</title>
-<style>
-body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#1c1712;line-height:1.45}
-h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:1.4rem}h3{font-size:0.95rem;margin-top:1rem}
-li{margin:0.25rem 0}em{color:#6b5a45}
-</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Film Intel</title>
+<style>body{font:14px/1.45 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1a140c}
+h1,h2,h3{font-family:Georgia,serif}li{margin:0.2em 0}</style></head><body>${body}</body></html>`;
 }

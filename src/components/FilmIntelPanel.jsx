@@ -27,6 +27,8 @@ import { getActiveCharacterProfiles, getActiveWorldAssets } from '../utils/proje
 import { exportDownloadText } from '../utils/exportGate';
 import { appendCreativeAudit } from '../utils/creativeAuditLog';
 import { proposeContinuityDriftFixes, applyContinuityDriftFixes } from '../utils/continuitySupervisor';
+import FilmIntelProgressTab from './FilmIntelProgressTab';
+import { lifecycleSummary } from '../utils/productionLifecycle';
 
 /**
  * Film Intel desk — search, quality, suggestions, Writer analysis, Matrix presence.
@@ -222,14 +224,19 @@ export default function FilmIntelPanel({
     const slug = String(projectTitle || 'film')
       .replace(/[^\w\-]+/g, '_')
       .slice(0, 40);
-    exportDownloadText(`${slug}_film_intel.md`, filmIntelToMarkdown(intel), {
-      projectTitle,
-      auditLabel: 'film_intel_md',
-      auditFormat: 'md',
-      mime: 'text/markdown;charset=utf-8',
-      shots,
-      note: `Film Intel ${intel.filmHealth?.score ?? 0}`
-    });
+    const live = (Array.isArray(shots) ? shots : []).filter((s) => !s?.isArchived && !s?.isMuted);
+    exportDownloadText(
+      `${slug}_film_intel.md`,
+      filmIntelToMarkdown({ ...intel, progressLife: lifecycleSummary(live) }),
+      {
+        projectTitle,
+        auditLabel: 'film_intel_md',
+        auditFormat: 'md',
+        mime: 'text/markdown;charset=utf-8',
+        shots,
+        note: `Film Intel ${intel.filmHealth?.score ?? 0}`
+      }
+    );
   };
 
   const handleExportPrint = () => {
@@ -274,6 +281,7 @@ export default function FilmIntelPanel({
 
   const deskTabs = [
     { id: 'overview', label: 'Overview' },
+    { id: 'progress', label: 'Progress' },
     { id: 'ready', label: 'Ready' },
     { id: 'search', label: 'Search' },
     { id: 'quality', label: 'Quality' },
@@ -432,6 +440,14 @@ export default function FilmIntelPanel({
           </p>
         </div>
       </div>
+
+      {deskTab === 'progress' && (
+        <FilmIntelProgressTab
+          shots={shots}
+          intel={intel}
+          onJumpToShot={jumpShot}
+        />
+      )}
 
       {deskTab === 'ready' && (
         <section className="space-y-2">
