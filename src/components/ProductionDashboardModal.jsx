@@ -243,10 +243,10 @@ function LifecycleBar({ summary = {} }) {
   const total = summary.total || 0;
   if (!total) return <p className="text-[11px] text-[var(--sps-muted)]">No items</p>;
   const parts = [
-    { key: 'draft', label: 'Draft', cls: 'bg-zinc-600' },
-    { key: 'review', label: 'Review', cls: 'bg-amber-500' },
-    { key: 'approved', label: 'Approved', cls: 'bg-emerald-500' },
-    { key: 'locked', label: 'Locked', cls: 'bg-[var(--sps-gold)]' }
+    { key: 'draft', label: 'Draft', cls: 'bg-[#6b7280]' },
+    { key: 'review', label: 'Review', cls: 'bg-[#dc2626]' },
+    { key: 'approved', label: 'Approved', cls: 'bg-[#16a34a]' },
+    { key: 'locked', label: 'Locked', cls: 'bg-[#2563eb]' }
   ];
   return (
     <div className="space-y-1.5">

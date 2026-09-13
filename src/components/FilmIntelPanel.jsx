@@ -76,6 +76,20 @@ export default function FilmIntelPanel({
   }, [projectTitle, shots, entityType, entityKey, tick]);
 
   const search = useMemo(() => searchFilmIntel(intel, query), [intel, query]);
+  const filmElements = useMemo(() => {
+    const index = Array.isArray(intel?.searchIndex) ? intel.searchIndex : [];
+    const order = ['shot', 'character', 'world', 'costume', 'prop', 'mark', 'beat', 'flag', 'quality', 'suggestion'];
+    const groups = new Map();
+    order.forEach((k) => groups.set(k, []));
+    index.forEach((row) => {
+      const kind = String(row?.kind || 'other');
+      if (!groups.has(kind)) groups.set(kind, []);
+      groups.get(kind).push(row);
+    });
+    return order
+      .filter((k) => (groups.get(k) || []).length > 0)
+      .map((k) => ({ kind: k, items: groups.get(k) }));
+  }, [intel]);
   const screenplay = intel.screenplay || {};
   const realScenes = (screenplay.scenes || []).filter((s) => !/^ACT\s+/i.test(s.title));
   const realBeats = (screenplay.beats || []).filter((b) => !/^ACT\s+/i.test(b.title));
@@ -296,22 +310,71 @@ export default function FilmIntelPanel({
     return 'var(--sps-success)';
   };
 
+  const pickFilmElement = (id) => {
+    if (!id) return;
+    const hit = (intel?.searchIndex || []).find((row) => row.id === id);
+    if (!hit) return;
+    setQuery(hit.title || '');
+    setDeskTab('search');
+    runHit(hit);
+  };
+
   return (
-    <div className={compact ? 'space-y-2' : 'space-y-3'}>
-      <div className="flex flex-wrap items-center justify-between gap-1.5">
-        <div className="min-w-0">
-          <h3
-            className={`font-semibold m-0 flex items-center gap-1.5 ${compact ? 'text-[13px]' : 'text-sm'}`}
-            style={{ fontFamily: 'var(--sps-font-display)' }}
+    <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <h3
+          className={`font-semibold m-0 flex items-center gap-1 shrink-0 ${compact ? 'text-[12px]' : 'text-[13px]'}`}
+          style={{ fontFamily: 'var(--sps-font-display)' }}
+        >
+          <Radar className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
+          Film Intel
+          <span className="text-[9px] font-normal text-[var(--sps-muted)] truncate max-w-[9rem]">
+            · {projectTitle || 'Untitled'}
+          </span>
+        </h3>
+
+        <div className="relative flex-1 min-w-[9rem] max-w-[14rem] mx-auto">
+          <Search className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-[var(--sps-muted)] pointer-events-none" />
+          <select
+            className="w-full appearance-none pl-6 pr-5 py-1 text-[10px] rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)] cursor-pointer"
+            defaultValue=""
+            aria-label="Jump to film element"
+            title="Shots, cast, world, marks, beats…"
+            onChange={(e) => {
+              const id = e.target.value;
+              e.target.value = '';
+              pickFilmElement(id);
+            }}
           >
-            <Radar className="w-3.5 h-3.5 text-[var(--sps-gold)] shrink-0" />
-            Film Intel
-            <span className="text-[10px] font-normal text-[var(--sps-muted)] truncate">
-              · {projectTitle || 'Untitled'}
-            </span>
-          </h3>
+            <option value="">Film elements…</option>
+            {filmElements.map((g) => (
+              <optgroup key={g.kind} label={`${g.kind} (${g.items.length})`}>
+                {g.items.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.title}
+                    {row.subtitle ? ` — ${String(row.subtitle).slice(0, 42)}` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
-        <div className="flex items-center gap-0.5 flex-wrap justify-end">
+
+        <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0" role="tablist" aria-label="Film Intel desks">
+          {deskTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={deskTab === t.id}
+              onClick={() => setDeskTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-0.5 flex-wrap justify-end ml-auto">
           <button
             type="button"
             className="sps-btn sps-btn-compact text-[10px] flex items-center gap-1"
@@ -363,78 +426,47 @@ export default function FilmIntelPanel({
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-1.5 sm:items-center">
-        <div className="relative flex-1 min-w-0">
-          <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-[var(--sps-muted)] pointer-events-none" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (e.target.value.trim()) setDeskTab('search');
-            }}
-            onFocus={() => setDeskTab('search')}
-            placeholder="Search shots, cast, world, marks, beats…"
-            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)]"
-            aria-label="Film Intel search"
-          />
-        </div>
-        <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0" role="tablist" aria-label="Film Intel desks">
-          {deskTabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={deskTab === t.id}
-              onClick={() => setDeskTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-1.5">
-        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Health</p>
-          <p className="text-[13px] font-bold m-0 text-[var(--sps-gold)] leading-tight truncate">
+      <div className="grid grid-cols-4 gap-1">
+        <div className="rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-1.5 py-0.5 min-w-0">
+          <p className="text-[8px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Health</p>
+          <p className="text-[12px] font-bold m-0 text-[var(--sps-gold)] leading-tight truncate">
             {intel.filmHealth?.score ?? 0}
-            <span className="text-[9px] font-semibold text-[var(--sps-muted)] ml-0.5">
+            <span className="text-[8px] font-semibold text-[var(--sps-muted)] ml-0.5">
               {intel.filmHealth?.grade || 'Draft'}
             </span>
           </p>
         </div>
-        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Craft</p>
-          <p className="text-[13px] font-bold m-0 leading-tight truncate">
+        <div className="rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-1.5 py-0.5 min-w-0">
+          <p className="text-[8px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Craft</p>
+          <p className="text-[12px] font-bold m-0 leading-tight truncate">
             {intel.quality?.craftFill?.pct ?? 0}%
-            <span className="text-[9px] font-normal text-[var(--sps-muted)] ml-0.5">
+            <span className="text-[8px] font-normal text-[var(--sps-muted)] ml-0.5">
               {(intel.quality?.craftFill?.weakShots || []).length} weak
             </span>
           </p>
         </div>
-        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Marks</p>
-          <p className="text-[13px] font-bold m-0 leading-tight truncate">
+        <div className="rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-1.5 py-0.5 min-w-0">
+          <p className="text-[8px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Marks</p>
+          <p className="text-[12px] font-bold m-0 leading-tight truncate">
             <span className="text-[var(--sps-danger)]">{intel.stats?.blockMarks || 0}</span>
-            <span className="text-[9px] text-[var(--sps-muted)]">b</span>
+            <span className="text-[8px] text-[var(--sps-muted)]">b</span>
             {' '}
-            <span className="text-[var(--sps-gold)]">{intel.stats?.warnMarks || 0}</span>
-            <span className="text-[9px] text-[var(--sps-muted)]">w</span>
+            <span className="text-[#dc2626]">{intel.stats?.warnMarks || 0}</span>
+            <span className="text-[8px] text-[var(--sps-muted)]">w</span>
           </p>
         </div>
-        <div className="rounded-[6px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-2 py-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Gates</p>
-          <p className="text-[11px] font-bold m-0 leading-tight truncate">
-            <span className={intel.readiness?.lock?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-danger)]'}>
+        <div className="rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg-elevated)] px-1.5 py-0.5 min-w-0">
+          <p className="text-[8px] uppercase tracking-wide text-[var(--sps-muted)] m-0 truncate">Gates</p>
+          <p className="text-[10px] font-bold m-0 leading-tight truncate">
+            <span className={intel.readiness?.lock?.ready ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
               L{intel.readiness?.lock?.ready ? '✓' : '✗'}
             </span>
             {' '}
-            <span className={intel.readiness?.generate?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-danger)]'}>
+            <span className={intel.readiness?.generate?.ready ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
               G{intel.readiness?.generate?.ready ? '✓' : '✗'}
             </span>
             {' '}
-            <span className={intel.readiness?.shoot?.ready ? 'text-[var(--sps-success)]' : 'text-[var(--sps-gold)]'}>
+            <span className={intel.readiness?.shoot?.ready ? 'text-[#16a34a]' : 'text-[#6b7280]'}>
               S{intel.readiness?.shoot?.ready ? '✓' : '·'}
             </span>
           </p>
@@ -506,11 +538,13 @@ export default function FilmIntelPanel({
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--sps-muted)] m-0 flex items-center gap-1">
             <Search className="w-3 h-3" />
             Results · {search.total}
-            {query ? ` · “${query.trim()}”` : ''}
+            {query ? ` · “${query.trim()}”` : ' · pick from Film elements ↑'}
           </h4>
           <div className="space-y-0.5 max-h-[min(28rem,55vh)] overflow-y-auto pr-0.5">
             {(search.hits || []).length === 0 && (
-              <p className="text-[11px] text-[var(--sps-muted)]">No hits. Try a character name, SC01, mark, or craft word.</p>
+              <p className="text-[11px] text-[var(--sps-muted)]">
+                No elements yet. Open Writer / Matrix so Film Intel can index shots, cast, world, and marks.
+              </p>
             )}
             {(search.hits || []).map((hit) => (
               <button

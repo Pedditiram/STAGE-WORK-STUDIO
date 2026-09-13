@@ -73,7 +73,7 @@ export default function FilmIntelConsole({
           </div>
         ) : null}
 
-        <div className={`flex-1 min-h-0 overflow-y-auto ${asRoom ? 'p-2.5' : 'p-3'}`}>
+        <div className={`flex-1 min-h-0 overflow-y-auto ${asRoom ? 'p-2' : 'p-2.5'}`}>
           <FilmIntelPanel
             key={`film-intel-${tick}`}
             projectTitle={projectTitle}

@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
 import { lifecycleSummary } from '../utils/productionLifecycle';
+import { LIFECYCLE_PART_DEFS } from '../utils/lifecycleColors';
 
 /**
  * Persistent thin progress rail at the bottom of the app.
  * Segments = live shot lifecycle mix (draft → review → approved → locked).
- * Updates as collaborators advance/lock shots.
  */
 export default function ProjectProgressRail({
   shots = [],
@@ -24,12 +24,11 @@ export default function ProjectProgressRail({
     ? Math.round(((summary.approved + summary.locked) / total) * 100)
     : 0;
 
-  const parts = [
-    { key: 'draft', n: summary.draft || 0, color: 'color-mix(in srgb, var(--sps-muted) 55%, var(--sps-border))' },
-    { key: 'review', n: summary.review || 0, color: 'color-mix(in srgb, #c4a574 85%, var(--sps-border))' },
-    { key: 'approved', n: summary.approved || 0, color: 'var(--sps-success)' },
-    { key: 'locked', n: summary.locked || 0, color: 'var(--sps-gold)' }
-  ];
+  const parts = LIFECYCLE_PART_DEFS.map((p) => ({
+    key: p.key,
+    n: summary[p.key] || 0,
+    color: p.color
+  }));
 
   const title = [
     projectTitle || 'Untitled',

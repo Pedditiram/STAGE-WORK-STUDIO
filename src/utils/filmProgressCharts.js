@@ -4,13 +4,9 @@
 
 import { lifecycleSummary, normalizeLifecycleStatus } from './productionLifecycle';
 import { parseSceneAndShotID } from './sceneShotUtils';
+import { LIFECYCLE_PART_DEFS } from './lifecycleColors';
 
-const LIFE_PARTS = [
-  { key: 'draft', label: 'Draft', color: 'color-mix(in srgb, var(--sps-muted) 55%, var(--sps-border))' },
-  { key: 'review', label: 'Review', color: 'color-mix(in srgb, #c4a574 85%, var(--sps-border))' },
-  { key: 'approved', label: 'Approved', color: 'var(--sps-success)' },
-  { key: 'locked', label: 'Locked', color: 'var(--sps-gold)' }
-];
+const LIFE_PARTS = LIFECYCLE_PART_DEFS;
 
 function shortActor(emailOrName = '') {
   const s = String(emailOrName || '').trim();
