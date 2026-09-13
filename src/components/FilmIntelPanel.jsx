@@ -76,19 +76,35 @@ export default function FilmIntelPanel({
   }, [projectTitle, shots, entityType, entityKey, tick]);
 
   const search = useMemo(() => searchFilmIntel(intel, query), [intel, query]);
+  /** Named story elements for the loaded film (cast, world, props…) — drives Search dropdown. */
   const filmElements = useMemo(() => {
     const index = Array.isArray(intel?.searchIndex) ? intel.searchIndex : [];
-    const order = ['shot', 'character', 'world', 'costume', 'prop', 'mark', 'beat', 'flag', 'quality', 'suggestion'];
-    const groups = new Map();
-    order.forEach((k) => groups.set(k, []));
-    index.forEach((row) => {
-      const kind = String(row?.kind || 'other');
-      if (!groups.has(kind)) groups.set(kind, []);
-      groups.get(kind).push(row);
-    });
+    const order = [
+      { kind: 'character', label: 'Cast' },
+      { kind: 'world', label: 'World' },
+      { kind: 'prop', label: 'Props' },
+      { kind: 'costume', label: 'Costumes' },
+      { kind: 'shot', label: 'Shots' },
+      { kind: 'beat', label: 'Beats' },
+      { kind: 'mark', label: 'Marks' }
+    ];
+    const seen = new Set();
     return order
-      .filter((k) => (groups.get(k) || []).length > 0)
-      .map((k) => ({ kind: k, items: groups.get(k) }));
+      .map(({ kind, label }) => {
+        const items = [];
+        index.forEach((row) => {
+          if (row?.kind !== kind) return;
+          const title = String(row.title || '').trim();
+          if (!title) return;
+          const dedupe = `${kind}:${title.toLowerCase()}`;
+          if (seen.has(dedupe)) return;
+          seen.add(dedupe);
+          items.push(row);
+        });
+        items.sort((a, b) => String(a.title).localeCompare(String(b.title)));
+        return { kind, label, items };
+      })
+      .filter((g) => g.items.length > 0);
   }, [intel]);
   const screenplay = intel.screenplay || {};
   const realScenes = (screenplay.scenes || []).filter((s) => !/^ACT\s+/i.test(s.title));
@@ -312,6 +328,11 @@ export default function FilmIntelPanel({
 
   const pickFilmElement = (id) => {
     if (!id) return;
+    if (id === '__all__') {
+      setQuery('');
+      setDeskTab('search');
+      return;
+    }
     const hit = (intel?.searchIndex || []).find((row) => row.id === id);
     if (!hit) return;
     setQuery(hit.title || '');
@@ -333,45 +354,46 @@ export default function FilmIntelPanel({
           </span>
         </h3>
 
-        <div className="relative flex-1 min-w-[9rem] max-w-[14rem] mx-auto">
-          <Search className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-[var(--sps-muted)] pointer-events-none" />
-          <select
-            className="w-full appearance-none pl-6 pr-5 py-1 text-[10px] rounded-[5px] border border-[var(--sps-border)] bg-[var(--sps-bg)] outline-none focus:border-[var(--sps-gold)] cursor-pointer"
-            defaultValue=""
-            aria-label="Jump to film element"
-            title="Shots, cast, world, marks, beats…"
-            onChange={(e) => {
-              const id = e.target.value;
-              e.target.value = '';
-              pickFilmElement(id);
-            }}
-          >
-            <option value="">Film elements…</option>
-            {filmElements.map((g) => (
-              <optgroup key={g.kind} label={`${g.kind} (${g.items.length})`}>
-                {g.items.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.title}
-                    {row.subtitle ? ` — ${String(row.subtitle).slice(0, 42)}` : ''}
-                  </option>
+        <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0 items-center" role="tablist" aria-label="Film Intel desks">
+          {deskTabs.map((t) =>
+            t.id === 'search' ? (
+              <select
+                key={t.id}
+                className="appearance-none max-w-[11rem] text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-[5px] border-0 outline-none cursor-pointer bg-[var(--sps-gold)] text-[var(--sps-bg)]"
+                value=""
+                aria-label={`Search ${projectTitle || 'film'} elements`}
+                title={`Elements in ${projectTitle || 'this film'}`}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  e.target.value = '';
+                  pickFilmElement(id);
+                }}
+                onFocus={() => setDeskTab('search')}
+              >
+                <option value="">Search</option>
+                <option value="__all__">All elements…</option>
+                {filmElements.map((g) => (
+                  <optgroup key={g.kind} label={`${g.label} (${g.items.length})`}>
+                    {g.items.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.title}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
-        <div className="sps-tabs sps-tabs-compact flex flex-wrap shrink-0" role="tablist" aria-label="Film Intel desks">
-          {deskTabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={deskTab === t.id}
-              onClick={() => setDeskTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
+              </select>
+            ) : (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={deskTab === t.id}
+                onClick={() => setDeskTab(t.id)}
+              >
+                {t.label}
+              </button>
+            )
+          )}
         </div>
 
         <div className="flex items-center gap-0.5 flex-wrap justify-end ml-auto">
@@ -538,12 +560,12 @@ export default function FilmIntelPanel({
           <h4 className="text-[10px] uppercase tracking-wide text-[var(--sps-muted)] m-0 flex items-center gap-1">
             <Search className="w-3 h-3" />
             Results · {search.total}
-            {query ? ` · “${query.trim()}”` : ' · pick from Film elements ↑'}
+            {query ? ` · “${query.trim()}”` : ` · ${projectTitle || 'this film'}`}
           </h4>
           <div className="space-y-0.5 max-h-[min(28rem,55vh)] overflow-y-auto pr-0.5">
             {(search.hits || []).length === 0 && (
               <p className="text-[11px] text-[var(--sps-muted)]">
-                No elements yet. Open Writer / Matrix so Film Intel can index shots, cast, world, and marks.
+                No elements indexed yet for this film. Fill Character / World / Matrix craft so Search can list names like cast, props, and locations.
               </p>
             )}
             {(search.hits || []).map((hit) => (
