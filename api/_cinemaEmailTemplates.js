@@ -472,6 +472,65 @@ www.stageworkstudio.com | admin@stageworkstudio.com
   return { subject, html, text };
 }
 
+/** Public web sign-up: 6-digit email code. Never shown in the app. */
+export function generateSignupCodeEmail({ name, email, otp }) {
+  const recipientName = name ? escapeHtml(name) : 'there';
+  const code = escapeHtml(String(otp || '').trim());
+  const subject = 'Stage Work Studio — your sign-up code';
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your sign-up code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#070605;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#e8e2d8;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#070605;padding:36px 14px 50px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:560px;background-color:#12100d;border:1px solid #28221a;border-radius:14px;overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(90deg, #8d7042, #c9a36a, #e8d4a8, #c9a36a, #8d7042);height:4px;"></td>
+          </tr>
+          <tr>
+            <td style="padding:32px 34px 22px;text-align:center;">
+              <img src="${LOGO_URL}" width="46" height="46" alt="Stage Work Studio" style="display:block;margin:0 auto 14px;border-radius:10px;border:1px solid #2e2821;" />
+              <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.24em;color:#c9a36a;text-transform:uppercase;">Stage Work Studio · Cinema Production OS</p>
+              <h1 style="margin:0;font-size:22px;font-weight:700;color:#fdfbf7;">Confirm your email</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 34px 28px;">
+              <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#ccc5b9;">
+                Dear <strong>${recipientName}</strong>, use this code to open your own trial film. It is not a studio invite. We never show this code in the app. Replies go to <strong>admin@stageworkstudio.com</strong>.
+              </p>
+              <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.16em;color:#c9a36a;text-transform:uppercase;text-align:center;">6-digit code</p>
+              <p style="margin:0 0 16px;font-size:32px;letter-spacing:0.35em;font-weight:700;color:#fbbf24;text-align:center;padding:14px;background:#18181b;border-radius:8px;">${code}</p>
+              <p style="margin:0;font-size:12px;color:#8f877a;text-align:center;">Expires in 15 minutes. Sent to ${escapeHtml(email || '')}.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#0b0a09;border-top:1px solid #1f1a15;padding:18px 34px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#575147;">
+                <a href="https://www.stageworkstudio.com" style="color:#857c6e;text-decoration:none;">www.stageworkstudio.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const text = `Stage Work Studio sign-up code: ${String(otp || '').trim()}\nExpires in 15 minutes.\nWe never show this code in the app.\nReplies: admin@stageworkstudio.com`.trim();
+
+  return { subject, html, text };
+}
+
 /**
  * Luxury cinema-grade cold promotional outreach email for studios, directors, and producers.
  */

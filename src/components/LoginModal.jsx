@@ -460,10 +460,10 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
         })
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.success && data?.emailed) {
+      if (res.ok && data?.success && (data.emailed || data.queued)) {
         setSignupAwaitingCode(true);
         setSignUpOtp('');
-        setSuccessMsg(data.message || `We emailed a code to ${cleanEmail}. It is not shown in this window.`);
+        setSuccessMsg(data.message || `Watch ${cleanEmail} for a note from admin@stageworkstudio.com.`);
       } else {
         const err = String(data?.error || '');
         if (err.toLowerCase().includes('invalid mail id') || err.toLowerCase().includes('valid email')) {
@@ -495,7 +495,7 @@ export default function LoginModal({ isOpen, onClose, setIsAdminLoggedIn, overla
     loginMode === 'createpass' ? (pendingEmail || emailInput || 'Choose a password for this email.')
       : loginMode === 'changepass' ? (getCurrentUserEmail() || emailInput || 'Update your password.')
         : isSwitch ? 'Projects stay open.'
-          : loginMode === 'signup' ? 'We email a code. Nothing is shown here.'
+          : loginMode === 'signup' ? 'We write from admin@stageworkstudio.com. Nothing is shown here.'
             : loginMode === 'admin' ? 'Custom Admin ID lock.'
               : PRODUCT;
   const legalLinks = (

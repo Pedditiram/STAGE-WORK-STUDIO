@@ -150,6 +150,17 @@ export async function issueSignupOtp(email, { name = '' } = {}) {
   return otp;
 }
 
+/** Drop an unsent code so the user can retry immediately after a mail failure. */
+export async function releaseSignupOtp(email) {
+  const clean = String(email || '').trim().toLowerCase();
+  if (!clean) return false;
+  const map = prune(await loadMap());
+  if (!map[clean]) return false;
+  delete map[clean];
+  await saveMap(map);
+  return true;
+}
+
 export async function verifySignupOtp(email, otp) {
   const clean = String(email || '').trim().toLowerCase();
   const code = String(otp || '').trim();
