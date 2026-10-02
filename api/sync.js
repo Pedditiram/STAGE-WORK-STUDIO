@@ -157,6 +157,17 @@ async function kvGet(kind) {
   return null;
 }
 
+async function kvSet(kind, body) {
+  if (!kvConfigured()) return false;
+  try {
+    const data = await kvCommand(['SET', kvKey(kind), JSON.stringify(body)]);
+    if (!data) return false;
+    return data.result === 'OK' || data.result === true || typeof data.result === 'string';
+  } catch (e) {
+    return false;
+  }
+}
+
 async function kvDel(kind) {
   if (!kvConfigured()) return false;
   try {
@@ -1544,13 +1555,15 @@ export default async function handler(req, res) {
       if (!title || slug === 'untitled') {
         return res.status(400).json({ success: false, error: 'Missing project' });
       }
-      let rec = memoryFilms[slug];
-      if (!rec && kvConfigured()) {
+      // KV is shared by every instance; this instance's memory may be stale.
+      let rec = null;
+      if (kvConfigured()) {
         try {
           rec = await kvGet(`film:${slug}`);
           if (rec?.project) memoryFilms[slug] = rec;
         } catch (e) {}
       }
+      if (!rec?.project) rec = memoryFilms[slug];
       return sendJson(req, res, {
         success: true,
         project: rec?.project || null,
@@ -1681,8 +1694,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Missing project' });
       }
       const incomingShots = Array.isArray(project.shots) ? project.shots : [];
-      let existing = memoryFilms[slug]?.project;
-      if (!existing && kvConfigured()) {
+      let existing = null;
+      if (kvConfigured()) {
         try {
           const prior = await kvGet(`film:${slug}`);
           if (prior?.project) {
@@ -1691,6 +1704,7 @@ export default async function handler(req, res) {
           }
         } catch (e) {}
       }
+      if (!existing) existing = memoryFilms[slug]?.project;
       if (!incomingShots.length && existing && Array.isArray(existing.shots) && existing.shots.length) {
         return sendJson(req, res, { success: true, project: existing, ignoredEmpty: true });
       }
